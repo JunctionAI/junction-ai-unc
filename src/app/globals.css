@@ -1,26 +1,56 @@
-@import "tailwindcss";
+/* Junction brand tokens — from design-reference/Junction Brand.dc.html + README.
+   All colors OKLCH. Cream dominates, navy structures, cyan is spent like money,
+   amber appears only where a decision waits (max 2 amber elements per screen). */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --navy: oklch(0.27 0.055 262);
+  --navy-raised: oklch(0.31 0.055 262);
+  --navy-deep: oklch(0.21 0.045 262);
+  --cyan: oklch(0.78 0.13 220);
+  --cyan-strong: oklch(0.55 0.16 245);
+  --cyan-wash: oklch(0.94 0.03 225);
+  --cyan-text: oklch(0.45 0.1 240);
+  --cyan-link: oklch(0.55 0.11 235);
+  --cream: oklch(0.976 0.006 90);
+  --cream-dim: oklch(0.955 0.006 90);
+  --amber: oklch(0.75 0.14 75);
+  --amber-wash: oklch(0.93 0.05 80);
+  --amber-text: oklch(0.45 0.11 70);
+  --ink: oklch(0.27 0.05 262);
+  --ink-soft: oklch(0.42 0.04 262);
+  --muted: oklch(0.52 0.03 260);
+  --muted-2: oklch(0.5 0.03 260);
+  --faint-on-navy: oklch(0.62 0.05 250);
+  --on-navy: oklch(0.96 0.01 90);
+  --on-navy-dim: oklch(0.72 0.06 235);
+  --card-border: oklch(0.91 0.01 260);
+  --card-border-2: oklch(0.89 0.012 260);
+  --hairline: oklch(0.93 0.008 260);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--cream); }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  font-family: var(--font-space-grotesk), 'Space Grotesk', sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+a { color: var(--cyan-link); text-decoration: none; }
+a:hover { color: oklch(0.3 0.06 262); }
+button { font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+
+@keyframes jfloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes jpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
+
+/* hover states the prototype expressed as style-hover attributes */
+.btn-navy { border: none; background: var(--navy); color: white; border-radius: 999px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+.btn-navy:hover { background: oklch(0.35 0.06 262); }
+.btn-cyan-strong { border: none; background: var(--cyan-strong); color: white; border-radius: 999px; cursor: pointer; font-weight: 700; transition: background 0.2s; }
+.btn-cyan-strong:hover { background: oklch(0.6 0.16 245); }
+.btn-cyan { border: none; background: var(--cyan); color: oklch(0.22 0.05 262); border-radius: 999px; cursor: pointer; font-weight: 700; transition: background 0.2s; }
+.btn-cyan:hover { background: oklch(0.83 0.11 220); }
