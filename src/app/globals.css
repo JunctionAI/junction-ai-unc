@@ -47,6 +47,26 @@ input, select, textarea { font-family: inherit; }
   * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
 
+/* Platform v2 additions (additive) — tokens the product surface repeats often */
+:root {
+  --navy-active: oklch(0.36 0.06 262);
+  --input-border: oklch(0.87 0.015 260);
+  --track: oklch(0.94 0.008 260);
+}
+
+/* Platform v2 hover utilities — ports of the prototype's style-hover attributes.
+   !important where the base value is set inline on the element. */
+.hov-underline:hover { text-decoration: underline; }
+.hov-border-cyan:hover { border-color: var(--cyan) !important; }
+.hov-border-cyanlink:hover { border-color: var(--cyan-link) !important; }
+.hov-border-muted:hover { border-color: oklch(0.6 0.03 260) !important; }
+.hov-bg-navylift:hover { background: oklch(0.33 0.055 262) !important; }
+.hov-bg-cyanwash-deep:hover { background: oklch(0.9 0.05 225) !important; }
+.hov-fg-onnavy:hover { color: var(--on-navy) !important; }
+.hov-fg-ink:hover { color: var(--ink) !important; }
+.hov-fg-warn:hover { color: oklch(0.5 0.12 75) !important; }
+.hov-card-cyan:hover { border-color: var(--cyan) !important; box-shadow: 0 2px 14px oklch(0.78 0.13 220 / 0.14); }
+
 /* hover states the prototype expressed as style-hover attributes */
 .btn-navy { border: none; background: var(--navy); color: white; border-radius: 999px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
 .btn-navy:hover { background: oklch(0.35 0.06 262); }
