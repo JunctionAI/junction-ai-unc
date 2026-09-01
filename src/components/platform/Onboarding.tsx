@@ -2,6 +2,7 @@
 
 import React from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
+import TypingDots from "./TypingDots";
 
 const stepLabel: React.CSSProperties = {
   fontSize: 10.5,
@@ -472,7 +473,7 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
                   <div style={{ marginTop: 10, display: "flex", gap: 10, maxWidth: "86%" }}>
                     <img src="/brand/mascot-small.png" alt="" style={{ width: 26, height: 28, objectFit: "contain", flex: "none", marginTop: 2 }} />
                     <div style={{ background: "white", border: "1px solid var(--card-border-2)", borderRadius: "4px 14px 14px 14px", padding: "9px 14px", fontSize: 12.5, lineHeight: 1.55, color: "oklch(0.35 0.05 262)" }}>
-                      {om.text}
+                      {om.typing ? <TypingDots /> : om.text}
                     </div>
                   </div>
                 )}

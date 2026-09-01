@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { derive } from "@/lib/platform/derive";
+import { useUncChat } from "@/lib/unc/useUncChat";
 import { usePlatformState } from "./usePlatformState";
 import Sidebar from "./Sidebar";
 import Onboarding from "./Onboarding";
@@ -13,7 +14,8 @@ import CornerBuddy from "./CornerBuddy";
 
 export default function Platform() {
   const { S, set } = usePlatformState();
-  const V = derive(S, set);
+  const uncSend = useUncChat(S, set);
+  const V = derive(S, set, undefined, uncSend);
 
   /* Corner-buddy scroll-spy — port of the prototype's _buddyTick/_buddyScroll:
      the topmost [data-buddy] section whose rect crosses 55% viewport height wins. */

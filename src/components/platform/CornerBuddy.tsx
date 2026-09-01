@@ -1,6 +1,7 @@
 "use client";
 
 import type { PlatformVals } from "@/lib/platform/derive";
+import TypingDots from "./TypingDots";
 
 export default function CornerBuddy({ V }: { V: PlatformVals }) {
   return (
@@ -58,7 +59,7 @@ export default function CornerBuddy({ V }: { V: PlatformVals }) {
                 )}
                 {m.fromJunction && (
                   <div style={{ alignSelf: "flex-start", maxWidth: "88%", background: "var(--cream-dim)", border: "1px solid var(--card-border)", borderRadius: "13px 13px 13px 4px", padding: "9px 13px", fontSize: 12.5, lineHeight: 1.5 }}>
-                    {m.text}
+                    {m.typing ? <TypingDots /> : m.text}
                     {m.link && (
                       <div style={{ marginTop: 7 }}>
                         <button
