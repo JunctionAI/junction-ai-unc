@@ -19,6 +19,8 @@ export interface Msg {
   text: string;
   link?: string;
   linkLabel?: string;
+  /** Transient placeholder while a live Unc reply is in flight (rendered as pulsing dots). */
+  typing?: boolean;
 }
 
 export interface TeamMember {

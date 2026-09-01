@@ -33,7 +33,7 @@ interface PostureDef {
   phases: { n: string; name: string; st: string; routines: string[]; you: string }[];
 }
 
-const postureDefs: Record<Posture, PostureDef> = {
+export const postureDefs: Record<Posture, PostureDef> = {
   brand: {
     label: "Brand-led organic",
     tag: "CURRENT PLAY",
@@ -96,7 +96,48 @@ const suggMap: Record<string, string[]> = {
   "paid.3": ["Founder content engine", "Lead research & scoring"],
 };
 
-export function derive(S: PlatformState, set: Setter, currentMRR?: number) {
+/* Demo-clock account facts (verbatim prototype copy) — lifted to module scope so the
+   Unc context serializer (src/lib/unc/context.ts) can read the same numbers the UI shows. */
+export const AP_DATA = [
+  { sys: "D02-W01", title: "Shift NZ$40/day into Advantage+ retargeting", detail: "Prospecting-B ROAS fell to 1.4× over 7 days; retargeting holds 3.1×. Reversible, inside guardrail.", before: "NZ$60/day Prospecting-B", after: "NZ$20/day + NZ$40 retargeting", expiry: "expires in 18h" },
+  { sys: "D01-W01", title: "Publish founder post “Why we stopped discounting”", detail: "Drafted from 31 customer questions. Zero first-person claims added. Scheduled for 09:00 Tuesday.", before: "Staged draft", after: "Published to LinkedIn", expiry: "expires in 2d" },
+  { sys: "D05-W03", title: "Send winback to 412 lapsed customers", detail: "Zero-recipient test passed. 15% offer respects margin guardrail. Suppresses anyone emailed this week.", before: "0 recipients", after: "412 recipients, 1 send", expiry: "expires in 3d" },
+];
+export const AP_WHY_TEXTS = [
+  "Certified 7-day ROAS: Prospecting-B 1.4×, Advantage+ 3.1× on identical revenue definitions. Reversible within a day, inside your NZ$120/day guardrail. Downside if wrong: ~NZ$40. Upside at the current spread: ~NZ$68/day.",
+  "Drafted only from questions 31 customers actually asked. No first-person claims were generated — the two personal lines are quoted from your own previous posts. Tuesday 09:00 is your audience’s peak window.",
+  "All 412 lapsed 60–180 days; anyone emailed this week is suppressed. The 15% offer keeps margin at 63%, above your 61% floor. Zero-recipient test passed last night — receipt R-4489.",
+];
+export const SIGNAL_DEFS = [
+  { label: "Budget headroom", value: "NZ$54/day", delta: "of NZ$120 guardrail", deltaColor: "oklch(0.62 0.05 250)" },
+  { label: "Site CVR", value: "3.1%", delta: "industry 2.8% · ahead", deltaColor: "oklch(0.78 0.13 220)" },
+  { label: "Social views", value: "48.2k/wk", delta: "▲ 22% · reels working", deltaColor: "oklch(0.78 0.13 220)" },
+  { label: "Email revenue", value: "9% of total", delta: "industry 22% · your gap", deltaColor: "oklch(0.75 0.14 75)" },
+];
+export const LEVER_DEFS = [
+  { name: "Retention: winback + welcome", impact: "+NZ$2,900/mo", cost: "NZ$0 — organic", conf: "HIGH · DOING FIRST", confColor: "oklch(0.78 0.13 220)", bg: "oklch(0.32 0.06 262)", border: "oklch(0.78 0.13 220 / 0.55)" },
+  { name: "Scale organic content", impact: "+NZ$1,400/mo", cost: "NZ$0 — 2h/wk of your voice", conf: "MEDIUM · RUNNING", confColor: "oklch(0.75 0.04 250)", bg: "transparent", border: "oklch(0.38 0.05 262)" },
+  { name: "CRO: PDP 3.1% → 3.6%", impact: "+NZ$1,100/mo", cost: "NZ$0 — test staged", conf: "MEDIUM · QUEUED", confColor: "oklch(0.75 0.04 250)", bg: "transparent", border: "oklch(0.38 0.05 262)" },
+  { name: "Scale paid +NZ$38/day", impact: "+NZ$3,300/mo", cost: "burns 70% of headroom", conf: "HOLD · UNTIL REPEAT ≥ 18%", confColor: "oklch(0.75 0.14 75)", bg: "transparent", border: "oklch(0.38 0.05 262)" },
+];
+export const COMPLETED_DEFS = [
+  { text: "Weekly operating brief delivered — three priorities set against the repeat-purchase constraint", receipt: "Receipt R-4482" },
+  { text: "4 founder posts drafted from customer questions, staged for approval", receipt: "Receipt R-4483" },
+  { text: "18 leads researched and scored against ICP, 6 qualified for review", receipt: "Receipt R-4485" },
+];
+
+/* Canned Unc replies — the pre-Phase-3 behaviour, kept as the fallback when the
+   live endpoint is unavailable (no key, network error, refusal). */
+export const CANNED_CORNER_REPLY =
+  "Understood. I’ll map that to the right system, run it read-only first, and bring you one decision with the evidence — nothing changes without your approval.";
+export const CANNED_OB_REPLY =
+  "Good push — folded into the draft. You’ll see it reflected in Strategy, and we keep reshaping it there as the data comes in.";
+
+/** Live-chat sender injected by the app shell (Platform.tsx). When absent or when the
+    endpoint falls back, the canned replies above are used — the chat is never dead. */
+export type UncSend = (args: { surface: "corner" | "onboarding"; text: string; canned: string }) => void;
+
+export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSend?: UncSend) {
   const gm = goalMath({ goalTitle: S.goalTitle, baselineNum: S.baselineNum, deadline: S.deadline, currency: S.currency, currentMRR });
   const { cur, curSym, target, pace, daysLeftN, needed, proj, gap, onTrack, fmt } = gm;
 
@@ -106,16 +147,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number) {
     set({ view: "systems", sel: s, nodeSel: 0, nodeVals: {}, wfState: "clean", setupOpen: false, setupStep: 0, setupDone: false });
   };
 
-  const apData = [
-    { sys: "D02-W01", title: "Shift NZ$40/day into Advantage+ retargeting", detail: "Prospecting-B ROAS fell to 1.4× over 7 days; retargeting holds 3.1×. Reversible, inside guardrail.", before: "NZ$60/day Prospecting-B", after: "NZ$20/day + NZ$40 retargeting", expiry: "expires in 18h" },
-    { sys: "D01-W01", title: "Publish founder post “Why we stopped discounting”", detail: "Drafted from 31 customer questions. Zero first-person claims added. Scheduled for 09:00 Tuesday.", before: "Staged draft", after: "Published to LinkedIn", expiry: "expires in 2d" },
-    { sys: "D05-W03", title: "Send winback to 412 lapsed customers", detail: "Zero-recipient test passed. 15% offer respects margin guardrail. Suppresses anyone emailed this week.", before: "0 recipients", after: "412 recipients, 1 send", expiry: "expires in 3d" },
-  ];
-  const whyTexts = [
-    "Certified 7-day ROAS: Prospecting-B 1.4×, Advantage+ 3.1× on identical revenue definitions. Reversible within a day, inside your NZ$120/day guardrail. Downside if wrong: ~NZ$40. Upside at the current spread: ~NZ$68/day.",
-    "Drafted only from questions 31 customers actually asked. No first-person claims were generated — the two personal lines are quoted from your own previous posts. Tuesday 09:00 is your audience’s peak window.",
-    "All 412 lapsed 60–180 days; anyone emailed this week is suppressed. The 15% offer keeps margin at 63%, above your 61% floor. Zero-recipient test passed last night — receipt R-4489.",
-  ];
+  const apData = AP_DATA;
+  const whyTexts = AP_WHY_TEXTS;
   const approvals = apData.map((a, i) => ({
     ...a,
     pending: S.apStatus[i] === "pending",
@@ -170,14 +203,13 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number) {
           { from: "j", text: "Got it — I have your account context in front of me: goal, strategy, receipts. I’ll come back with a proper answer within a few hours, or I can book you a 20-minute strategy call. — Sam" },
         ],
       }));
+    } else if (uncSend) {
+      set({ draft: "" });
+      uncSend({ surface: "corner", text: t, canned: CANNED_CORNER_REPLY });
     } else {
       set((s) => ({
         draft: "",
-        messages: [
-          ...s.messages,
-          { from: "u", text: t },
-          { from: "j", text: "Understood. I’ll map that to the right system, run it read-only first, and bring you one decision with the evidence — nothing changes without your approval." },
-        ],
+        messages: [...s.messages, { from: "u", text: t }, { from: "j", text: CANNED_CORNER_REPLY }],
       }));
     }
   };
@@ -437,10 +469,15 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number) {
   const obSendImpl = () => {
     const t = S.obDraft.trim();
     if (!t) return;
-    set((s) => ({
-      obDraft: "",
-      obThread: [...s.obThread, { from: "u", text: t }, { from: "j", text: "Good push — folded into the draft. You’ll see it reflected in Strategy, and we keep reshaping it there as the data comes in." }],
-    }));
+    if (uncSend) {
+      set({ obDraft: "" });
+      uncSend({ surface: "onboarding", text: t, canned: CANNED_OB_REPLY });
+    } else {
+      set((s) => ({
+        obDraft: "",
+        obThread: [...s.obThread, { from: "u", text: t }, { from: "j", text: CANNED_OB_REPLY }],
+      }));
+    }
   };
   const readSendImpl = () => {
     const t = S.readDraft.trim();
@@ -714,7 +751,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number) {
       };
     }),
     obPaceLine: `${S.obPace.split(" · ")[1]} it is — I’ll only ever ask for a few minutes of your day, and I handle the rest.`,
-    obThreadMsgs: S.obThread.map((m) => ({ text: m.text, fromUser: m.from === "u", fromJ: m.from === "j" })),
+    obThreadMsgs: S.obThread.map((m) => ({ text: m.text, fromUser: m.from === "u", fromJ: m.from === "j", typing: !!m.typing })),
     obDraft: S.obDraft,
     onObDraft: (e: Ev) => set({ obDraft: e.target.value }),
     obSend: obSendImpl,
@@ -751,6 +788,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number) {
       text: m.text,
       fromUser: m.from === "u",
       fromJunction: m.from !== "u",
+      typing: !!m.typing,
       link: !!m.link,
       linkLabel: m.linkLabel,
       linkGo: () => {
@@ -822,18 +860,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number) {
     statusColor: onTrack ? "oklch(0.45 0.1 240)" : "oklch(0.5 0.12 75)",
     statusBg: onTrack ? "oklch(0.94 0.03 225)" : "oklch(0.93 0.05 80)",
     strategicRead: `At ${fmt(pace)}/day you land at ${fmt(proj)}${onTrack ? " — clear of the goal. Hold the line and bank the learning." : ` — ${fmt(gap)} short.`} I weighed 14 moves against your NZ$54/day budget headroom. Your site already converts ahead of industry and reels are compounding, so traffic isn’t the constraint — repeat purchase is (14% vs a 22% norm). Retention closes the gap organically, for free. Paid could buy it faster, but it burns headroom retention gives us for nothing — it’s queued for when repeat crosses 18%.`,
-    signals: [
-      { label: "Budget headroom", value: "NZ$54/day", delta: "of NZ$120 guardrail", deltaColor: "oklch(0.62 0.05 250)" },
-      { label: "Site CVR", value: "3.1%", delta: "industry 2.8% · ahead", deltaColor: "oklch(0.78 0.13 220)" },
-      { label: "Social views", value: "48.2k/wk", delta: "▲ 22% · reels working", deltaColor: "oklch(0.78 0.13 220)" },
-      { label: "Email revenue", value: "9% of total", delta: "industry 22% · your gap", deltaColor: "oklch(0.75 0.14 75)" },
-    ],
-    levers: [
-      { name: "Retention: winback + welcome", impact: "+NZ$2,900/mo", cost: "NZ$0 — organic", conf: "HIGH · DOING FIRST", confColor: "oklch(0.78 0.13 220)", bg: "oklch(0.32 0.06 262)", border: "oklch(0.78 0.13 220 / 0.55)" },
-      { name: "Scale organic content", impact: "+NZ$1,400/mo", cost: "NZ$0 — 2h/wk of your voice", conf: "MEDIUM · RUNNING", confColor: "oklch(0.75 0.04 250)", bg: "transparent", border: "oklch(0.38 0.05 262)" },
-      { name: "CRO: PDP 3.1% → 3.6%", impact: "+NZ$1,100/mo", cost: "NZ$0 — test staged", conf: "MEDIUM · QUEUED", confColor: "oklch(0.75 0.04 250)", bg: "transparent", border: "oklch(0.38 0.05 262)" },
-      { name: "Scale paid +NZ$38/day", impact: "+NZ$3,300/mo", cost: "burns 70% of headroom", conf: "HOLD · UNTIL REPEAT ≥ 18%", confColor: "oklch(0.75 0.14 75)", bg: "transparent", border: "oklch(0.38 0.05 262)" },
-    ],
+    signals: SIGNAL_DEFS,
+    levers: LEVER_DEFS,
     focus: ["D05-W03", "D05-W01", "D05-W04"].map((id) => {
       const s = ALL_SYSTEMS.find((x) => x.id === id)!;
       return { name: s.name, open: () => openSys(s) };
@@ -855,11 +883,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number) {
     goalPct: gm.goalPct,
     approvals,
     pendingCount: S.apStatus.filter((x) => x === "pending").length,
-    completed: [
-      { text: "Weekly operating brief delivered — three priorities set against the repeat-purchase constraint", receipt: "Receipt R-4482" },
-      { text: "4 founder posts drafted from customer questions, staged for approval", receipt: "Receipt R-4483" },
-      { text: "18 leads researched and scored against ICP, 6 qualified for review", receipt: "Receipt R-4485" },
-    ],
+    completed: COMPLETED_DEFS,
     catChips,
     visibleSystems,
     noSel: !sel,
