@@ -21,6 +21,7 @@ import { isServiceRoleConfigured } from "../src/lib/db/server";
 import { coreScore, CRITERIA, evaluateReply, JUDGE_SYSTEM, judgeUserPrompt, MAX_CORE, MAX_TOTAL, parseJudgeScores, totalScore, type DeterministicResult, type JudgeScores } from "../src/lib/eval/chat-evals/rubric";
 import { SCENARIOS, type Scenario } from "../src/lib/eval/chat-evals/scenarios";
 import { complete, describeLlm, resolveModel } from "../src/lib/llm/router";
+import { countSentences, enforceConcision } from "../src/lib/unc/concision";
 
 /* src/lib/unc/prompt.ts reaches src/lib/unc/context.ts, which imports with the "@/" alias. The
    standalone CommonJS build has no bundler to resolve it, so map "@/" onto the compiled src tree
@@ -63,6 +64,8 @@ interface Row {
   core: number | null;
   /** The JUNCTION PLAYBOOK NOTES block the reply was given (absent when none applied). */
   playbooks?: string;
+  /** The code-enforced cap (src/lib/unc/concision.ts), exactly as respond.ts applies it. */
+  concision: { attempted: boolean; shortened: boolean; rejected?: string[]; firstReply?: string; sentences: number; chars: number };
 }
 
 function arg(name: string): string | null {
@@ -99,15 +102,28 @@ function playbookRowsFromContent(root: string): PlaybookRowLite[] {
   return rows;
 }
 
-async function ask(s: Scenario, verbose: boolean, buildUncSystemPrompt: PromptBuilder, notesFor: (s: Scenario) => Promise<string>): Promise<{ reply: string; model: string; notes: string }> {
+async function ask(s: Scenario, verbose: boolean, buildUncSystemPrompt: PromptBuilder, notesFor: (s: Scenario) => Promise<string>): Promise<{ reply: string; model: string; notes: string; concision: Row["concision"] }> {
   // The same playbook notes the live route attaches (src/lib/unc/respond.ts): ≤ 3 cards for the question.
   const notes = await notesFor(s);
   const context = notes ? { ...s.context, playbooks: notes } : s.context;
-  const r = await complete("chat", { system: buildUncSystemPrompt(context, s.surface), messages: [{ role: "user", content: s.question }], maxTokens: MAX_REPLY_TOKENS, effort: "low" }, { db: null, log: verbose ? undefined : () => undefined });
+  const system = buildUncSystemPrompt(context, s.surface);
+  const llmCtx = { db: null, log: verbose ? undefined : () => undefined };
+  const r = await complete("chat", { system, messages: [{ role: "user", content: s.question }], maxTokens: MAX_REPLY_TOKENS, effort: "low" }, llmCtx);
   if (!r) throw new Error("no provider configured");
   if (r.stopReason === "error") throw new Error(`chat ${r.errorCode}: ${r.errorMessage ?? ""}`);
-  if (r.stopReason === "refusal") return { reply: "[refusal]", model: r.model, notes };
-  return { reply: r.text.trim(), model: r.model, notes };
+  if (r.stopReason === "refusal") return { reply: "[refusal]", model: r.model, notes, concision: { attempted: false, shortened: false, sentences: 0, chars: 0 } };
+  const first = r.text.trim();
+  // The code-enforced cap, exactly as src/lib/unc/respond.ts applies it: one re-ask, the shorter reply only when it validates.
+  const c = await enforceConcision({
+    question: s.question,
+    reply: first,
+    context: s.context,
+    reask: async (instruction) => {
+      const again = await complete("chat", { system, messages: [{ role: "user", content: s.question }, { role: "assistant", content: first }, { role: "user", content: instruction }], maxTokens: MAX_REPLY_TOKENS, effort: "low" }, llmCtx);
+      return again && again.stopReason !== "error" && again.stopReason !== "refusal" ? again.text.trim() : null;
+    },
+  });
+  return { reply: c.reply, model: r.model, notes, concision: { attempted: c.attempted, shortened: c.shortened, ...(c.rejected ? { rejected: c.rejected } : {}), ...(c.attempted ? { firstReply: first } : {}), sentences: countSentences(c.reply), chars: c.reply.length } };
 }
 
 async function judge(s: Scenario, reply: string, verbose: boolean): Promise<{ scores: JudgeScores | null; raw: string }> {
@@ -138,15 +154,16 @@ async function main() {
   const rows: Row[] = [];
   for (const s of scenarios) {
     process.stdout.write(`  ${s.id.padEnd(20)} `);
-    const { reply, model, notes } = await ask(s, verbose, buildUncSystemPrompt, notesFor);
+    const { reply, model, notes, concision } = await ask(s, verbose, buildUncSystemPrompt, notesFor);
     const deterministic = evaluateReply(s, reply);
     let scores: JudgeScores | null = null;
     let raw: string | undefined;
     if (judgeModel) ({ scores, raw } = await judge(s, reply, verbose));
     const total = scores ? totalScore(scores) : null;
     const core = scores ? coreScore(scores) : null;
-    rows.push({ id: s.id, title: s.title, question: s.question, model, reply, deterministic, judge: scores, judgeRaw: raw, total, core, playbooks: notes || undefined });
-    console.log(`${deterministic.pass ? "det ok " : "det FAIL"} ${total === null ? "" : `judge ${total}/${MAX_TOTAL} (core ${core}/${MAX_CORE})`}`);
+    rows.push({ id: s.id, title: s.title, question: s.question, model, reply, deterministic, judge: scores, judgeRaw: raw, total, core, playbooks: notes || undefined, concision });
+    const capNote = concision.shortened ? " · cap: shortened" : concision.attempted ? ` · cap: kept first (${(concision.rejected ?? []).join("; ")})` : "";
+    console.log(`${deterministic.pass ? "det ok " : "det FAIL"} ${total === null ? "" : `judge ${total}/${MAX_TOTAL} (core ${core}/${MAX_CORE})`}${capNote}`);
   }
 
   // table
@@ -161,13 +178,19 @@ async function main() {
   const detPass = rows.filter((r) => r.deterministic.pass).length;
   const mean = judged.length ? judged.reduce((n, r) => n + (r.total ?? 0), 0) / judged.length : null;
   const meanCore = judged.length ? judged.reduce((n, r) => n + (r.core ?? 0), 0) / judged.length : null;
+  const attempted = rows.filter((r) => r.concision.attempted).length;
+  const shortened = rows.filter((r) => r.concision.shortened).length;
+  const avgSentences = rows.length ? rows.reduce((n, r) => n + r.concision.sentences, 0) / rows.length : 0;
+  const avgChars = rows.length ? rows.reduce((n, r) => n + r.concision.chars, 0) / rows.length : 0;
+  const meanOf = (c: (typeof CRITERIA)[number]) => (judged.length ? judged.reduce((n, r) => n + (r.judge ? r.judge[c] : 0), 0) / judged.length : null);
   console.log(`\ndeterministic: ${detPass}/${rows.length} pass · judge mean: ${mean === null ? "n/a" : `${mean.toFixed(1)}/${MAX_TOTAL} over ${judged.length}`} · core (original five): ${meanCore === null ? "n/a" : `${meanCore.toFixed(1)}/${MAX_CORE}`}`);
+  console.log(`concision cap: re-asked ${attempted}, shortened ${shortened} · avg ${avgSentences.toFixed(1)} sentences · ${Math.round(avgChars)} chars · judge concise ${meanOf("concise")?.toFixed(2) ?? "n/a"} · judgement ${meanOf("judgement")?.toFixed(2) ?? "n/a"}`);
   for (const r of rows.filter((x) => !x.deterministic.pass)) console.log(`  ${r.id}: ${JSON.stringify({ banned: r.deterministic.bannedPhrases, filler: r.deterministic.fillerPhrases, numbers: r.deterministic.unsupportedNumbers, format: r.deterministic.formatIssues })}`);
 
   const date = new Date().toISOString().slice(0, 10);
   const out = arg("--out") ?? path.join(ROOT, "design-reference", "evals", `chat-${date}.json`);
   mkdirSync(path.dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify({ ranAt: new Date().toISOString(), chatModel: chat.id, judgeModel: judgeModel?.id ?? null, summary: { scenarios: rows.length, deterministicPass: detPass, judgeMean: mean, judgeMax: MAX_TOTAL, judgeMeanCore: meanCore, judgeCoreMax: MAX_CORE }, rows }, null, 2));
+  writeFileSync(out, JSON.stringify({ ranAt: new Date().toISOString(), chatModel: chat.id, judgeModel: judgeModel?.id ?? null, summary: { scenarios: rows.length, deterministicPass: detPass, judgeMean: mean, judgeMax: MAX_TOTAL, judgeMeanCore: meanCore, judgeCoreMax: MAX_CORE, concision: { attempted, shortened, avgSentences, avgChars, judgeConcise: meanOf("concise"), judgeJudgement: meanOf("judgement") } }, rows }, null, 2));
   console.log(`wrote ${path.relative(ROOT, out)}`);
 }
 

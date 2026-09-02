@@ -15,6 +15,10 @@
      buildServerContext(db, accountId)  the account's persisted state → buildUncContext, for
                 callers with no browser in the loop.
 
+   Concision is enforced in code (src/lib/unc/concision.ts): a reply past three sentences to a
+   founder who did not ask for depth is re-asked ONCE ("Same answer in at most three sentences,
+   answer first") and the shorter one stands only when it validates — never a truncation.
+
    Nothing here logs a key or surfaces a provider error. The system prompt is built by
    src/lib/unc/prompt.ts (buildUncSystemPrompt) — never duplicated. */
 
@@ -25,6 +29,7 @@ import { loadAccountState } from "@/lib/db/accountState";
 import type { DbClient } from "@/lib/db/types";
 import { complete, resolveModel } from "@/lib/llm/router";
 import type { LlmMessage } from "@/lib/llm/types";
+import { enforceConcision } from "@/lib/unc/concision";
 import { attachBrain, buildUncContext, type BrainContext } from "@/lib/unc/context";
 import { buildUncSystemPrompt, recallPlaybookNotes, type UncSurface } from "@/lib/unc/prompt";
 
@@ -80,16 +85,25 @@ export async function respondAsUnc(input: RespondInput): Promise<RespondResult> 
     // env-gated (no database → none; no embeddings → keyword recall). Never a source of numbers.
     const [brain, notes] = await Promise.all([brainFor(account, question), recallPlaybookNotes(question, input.context, account?.db ? { db: account.db } : {})]);
     const withNotes: BrainContext | null = notes ? { memories: brain?.memories ?? [], profile: brain?.profile ?? "", playbooks: notes } : brain;
-    const response = await complete(
-      "chat",
-      { system: buildUncSystemPrompt(attachBrain(input.context, withNotes), surface), messages, maxTokens: MAX_REPLY_TOKENS, effort: "low" },
-      { accountId: account?.accountId ?? null, db: account?.db },
-    );
+    const system = buildUncSystemPrompt(attachBrain(input.context, withNotes), surface);
+    const llmCtx = { accountId: account?.accountId ?? null, db: account?.db };
+    const response = await complete("chat", { system, messages, maxTokens: MAX_REPLY_TOKENS, effort: "low" }, llmCtx);
     if (!response) return { ok: false, reason: "error" };
     if (response.stopReason === "refusal") return { ok: false, reason: "refusal" };
     if (response.stopReason === "error") return { ok: false, reason: "error" };
-    const reply = response.text.trim();
-    if (!reply) return { ok: false, reason: "empty" };
+    const first = response.text.trim();
+    if (!first) return { ok: false, reason: "empty" };
+    // The code-enforced cap: one re-ask when the reply ran long without a request for depth;
+    // the shorter answer is used only when it validates, else the first stands whole.
+    const { reply } = await enforceConcision({
+      question,
+      reply: first,
+      context: input.context,
+      reask: async (instruction) => {
+        const again = await complete("chat", { system, messages: [...messages, { role: "assistant", content: first }, { role: "user", content: instruction }], maxTokens: MAX_REPLY_TOKENS, effort: "low" }, llmCtx);
+        return again && again.stopReason !== "refusal" && again.stopReason !== "error" ? again.text.trim() : null;
+      },
+    });
     if (account?.db) {
       // Fire-and-forget: Unc learns from the exchange; the reply never waits on it.
       void afterChatReply({ accountId: account.accountId, surface, history: input.history, reply }, { db: account.db }).catch(() => {});
