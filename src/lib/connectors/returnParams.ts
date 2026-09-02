@@ -60,4 +60,6 @@ export const CONNECT_COPY = {
   failed: "That didn't go through. Nothing was stored — try again in a minute.",
   signIn: "Sign in first, then I can connect it.",
   shopPrompt: "your-store.myshopify.com",
+  disconnected: "Disconnected — token deleted. Reconnect any time; revoke the app on their side too if you want it gone there.",
+  disconnectFailed: "Couldn't disconnect it just now — nothing changed. Try again in a minute.",
 } as const;

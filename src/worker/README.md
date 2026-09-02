@@ -11,7 +11,9 @@ dry-run-only**:
   `{ ok: false, error: "not_implemented — mutations are Wave 2, founder-gated" }`, and the
   engine fails the run closed with a receipt saying so. This holds even for a live run
   with an approved gate.
-- The only CredentialProvider shipped is `FixtureCredentialProvider`: it returns fixture
+- Credentials are chosen in `wiring.ts`: `ConnectorCredentialProvider` (real tokens from
+  `connector_secrets`) when Supabase (service role) + `CONNECTOR_SECRET_KEY` are configured,
+  else `FixtureCredentialProvider`. `FixtureCredentialProvider` returns fixture
   markers, never tokens. Nothing in `src/worker/` reads `.env` files or platform tokens
   from `process.env`.
 - Dry runs never pause: a gate becomes a `Would ask <approver>: …` draft receipt and the
@@ -27,8 +29,9 @@ dry-run-only**:
 | `loop.ts` | The daemon: `Worker` class — tick every N s, per-tick time budget, structured JSON logs, atomic heartbeat file, graceful SIGTERM/SIGINT, `whenIdle()`. |
 | `main.ts` | CLI entry (flags below). |
 | `health.ts` | Optional `GET /health` (200 while the heartbeat is fresh, 503 otherwise). |
-| `accounts.ts` | `AccountsSource` interface + `StaticAccountsSource` (one `demo` account). |
-| `credentials.ts` | `CredentialProvider` interface + `FixtureCredentialProvider` (the only implementation). |
+| `accounts.ts` | `AccountsSource` interface + `StaticAccountsSource` (one `demo` account) + `DbAccountsSource` (accounts with ≥ 1 enabled routine, from the DB). |
+| `credentials.ts` | `CredentialProvider` interface + `FixtureCredentialProvider`. The live one is `src/lib/connectors/tokens.ts` `ConnectorCredentialProvider`. |
+| `wiring.ts` | Environment → which credentials / accounts source the worker and the API routes get. |
 | `log.ts` | JSON-lines logger with unconditional secret redaction (key names and token-shaped values). |
 | `providers/connectorReader.ts` | `WorkerConnectorReader` — resolves credentials, dispatches by platform, maps reader answers onto the engine's `ReadResult`. |
 | `providers/executor.ts` | `RefusingExecutor`. |

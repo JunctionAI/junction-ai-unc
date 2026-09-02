@@ -183,11 +183,47 @@ fails closed → card shows Reconnect.
    `getStatus` maps it to `ok`/`empty`; `last_sync_result` reflects it.
 8. Rotate the key (§6) → an existing connector still reads; its `key_version` bumps.
 
-## 8. Not built (known gaps)
+## 8. Shopify compliance webhooks (mandatory for app review)
+
+Three HMAC-verified endpoints (`src/app/api/webhooks/shopify/[topic]/route.ts`, logic in
+`src/lib/connectors/webhooks.ts`). Register them in the Dev Dashboard → your app → **Compliance
+webhooks**, exactly:
+
+| Topic | URL |
+|---|---|
+| `customers/data_request` | `https://<APP_URL>/api/webhooks/shopify/customers_data_request` |
+| `customers/redact` | `https://<APP_URL>/api/webhooks/shopify/customers_redact` |
+| `shop/redact` | `https://<APP_URL>/api/webhooks/shopify/shop_redact` |
+
+Signature = `X-Shopify-Hmac-Sha256` over the **raw** body with `SHOPIFY_CLIENT_SECRET`
+(timing-safe). Bad signature → 401 before the body is parsed (this is what the reviewer's
+probe checks); unknown topic → 404; Shopify not configured → 503. A verified delivery writes
+one `receipts` row (kind `notification`, `run_id` null, ids + counts only — never emails) on
+every account holding that shop; `shop/redact` also flips the connector to `disconnected` and
+deletes its `connector_secrets` row. A shop we don't hold answers 200 `recorded:false`
+(nothing to retry).
+
+## 9. Disconnect
+
+`POST /api/connectors/<platform>/disconnect` (session-bound, same gates as start): deletes the
+sealed token, sets the row `disconnected`, writes a receipt. The Connected card shows a
+"Disconnect" link in accounts mode only. The platform-side revoke (each platform's connected-
+apps page) stays with the founder — the receipt says so. The Airbyte connection is not torn
+down here; the next sync reads `error:token_refresh` / `no_secret` and the card shows Reconnect.
+
+## 10. Worker credentials
+
+The worker and the API routes pick their adapters in `src/worker/wiring.ts`: with the DB
+(service role) **and** `CONNECTOR_SECRET_KEY` present, readers get `ConnectorCredentialProvider`
+(live tokens from `connector_secrets`, refreshed + re-sealed as needed) and accounts come from
+`DbAccountsSource` (every account with ≥ 1 enabled routine); otherwise fixtures + the static
+`demo` account. The worker's startup log line reports `credentials: connectors|fixture` and
+`accounts: db|static`.
+
+## 11. Not built (known gaps)
 
 - GA4 property / Google Ads customer picker (external_ref stays null).
-- Shopify mandatory GDPR webhooks; Meta ad-account picker for multi-account users.
-- Disconnect / revoke (delete secret + revoke at the platform).
+- Meta ad-account picker for multi-account users.
+- Platform-side token revoke on disconnect (Shopify/Klaviyo/Meta/Google revoke endpoints).
+- Warehouse tenant purge on `customers/redact` / `shop/redact` (the Airbyte side).
 - A cron for `sweepOauthStates()` (10-minute TTL rows accumulate harmlessly until then).
-- The worker still ships `FixtureCredentialProvider`; `ConnectorCredentialProvider` (tokens.ts)
-  matches its interface and is the drop-in when live reads are switched on.

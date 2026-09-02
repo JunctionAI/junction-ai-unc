@@ -22,7 +22,8 @@ import type { DbClient } from "@/lib/db/types";
 import { seal, type Keyring } from "./crypto";
 import { bundleFromResponse, callbackUri, codeChallenge, exchangeCode, exchangeMetaLongLived, newCodeVerifier, newState, STATE_TTL_MS, verifyShopifyHmac, type FetchLike, type TokenBundle } from "./oauth";
 import { connectorEntry, normaliseShopDomain, platformCredentials, type ConnectorEntry } from "./registry";
-import { accountForUser, consumeOauthState, insertOauthState, isMember, putSecret, upsertConnector } from "./store";
+import { insertSystemReceipt } from "@/lib/db/receipts";
+import { accountForUser, consumeOauthState, deleteSecret, getConnector, insertOauthState, isMember, putSecret, updateConnector, upsertConnector } from "./store";
 
 export interface ConnectorConfig {
   /** Public base URL the callbacks are registered under (APP_URL), no trailing slash. */
@@ -178,6 +179,38 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
     const code = e instanceof Error && "code" in e ? String((e as { code: unknown }).code) : "unexpected";
     return fail(`exchange_${code}`);
   }
+}
+
+// ---------- disconnect ----------
+
+export type DisconnectResult = { status: 200; body: { ok: true; status: "disconnected" } } | { status: 200; body: { fallback: true; reason: FallbackReason } } | { status: 401 | 403 | 404; body: { error: string } };
+
+/** Forget a connection: delete the sealed token, mark the row disconnected, leave a receipt.
+    The platform-side revoke (the founder's connected-apps page) is theirs; the receipt says so.
+    Gates mirror start: platform known → DB → session → membership → a row to disconnect. */
+export async function handleDisconnect(deps: HandlerDeps, platform: string): Promise<DisconnectResult> {
+  const entry = connectorEntry(platform);
+  if (!entry) return { status: 404, body: { error: "unknown platform" } };
+  if (!deps.config.dbConfigured || !deps.db) return { status: 200, body: { fallback: true, reason: "accounts_not_configured" } };
+  if (!deps.userId) return { status: 401, body: { error: "sign in first" } };
+  const accountId = await accountForUser(deps.db, deps.userId);
+  if (!accountId) return { status: 403, body: { error: "no account for this user" } };
+  const row = await getConnector(deps.db, accountId, entry.id);
+  if (!row) return { status: 404, body: { error: "nothing connected" } };
+
+  const now = deps.now().toISOString();
+  await deleteSecret(deps.db, row.id);
+  await updateConnector(deps.db, row.id, { status: "disconnected", last_sync_result: null });
+  await insertSystemReceipt(deps.db, {
+    accountId,
+    kind: "notification",
+    platform: entry.id,
+    description: `${entry.name} disconnected — token deleted from the secret store; reads on it stop now. Revoke the app on ${entry.name}’s side too if you want it gone there.`,
+    payload: { connector_id: row.id, platform: entry.id, previous_status: row.status, external_ref: row.external_ref },
+    now,
+  });
+  deps.log?.(`connectors.disconnect platform=${entry.id} account=${accountId}`);
+  return { status: 200, body: { ok: true, status: "disconnected" } };
 }
 
 // ---------- external_ref discovery (best-effort, never fatal) ----------

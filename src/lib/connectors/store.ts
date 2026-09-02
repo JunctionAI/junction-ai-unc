@@ -57,6 +57,12 @@ export async function getConnector(db: DbClient, accountId: string, platform: st
   return unwrap<ConnectorRow | null>("connectors.select", db.from("connectors").select(CONNECTOR_COLS).eq("account_id", accountId).eq("platform", platform).maybeSingle());
 }
 
+/** The connector rows a platform-side identifier belongs to (a Shopify shop domain can only be
+    installed once per account, but the same shop may exist on several accounts). */
+export async function findConnectorsByExternalRef(db: DbClient, platform: string, externalRef: string): Promise<ConnectorRow[]> {
+  return unwrap<ConnectorRow[]>("connectors.select", db.from("connectors").select(CONNECTOR_COLS).eq("platform", platform).eq("external_ref", externalRef));
+}
+
 export async function getConnectorById(db: DbClient, connectorId: string): Promise<ConnectorRow | null> {
   return unwrap<ConnectorRow | null>("connectors.select", db.from("connectors").select(CONNECTOR_COLS).eq("id", connectorId).maybeSingle());
 }

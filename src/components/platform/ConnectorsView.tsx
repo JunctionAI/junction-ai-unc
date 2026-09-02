@@ -12,6 +12,7 @@ import type { PlatformVals } from "@/lib/platform/derive";
    line in Unc's voice when the platform isn't switched on yet. */
 
 type StartResponse = { url?: string; fallback?: boolean; reason?: string; error?: string };
+type DisconnectResponse = { ok?: boolean; fallback?: boolean; error?: string };
 
 export default function ConnectorsView({ V }: { V: PlatformVals }) {
   // Seeded from the OAuth return (if any) on first render; cleared once shown so it doesn't replay.
@@ -26,6 +27,28 @@ export default function ConnectorsView({ V }: { V: PlatformVals }) {
   useEffect(() => clearConnectReturn(), []);
 
   const note = (name: string, text: string) => setNotes((n) => ({ ...n, [name]: text }));
+  // Accounts mode only: the demo cards have no token to forget.
+  const canDisconnect = isDbConfigured();
+
+  async function disconnect(name: string, demoDisconnect: () => void) {
+    const platform = CONNECTOR_PLATFORMS[name];
+    if (!platform) return;
+    setBusy(name);
+    try {
+      const res = await fetch(`/api/connectors/${platform}/disconnect`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as DisconnectResponse;
+      if (res.status === 401) note(name, CONNECT_COPY.signIn);
+      else if (res.ok && data.ok) {
+        demoDisconnect();
+        note(name, CONNECT_COPY.disconnected);
+      } else if (res.ok && data.fallback) note(name, CONNECT_COPY.notSwitchedOn);
+      else note(name, data.error ? `${CONNECT_COPY.disconnectFailed} (${data.error})` : CONNECT_COPY.disconnectFailed);
+    } catch {
+      note(name, CONNECT_COPY.disconnectFailed);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function start(name: string, demoConnect: () => void, shopDomain?: string) {
     if (!isDbConfigured()) {
@@ -109,6 +132,16 @@ export default function ConnectorsView({ V }: { V: PlatformVals }) {
             {cn.ok && (
               <span style={{ flex: "none", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--cyan-text)", fontWeight: 600 }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan)" }}></span>Connected
+                {canDisconnect && (
+                  <button
+                    onClick={() => void disconnect(cn.name, cn.disconnect)}
+                    disabled={busy === cn.name}
+                    className="hov-underline"
+                    style={{ marginLeft: 8, border: "none", background: "transparent", color: "var(--muted)", fontSize: 11.5, fontWeight: 500, cursor: "pointer", padding: 0 }}
+                  >
+                    Disconnect
+                  </button>
+                )}
               </span>
             )}
             {cn.expired && (
