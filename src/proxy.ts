@@ -6,12 +6,13 @@
    Auth — no-op unless Supabase is configured. When it is:
      - refreshes the session cookies on every matched request (@supabase/ssr pattern);
      - /app/*  without a session → /login
-     - /login  with a session    → /app
+     - /login  with a session    → its ?next= (same-origin, via safeNext) or /app
    Reads process.env only; nothing secret is involved (anon key + the user's own cookies). */
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { publicSupabaseEnv } from "@/lib/db/client";
+import { safeNext } from "@/lib/db/redirects";
 import { COUNTRY_COOKIE, COUNTRY_COOKIE_MAX_AGE, COUNTRY_QUERY, normalizeCountry } from "@/lib/locale/resolve";
 
 export async function proxy(request: NextRequest) {
@@ -50,10 +51,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
   if (user && path === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/app";
-    url.search = "";
-    return NextResponse.redirect(url);
+    // Already signed in: honour ?next= (the Shopify install resume rides on it), else /app.
+    return NextResponse.redirect(new URL(safeNext(request.nextUrl.searchParams.get("next")), request.nextUrl.origin));
   }
   return response;
 }

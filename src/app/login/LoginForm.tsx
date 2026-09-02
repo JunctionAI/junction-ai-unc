@@ -7,7 +7,8 @@ type Phase = "idle" | "sending" | "sent" | "error";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function LoginForm() {
+/** `next`: same-origin path the magic link returns to (already passed through safeNext by the page). */
+export default function LoginForm({ next = "/app" }: { next?: string }) {
   const [email, setEmail] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [message, setMessage] = useState<string>("");
@@ -24,7 +25,7 @@ export default function LoginForm() {
     try {
       const { error } = await getBrowserSupabase().auth.signInWithOtp({
         email: addr,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/app` },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
       });
       if (error) throw error;
       setPhase("sent");

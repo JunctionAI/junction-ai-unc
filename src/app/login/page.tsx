@@ -1,6 +1,7 @@
 import Link from "next/link";
 import SiteFooter from "@/components/site/SiteFooter";
 import { isDbConfigured } from "@/lib/db/client";
+import { safeNext } from "@/lib/db/redirects";
 import LoginForm from "./LoginForm";
 
 export const metadata = { title: "Junction — Sign in" };
@@ -10,9 +11,12 @@ const ERRORS: Record<string, string> = {
   auth: "I couldn’t sign you in just now. Try again in a moment.",
 };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+/* ?next=<same-origin path> is where the magic link lands after sign-in (default /app) — the
+   Shopify install entry uses it to resume the OAuth flow. safeNext() keeps it on this origin. */
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; next?: string }> }) {
+  const { error, next } = await searchParams;
   const configured = isDbConfigured();
+  const after = safeNext(next);
   return (
     <main
       style={{
@@ -58,7 +62,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                 {ERRORS[error]}
               </div>
             )}
-            <LoginForm />
+            <LoginForm next={after} />
           </>
         ) : (
           <>
