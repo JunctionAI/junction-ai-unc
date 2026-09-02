@@ -115,9 +115,11 @@ describe("self-review", () => {
     const posted = await (await postReview()).json();
     expect(posted.author).toBe("sonnet");
     expect(posted.review.worked).toBe("I completed 1 run and handed over 1 draft.");
-    expect(seen).toEqual([{ provider: "openai", model: "gpt-5", maxTokens: 4000, effort: "low" }]);
-    expect(db.rows("llm_usage")).toHaveLength(1);
-    expect(db.rows("llm_usage")[0]).toMatchObject({ account_id: ACCT, task: "self_review", provider: "openai", model: "gpt-5", input_tokens: 900, output_tokens: 120, est_cost_usd: 0.002325, latency_ms: 42, stop_reason: "end" });
+    expect(seen.filter((c: { maxTokens?: number }) => c.maxTokens === 4000)).toEqual([{ provider: "openai", model: "gpt-5", maxTokens: 4000, effort: "low" }]);
+    // The self-review route also fires the Client Brain extraction hook (task memory_extract) — count only this task.
+    const reviewCalls = db.rows("llm_usage").filter((r) => r.task === "self_review");
+    expect(reviewCalls).toHaveLength(1);
+    expect(reviewCalls[0]).toMatchObject({ account_id: ACCT, task: "self_review", provider: "openai", model: "gpt-5", input_tokens: 900, output_tokens: 120, est_cost_usd: 0.002325, latency_ms: 42, stop_reason: "end" });
   });
   it("is session-bound: another user's account is never read", async () => {
     db.seed("self_reviews", [{ account_id: "00000000-0000-4000-8000-00000000acc2", week_start: "2026-08-31", body: "not yours", changes: [], evidence: {} }]);

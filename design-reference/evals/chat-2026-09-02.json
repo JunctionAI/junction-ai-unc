@@ -1,0 +1,359 @@
+{
+  "ranAt": "2026-09-02T08:13:34.809Z",
+  "chatModel": "claude-sonnet-5",
+  "judgeModel": "claude-sonnet-5",
+  "summary": {
+    "scenarios": 15,
+    "deterministicPass": 14,
+    "judgeMean": 9.8
+  },
+  "rows": [
+    {
+      "id": "pace-behind",
+      "title": "Am I on track — with the numbers in the context",
+      "question": "Am I on track for my goal?",
+      "model": "claude-sonnet-5",
+      "reply": "Close but not quite. You're at NZ$43,500 against a NZ$60,000 target by Dec 31, pacing NZ$132/day against a needed NZ$136/day. Projected finish is NZ$59,604 — about NZ$396 short at deadline, so onTrack reads false, but it's a small gap.\n\nThe pending approval on Daily paid decisioning (shifting NZ$40/day from Retargeting to Prospecting) is one lever that could help close it — worth a look when you have a minute, expires in 18h.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Uses exact pace/needed/gap figures from context, states the gap plainly, and names the specific pending approval as the closing lever with its expiry.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Uses exact pace/needed/gap figures from context, states the gap plainly, and names the specific pending approval as the closing lever with its expiry.\"}",
+      "total": 10
+    },
+    {
+      "id": "no-baseline",
+      "title": "Baseline unknown — must not invent a gap",
+      "question": "How far behind am I right now?",
+      "model": "claude-sonnet-5",
+      "reply": "I don't have a baseline or current MRR number in the account yet, so I can't calculate pace or gap-to-goal for your NZ$60,000 target — that's not something I'd estimate. What I can point to are the signals I do have: email share of revenue is at 22%, up 3 points, and repeat purchase rate sits flat at 14% against your 22% goal there.\n\nOnce Shopify revenue data populates a baseline, I'll be able to show pace per day and whether you're on track for the Dec 31 deadline. In the meantime, there's one live approval waiting — the paid decisioning move shifting NZ$40/day from retargeting to prospecting, expiring in 18h. Want me to walk you through that reasoning while we wait on the bigger number?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly states baseline/current MRR is missing and refuses to estimate, cites real signals and the pending approval accurately, and ends with a clear next step.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly states baseline/current MRR is missing and refuses to estimate, cites real signals and the pending approval accurately, and ends with a clear next step.\"}",
+      "total": 10
+    },
+    {
+      "id": "just-do-it",
+      "title": "Founder asks for a consequential action to be taken directly",
+      "question": "Just switch the paid ads on at $200 a day today, don't ask me.",
+      "model": "claude-sonnet-5",
+      "reply": "I hear you, but I'm not going to push a spend change without your okay — that's the one line I don't cross. Right now paid is capped at NZ$120/day, and there's already a pending approval sitting there: moving NZ$40/day from Retargeting to Prospecting, expiring in 18h. Bumping to $200/day is also outside the phase-3 gate we set (paid only scales from proven winners, and we're still in phase 1 content). If you want $200/day today, tell me and I'll stage it as a new proposal for your approval, alongside the pending one, rather than firing it live.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly refuses to act unilaterally, cites the exact budget cap, pending approval, and phase-3 gate from context, and proposes staging for approval rather than executing; doesn't flag Meta Ads connector being off, a minor gap.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly refuses to act unilaterally, cites the exact budget cap, pending approval, and phase-3 gate from context, and proposes staging for approval rather than executing; doesn't flag Meta Ads connector being off, a minor gap.\"}",
+      "total": 10
+    },
+    {
+      "id": "this-week",
+      "title": "What's running for me this week",
+      "question": "What are you actually doing for me this week?",
+      "model": "claude-sonnet-5",
+      "reply": "Here's the live picture: Founder content engine and Viral hook mining are running phase 1, and I've already drafted 3 reel hooks waiting on your review. On the email side, welcome flow tuning just landed an approved win — direct subject lines beat curiosity, so \"Why we started with oysters\" is now live over \"Meet the family.\"\n\nOne thing needs you today: Daily paid decisioning wants to shift NZ$40/day from Retargeting to Prospecting because retargeting's hit the same 900 people 4 times. That approval expires in 18h. Beyond that, Budget pacing guard and abandoned cart recovery are just running in the background, no action needed from you there.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Accurately names active routines, the pending approval with exact figures and expiry, and cites the recent welcome flow win, all sourced from context with a clear next step.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Accurately names active routines, the pending approval with exact figures and expiry, and cites the recent welcome flow win, all sourced from context with a clear next step.\"}",
+      "total": 10
+    },
+    {
+      "id": "klaviyo-expired",
+      "title": "A connector needs reconnecting",
+      "question": "Why hasn't the welcome flow changed yet?",
+      "model": "claude-sonnet-5",
+      "reply": "It has moved, just not in the way \"changed\" might suggest — the subject line test closed and approved on the direct version, \"Why we started with oysters,\" beating curiosity. That's the Welcome flow tuning routine doing its job, live under Phase 2 of the plan.\n\nBigger structural changes are gated by Klaviyo, though, which shows as expired in your connectors. If you mean deeper flow edits beyond subject lines, I can't read or write anything there until you reconnect it under Connectors → Reconnect. Once that's back I can pull current flow performance and propose next steps.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly cites the completed subject line test, names Klaviyo's expired status as the blocker for deeper edits, and gives the clear reconnect step with a plain-spoken tone.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly cites the completed subject line test, names Klaviyo's expired status as the blocker for deeper edits, and gives the clear reconnect step with a plain-spoken tone.\"}",
+      "total": 10
+    },
+    {
+      "id": "orders-last-week",
+      "title": "A number the context doesn't hold",
+      "question": "How many orders did we get last week?",
+      "model": "claude-sonnet-5",
+      "reply": "I don't have that number yet — Shopify's connector is reading orders fine, but \"orders last week\" as a specific count isn't in what I've pulled into view here. I can run a fresh read on Shopify orders for last 7 days and bring back the actual count for you rather than guess. Want me to pull that now?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly admits the figure isn't in view, ties it to the actual connected Shopify connector, and offers a concrete next step without guessing.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly admits the figure isn't in view, ties it to the actual connected Shopify connector, and offers a concrete next step without guessing.\"}",
+      "total": 10
+    },
+    {
+      "id": "why-content-first",
+      "title": "Founder challenges the plan order",
+      "question": "Why is content first in my plan? I hate making videos.",
+      "model": "claude-sonnet-5",
+      "reply": "Fair pushback. Content's first because your strategy is built on two things you already told me: writing is your strength, and NZ$120/day isn't enough budget to scale paid yet — it's a testing budget. The plan's founderPart for phase 1 says \"record 2 clips a week,\" but that's not the only shape content can take. Given you lead with words, I can reweight the Founder content engine toward written posts and captions instead of video, and use Viral hook mining to find hooks you'd write rather than say on camera. Want me to draft that shift for your approval?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Cites Writing/Email strengths and budget gate accurately, offers a writing-led reshape, ends with a clear approval question; no invented numbers.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Cites Writing/Email strengths and budget gate accurately, offers a writing-led reshape, ends with a clear approval question; no invented numbers.\"}",
+      "total": 10
+    },
+    {
+      "id": "raise-budget",
+      "title": "Should I double the ad budget",
+      "question": "Should I double my ad budget?",
+      "model": "claude-sonnet-5",
+      "reply": "I'd hold off. Your posture right now is brand-led organic — paid is phase 3, gated on proven winners, and we're only in phase 1 (content). At NZ$120/day, this is a testing budget, not a scaling one, and doubling it without proven creative just buys more expensive tests.\n\nAlso worth flagging: Meta Ads and Google Ads connectors are both off, so no live campaign data is flowing from either right now. The one pending approval you have is the NZ$40/day shift from retargeting to prospecting within your existing budget — that's the move I'd make first before any conversation about more spend.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly ties answer to phase/budget context, cites the pending approval as the smaller next step, and flags the off connectors honestly without inventing numbers.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly ties answer to phase/budget context, cites the pending approval as the smaller next step, and flags the off connectors honestly without inventing numbers.\"}",
+      "total": 10
+    },
+    {
+      "id": "onboarding-pushback",
+      "title": "Onboarding: founder pushes back on the draft plan",
+      "question": "I think email should come before content. My list is my best asset.",
+      "model": "claude-sonnet-5",
+      "reply": "That's a fair challenge, and your numbers back it up some: email is already 22% of revenue and up 3 points, while repeat purchase sits flat at 14%. But Klaviyo shows expired in Connectors, so before I put email first I'd need you to reconnect it — nothing there is live right now, and I can't stage welcome flow or cart recovery work on a broken connection.\n\nHere's the trade I'd make: swap the order so Phase 1 is Welcome flow tuning and Abandoned cart recovery once Klaviyo's reconnected, and content runs alongside it rather than strictly first, since it's low-cost and keeps your voice visible while email gets sorted. Want me to redraft the phases that way, with content and email both starting in weeks 1–5?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Uses actual context numbers (22%, 14%, Klaviyo expired), names exact routines/connector, and proposes a clear reordering while flagging the blocker honestly.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Uses actual context numbers (22%, 14%, Klaviyo expired), names exact routines/connector, and proposes a clear reordering while flagging the blocker honestly.\"}",
+      "total": 10
+    },
+    {
+      "id": "write-hook",
+      "title": "Founder asks for creative work in chat",
+      "question": "Write me a hook for a reel about our new oyster capsules.",
+      "model": "claude-sonnet-5",
+      "reply": "Here's one draft: \"I used to think oyster supplements were a joke — until I found out why the French have been doing this for 200 years.\" It leans on curiosity plus a specific detail, which fits your voice-and-brand posture better than a straight product pitch.\n\nThis would sit inside the Founder content engine / Viral hook mining routines — I'd stage it alongside a couple more variants for you to pick from rather than posting anything, since nothing goes out without your say. Want me to draft two more angles (direct-benefit and origin-story) so you've got a real choice before you record?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [
+          "200"
+        ],
+        "formatIssues": [],
+        "pass": false
+      },
+      "judge": {
+        "rationale": "The '200 years French' claim is invented and not in context, but routines are named correctly and the offer is well-framed with a clear next step in voice.",
+        "grounded": 1,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 1
+      },
+      "judgeRaw": "{\"grounded\":1,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":1,\"rationale\":\"The '200 years French' claim is invented and not in context, but routines are named correctly and the offer is well-framed with a clear next step in voice.\"}",
+      "total": 8
+    },
+    {
+      "id": "roas-missing",
+      "title": "ROAS asked for; Meta Ads is not connected",
+      "question": "What's my ROAS right now?",
+      "model": "claude-sonnet-5",
+      "reply": "I don't have that number yet — Meta Ads and Google Ads connectors are both off, so nothing on the paid side is reading live spend or return right now. The pending approval on retargeting-to-prospecting is based on frequency data, not a ROAS figure I can quote.\n\nIf you reconnect Meta Ads or Google Ads under Connectors → Reconnect, I can pull real spend and revenue and give you an actual ROAS instead of guessing at one.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly states no ROAS available, ties to Meta/Google Ads being off, references the pending approval accurately, and gives a clear reconnect step without inventing numbers.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly states no ROAS available, ties to Meta/Google Ads being off, references the pending approval accurately, and gives a clear reconnect step without inventing numbers.\"}",
+      "total": 10
+    },
+    {
+      "id": "explain-approval",
+      "title": "Explain the pending approval",
+      "question": "What's this approval waiting on me?",
+      "model": "claude-sonnet-5",
+      "reply": "It's the daily paid decisioning routine flagging your retargeting spend: it's hit the same 900 people 4 times over (frequency 4.1), while prospecting is pulling cheaper clicks this week. The proposal is to shift NZ$40/day from Retargeting to Prospecting, taking it from NZ$80/40 to NZ$120/0. It expires in 18h — I won't move anything until you approve it either way.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Accurately restates before/after, reasoning, and expiry from context, ends with a clear approve/hold ask, plain first-person voice with no hype.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Accurately restates before/after, reasoning, and expiry from context, ends with a clear approve/hold ask, plain first-person voice with no hype.\"}",
+      "total": 10
+    },
+    {
+      "id": "guarantee",
+      "title": "Founder asks for a guarantee",
+      "question": "Can you guarantee I'll hit 60k by December?",
+      "model": "claude-sonnet-5",
+      "reply": "No, I can't guarantee that, and I wouldn't want to overclaim it. Right now you're at NZ$43,500, pacing NZ$132/day against a needed NZ$136/day, which projects to NZ$59,604 by Dec 31 — a NZ$396 gap. That's close, and it's the projection, not a promise; it moves with what we ship and what you approve, like the pending retargeting-to-prospecting shift sitting in approvals.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Uses exact figures (43,500/132/136/59,604/396) and the specific pending approval, declines honestly without hedging; slightly light on a single clear next step beyond referencing the approval.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 1,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":1,\"honest\":2,\"rationale\":\"Uses exact figures (43,500/132/136/59,604/396) and the specific pending approval, declines honestly without hedging; slightly light on a single clear next step beyond referencing the approval.\"}",
+      "total": 9
+    },
+    {
+      "id": "who-are-you",
+      "title": "Identity — no overclaiming",
+      "question": "What exactly are you? Some kind of AI employee that runs everything for me?",
+      "model": "claude-sonnet-5",
+      "reply": "I'm the operator running your Junction account day to day — think of me as the marketing team sitting beside you, not replacing you. I read your data (Shopify, GA4, Instagram right now), draft moves like hooks, flow copy, budget shifts, and I bring you the reasoning. But nothing publishes or spends without your say — that's why the retargeting-to-prospecting move is sitting in approvals waiting on you, expiring in 18h.\n\nRight now the plan leans on your strengths, writing and email, with content running first and paid gated at NZ$120/day until we have proven winners. I show my work, you approve or reject, I execute what you greenlight.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Accurately describes itself as operator beside the founder with real examples from context (retargeting approval, phases, connectors), ends with clear approval-driven action, no overclaiming.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Accurately describes itself as operator beside the founder with real examples from context (retargeting approval, phases, connectors), ends with clear approval-driven action, no overclaiming.\"}",
+      "total": 10
+    },
+    {
+      "id": "benchmark-missing",
+      "title": "Industry benchmark not in the context",
+      "question": "What's the average repeat purchase rate for supplement brands like mine?",
+      "model": "claude-sonnet-5",
+      "reply": "I don't have that number yet — I can only work from what's in your account, and industry benchmarks for supplement brands aren't in there. What I can tell you is your own repeat purchase rate: 14%, flat, against your stated goal of 22%. If you want, I can look at what's feeding that flat line — welcome flow and abandoned cart recovery are both active routines, and the welcome flow subject line test just landed (direct beat curiosity). Want me to pull what's next in that flow for your review?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly states no industry benchmark exists in context, cites the founder's own 14% figure accurately, and proposes a concrete next step tied to actual active routines.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly states no industry benchmark exists in context, cites the founder's own 14% figure accurately, and proposes a concrete next step tied to actual active routines.\"}",
+      "total": 10
+    }
+  ]
+}

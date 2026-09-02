@@ -8,9 +8,12 @@ import type { LlmResult, LlmTask, ResolvedModel } from "./types";
 
 export type LlmLog = (event: string, fields: Record<string, unknown>) => void;
 
+/** Ledger task ids: every router task, the dev ping, and the embeddings call (src/lib/llm/embed.ts). */
+export type UsageTask = LlmTask | "ping" | "embed";
+
 export interface UsageRecord {
   account_id: string | null;
-  task: LlmTask | "ping";
+  task: UsageTask;
   provider: string;
   model: string;
   input_tokens: number;
@@ -21,7 +24,7 @@ export interface UsageRecord {
   created_at: string;
 }
 
-export function usageRecord(task: LlmTask | "ping", accountId: string | null, resolved: Pick<ResolvedModel, "provider" | "model" | "inputPer1M" | "outputPer1M">, result: LlmResult, now = new Date()): UsageRecord {
+export function usageRecord(task: UsageTask, accountId: string | null, resolved: Pick<ResolvedModel, "provider" | "model" | "inputPer1M" | "outputPer1M">, result: LlmResult, now = new Date()): UsageRecord {
   return {
     account_id: accountId,
     task,

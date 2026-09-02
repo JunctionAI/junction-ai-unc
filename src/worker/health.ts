@@ -3,7 +3,7 @@
    is served; nothing from the request is echoed. */
 
 import { createServer, type Server } from "node:http";
-import type { JobMarkers } from "./jobs";
+import type { BriefMarkers, JobMarkers } from "./jobs";
 
 export interface Heartbeat {
   pid: number;
@@ -17,6 +17,8 @@ export interface Heartbeat {
   stopping: boolean;
   /** Per-job "already ran" markers for the in-loop scheduler (jobs.ts); reloaded on start. */
   jobs?: JobMarkers;
+  /** Per-account "already briefed today" markers (account-local days); reloaded on start. */
+  briefs?: BriefMarkers;
   lastSweepAt?: string | null;
   lastError?: string;
 }

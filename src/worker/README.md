@@ -27,8 +27,8 @@ dry-run-only**:
 | `scheduler.ts` | Pure due-selection: `dueRoutines(now, candidates, {lookbackMs})`. `manual` and `event:*` cadences are never scheduled. Dedup for dry runs is store-backed (see below). |
 | `service.ts` | Shared trigger/resume used by the loop **and** the API routes. `LIVE_MODE_ENABLED`, `buildAdapters`, `triggerRun`, `resumeApproval`, `collectCandidates`, `WorkerError`. |
 | `loop.ts` | The daemon: `Worker` class — tick every N s, per-tick time budget, structured JSON logs, atomic heartbeat file, graceful SIGTERM/SIGINT, `whenIdle()`; after the routines each tick runs the due telemetry jobs and the hourly `oauth_states` sweep. |
-| `jobs.ts` | Pure in-loop schedule for the telemetry jobs (`measure` 02:00 daily, `benchmarks` Mon 03:00, `self_review` Mon 06:00 UTC): `dueJobs(now, markers)`, per-job "already ran" markers that ride on the heartbeat file. |
-| `telemetry.ts` | `runMeasure` / `runSelfReview` / `runBenchmarks` — what the jobs and the one-shot flags call (docs/IMPROVEMENT-LOOP.md). |
+| `jobs.ts` | Pure in-loop schedule for the telemetry jobs (`kpi_snapshot` 01:30 daily, `measure` 02:00 daily, `benchmarks` Mon 03:00, `self_review` Mon 06:00 UTC): `dueJobs(now, markers)`, per-job "already ran" markers that ride on the heartbeat file; `dueBriefs` for the daily brief at 06:30 in each account's own timezone (docs/PROACTIVE.md). |
+| `telemetry.ts` | `runMeasure` / `runSelfReview` / `runBenchmarks` / `runKpiSnapshot` / `runDailyBrief` — what the jobs and the one-shot flags call (docs/IMPROVEMENT-LOOP.md, docs/PROACTIVE.md). |
 | `main.ts` | CLI entry (flags below). |
 | `health.ts` | Optional `GET /health` (200 while the heartbeat is fresh, 503 otherwise). |
 | `accounts.ts` | `AccountsSource` interface + `StaticAccountsSource` (one `demo` account) + `DbAccountsSource` (accounts with ≥ 1 enabled routine, from the DB). |
@@ -37,7 +37,7 @@ dry-run-only**:
 | `log.ts` | JSON-lines logger with unconditional secret redaction (key names and token-shaped values). |
 | `providers/connectorReader.ts` | `WorkerConnectorReader` — resolves credentials, dispatches by platform, maps reader answers onto the engine's `ReadResult`. |
 | `providers/executor.ts` | `RefusingExecutor`. |
-| `providers/llmDecision.ts` | `LlmDecisionProvider` for `rule: { kind: "llm" }` decide nodes (Sonnet, env-gated), strict `{optionId, reasoning}` validation, deterministic fallback on any failure. |
+| `providers/llmDecision.ts` | `LlmDecisionProvider` for `rule: { kind: "llm" }` decide nodes (env-gated), strict `{optionId, reasoning}` validation, deterministic fallback on any failure; the FOUNDER block (tone / decision style / taste lines) in the prompt and the taste-derived spend ceiling applied after every decision (docs/PROACTIVE.md). |
 | `readers/{shopify,klaviyo,ga4,meta,googleAds,hubspot}.ts` | `read(query, creds, opts)` per platform: request shaping for real read endpoints + fixture rows. |
 | `readers/http.ts`, `readers/types.ts` | Shared fetch-with-timeout, window parsing, `ReaderResult` contract. |
 | `../lib/runtime/store/index.ts` | `getStore()` — process-wide `MemoryStore` (TODO Supabase swap). |
@@ -72,6 +72,8 @@ Flags (all optional):
 | `--measure` | off | Measure every routine's KPI contract against actuals → `routine_outcomes`, then exit. |
 | `--self-review` | off | Write Unc's weekly self-review per account → `self_reviews` (idempotent per ISO week), then exit. |
 | `--benchmarks` | off | Aggregate opted-in accounts' outcomes into anonymised p50/p75 (n ≥ 5 only) → `benchmarks`, then exit. |
+| `--kpi-snapshot` | off | Snapshot the fixed KPI set for every account with a connected platform → `kpi_snapshots` (docs/PROACTIVE.md), then exit. |
+| `--daily-brief` | off | Refresh taste → `account_profiles.decision_style`, then write today's brief per account → `daily_briefs` (idempotent per account-local day), then exit. |
 
 The three flags are manual / catch-up runs. **The daemon runs the same jobs itself** at
 their UTC slots (`jobs.ts`; see "How a tick works" and `docs/IMPROVEMENT-LOOP.md`).

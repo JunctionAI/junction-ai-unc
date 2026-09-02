@@ -10,15 +10,26 @@
    reasoning line that says so. The model never gets to invent an option and
    its reasoning is capped and trimmed before it reaches a receipt/approval.
 
+   Personalisation (src/lib/brain/taste.ts): the prompt carries a FOUNDER block — the
+   account's tone / decision style (account_profiles) and 2–4 taste lines derived from the
+   approvals ledger ("held 3 of 4 budget shifts above NZ$50/day…"). After ANY decision (llm
+   or deterministic) the taste-derived spend ceiling shrinks a proposal that exceeds it —
+   never expands one — and the reasoning says so ("Kept under your usual NZ$50/day"), which
+   is what lands on the approval. A personalisation lookup that fails is a warning: the
+   decision proceeds without it.
+
    The production client comes from the model-provider layer
    (src/lib/llm/router.ts, task "routine_decision": account setting →
    LLM_MODEL_ROUTINE_DECISION → the first configured provider's fast tier).
    Keys are read there from process.env, never by us, never logged. Tests
    inject a fake LlmClient — no live calls. */
 
+import { applySpendCeiling, readAccountProfile, renderProfileForDecision, renderTasteForDecision, suggestedSpendCeiling, tastePatterns } from "../../lib/brain/taste";
+import type { DbClient } from "../../lib/db/types";
 import { createTextClient, describeLlm, type CompleteContext } from "../../lib/llm/router";
 import { renderParams, renderTemplate, resolveSpend } from "../../lib/runtime/context";
 import { DeterministicDecisionProvider } from "../../lib/runtime/providers";
+import type { Store } from "../../lib/runtime/store/interface";
 import type { DecideNode, Decision, DecisionOption, DecisionProvider, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
 
@@ -46,6 +57,8 @@ Voice rules (non-negotiable): first person, present tense; numbers over adjectiv
 
 Product guardrails (absolute): you propose, the founder approves — nothing publishes, sends or spends without their explicit okay. No invented numbers: the ONLY numbers you may use are the ones in the CONTEXT below. If a number you need is not there, say so in the reasoning rather than estimating.
 
+Personalisation: when a FOUNDER block is present it tells you how this founder likes to work and what they have approved or held before. Propose within their comfort — or explain in the reasoning why this time is different. When a taste line shaped your choice, say so in the reasoning in their terms (e.g. "kept under your usual NZ$50/day").
+
 Task: a routine has reached a decision node. Choose exactly one of the OFFERED OPTIONS by id.
 
 Output format (strict): reply with ONLY a JSON object, no prose, no markdown fences:
@@ -64,7 +77,24 @@ function compactContext(ctx: RunContext): Record<string, unknown> {
   };
 }
 
-export function buildDecisionPrompt(node: DecideNode, ctx: RunContext): LlmPrompt {
+/** What the decider knows about this founder (taste.ts) — empty lines = nothing known yet. */
+export interface Personalisation {
+  /** From account_profiles: tone, decision style, founder notes. */
+  profileLines: string[];
+  /** From the approvals ledger: approval rates, hold reasons, spend comfort. */
+  tasteLines: string[];
+  /** Per-day spend the evidence says to stay under; null = no pattern. */
+  spendCeiling: number | null;
+  currency: string;
+}
+
+export function renderFounderBlock(p: Personalisation | null | undefined): string {
+  if (!p) return "";
+  const lines = [...p.profileLines, ...p.tasteLines];
+  return lines.length ? `FOUNDER (how they like to work; what they have approved or held):\n${lines.map((l) => `- ${l}`).join("\n")}` : "";
+}
+
+export function buildDecisionPrompt(node: DecideNode, ctx: RunContext, personal?: Personalisation | null): LlmPrompt {
   const rule = node.rule.kind === "llm" ? node.rule : null;
   const options = node.options.map((o) => ({
     id: o.id,
@@ -77,6 +107,7 @@ export function buildDecisionPrompt(node: DecideNode, ctx: RunContext): LlmPromp
     `QUESTION: ${node.question}`,
     rule?.prompt ? `GUIDANCE: ${renderTemplate(rule.prompt, ctx)}` : "",
     `OFFERED OPTIONS (choose one id): ${JSON.stringify(options)}`,
+    renderFounderBlock(personal),
     `CONTEXT (your only source of numbers): ${JSON.stringify(compactContext(ctx))}`,
     `Reply with the JSON object only.`,
   ]
@@ -127,8 +158,42 @@ function toDecision(opt: DecisionOption, reasoning: string, ctx: RunContext): De
   };
 }
 
+export interface PersonalisationSource {
+  /** null = nothing known (demo, no ledger yet). Must not throw for "no data". */
+  forAccount(accountId: string, currency: string): Promise<Personalisation | null>;
+}
+
+/** Store-backed source with a short per-account cache (a run has several decide nodes; a
+    tick has several runs). `db` null → no profile block, taste lines only. */
+export class StorePersonalisation implements PersonalisationSource {
+  private readonly cache = new Map<string, { at: number; value: Personalisation | null }>();
+  private readonly now: () => Date;
+  private readonly ttlMs: number;
+  constructor(
+    private readonly store: Store,
+    private readonly db: DbClient | null,
+    opts: { now?: () => Date; ttlMs?: number } = {},
+  ) {
+    this.now = opts.now ?? (() => new Date());
+    this.ttlMs = opts.ttlMs ?? 10 * 60_000;
+  }
+  async forAccount(accountId: string, currency: string): Promise<Personalisation | null> {
+    const hit = this.cache.get(accountId);
+    const t = this.now().getTime();
+    if (hit && t - hit.at < this.ttlMs) return hit.value;
+    const patterns = await tastePatterns(this.store, accountId, { now: this.now, currency });
+    const profile = this.db ? await readAccountProfile(this.db, accountId) : null;
+    const value: Personalisation = { profileLines: renderProfileForDecision(profile), tasteLines: renderTasteForDecision(patterns, null, currency), spendCeiling: suggestedSpendCeiling(patterns), currency };
+    const out = value.profileLines.length || value.tasteLines.length || value.spendCeiling !== null ? value : null;
+    this.cache.set(accountId, { at: t, value: out });
+    return out;
+  }
+}
+
 export interface LlmDecisionProviderOptions {
   log?: Logger;
+  /** Taste + profile for the FOUNDER block and the spend ceiling. Absent = impersonal. */
+  personalisation?: PersonalisationSource | null;
 }
 
 export class LlmDecisionProvider implements DecisionProvider {
@@ -140,7 +205,26 @@ export class LlmDecisionProvider implements DecisionProvider {
     private readonly opts: LlmDecisionProviderOptions = {},
   ) {}
 
+  private async personal(ctx: RunContext): Promise<Personalisation | null> {
+    const src = this.opts.personalisation;
+    if (!src) return null;
+    try {
+      return await src.forAccount(ctx.account.accountId, ctx.account.currency);
+    } catch (err) {
+      this.opts.log?.warn("decision.personalisation_failed", { runId: ctx.runId, accountId: ctx.account.accountId, error: err instanceof Error ? err.message : String(err) });
+      return null;
+    }
+  }
+
+  /** Every decision — llm or deterministic — passes the taste-derived spend ceiling on its way
+      to the gate. The ceiling can only lower a proposal. */
   async decide(node: DecideNode, ctx: RunContext): Promise<Decision> {
+    const personal = await this.personal(ctx);
+    const decision = await this.choose(node, ctx, personal);
+    return applySpendCeiling(decision, personal?.spendCeiling ?? null, personal?.currency ?? ctx.account.currency);
+  }
+
+  private async choose(node: DecideNode, ctx: RunContext, personal: Personalisation | null): Promise<Decision> {
     if (node.rule.kind !== "llm") return this.deterministic.decide(node, ctx);
     const byId = new Map(node.options.map((o) => [o.id, o]));
     const fallback = (node.rule.fallback && byId.get(node.rule.fallback)) || node.options[0];
@@ -150,7 +234,7 @@ export class LlmDecisionProvider implements DecisionProvider {
 
     let text: string;
     try {
-      text = await this.client.complete({ ...buildDecisionPrompt(node, ctx), accountId: ctx.account.accountId });
+      text = await this.client.complete({ ...buildDecisionPrompt(node, ctx, personal), accountId: ctx.account.accountId });
     } catch (err) {
       // Log the failure class only — never the error body (it could echo request details).
       this.opts.log?.warn("decision.llm_failed", { runId: ctx.runId, routineId: ctx.routineId, node: node.id, error: err instanceof Error ? err.name : "unknown" });

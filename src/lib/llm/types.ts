@@ -5,8 +5,14 @@
    "error" (plus a code) or "refusal", so every call site keeps exactly the deterministic /
    canned fallback it had when the Anthropic SDK was wired in directly. */
 
-export type LlmTask = "chat" | "plan_narrative" | "business_scan" | "self_review" | "routine_decision";
+export type LlmTask = "chat" | "plan_narrative" | "business_scan" | "self_review" | "routine_decision" | "memory_extract" | "daily_brief" | "kpi_insight" | "eval_judge";
 
+/** The founder-settable tasks (the settings UI + account_model_prefs, whose check constraint
+    lists exactly these). memory_extract is an internal task: default fast tier, env override
+    LLM_MODEL_MEMORY_EXTRACT, no per-account setting. daily_brief (balanced tier) and
+    kpi_insight (fast tier) are internal too — docs/PROACTIVE.md. */
+/** eval_judge (balanced tier, env LLM_MODEL_EVAL_JUDGE) is internal too — the chat eval harness,
+    scripts/eval-chat.ts — and is deliberately not listed below. */
 export const LLM_TASKS: readonly LlmTask[] = ["chat", "plan_narrative", "business_scan", "self_review", "routine_decision"] as const;
 
 export type ProviderId = "anthropic" | "openai" | "gemini" | "openrouter" | "custom";
@@ -105,4 +111,8 @@ export const TASK_LABELS: Record<LlmTask, string> = {
   business_scan: "Reading your site",
   self_review: "My weekly self-review",
   routine_decision: "Decisions inside routines",
+  memory_extract: "Remembering what you tell me",
+  daily_brief: "My morning brief",
+  kpi_insight: "Reading your numbers",
+  eval_judge: "Grading my own replies (evals)",
 };

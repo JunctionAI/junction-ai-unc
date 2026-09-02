@@ -101,3 +101,37 @@ export function buildUncContext(S: PlatformState) {
 }
 
 export type UncContext = ReturnType<typeof buildUncContext>;
+
+/* ---------- Client Brain (server-side only) ----------
+   The browser builds the context above from its own state; the chat route then attaches what
+   Unc remembers about this founder (src/lib/brain/retrieve.ts recallForContext, keyed on the
+   latest founder message) and how they like to work (src/lib/brain/profile.ts). Both are
+   rendered by buildUncSystemPrompt as their own sections, never as raw JSON. Anything the
+   client sent under these keys is dropped first — the brain is server truth. */
+
+export const BRAIN_CONTEXT_KEYS = ["memories", "profile"] as const;
+
+export interface BrainContext {
+  /** "[kind] text" lines from recallForContext — the founder's stated truth, compact. */
+  memories: string[];
+  /** renderProfileForPrompt output; "" when the profile is empty. */
+  profile: string;
+}
+
+export type UncContextWithBrain = UncContext & Partial<BrainContext>;
+
+export function attachBrain(context: unknown, brain: BrainContext | null): Record<string, unknown> {
+  const base = context && typeof context === "object" && !Array.isArray(context) ? { ...(context as Record<string, unknown>) } : {};
+  for (const k of BRAIN_CONTEXT_KEYS) delete base[k];
+  if (!brain) return base;
+  return { ...base, memories: brain.memories.filter((m) => typeof m === "string" && m.trim()), profile: brain.profile ?? "" };
+}
+
+/** Pull the brain sections back out of a context object (the prompt renders them separately). */
+export function splitBrain(context: unknown): { context: Record<string, unknown>; brain: BrainContext | null } {
+  const base = context && typeof context === "object" && !Array.isArray(context) ? { ...(context as Record<string, unknown>) } : {};
+  const memories = Array.isArray(base.memories) ? base.memories.filter((m): m is string => typeof m === "string" && !!m.trim()) : [];
+  const profile = typeof base.profile === "string" ? base.profile : "";
+  for (const k of BRAIN_CONTEXT_KEYS) delete base[k];
+  return { context: base, brain: memories.length || profile.trim() ? { memories, profile } : null };
+}

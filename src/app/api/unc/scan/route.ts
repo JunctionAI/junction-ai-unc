@@ -10,6 +10,7 @@
    inside scanBusiness (≤ 3 redirects). Model: the "business_scan" task through
    src/lib/llm/router.ts (fast tier by default). Keys never reach the client. */
 
+import { afterScan } from "@/lib/brain/hooks";
 import { optionalAccountContext } from "@/lib/llm/accountContext";
 import { resolveModel } from "@/lib/llm/router";
 import { isSafeUrl, scanBusiness } from "@/lib/unc/scan";
@@ -43,6 +44,10 @@ export async function POST(req: Request) {
   try {
     const account = await optionalAccountContext();
     const profile = await scanBusiness({ website, socials, accountId: account?.accountId ?? null });
+    if (account?.db && profile.confidence !== "low") {
+      // Client Brain: the profile's facts become memories (source "scan"); fire-and-forget, accounts mode only.
+      void afterScan({ accountId: account.accountId, profile, sourceRef: website || null }, { db: account.db }).catch(() => {});
+    }
     return Response.json({ profile });
   } catch {
     // scanBusiness never throws by contract; this is belt-and-braces.

@@ -19,6 +19,8 @@ export const LLM_ENV_KEYS = [
   "LLM_MODEL_BUSINESS_SCAN",
   "LLM_MODEL_SELF_REVIEW",
   "LLM_MODEL_ROUTINE_DECISION",
+  "LLM_MODEL_DAILY_BRIEF",
+  "LLM_MODEL_KPI_INSIGHT",
 ] as const;
 
 let saved: Record<string, string | undefined> = {};

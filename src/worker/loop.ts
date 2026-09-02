@@ -10,10 +10,12 @@
    every mutation regardless. Credentials are fixture markers unless a real
    CredentialProvider is injected (none is shipped).
 
-   Housekeeping the same tick does, after the routines (both env-gated on a DB):
-     - the telemetry jobs at their UTC slots (src/worker/jobs.ts: measure daily 02:00,
-       benchmarks Mondays 03:00, self-review Mondays 06:00) with per-job "already ran"
-       markers on the heartbeat file so a restart doesn't double-run;
+   Housekeeping the same tick does, after the routines (all env-gated on a DB):
+     - the telemetry jobs at their UTC slots (src/worker/jobs.ts: kpi snapshot daily 01:30,
+       measure daily 02:00, benchmarks Mondays 03:00, self-review Mondays 06:00) with per-job
+       "already ran" markers on the heartbeat file so a restart doesn't double-run;
+     - Unc's daily brief at 06:30 in each account's own timezone (jobs.ts dueBriefs, one
+       marker per account on the same heartbeat; the daily_briefs row is the durable dedup);
      - sweepOauthStates() once an hour (expired 10-minute Connect states).
 
    Deps are injected (WorkerDeps) so tests run a tick against MemoryStore and
@@ -25,12 +27,13 @@ import { sweepOauthStates } from "../lib/connectors/store";
 import type { DbClient } from "../lib/db/types";
 import type { RunStatus } from "../lib/runtime/types";
 import type { Heartbeat } from "./health";
-import { DEFAULT_JOB_LOOKBACK_MS, dueJobs, sanitiseMarkers, type JobId, type JobMarkers } from "./jobs";
+import { DEFAULT_JOB_LOOKBACK_MS, dueBriefs, dueJobs, sanitiseBriefMarkers, sanitiseMarkers, type BriefCandidate, type BriefMarkers, type JobId, type JobMarkers } from "./jobs";
 import { createLogger, type Logger } from "./log";
 import { dueRoutines, type DueRoutine } from "./scheduler";
 import { buildAdapters, collectCandidates, LIVE_MODE_ENABLED, triggerRun, WORKER_RUN_MODE, type BuiltAdapters, type ServiceDeps } from "./service";
-import { runBenchmarks, runMeasure, runSelfReview, type TelemetryDeps } from "./telemetry";
+import { runBenchmarks, runDailyBrief, runKpiSnapshot, runMeasure, runSelfReview, type TelemetryDeps } from "./telemetry";
 import type { SelfReviewLlm } from "../lib/telemetry/selfReview";
+import { readTimezone, type BriefLlm } from "../lib/brain/brief";
 
 export interface WorkerOptions {
   /** Seconds between ticks. Default 60. */
@@ -50,6 +53,8 @@ export interface WorkerOptions {
   jobLookbackMs?: number;
   /** How often expired oauth_states are swept (needs deps.db). Default 1 h. */
   sweepIntervalMs?: number;
+  /** Run the account-local daily brief inside the loop (needs deps.db). Default true. */
+  briefs?: boolean;
 }
 
 export interface WorkerDeps extends ServiceDeps {
@@ -59,6 +64,8 @@ export interface WorkerDeps extends ServiceDeps {
   /** Model client for the weekly self-review (task "self_review"); falls back to `llm`
       so existing fixtures keep working. null = deterministic review. */
   reviewLlm?: SelfReviewLlm | null;
+  /** Model client for the daily brief (task "daily_brief"); null = deterministic brief. */
+  briefLlm?: BriefLlm | null;
 }
 
 export const DEFAULT_SWEEP_INTERVAL_MS = 3_600_000;
@@ -83,6 +90,8 @@ export interface TickReport {
   deferred: number;
   /** Scheduled telemetry jobs this tick ran (jobs.ts), in order. */
   jobs: JobId[];
+  /** Accounts whose daily brief this tick served (account-local 06:30). */
+  briefs: string[];
   /** True when the hourly oauth_states sweep ran this tick. */
   swept: boolean;
   ms: number;
@@ -96,6 +105,7 @@ export interface WorkerStats {
   lastTickMs: number | null;
   lastError?: string;
   jobs: JobMarkers;
+  briefs: BriefMarkers;
   lastSweepAt: string | null;
 }
 
@@ -123,7 +133,7 @@ export class Worker {
     // Job markers survive a restart through the heartbeat file (a restart inside the
     // look-back window must not re-run the day's jobs).
     const previous = opts.heartbeatPath ? readHeartbeatFile(opts.heartbeatPath) : null;
-    this.stats = { startedAt: this.now().toISOString(), ticks: 0, runsStarted: 0, lastTickAt: null, lastTickMs: null, jobs: sanitiseMarkers(previous?.jobs), lastSweepAt: null };
+    this.stats = { startedAt: this.now().toISOString(), ticks: 0, runsStarted: 0, lastTickAt: null, lastTickMs: null, jobs: sanitiseMarkers(previous?.jobs), briefs: sanitiseBriefMarkers(previous?.briefs), lastSweepAt: null };
   }
 
   // ----- one tick -----
@@ -131,7 +141,7 @@ export class Worker {
   /** Run one scheduling pass. Safe to call directly (tests, --once). */
   async tick(now: Date = this.now()): Promise<TickReport> {
     const t0 = Date.now();
-    const report: TickReport = { at: now.toISOString(), accounts: 0, candidates: 0, due: 0, started: [], deferred: 0, jobs: [], swept: false, ms: 0 };
+    const report: TickReport = { at: now.toISOString(), accounts: 0, candidates: 0, due: 0, started: [], deferred: 0, jobs: [], briefs: [], swept: false, ms: 0 };
     try {
       const accounts = await this.deps.accounts.listAccounts();
       report.accounts = accounts.length;
@@ -164,6 +174,7 @@ export class Worker {
     }
     // Housekeeping after the routines: each part isolates its own failures.
     if (this.opts.jobs ?? true) report.jobs = await this.runDueJobs(now);
+    if (this.opts.briefs ?? true) report.briefs = await this.runDueBriefs(now);
     report.swept = await this.sweepIfDue(now);
     report.ms = Date.now() - t0;
     this.stats.ticks += 1;
@@ -191,7 +202,7 @@ export class Worker {
   // ----- scheduled telemetry jobs (jobs.ts) -----
 
   private telemetryDeps(): TelemetryDeps {
-    return { store: this.deps.store, accounts: this.deps.accounts, reader: this.adapters.reader, db: this.deps.db ?? null, llm: this.deps.reviewLlm ?? this.deps.llm ?? null, now: this.now, log: this.log };
+    return { store: this.deps.store, accounts: this.deps.accounts, reader: this.adapters.reader, db: this.deps.db ?? null, llm: this.deps.reviewLlm ?? this.deps.llm ?? null, briefLlm: this.deps.briefLlm ?? null, now: this.now, log: this.log };
   }
 
   /** Run every job whose slot is due and unserved; the marker is written whatever
@@ -205,7 +216,10 @@ export class Worker {
       this.log.info("job.start", base);
       try {
         const deps = this.telemetryDeps();
-        if (job.id === "measure") {
+        if (job.id === "kpi_snapshot") {
+          const r = await runKpiSnapshot(deps);
+          this.log.info("job.finish", { ...base, accounts: r.accounts, written: r.written, couldntAsk: r.couldntAsk, skipped: r.skipped, ms: Date.now() - t0 });
+        } else if (job.id === "measure") {
           const r = await runMeasure(deps);
           this.log.info("job.finish", { ...base, accounts: r.accounts, measured: r.measured, skipped: r.skipped, ms: Date.now() - t0 });
         } else if (job.id === "benchmarks") {
@@ -225,6 +239,52 @@ export class Worker {
       ran.push(job.id);
     }
     return ran;
+  }
+
+  // ----- the daily brief (account-local 06:30) -----
+
+  /** Every account whose local 06:30 slot is inside the look-back and not yet served today.
+      No DB → nothing (demo mode has no briefs). A failing brief is marked served for the day. */
+  private async runDueBriefs(now: Date): Promise<string[]> {
+    const db = this.deps.db;
+    if (!db) return [];
+    const served: string[] = [];
+    let candidates: BriefCandidate[];
+    try {
+      const accounts = await this.deps.accounts.listAccounts();
+      candidates = [];
+      for (const a of accounts) {
+        const id = a.account.accountId;
+        let timezone: string | null = null;
+        try {
+          timezone = await readTimezone(db, id);
+        } catch (err) {
+          this.log.warn("brief.timezone_failed", { accountId: id, error: err instanceof Error ? err.message : String(err) });
+        }
+        candidates.push({ accountId: id, timezone });
+      }
+    } catch (err) {
+      this.log.warn("brief.candidates_failed", { error: err instanceof Error ? err.message : String(err) });
+      return [];
+    }
+    for (const d of dueBriefs(now, candidates, this.stats.briefs, this.opts.jobLookbackMs ?? DEFAULT_JOB_LOOKBACK_MS)) {
+      if (this.stopping) break;
+      const t0 = Date.now();
+      const base = { job: "daily_brief", accountId: d.accountId, day: d.day, slot: d.slot.toISOString(), timezone: d.timezone ?? "UTC" };
+      this.log.info("job.start", base);
+      try {
+        const r = await runDailyBrief(this.telemetryDeps(), { accountId: d.accountId, timezone: d.timezone });
+        this.log.info("job.finish", { ...base, written: r.written.length, alreadyDone: r.alreadyDone.length, ms: Date.now() - t0 });
+        this.stats.briefs[d.accountId] = { day: d.day, ranAt: this.now().toISOString(), ok: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.stats.lastError = message;
+        this.log.error("job.error", { ...base, error: message });
+        this.stats.briefs[d.accountId] = { day: d.day, ranAt: this.now().toISOString(), ok: false, error: message };
+      }
+      served.push(d.accountId);
+    }
+    return served;
   }
 
   // ----- oauth_states sweep -----
@@ -312,6 +372,7 @@ export class Worker {
       liveModeEnabled: false,
       stopping: this.stopping,
       jobs: this.stats.jobs,
+      briefs: this.stats.briefs,
       lastSweepAt: this.stats.lastSweepAt,
       ...(this.stats.lastError ? { lastError: this.stats.lastError } : {}),
     };

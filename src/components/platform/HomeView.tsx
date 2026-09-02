@@ -7,6 +7,7 @@ import { BASELINE_NOT_SET_COPY } from "@/lib/platform/goal";
 import type { LiveApprovals } from "./useLiveApprovals";
 import type { HomeTelemetryState } from "./useHomeTelemetry";
 import { barCards, hoursSavedLabel, weekLabel } from "@/lib/platform/telemetry";
+import TodayBrief, { approvalAnchorId } from "./TodayBrief";
 
 const sectionLabel: React.CSSProperties = {
   fontSize: 11,
@@ -238,6 +239,8 @@ export default function HomeView({ V, live = null, telemetry = null, accountMode
             <span style={{ fontSize: 11, background: "var(--amber-wash)", color: "var(--amber-text)", borderRadius: 999, padding: "2px 9px", fontWeight: 600, marginLeft: 4 }}>{needsCount}</span>
           </div>
         </div>
+        {/* Unc's daily brief — accounts mode only; the component renders nothing in demo mode. */}
+        {accountMode && <TodayBrief accountMode={accountMode} />}
         {review && (
           <div data-testid="unc-self-review" style={{ display: "flex", gap: 12, marginBottom: 14 }}>
             <img src="/brand/mascot-small.png" alt="" style={{ ...smallMascot, marginTop: 4 }} />
@@ -330,26 +333,28 @@ export default function HomeView({ V, live = null, telemetry = null, accountMode
             ))}
           {isLive &&
             live.approvals.map((ap) => (
-              <ApprovalCard
-                key={ap.key}
-                sys={ap.sys}
-                title={ap.title}
-                detail={ap.detail}
-                before={ap.before}
-                after={ap.after}
-                expiry={ap.expiry}
-                pending={ap.pending}
-                approved={ap.approved}
-                held={ap.held}
-                showWhy={ap.showWhy}
-                whyText={ap.whyText}
-                approvedText={ap.outcomeText}
-                heldText={ap.outcomeText || HELD_TEXT}
-                busy={ap.busy}
-                approve={ap.approve}
-                hold={ap.hold}
-                why={ap.why}
-              />
+              /* the wrapper keeps the card's bubbles in the same column + gap; its id is the brief's needs_you anchor */
+              <div key={ap.key} id={approvalAnchorId(ap.key)} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <ApprovalCard
+                  sys={ap.sys}
+                  title={ap.title}
+                  detail={ap.detail}
+                  before={ap.before}
+                  after={ap.after}
+                  expiry={ap.expiry}
+                  pending={ap.pending}
+                  approved={ap.approved}
+                  held={ap.held}
+                  showWhy={ap.showWhy}
+                  whyText={ap.whyText}
+                  approvedText={ap.outcomeText}
+                  heldText={ap.outcomeText || HELD_TEXT}
+                  busy={ap.busy}
+                  approve={ap.approve}
+                  hold={ap.hold}
+                  why={ap.why}
+                  />
+              </div>
             ))}
           {accountMode && live?.error && (
             <div style={{ fontSize: 12.5, color: "var(--amber-text)", lineHeight: 1.5, paddingLeft: 36 }}>Couldn’t reach the runtime just now: {live.error}</div>

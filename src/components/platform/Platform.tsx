@@ -7,6 +7,7 @@ import { useAccountPersistence } from "@/lib/db/useAccountPersistence";
 import { usePlatformState } from "./usePlatformState";
 import { useLiveApprovals } from "./useLiveApprovals";
 import { useHomeTelemetry } from "./useHomeTelemetry";
+import { useOnboardingMemories } from "./useOnboardingMemories";
 import Sidebar from "./Sidebar";
 import Onboarding from "./Onboarding";
 import HomeView from "./HomeView";
@@ -17,6 +18,7 @@ import CornerBuddy from "./CornerBuddy";
 import Paywall from "./Paywall";
 import BillingBanner from "./BillingBanner";
 import ModelSettings from "./ModelSettings";
+import WhatUncKnows from "./WhatUncKnows";
 import { isOpen } from "@/lib/billing/gate";
 import type { BillingProps } from "@/lib/billing/server";
 
@@ -37,9 +39,13 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
   /* Accounts mode: Unc's self-review, "The bar" and hours saved from the improvement loops
      (GET /api/telemetry/home). Demo mode: never fetched — the demo values stay verbatim. */
   const telemetry = useHomeTelemetry(inAccount);
+  /* Client Brain: "Agree the plan" persists the onboarding answers as memories (accounts mode only). */
+  useOnboardingMemories(S, inAccount);
   const runTarget = { accountId: inAccount ? persistence.accountId! : "demo", account: { currency: S.currency, budgetMonthly: S.budgetMo }, persisted: inAccount };
   /* "Models" settings (which brain for which job) — accounts mode only; demo never shows the link. */
   const [modelsOpen, setModelsOpen] = useState(false);
+  /* "What Unc knows" (his memory of this founder, correctable) — accounts mode only. */
+  const [knowsOpen, setKnowsOpen] = useState(false);
 
   /* Corner-buddy scroll-spy — port of the prototype's _buddyTick/_buddyScroll:
      the topmost [data-buddy] section whose rect crosses 55% viewport height wins. */
@@ -119,7 +125,7 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
         WebkitFontSmoothing: "antialiased",
       }}
     >
-      {V.notOnboarding && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} billing={gated} onModels={inAccount ? () => setModelsOpen(true) : undefined} />}
+      {V.notOnboarding && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} billing={gated} onModels={inAccount ? () => setModelsOpen(true) : undefined} onWhatUncKnows={inAccount ? () => setKnowsOpen(true) : undefined} />}
       <main style={{ flex: 1, minWidth: 0 }}>
         {gated?.state === "past_due" && <BillingBanner />}
         {V.isOnboarding && <Onboarding V={V} />}
@@ -130,6 +136,7 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
       </main>
       {V.showBuddy && <CornerBuddy V={V} />}
       {inAccount && modelsOpen && <ModelSettings onClose={() => setModelsOpen(false)} />}
+      {inAccount && knowsOpen && <WhatUncKnows onClose={() => setKnowsOpen(false)} />}
     </div>
   );
 }

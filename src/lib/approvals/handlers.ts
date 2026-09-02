@@ -15,6 +15,7 @@
    Store-agnostic: MemoryStore in demo mode, SupabaseStore with the service role otherwise.
    Nothing here reads process.env. */
 
+import { afterApprovalDecision } from "@/lib/brain/hooks";
 import { ALL_SYSTEMS } from "@/lib/platform/catalog";
 import type { Store } from "@/lib/runtime/store/interface";
 import type { ApprovalRecord, Receipt, ReceiptKind, RunResult } from "@/lib/runtime/types";
@@ -204,5 +205,8 @@ export async function decideApproval(deps: ServiceDeps, input: DecideInput): Pro
     throw err;
   }
   const updated = run.approval ?? (await deps.store.getApproval(approval.id)) ?? approval;
+  // Client Brain: the decision becomes a memory and the founder's decision style is refreshed.
+  // Fire-and-forget; demo mode (no service role) is a no-op inside the hook.
+  void afterApprovalDecision({ id: updated.id, accountId: updated.accountId, routineId: updated.routineId, title: updated.title, detail: updated.detail }, input.decision, { store: deps.store }).catch(() => {});
   return { approval: approvalView(updated), run, receipts: run.receipts.map(receiptView) };
 }
