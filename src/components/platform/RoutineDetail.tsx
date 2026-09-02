@@ -8,6 +8,7 @@ import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
 import { readPlatforms } from "@/lib/runtime/availability";
 import type { Node } from "@/lib/runtime/types";
 import RunNowPanel, { type RunNowProps } from "./RunNowPanel";
+import DraftCard, { type ArtifactView } from "./DraftCard";
 import { agoLabel, runStatusLabel, type RoutinesLive, type RoutineStateView } from "./useRoutinesState";
 
 const contractCard: React.CSSProperties = { background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "17px 19px" };
@@ -31,6 +32,8 @@ const NODE_STYLE: Record<Node["kind"], { tag: string; color: string }> = {
   read: { tag: "READ", color: "oklch(0.55 0.11 235)" },
   check: { tag: "CHECK", color: "oklch(0.55 0.11 235)" },
   decide: { tag: "DECIDE", color: "oklch(0.45 0.1 240)" },
+  produce: { tag: "PRODUCE", color: "oklch(0.45 0.12 150)" },
+  n8n: { tag: "N8N", color: "oklch(0.45 0.12 150)" },
   gate: { tag: "GATE", color: "oklch(0.5 0.12 75)" },
   execute: { tag: "EXECUTE", color: "oklch(0.45 0.1 240)" },
   receipt: { tag: "RECEIPT", color: "oklch(0.55 0.11 235)" },
@@ -56,11 +59,15 @@ export function specNodes(routineId: string): { tag: string; name: string; desc:
       case "trigger":
         return { ...s, name: "Schedule", desc: cadenceLabel(n.cadence) };
       case "read":
-        return { ...s, name: NAME_BY_PLATFORM[n.source] ?? n.source, desc: `${n.query.resource}${n.query.window ? ` · ${n.query.window}` : ""}` };
+        return { ...s, name: NAME_BY_PLATFORM[n.source] ?? n.source, desc: `${n.query.resource}${n.query.window ? ` · ${n.query.window}` : ""}${n.optional ? " · optional" : ""}` };
       case "check":
         return { ...s, name: n.id.replace(/_/g, " "), desc: n.onFail === "fail" ? "fails closed" : "skips quietly" };
       case "decide":
         return { ...s, name: "Decision", desc: `${n.options.length} options · ${n.rule.kind}` };
+      case "produce":
+        return { ...s, name: "Draft the work", desc: `skill ${n.skill ?? routineId}${n.maxItems ? ` · ≤ ${n.maxItems} items` : ""}` };
+      case "n8n":
+        return { ...s, name: "n8n workflow", desc: n.webhookUrlEnv ? `webhook from ${n.webhookUrlEnv}` : "registered webhook" };
       case "gate":
         return { ...s, name: "Approval", desc: `${n.approver ?? "you"} · ${n.expiryHours} h` };
       case "execute":
@@ -79,6 +86,8 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
   const [trailErr, setTrailErr] = useState<string | null>(null);
   const [connected, setConnected] = useState<string[] | null>(live?.data?.connected ?? null);
   const [tick, setTick] = useState(0);
+  const [lastArtifact, setLastArtifact] = useState<ArtifactView | null | undefined>(undefined);
+  const [channels, setChannels] = useState<string[]>([]);
 
   useEffect(() => {
     if (!accounts || !routineId) return;
@@ -103,6 +112,28 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
     };
   }, [accounts, routineId, tick]);
 
+  /* The last artifact this routine produced (GET /api/artifacts?routineId=…&limit=1). */
+  useEffect(() => {
+    if (!accounts || !routineId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/artifacts?routineId=${encodeURIComponent(routineId)}&limit=1`, { cache: "no-store" });
+        const body = (await res.json().catch(() => ({}))) as { artifacts?: ArtifactView[]; channels?: string[]; fallback?: boolean };
+        if (cancelled) return;
+        if (res.ok && Array.isArray(body.artifacts)) {
+          setLastArtifact(body.artifacts[0] ?? null);
+          setChannels(Array.isArray(body.channels) ? body.channels : []);
+        } else setLastArtifact(null);
+      } catch {
+        if (!cancelled) setLastArtifact(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accounts, routineId, tick]);
+
   const refresh = () => {
     setTick((n) => n + 1);
     live?.refresh();
@@ -112,6 +143,9 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
   const spec = accounts ? CATALOG_SPEC_BY_ID[routineId] : undefined;
   const sources = spec ? readPlatforms(spec) : [];
   const have = new Set(connected ?? []);
+  const minimum = spec?.minimum ?? null;
+  /* With a stated minimum, only its required platforms gate the routine; the rest help. */
+  const required = new Set<string>(minimum ? minimum.platforms : sources);
   const stateText = accounts ? (mine ? (mine.enabled ? "On" : "Off") : "…") : V.selState;
   const stateColor = accounts ? (mine?.enabled ? "oklch(0.45 0.1 240)" : "oklch(0.52 0.03 260)") : V.selStateColor;
   const stateBg = accounts ? (mine?.enabled ? "oklch(0.94 0.03 225)" : "oklch(0.945 0.008 260)") : V.selStateBg;
@@ -274,6 +308,22 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
         </div>
       )}
 
+      {accounts && (
+        <div data-testid="last-artifact" style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Last draft</span>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>— the real work this routine produced last time it ran</span>
+          </div>
+          {lastArtifact === undefined && <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Reading the last draft…</div>}
+          {lastArtifact === null && (
+            <div data-testid="last-artifact-empty" style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>
+              Nothing drafted by this routine yet{minimum ? ` — it needs ${minimum.summary}.` : "."} Run it now and the draft lands here.
+            </div>
+          )}
+          {lastArtifact && <DraftCard artifact={lastArtifact} defaultOpen channels={channels} onChange={(a) => setLastArtifact(a)} />}
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10, background: "var(--cyan-wash)", borderRadius: 13, padding: "16px 20px", flexWrap: "wrap" }}>
         <img src="/brand/mascot-small.png" alt="" style={{ width: 38, height: 41, objectFit: "contain", flex: "none" }} />
         <div style={{ fontSize: 13, lineHeight: 1.5, color: "oklch(0.3 0.06 262)", flex: 1, minWidth: 260 }}>
@@ -297,9 +347,10 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
             {sources.length === 0 && <span style={{ fontSize: 12, color: "var(--muted)" }}>Reads no connected platform — research reads only.</span>}
             {sources.map((p) => {
               const ok = have.has(p);
+              const helps = !required.has(p);
               return (
-                <span key={p} data-testid={`source-${p}`} data-ok={ok ? "1" : "0"} style={{ fontSize: 12, border: `1px solid ${ok ? "oklch(0.88 0.015 260)" : "oklch(0.8 0.09 75)"}`, color: ok ? "oklch(0.35 0.05 262)" : "oklch(0.45 0.11 70)", background: ok ? "white" : "oklch(0.93 0.05 80)", borderRadius: 999, padding: "5px 12px" }}>
-                  {NAME_BY_PLATFORM[p] ?? p} · {ok ? "connected" : "not connected"}
+                <span key={p} data-testid={`source-${p}`} data-ok={ok ? "1" : "0"} style={{ fontSize: 12, border: `1px solid ${ok || helps ? "oklch(0.88 0.015 260)" : "oklch(0.8 0.09 75)"}`, color: ok ? "oklch(0.35 0.05 262)" : helps ? "var(--muted)" : "oklch(0.45 0.11 70)", background: ok ? "white" : helps ? "oklch(0.975 0.004 260)" : "oklch(0.93 0.05 80)", borderRadius: 999, padding: "5px 12px" }}>
+                  {NAME_BY_PLATFORM[p] ?? p} · {ok ? "connected" : helps ? "optional" : "not connected"}
                 </span>
               );
             })}
@@ -308,14 +359,29 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
               Budget guardrail · {run.account.currency} {Math.round(run.account.budgetMonthly).toLocaleString("en-NZ")}/mo
             </span>
           </div>
+          {minimum && (
+            <div data-testid="spec-minimum" style={{ fontSize: 12.5, color: "oklch(0.35 0.05 262)", marginTop: 10, lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600 }}>Needs:</span> {minimum.summary}
+              {minimum.inputs.length ? <span style={{ color: "var(--muted)" }}> · I ask you for {minimum.inputs.map((i) => i.replace(/_/g, " ")).join(", ")} when I don’t have it</span> : null}
+            </div>
+          )}
           <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.5 }}>
-            {sources.some((p) => !have.has(p)) ? (
+            {sources.some((p) => required.has(p) && !have.has(p)) ? (
               <>
                 Connect the missing source and I can read for real; until then a run answers “couldn’t ask”, never a guess.{" "}
                 <button onClick={V.goConnectors} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", padding: 0 }}>
                   Open Connectors →
                 </button>
               </>
+            ) : sources.some((p) => !have.has(p)) ? (
+              <>
+                Everything this routine must have is in hand. Connect {sources.filter((p) => !have.has(p)).map((p) => NAME_BY_PLATFORM[p] ?? p).join(", ")} and it reads real numbers too.{" "}
+                <button onClick={V.goConnectors} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", padding: 0 }}>
+                  Open Connectors →
+                </button>
+              </>
+            ) : minimum ? (
+              "Everything this routine must have is in hand. Switch it on in the list, or run it now — it drafts real work; nothing goes out without you."
             ) : (
               "Every source this chain reads is connected. Switch it on in the list, or run it now — drafts only, nothing goes out without you."
             )}

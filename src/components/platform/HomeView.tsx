@@ -15,6 +15,8 @@ import type { TurnOnResult } from "@/lib/setup/routine";
 import { automationStrip, cadenceLabel, HOME_COPY, paidInPlan, realPlanTimeline, realProposals } from "@/lib/setup/home";
 import { platformName } from "@/lib/setup/channels";
 import type { DailyBriefRecord } from "@/lib/brain/brief";
+import type { ArtifactView } from "@/lib/artifacts/handlers";
+import Drafts from "./Drafts";
 
 const sectionLabel: React.CSSProperties = {
   fontSize: 11,
@@ -154,6 +156,10 @@ export interface HomeViewProps {
   onTurnOn?: (routineId: string) => Promise<TurnOnResult>;
   /** Accounts mode, server render / tests: today's brief passed in directly (null = none yet). */
   briefInitial?: DailyBriefRecord | null;
+  /** Accounts mode, server render / tests: the artifacts listing in hand (undefined = fetch). */
+  artifactsInitial?: ArtifactView[] | null;
+  /** Bump to make "What I drafted" refetch (a run just landed). */
+  draftsRefreshKey?: number;
 }
 
 /** Demo mode renders the prototype's Home verbatim (DemoHome). Accounts mode renders the
@@ -733,7 +739,7 @@ function BarCard({ hb, onFix }: { hb: BarCardView; onFix: () => void }) {
 
 const EMPTY_TELEMETRY = { review: null, segment: "all", bar: [], automation: { hoursSavedWk: 0, runsThisWeek: 0, routinesOn: 0 } };
 
-export function AccountHome({ V, live = null, telemetry = null, setup = null, onSetupAction, onTurnOn, briefInitial }: HomeViewProps) {
+export function AccountHome({ V, live = null, telemetry = null, setup = null, onSetupAction, onTurnOn, briefInitial, artifactsInitial, draftsRefreshKey = 0 }: HomeViewProps) {
   const isLive = !!live && live.active;
   const liveLoading = !isLive && !live?.error;
   const pendingCount = isLive ? live.pendingCount : 0;
@@ -781,11 +787,13 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [turnOnNote, setTurnOnNote] = useState<Record<string, string>>({});
+  const [turnOnTick, setTurnOnTick] = useState(0);
   const turnOn = async (id: string) => {
     if (!onTurnOn) return;
     setBusyId(id);
     try {
       const r = await onTurnOn(id);
+      if (r.kind === "ran") setTurnOnTick((n) => n + 1);
       setTurnOnNote((n) => ({ ...n, [id]: r.kind === "ran" ? "On — dry run done, the draft is above." : r.kind === "enabled_only" ? `On — the first run didn’t start (${r.error}); it runs on its cadence.` : r.kind === "error" ? `Couldn’t turn it on: ${r.message}` : "On." }));
     } finally {
       setBusyId(null);
@@ -885,39 +893,9 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
           )}
         </div>
 
-        {/* ---- what I drafted ---- */}
-        <div id={DRAFTED_ID} data-testid="what-i-drafted" style={{ marginTop: 22 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <span style={{ fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>What I drafted</span>
-            <span style={{ fontSize: 12, color: "var(--muted)" }}>— dry runs, zero outward actions; nothing here needs you</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {isLive && drafts.length === 0 && (
-              <EmptyLine testId="no-drafts">
-                {anyOn ? (
-                  HOME_COPY.noDraftsRunning
-                ) : (
-                  <button onClick={() => go("#setting-up-next")} className="hov-underline" style={{ border: "none", background: "transparent", padding: 0, font: "inherit", color: "var(--cyan-link)", cursor: "pointer", textAlign: "left" }}>
-                    {HOME_COPY.noDraftsYet}
-                  </button>
-                )}
-              </EmptyLine>
-            )}
-            {drafts.map((d, i) => (
-              <div key={d.runId} className={slide && i === 0 ? "j-slidein" : undefined} data-testid="draft-card" style={{ display: "flex", alignItems: "center", gap: 16, background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "12px 18px" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                    <span style={sysTag}>{d.sys}</span>
-                    <span style={{ fontSize: 13.5, fontWeight: 500 }}>{d.title}</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--muted-2)", marginTop: 4, lineHeight: 1.5 }}>{d.line}</div>
-                </div>
-                <button onClick={() => V.openRoutineById(d.sys)} className="hov-underline" style={{ flex: "none", border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
-                  Inspect the system →
-                </button>
-              </div>
-            ))}
-          </div>
+        {/* ---- what I drafted (real artifacts; receipt previews as the fallback) ---- */}
+        <div id={DRAFTED_ID}>
+          <Drafts accountMode initial={artifactsInitial ?? (isLive ? [] : undefined)} fallback={isLive ? drafts : []} refreshKey={draftsRefreshKey + (turnOnTick)} anyOn={anyOn} onOpenRoutine={V.openRoutineById} onNoDrafts={() => go("#setting-up-next")} slideFirst={slide} />
         </div>
       </section>
 
