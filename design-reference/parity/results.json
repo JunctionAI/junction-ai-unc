@@ -13,10 +13,10 @@
       "height": 3744
     },
     "totalPixels": 4792320,
-    "diffPixels": 45110,
+    "diffPixels": 2571,
     "sizeOnlyPixels": 0,
-    "diffPct": 0.9412977430555556,
-    "overlapDiffPct": 0.9412977430555556,
+    "diffPct": 0.05364833733974359,
+    "overlapDiffPct": 0.05364833733974359,
     "pass": true,
     "note": "",
     "textOnlyProto": [],

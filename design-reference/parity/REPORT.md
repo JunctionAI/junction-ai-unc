@@ -1,6 +1,6 @@
 # Visual parity — React port vs original prototypes
 
-*Generated 2026-09-02T03:37:29.402Z by `npx playwright test tests/e2e/parity.spec.ts` (scripts/parity/capture.ts).*
+*Generated 2026-09-02T03:39:15.627Z by `npx playwright test tests/e2e/parity.spec.ts` (scripts/parity/capture.ts).*
 
 **Method.** Both sources are driven to the same state with the same clicks (Skip → nav items → role card → Tutorial), every CSS animation/transition is frozen at its 0% frame (jfloat, jpulse, toggle knobs, phase dots), web fonts and images are awaited, then a full-page screenshot is taken at a 1280×900 viewport (DPR 1), clipped to the 1280px viewport width. Pixels are compared with a pixelmatch-style YIQ colour delta (threshold 0.1) over the union canvas; a page that is taller in one source counts the extra rows as differences (`diff %`), while `overlap %` restricts the comparison to the shared region so layout drift is visible separately from height drift. `<screen>-diff.png` paints differing pixels red (orange = present in only one source). Visible copy (`document.body.innerText`) is also diffed line by line with quotes/whitespace normalised (`copy Δ`).
 
@@ -8,7 +8,7 @@
 
 | Screen | id | proto / port size | diff % | overlap % | copy Δ | verdict | notes |
 |---|---|---|---|---|---|---|---|
-| Landing page | `landing` | 1280×3744 / 1280×3744 | **0.94%** | 0.94% | none | ✅ pass |  |
+| Landing page | `landing` | 1280×3744 / 1280×3744 | **0.05%** | 0.05% | none | ✅ pass |  |
 | Onboarding · step 0 (welcome) | `onboarding-0` | 1280×900 / 1280×900 | **0.14%** | 0.14% | none | ✅ pass |  |
 | Control centre · Home (demo data) | `home` | 1280×2474 / 1280×2474 | **0.24%** | 0.24% | none | ✅ pass |  |
 | Strategy | `strategy` | 1280×1032 / 1280×1032 | **0.09%** | 0.09% | none | ✅ pass |  |
