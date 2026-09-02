@@ -839,10 +839,10 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
       {/* ---- needs you ---- */}
       <section id={NEEDS_YOU_ID} data-buddy="Only you can clear these. A tap each and the machine keeps moving without you." style={{ marginTop: 34 }}>
         {review && <ReviewBubble review={review} V={V} />}
+        {!review && briefState === "absent" && <UncBubble testId="first-day-line">{firstDayLine}</UncBubble>}
         <div id={BRIEF_ID}>
           <TodayBrief accountMode initial={briefInitial} onLoaded={(b) => setBriefState(b ? "present" : "absent")} />
         </div>
-        {!review && briefState === "absent" && <UncBubble testId="first-day-line">{firstDayLine}</UncBubble>}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {liveLoading && (
             <div data-testid="needs-you-loading" style={{ fontSize: 12.5, color: "var(--muted-2)", lineHeight: 1.5, paddingLeft: 36 }}>
