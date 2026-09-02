@@ -17,10 +17,13 @@ export interface CliArgs {
   measure: boolean;
   selfReview: boolean;
   benchmarks: boolean;
+  /** Proactive layer one-shots (docs/PROACTIVE.md). */
+  kpiSnapshot: boolean;
+  dailyBrief: boolean;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { intervalSec: 60, heartbeatPath: ".unc-worker/heartbeat.json", healthPort: null, once: false, enable: [], run: [], accountId: "demo", accountGiven: false, measure: false, selfReview: false, benchmarks: false };
+  const args: CliArgs = { intervalSec: 60, heartbeatPath: ".unc-worker/heartbeat.json", healthPort: null, once: false, enable: [], run: [], accountId: "demo", accountGiven: false, measure: false, selfReview: false, benchmarks: false, kpiSnapshot: false, dailyBrief: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -55,6 +58,12 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case "--benchmarks":
         args.benchmarks = true;
+        break;
+      case "--kpi-snapshot":
+        args.kpiSnapshot = true;
+        break;
+      case "--daily-brief":
+        args.dailyBrief = true;
         break;
       default:
         throw new Error(`unknown argument ${a}`);

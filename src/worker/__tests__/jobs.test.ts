@@ -38,8 +38,9 @@ function harness(startAt: string, extra: Partial<WorkerDeps> = {}) {
 }
 
 describe("dueJobs (pure)", () => {
-  it("names the three jobs with the documented UTC crons, in measure → benchmarks → self_review order", () => {
+  it("names the four jobs with the documented UTC crons, in kpi_snapshot → measure → benchmarks → self_review order", () => {
     expect(SCHEDULED_JOBS.map((j) => [j.id, j.cron, j.flag])).toEqual([
+      ["kpi_snapshot", "30 1 * * *", "--kpi-snapshot"],
       ["measure", "0 2 * * *", "--measure"],
       ["benchmarks", "0 3 * * 1", "--benchmarks"],
       ["self_review", "0 6 * * 1", "--self-review"],
@@ -49,25 +50,28 @@ describe("dueJobs (pure)", () => {
 
   it("a slot inside the look-back with no marker is due; a marker at or after the slot clears it", () => {
     const wed0200 = new Date("2026-09-02T02:00:30.000Z"); // Wednesday
-    expect(dueJobs(wed0200, {}).map((d) => [d.job.id, d.slot.toISOString()])).toEqual([["measure", "2026-09-02T02:00:00.000Z"]]);
-    expect(dueJobs(wed0200, { measure: { lastSlot: "2026-09-02T02:00:00.000Z", ranAt: "x", ok: true } })).toEqual([]);
+    const kpi = { kpi_snapshot: { lastSlot: "2026-09-02T01:30:00.000Z", ranAt: "x", ok: true } };
+    expect(dueJobs(wed0200, kpi).map((d) => [d.job.id, d.slot.toISOString()])).toEqual([["measure", "2026-09-02T02:00:00.000Z"]]);
+    expect(dueJobs(wed0200, { ...kpi, measure: { lastSlot: "2026-09-02T02:00:00.000Z", ranAt: "x", ok: true } })).toEqual([]);
     // yesterday's marker does not cover today's slot; a failed marker still counts as served
-    expect(dueJobs(wed0200, { measure: { lastSlot: "2026-09-01T02:00:00.000Z", ranAt: "x", ok: true } })).toHaveLength(1);
-    expect(dueJobs(wed0200, { measure: { lastSlot: "2026-09-02T02:00:00.000Z", ranAt: "x", ok: false, error: "boom" } })).toEqual([]);
-    // 01:59 → nothing yet (yesterday's slot is outside the 6 h look-back)
-    expect(dueJobs(new Date("2026-09-02T01:59:00.000Z"), {})).toEqual([]);
-    // 07:59 → still inside the look-back; 08:01 → gone
-    expect(dueJobs(new Date("2026-09-02T07:59:00.000Z"), {})).toHaveLength(1);
+    expect(dueJobs(wed0200, { ...kpi, measure: { lastSlot: "2026-09-01T02:00:00.000Z", ranAt: "x", ok: true } })).toHaveLength(1);
+    expect(dueJobs(wed0200, { ...kpi, measure: { lastSlot: "2026-09-02T02:00:00.000Z", ranAt: "x", ok: false, error: "boom" } })).toEqual([]);
+    // 01:29 → nothing yet (yesterday's slots are outside the 6 h look-back); 01:59 → only the 01:30 snapshot
+    expect(dueJobs(new Date("2026-09-02T01:29:00.000Z"), {})).toEqual([]);
+    expect(dueJobs(new Date("2026-09-02T01:59:00.000Z"), {}).map((d) => d.job.id)).toEqual(["kpi_snapshot"]);
+    // 07:29 → both still inside the look-back; 07:59 → the snapshot has aged out; 08:01 → gone
+    expect(dueJobs(new Date("2026-09-02T07:29:00.000Z"), {}).map((d) => d.job.id)).toEqual(["kpi_snapshot", "measure"]);
+    expect(dueJobs(new Date("2026-09-02T07:59:00.000Z"), {}).map((d) => d.job.id)).toEqual(["measure"]);
     expect(dueJobs(new Date("2026-09-02T08:01:00.000Z"), {})).toEqual([]);
   });
 
   it("Monday morning lists all three once each is reached, in run order", () => {
     const mon = (hhmm: string) => new Date(`2026-09-07T${hhmm}:00.000Z`);
-    expect(dueJobs(mon("02:00"), {}).map((d) => d.job.id)).toEqual(["measure"]);
-    expect(dueJobs(mon("03:00"), {}).map((d) => d.job.id)).toEqual(["measure", "benchmarks"]);
-    expect(dueJobs(mon("07:00"), {}).map((d) => d.job.id)).toEqual(["measure", "benchmarks", "self_review"]);
+    expect(dueJobs(mon("02:00"), {}).map((d) => d.job.id)).toEqual(["kpi_snapshot", "measure"]);
+    expect(dueJobs(mon("03:00"), {}).map((d) => d.job.id)).toEqual(["kpi_snapshot", "measure", "benchmarks"]);
+    expect(dueJobs(mon("07:00"), {}).map((d) => d.job.id)).toEqual(["kpi_snapshot", "measure", "benchmarks", "self_review"]);
     // a Tuesday never lists the weekly ones
-    expect(dueJobs(new Date("2026-09-08T07:00:00.000Z"), {}).map((d) => d.job.id)).toEqual(["measure"]);
+    expect(dueJobs(new Date("2026-09-08T07:00:00.000Z"), {}).map((d) => d.job.id)).toEqual(["kpi_snapshot", "measure"]);
   });
 
   it("sanitiseMarkers keeps only well-formed markers from a heartbeat file", () => {
@@ -88,10 +92,11 @@ describe("Worker runs the jobs inside the tick", () => {
     const worker = new Worker(deps, { intervalSec: 60, heartbeatPath: hbPath, handleSignals: false });
 
     const first = await worker.tick();
-    expect(first.jobs).toEqual(["measure"]);
+    expect(first.jobs).toEqual(["kpi_snapshot", "measure"]); // no DB → the snapshot is a logged skip, still marked served
     expect(worker.stats.jobs.measure).toMatchObject({ lastSlot: "2026-09-02T02:00:00.000Z", ranAt: "2026-09-02T02:00:30.000Z", ok: true });
-    expect(entries.filter((e) => e.event === "job.start").map((e) => e.job)).toEqual(["measure"]);
-    expect(entries.find((e) => e.event === "job.finish")).toMatchObject({ job: "measure", accounts: 1 });
+    expect(worker.stats.jobs.kpi_snapshot).toMatchObject({ lastSlot: "2026-09-02T01:30:00.000Z", ok: true });
+    expect(entries.filter((e) => e.event === "job.start").map((e) => e.job)).toEqual(["kpi_snapshot", "measure"]);
+    expect(entries.find((e) => e.event === "job.finish" && e.job === "measure")).toMatchObject({ job: "measure", accounts: 1 });
     expect(entries.find((e) => e.event === "measure.done")).toBeTruthy();
     const hb = JSON.parse(readFileSync(hbPath, "utf8")) as { jobs: JobMarkers; lastSweepAt: string | null };
     expect(hb.jobs.measure?.lastSlot).toBe("2026-09-02T02:00:00.000Z");
@@ -106,8 +111,9 @@ describe("Worker runs the jobs inside the tick", () => {
     clk.advanceHours(24 * 5 - 5 + (6 - 2)); // → Monday 06:01:30
     const monday = await worker.tick();
     expect(monday.at).toBe("2026-09-07T06:01:30.000Z");
-    expect(monday.jobs).toEqual(["measure", "benchmarks", "self_review"]);
+    expect(monday.jobs).toEqual(["kpi_snapshot", "measure", "benchmarks", "self_review"]);
     expect(worker.stats.jobs).toMatchObject({
+      kpi_snapshot: { lastSlot: "2026-09-07T01:30:00.000Z", ok: true },
       measure: { lastSlot: "2026-09-07T02:00:00.000Z", ok: true },
       benchmarks: { lastSlot: "2026-09-07T03:00:00.000Z", ok: true },
       self_review: { lastSlot: "2026-09-07T06:00:00.000Z", ok: true },
@@ -122,7 +128,7 @@ describe("Worker runs the jobs inside the tick", () => {
     const dir = tmp();
     const hbPath = join(dir, "heartbeat.json");
     const w1 = new Worker(deps, { intervalSec: 60, heartbeatPath: hbPath, handleSignals: false });
-    expect((await w1.tick()).jobs).toEqual(["measure"]);
+    expect((await w1.tick()).jobs).toEqual(["kpi_snapshot", "measure"]);
     expect(readHeartbeatFile(hbPath)?.jobs?.measure?.ok).toBe(true);
 
     // "restart" ten minutes later: a new Worker on the same heartbeat path
@@ -130,11 +136,11 @@ describe("Worker runs the jobs inside the tick", () => {
     const w2 = new Worker(deps, { intervalSec: 60, heartbeatPath: hbPath, handleSignals: false });
     expect(w2.stats.jobs.measure?.lastSlot).toBe("2026-09-02T02:00:00.000Z");
     expect((await w2.tick()).jobs).toEqual([]);
-    expect(entries.filter((e) => e.event === "job.start")).toHaveLength(1);
+    expect(entries.filter((e) => e.event === "job.start")).toHaveLength(2);
 
-    // a restart with no heartbeat file (fresh volume) runs it once more — harmless, measure is idempotent
+    // a restart with no heartbeat file (fresh volume) runs them once more — harmless, both are idempotent
     const w3 = new Worker(deps, { intervalSec: 60, heartbeatPath: join(dir, "elsewhere.json"), handleSignals: false });
-    expect((await w3.tick()).jobs).toEqual(["measure"]);
+    expect((await w3.tick()).jobs).toEqual(["kpi_snapshot", "measure"]);
     // a corrupt heartbeat file is ignored, not fatal
     writeFileSync(hbPath, "{not json");
     expect(new Worker(deps, { intervalSec: 60, heartbeatPath: hbPath, handleSignals: false }).stats.jobs).toEqual({});
@@ -153,7 +159,7 @@ describe("Worker runs the jobs inside the tick", () => {
     };
     const worker = new Worker({ ...deps, store: broken }, { intervalSec: 60, heartbeatPath: null, handleSignals: false });
     const report = await worker.tick();
-    expect(report.jobs).toEqual(["measure"]);
+    expect(report.jobs).toEqual(["kpi_snapshot", "measure"]);
     expect(worker.stats.jobs.measure).toMatchObject({ ok: false, error: "db down", lastSlot: "2026-09-02T02:00:00.000Z" });
     expect(entries.find((e) => e.event === "job.error")).toMatchObject({ job: "measure", error: "db down" });
     expect(worker.stats.lastError).toBe("db down");

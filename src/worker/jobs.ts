@@ -4,9 +4,14 @@
    sidecar the loop runs the three jobs itself at their UTC slots, through the same
    functions the CLI flags call:
 
+     kpi_snapshot  30 1 * * *   daily 01:30 UTC        runKpiSnapshot  (--kpi-snapshot)
      measure       0 2 * * *    daily 02:00 UTC        runMeasure      (--measure)
      benchmarks    0 3 * * 1    Mondays 03:00 UTC      runBenchmarks   (--benchmarks)
      self_review   0 6 * * 1    Mondays 06:00 UTC      runSelfReview   (--self-review)
+
+   The daily brief is NOT on this UTC list: it runs at 06:30 in each account's own timezone
+   (account_profiles.cadence.timezone, else UTC) — see dueBriefs() below, which the loop
+   calls per account with a per-account marker (BriefMarkers) on the same heartbeat file.
 
    "Already ran" markers: one per job — the slot it last served — kept on the heartbeat
    file (src/worker/health.ts Heartbeat.jobs) and reloaded on start, so a restart inside the
@@ -18,9 +23,10 @@
 
    Pure: no I/O, no clock of its own. */
 
+import { briefSlotUtc, localDay } from "../lib/brain/brief";
 import { latestSlotBetween } from "./cron";
 
-export type JobId = "measure" | "benchmarks" | "self_review";
+export type JobId = "kpi_snapshot" | "measure" | "benchmarks" | "self_review";
 
 export interface ScheduledJob {
   id: JobId;
@@ -32,6 +38,7 @@ export interface ScheduledJob {
 
 /** In run order for a tick that finds several due at once. */
 export const SCHEDULED_JOBS: ScheduledJob[] = [
+  { id: "kpi_snapshot", cron: "30 1 * * *", flag: "--kpi-snapshot" },
   { id: "measure", cron: "0 2 * * *", flag: "--measure" },
   { id: "benchmarks", cron: "0 3 * * 1", flag: "--benchmarks" },
   { id: "self_review", cron: "0 6 * * 1", flag: "--self-review" },
@@ -81,6 +88,65 @@ export function sanitiseMarkers(raw: unknown): JobMarkers {
     const { lastSlot, ranAt, ok } = m as Record<string, unknown>;
     if (typeof lastSlot !== "string" || Number.isNaN(new Date(lastSlot).getTime())) continue;
     out[job.id] = { lastSlot, ranAt: typeof ranAt === "string" ? ranAt : lastSlot, ok: ok === true };
+  }
+  return out;
+}
+
+// ---------- the daily brief: account-local 06:30 ----------
+
+export const BRIEF_HOUR_LOCAL = 6;
+export const BRIEF_MINUTE_LOCAL = 30;
+
+export interface BriefMarker {
+  /** The local day (YYYY-MM-DD in the account's zone) last served — including failed attempts. */
+  day: string;
+  ranAt: string;
+  ok: boolean;
+  error?: string;
+}
+
+/** accountId → marker. Rides on the heartbeat file next to `jobs`. */
+export type BriefMarkers = Record<string, BriefMarker>;
+
+export interface BriefCandidate {
+  accountId: string;
+  /** null / invalid → UTC. */
+  timezone: string | null;
+}
+
+export interface DueBrief {
+  accountId: string;
+  timezone: string | null;
+  /** The local day being served. */
+  day: string;
+  /** The UTC instant of 06:30 local that day. */
+  slot: Date;
+}
+
+/** Accounts whose 06:30-local slot for today (their day) is inside (now - lookback, now] and
+    whose marker does not already name that day. The DB row (daily_briefs unique per account +
+    day) is the durable dedup; the marker just saves the read. */
+export function dueBriefs(now: Date, candidates: BriefCandidate[], markers: BriefMarkers, lookbackMs = DEFAULT_JOB_LOOKBACK_MS): DueBrief[] {
+  const out: DueBrief[] = [];
+  for (const c of candidates) {
+    const day = localDay(now, c.timezone);
+    const slot = briefSlotUtc(now, c.timezone, BRIEF_HOUR_LOCAL, BRIEF_MINUTE_LOCAL);
+    if (slot.getTime() > now.getTime()) continue; // not yet today
+    if (now.getTime() - slot.getTime() > lookbackMs) continue; // missed by more than the look-back: wait for tomorrow
+    if (markers[c.accountId]?.day === day) continue;
+    out.push({ accountId: c.accountId, timezone: c.timezone, day, slot });
+  }
+  return out;
+}
+
+export function sanitiseBriefMarkers(raw: unknown): BriefMarkers {
+  const out: BriefMarkers = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [accountId, m] of Object.entries(raw as Record<string, unknown>)) {
+    if (!m || typeof m !== "object") continue;
+    const { day, ranAt, ok } = m as Record<string, unknown>;
+    if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    out[accountId] = { day, ranAt: typeof ranAt === "string" ? ranAt : day, ok: ok === true };
   }
   return out;
 }

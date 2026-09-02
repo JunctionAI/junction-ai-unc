@@ -13,9 +13,10 @@ import { readHeartbeatFile, Worker } from "./loop";
 import { createLlmClient, describeLlmClient } from "./providers/llmDecision";
 import { createTextClient } from "../lib/llm/router";
 import { SELF_REVIEW_EFFORT, SELF_REVIEW_MAX_TOKENS } from "../lib/telemetry/selfReview";
+import { BRIEF_EFFORT, BRIEF_MAX_TOKENS } from "../lib/brain/brief";
 import { triggerRun, WORKER_RUN_MODE } from "./service";
 import { parseArgs } from "./cli";
-import { runBenchmarks, runMeasure, runSelfReview } from "./telemetry";
+import { runBenchmarks, runDailyBrief, runKpiSnapshot, runMeasure, runSelfReview } from "./telemetry";
 import { getStore } from "../lib/runtime/store";
 import { setEnabled } from "../lib/runtime/versioning";
 import { defaultAccountsSource, defaultCredentialProvider, describeWiring, serviceDb } from "./wiring";
@@ -27,6 +28,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   const accounts = defaultAccountsSource();
   const llm = createLlmClient();
   const reviewLlm = createTextClient("self_review", { maxTokens: SELF_REVIEW_MAX_TOKENS, effort: SELF_REVIEW_EFFORT, jsonMode: true });
+  const briefLlm = createTextClient("daily_brief", { maxTokens: BRIEF_MAX_TOKENS, effort: BRIEF_EFFORT, jsonMode: true });
   log.info("worker.config", { ...args, ...describeWiring(), llm: describeLlmClient() });
 
   // Demo convenience: MemoryStore starts empty, so nothing is enabled until
@@ -34,7 +36,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   for (const routineId of args.enable) await setEnabled({ store }, args.accountId, routineId, true);
 
   const db = serviceDb();
-  const deps = { store, accounts, credentials: defaultCredentialProvider(process.env, (line) => log.info("credentials", { line })), llm, reviewLlm, log, db };
+  const deps = { store, accounts, credentials: defaultCredentialProvider(process.env, (line) => log.info("credentials", { line })), llm, reviewLlm, briefLlm, log, db };
   // The daemon runs the telemetry jobs itself at their UTC slots (src/worker/jobs.ts); the
   // one-shot flags below stay for manual / catch-up runs.
   const worker = new Worker(deps, { intervalSec: args.intervalSec, heartbeatPath: args.heartbeatPath });
@@ -47,9 +49,13 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
 
   // Telemetry one-shots (the "improves over time" loops). Each runs across the accounts
   // source (or --account) and the process exits afterwards, like --once.
-  if (args.measure || args.selfReview || args.benchmarks) {
-    const telemetry = { store, accounts, reader: worker.adapters.reader, db, llm: reviewLlm, log };
+  if (args.measure || args.selfReview || args.benchmarks || args.kpiSnapshot || args.dailyBrief) {
+    const telemetry = { store, accounts, reader: worker.adapters.reader, db, llm: reviewLlm, briefLlm, log };
     const only = args.accountGiven ? args.accountId : undefined;
+    if (args.kpiSnapshot) {
+      const r = await runKpiSnapshot(telemetry, { accountId: only });
+      log.info("worker.kpi_snapshot", { accounts: r.accounts, written: r.written, couldntAsk: r.couldntAsk, skipped: r.skipped });
+    }
     if (args.measure) {
       const r = await runMeasure(telemetry, { accountId: only });
       log.info("worker.measure", { accounts: r.accounts, measured: r.measured, skipped: r.skipped });
@@ -61,6 +67,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     if (args.benchmarks) {
       const r = await runBenchmarks(telemetry);
       log.info("worker.benchmarks", { ...r });
+    }
+    if (args.dailyBrief) {
+      const r = await runDailyBrief(telemetry, { accountId: only });
+      log.info("worker.daily_brief", { accounts: r.accounts, written: r.written, alreadyDone: r.alreadyDone, skipped: r.skipped });
     }
     if (!args.once) return;
   }

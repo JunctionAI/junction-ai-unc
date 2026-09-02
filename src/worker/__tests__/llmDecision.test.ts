@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { DecideNode, DecisionOption, RunContext } from "../../lib/runtime/types";
 import { memorySink, createLogger } from "../log";
-import { buildDecisionPrompt, LlmDecisionProvider, MAX_REASONING_CHARS, parseLlmDecision, type LlmClient } from "../providers/llmDecision";
+import { buildDecisionPrompt, LlmDecisionProvider, MAX_REASONING_CHARS, parseLlmDecision, renderFounderBlock, StorePersonalisation, type LlmClient, type Personalisation, type PersonalisationSource } from "../providers/llmDecision";
+import { MemoryStore } from "../../lib/runtime/store/memory";
+import { FakeSupabase } from "../../lib/db/__tests__/fakeSupabase";
 
 const OPTIONS: DecisionOption[] = [
   { id: "scale", label: "Scale {{reads.spend.top_name}}", spend: { amount: 20, period: "day" }, params: { adsetId: "{{reads.spend.top_id}}" } },
@@ -129,5 +131,85 @@ describe("LlmDecisionProvider", () => {
     expect(d.reasoning).toBe("LLM decision unavailable (request failed); deterministic fallback → Hold.");
     expect(JSON.stringify(entries)).not.toContain("sk-ant");
     expect(entries[0]).toMatchObject({ event: "decision.llm_failed", error: "Error" });
+  });
+});
+
+describe("personalisation — the FOUNDER block and the spend ceiling", () => {
+  const personal: Personalisation = {
+    profileLines: ["Tone: formality casual.", "Decision style: risk appetite measured, approves 57% of proposals."],
+    tasteLines: ["This founder has decided 7 proposals in the last 90 days: approved 4, held 3, typically within 3 h.", "They have held 3 of 3 budget shifts above NZ$10/day — propose within that ceiling or explain why not."],
+    spendCeiling: 10,
+    currency: "NZD",
+  };
+  const source = (p: Personalisation | null | (() => Promise<Personalisation | null>)): PersonalisationSource & { asked: string[] } => {
+    const asked: string[] = [];
+    return {
+      asked,
+      async forAccount(accountId) {
+        asked.push(accountId);
+        return typeof p === "function" ? p() : p;
+      },
+    };
+  };
+
+  it("the prompt carries the taste block between the options and the context; none when nothing is known", () => {
+    const p = buildDecisionPrompt(llmNode(), ctx(), personal);
+    expect(p.user).toContain("FOUNDER (how they like to work; what they have approved or held):");
+    expect(p.user).toContain("- They have held 3 of 3 budget shifts above NZ$10/day — propose within that ceiling or explain why not.");
+    expect(p.user).toContain("- Tone: formality casual.");
+    expect(p.user.indexOf("OFFERED OPTIONS")).toBeLessThan(p.user.indexOf("FOUNDER ("));
+    expect(p.user.indexOf("FOUNDER (")).toBeLessThan(p.user.indexOf("CONTEXT (your only source of numbers)"));
+    expect(p.system).toContain("kept under your usual NZ$50/day");
+    expect(buildDecisionPrompt(llmNode(), ctx()).user).not.toContain("FOUNDER");
+    expect(renderFounderBlock({ profileLines: [], tasteLines: [], spendCeiling: null, currency: "NZD" })).toBe("");
+  });
+
+  it("shrinks the model's proposal to the ceiling and says so in the reasoning — the same for a deterministic rule; never expands", async () => {
+    const c = client('{"optionId":"scale","reasoning":"ROAS 3.1 clears your 2.5 floor."}');
+    const src = source(personal);
+    const d = await new LlmDecisionProvider(c, { personalisation: src }).decide(llmNode("hold"), ctx());
+    expect(d.spend).toEqual({ amount: 10, currency: "NZD", period: "day" });
+    expect(d.reasoning).toBe("ROAS 3.1 clears your 2.5 floor. Kept under your usual NZ$10/day (you have held the larger shifts).");
+    expect(src.asked).toEqual(["acct-1"]);
+    expect(c.prompts[0].user).toContain("FOUNDER (");
+
+    const node: DecideNode = { ...llmNode(), rule: { kind: "threshold", metric: "reads.spend.top_roas", op: "gte", value: 2.5, ifTrue: "scale", ifFalse: "hold" } };
+    const det = await new LlmDecisionProvider(null, { personalisation: src }).decide(node, ctx());
+    expect(det.spend?.amount).toBe(10);
+    expect(det.reasoning).toContain("Kept under your usual NZ$10/day");
+
+    const roomy = await new LlmDecisionProvider(c, { personalisation: source({ ...personal, spendCeiling: 50 }) }).decide(llmNode("hold"), ctx());
+    expect(roomy.spend).toEqual({ amount: 20, currency: "NZD", period: "day" });
+    expect(roomy.reasoning).not.toContain("Kept under");
+    const none = await new LlmDecisionProvider(c, { personalisation: source(null) }).decide(llmNode("hold"), ctx());
+    expect(none.spend?.amount).toBe(20);
+  });
+
+  it("a failing personalisation lookup is a warning; the decision proceeds impersonally", async () => {
+    const { sink, entries } = memorySink();
+    const c = client('{"optionId":"scale","reasoning":"ROAS 3.1 clears your 2.5 floor."}');
+    const d = await new LlmDecisionProvider(c, { log: createLogger(sink), personalisation: source(async () => { throw new Error("db down"); }) }).decide(llmNode("hold"), ctx());
+    expect(d.spend?.amount).toBe(20);
+    expect(entries.map((e) => e.event)).toEqual(["decision.personalisation_failed", "decision.llm_ok"]);
+    expect(c.prompts[0].user).not.toContain("FOUNDER");
+  });
+
+  it("StorePersonalisation: nothing known → null (no block); with a profile → profile lines; cached per account", async () => {
+    const store = new MemoryStore();
+    const empty = new StorePersonalisation(store, null, { now: () => new Date("2026-09-02T07:00:00.000Z") });
+    expect(await empty.forAccount("acct-1", "NZD")).toBeNull();
+    const db = new FakeSupabase();
+    db.seed("account_profiles", [{ account_id: "acct-1", tone: { formality: "casual" }, founder_notes: "Be brief." }]);
+    let t = new Date("2026-09-02T07:00:00.000Z").getTime();
+    const src = new StorePersonalisation(store, db, { now: () => new Date(t) });
+    const first = await src.forAccount("acct-1", "NZD");
+    expect(first).toEqual({ profileLines: ["Tone: formality casual.", "Founder's note on working with them: Be brief."], tasteLines: [], spendCeiling: null, currency: "NZD" });
+    const reads = db.callsFor("account_profiles", "select").length;
+    t += 60_000;
+    await src.forAccount("acct-1", "NZD");
+    expect(db.callsFor("account_profiles", "select")).toHaveLength(reads); // cached
+    t += 11 * 60_000;
+    await src.forAccount("acct-1", "NZD");
+    expect(db.callsFor("account_profiles", "select")).toHaveLength(reads + 1); // ttl elapsed
   });
 });

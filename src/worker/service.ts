@@ -21,11 +21,12 @@ import type { Store } from "../lib/runtime/store/interface";
 import type { AccountContext, RoutineSpec, RunMode, RunResult } from "../lib/runtime/types";
 import { effectiveSpec, getOrInitState } from "../lib/runtime/versioning";
 import type { AccountsSource, WorkerAccount } from "./accounts";
+import type { DbClient } from "../lib/db/types";
 import type { CredentialProvider } from "./credentials";
 import type { Logger } from "./log";
 import { WorkerConnectorReader } from "./providers/connectorReader";
 import { RefusingExecutor } from "./providers/executor";
-import { LlmDecisionProvider, type LlmClient } from "./providers/llmDecision";
+import { LlmDecisionProvider, StorePersonalisation, type LlmClient } from "./providers/llmDecision";
 import type { ScheduleCandidate } from "./scheduler";
 import { defaultCredentialProvider } from "./wiring";
 
@@ -55,6 +56,9 @@ export interface ServiceDeps {
   /** null = no LLM (every llm-rule decide takes its fallback). Default null;
       the CLI passes createAnthropicLlmClient() which is env-gated. */
   llm?: LlmClient | null;
+  /** Service-role client: lets the decider read account_profiles (tone / decision style).
+      Absent → taste patterns still come from the Store; the profile block is empty. */
+  db?: DbClient | null;
   now?: () => Date;
   log?: Logger;
   fetch?: typeof fetch;
@@ -68,7 +72,7 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
   const now = deps.now ?? (() => new Date());
   return {
     reader: new WorkerConnectorReader({ credentials: deps.credentials ?? defaultCredentialProvider(process.env, deps.log ? (line) => deps.log?.info("credentials", { line }) : undefined), now, log: deps.log, fetch: deps.fetch }),
-    decider: new LlmDecisionProvider(deps.llm ?? null, { log: deps.log }),
+    decider: new LlmDecisionProvider(deps.llm ?? null, { log: deps.log, personalisation: new StorePersonalisation(deps.store, deps.db ?? null, { now }) }),
     executor: new RefusingExecutor(),
     store: deps.store,
     now,
