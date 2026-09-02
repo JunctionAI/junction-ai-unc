@@ -1,8 +1,64 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { clearConnectReturn, CONNECT_COPY, peekConnectReturn } from "@/lib/connectors/returnParams";
+import { isDbConfigured } from "@/lib/db/client";
+import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
 import type { PlatformVals } from "@/lib/platform/derive";
 
+/* Connect / Reconnect: in demo mode (no Supabase configured) the button does exactly what the
+   prototype did — flips the card to Connected client-side. With accounts on, it asks
+   /api/connectors/<platform>/start and either follows the returned authorize URL or shows one
+   line in Unc's voice when the platform isn't switched on yet. */
+
+type StartResponse = { url?: string; fallback?: boolean; reason?: string; error?: string };
+
 export default function ConnectorsView({ V }: { V: PlatformVals }) {
+  // Seeded from the OAuth return (if any) on first render; cleared once shown so it doesn't replay.
+  const [notes, setNotes] = useState<Record<string, string>>(() => {
+    const r = peekConnectReturn();
+    return r ? { [r.name]: r.kind === "connected" ? CONNECT_COPY.connected : CONNECT_COPY.failed } : {};
+  });
+  const [shopFor, setShopFor] = useState<string | null>(null);
+  const [shop, setShop] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => clearConnectReturn(), []);
+
+  const note = (name: string, text: string) => setNotes((n) => ({ ...n, [name]: text }));
+
+  async function start(name: string, demoConnect: () => void, shopDomain?: string) {
+    if (!isDbConfigured()) {
+      demoConnect();
+      return;
+    }
+    const platform = CONNECTOR_PLATFORMS[name];
+    if (!platform) {
+      note(name, CONNECT_COPY.notSwitchedOn);
+      return;
+    }
+    if (platform === "shopify" && !shopDomain) {
+      setShopFor(name);
+      return;
+    }
+    setBusy(name);
+    try {
+      const res = await fetch(`/api/connectors/${platform}/start`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(shopDomain ? { shop: shopDomain } : {}) });
+      const data = (await res.json().catch(() => ({}))) as StartResponse;
+      if (res.status === 401) note(name, CONNECT_COPY.signIn);
+      else if (res.ok && data.url) {
+        window.location.assign(data.url);
+        return;
+      } else if (res.ok && data.fallback) note(name, CONNECT_COPY.notSwitchedOn);
+      else note(name, data.error ? `${CONNECT_COPY.failed} (${data.error})` : CONNECT_COPY.failed);
+    } catch {
+      note(name, CONNECT_COPY.failed);
+    } finally {
+      setBusy(null);
+      setShopFor(null);
+    }
+  }
+
   return (
     <div
       data-buddy="Least privilege, always — I list every scope before you approve it. Each connection unlocks more of the library."
@@ -26,6 +82,29 @@ export default function ConnectorsView({ V }: { V: PlatformVals }) {
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
                 {cn.note} · unlocks {cn.unlocks} routines
               </div>
+              {shopFor === cn.name && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void start(cn.name, cn.connect, shop.trim());
+                  }}
+                  style={{ display: "flex", gap: 6, marginTop: 8 }}
+                >
+                  <input
+                    autoFocus
+                    value={shop}
+                    onChange={(e) => setShop(e.target.value)}
+                    placeholder={CONNECT_COPY.shopPrompt}
+                    style={{ flex: 1, minWidth: 0, fontSize: 12, padding: "5px 9px", border: "1px solid var(--card-border)", borderRadius: 8 }}
+                  />
+                  <button type="submit" className="btn-navy" disabled={busy === cn.name} style={{ flex: "none", padding: "5px 12px", fontSize: 12, fontWeight: 600 }}>
+                    Go
+                  </button>
+                </form>
+              )}
+              {notes[cn.name] && (
+                <div style={{ fontSize: 12, color: "var(--amber-text)", marginTop: 6, lineHeight: 1.45 }}>{notes[cn.name]}</div>
+              )}
             </div>
             {cn.ok && (
               <span style={{ flex: "none", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--cyan-text)", fontWeight: 600 }}>
@@ -34,14 +113,15 @@ export default function ConnectorsView({ V }: { V: PlatformVals }) {
             )}
             {cn.expired && (
               <button
-                onClick={cn.connect}
+                onClick={() => void start(cn.name, cn.connect)}
+                disabled={busy === cn.name}
                 style={{ flex: "none", border: "1px solid oklch(0.8 0.09 75)", background: "var(--amber-wash)", color: "var(--amber-text)", borderRadius: 999, padding: "7px 15px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
               >
                 Reconnect
               </button>
             )}
             {cn.off && (
-              <button onClick={cn.connect} className="btn-navy" style={{ flex: "none", padding: "7px 16px", fontSize: 12, fontWeight: 600 }}>
+              <button onClick={() => void start(cn.name, cn.connect)} disabled={busy === cn.name} className="btn-navy" style={{ flex: "none", padding: "7px 16px", fontSize: 12, fontWeight: 600 }}>
                 Connect
               </button>
             )}
