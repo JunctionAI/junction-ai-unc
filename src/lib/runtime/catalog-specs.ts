@@ -18,6 +18,7 @@ import type {
   DecisionOption,
   ExecuteNode,
   GateNode,
+  KpiContract,
   Node,
   Platform,
   Predicate,
@@ -90,10 +91,93 @@ const draftOrNothing = (question: string, proceedLabel: string, metric: string, 
 
 const NAME_BY_ID = new Map(ALL_SYSTEMS.map((s) => [s.id, s.name]));
 
+// ---------- KPI contracts (outcome telemetry) ----------
+
+/* Every routine promises one measurable thing. Two source kinds:
+     read  — a certified platform read (the same reader the routine uses), so the actual
+             is the platform's number, not ours. Only platforms with a shipped reader
+             (shopify, klaviyo, meta_ads, google_ads, ga4) can answer today; the rest
+             measure as "couldn't ask" until their reader lands — never a made-up actual.
+     runs  — the routine's own ledger (completed runs / draft receipts / approvals) —
+             the honest measure for draft-only routines whose output IS the draft.
+   Three keys double as benchmark metric_keys for "The bar" (src/lib/telemetry/benchmarks.ts):
+   content_drafts_per_week, repeat_purchase_pct, lead_response_hours. */
+const kpi = (key: string, label: string, target: number, op: KpiContract["op"], windowDays: number, unit: string, source: KpiContract["source"]): KpiContract => ({ key, label, target, op, windowDays, unit, source });
+const runsKpi = (key: string, label: string, target: number, windowDays: number, unit: string, metric: Extract<KpiContract["source"], { kind: "runs" }>["metric"] = "draft_receipts"): KpiContract =>
+  kpi(key, label, target, "gte", windowDays, unit, { kind: "runs", metric });
+
+export const KPI_CONTRACTS: Record<RoutineId, KpiContract> = {
+  // D01 Content
+  "D01-W01": runsKpi("content_drafts_per_week", "Founder drafts handed over", 5, 7, "drafts / week"),
+  "D01-W02": runsKpi("hook_briefs_per_week", "Hook briefs delivered", 1, 7, "briefs / week"),
+  "D01-W03": runsKpi("question_digests_per_week", "Customer-question digests", 1, 7, "digests / week"),
+  "D01-W04": runsKpi("creator_shortlists_per_month", "Creator shortlists delivered", 1, 28, "shortlists / 28d"),
+  "D01-W05": runsKpi("repurpose_packs_per_week", "Repurposing packs delivered", 1, 7, "packs / week"),
+  "D01-W06": runsKpi("winning_elements_per_month", "Winning-element entries", 1, 28, "entries / 28d"),
+  "D01-W07": runsKpi("trend_alerts_per_week", "Trend alerts delivered", 1, 7, "alerts / week"),
+  "D01-W08": runsKpi("performance_reads_per_week", "Performance readouts", 1, 7, "readouts / week"),
+  // D02 Paid ads
+  "D02-W01": kpi("blended_roas_7d", "Blended ROAS (7d)", 2.5, "gte", 7, "×", { kind: "read", platform: "meta_ads", resource: "insights", metric: "roas", query: { filter: { level: "adset" } } }),
+  "D02-W02": runsKpi("creative_tests_per_month", "Creative tests proposed", 4, 28, "tests / 28d"),
+  "D02-W03": runsKpi("hook_rotations_per_month", "Hook rotations proposed", 2, 28, "rotations / 28d"),
+  "D02-W04": kpi("worst_ad_frequency_7d", "Worst ad frequency (7d)", 3.5, "lte", 7, "×", { kind: "read", platform: "meta_ads", resource: "insights", metric: "worst_frequency", query: { filter: { level: "ad" } } }),
+  "D02-W05": runsKpi("whitelist_proposals_per_month", "Whitelisting proposals", 1, 28, "proposals / 28d"),
+  "D02-W06": runsKpi("test_plans_per_month", "Test plans delivered", 1, 28, "plans / 28d"),
+  "D02-W07": kpi("daily_spend_vs_budget_pct", "Daily spend vs budget", 105, "lte", 1, "%", { kind: "read", platform: "meta_ads", resource: "insights", metric: "spend", per: "daily_budget_total", scale: 100, query: { filter: { level: "account" } } }),
+  "D02-W08": runsKpi("organic_promotions_per_month", "Organic-to-paid candidates", 2, 28, "candidates / 28d"),
+  // D03 SEO
+  "D03-W01": runsKpi("keyword_briefs_per_week", "Keyword briefs delivered", 1, 7, "briefs / week"),
+  "D03-W02": runsKpi("gap_reports_per_month", "Content-gap reports", 1, 28, "reports / 28d"),
+  "D03-W03": runsKpi("ai_visibility_reads_per_month", "AI-search visibility reads", 1, 28, "reads / 28d"),
+  "D03-W04": kpi("pages_missing_meta", "Pages missing meta", 0, "lte", 28, "pages", { kind: "read", platform: "shopify", resource: "pages", metric: "missing_meta_count" }),
+  "D03-W05": runsKpi("serp_reads_per_week", "SERP position reads", 1, 7, "reads / week"),
+  "D03-W06": runsKpi("competitor_watches_per_week", "Competitor gap watches", 1, 7, "watches / week"),
+  // D04 Sales
+  "D04-W01": runsKpi("lead_scoring_runs_per_week", "Lead scoring runs", 5, 7, "runs / week", "completed_runs"),
+  "D04-W02": runsKpi("outbound_drafts_per_week", "Outbound drafts handed over", 5, 7, "drafts / week"),
+  "D04-W03": runsKpi("meeting_briefs_per_week", "Meeting briefs delivered", 3, 7, "briefs / week"),
+  "D04-W04": kpi("lead_response_hours", "Time to first reply on open deals", 4, "lte", 7, "h", { kind: "read", platform: "hubspot", resource: "deals", metric: "median_response_hours" }),
+  "D04-W05": runsKpi("win_loss_captures_per_month", "Win/loss captures", 2, 28, "captures / 28d"),
+  "D04-W06": runsKpi("pipeline_hygiene_runs_per_week", "Pipeline hygiene runs", 1, 7, "runs / week", "completed_runs"),
+  // D05 Email & SMS
+  "D05-W01": kpi("repeat_purchase_pct", "Repeat purchase rate (90d)", 22, "gte", 90, "%", { kind: "read", platform: "shopify", resource: "customers", metric: "repeat_count", per: "count", scale: 100 }),
+  "D05-W02": kpi("abandoned_checkout_value_7d", "Abandoned checkout value (7d)", 500, "lte", 7, "$", { kind: "read", platform: "shopify", resource: "checkouts", metric: "total_value", query: { filter: { abandoned: true } } }),
+  "D05-W03": runsKpi("segment_refreshes_per_month", "Segment refreshes proposed", 1, 28, "refreshes / 28d"),
+  "D05-W04": kpi("winback_revenue_28d", "Winback campaign revenue (28d)", 500, "gte", 28, "$", { kind: "read", platform: "klaviyo", resource: "campaigns", metric: "revenue", query: { filter: { tag: "winback" } } }),
+  "D05-W05": runsKpi("post_purchase_drafts_per_month", "Post-purchase drafts", 1, 28, "drafts / 28d"),
+  "D05-W06": runsKpi("review_timing_proposals_per_month", "Review-timing proposals", 1, 28, "proposals / 28d"),
+  "D05-W07": runsKpi("calendars_per_month", "Campaign calendars delivered", 1, 28, "calendars / 28d"),
+};
+
+// ---------- hours saved per completed run ----------
+
+/* Conservative founder-hours one completed run stands in for: the time it takes a founder
+   to do the same read + draft by hand, NOT the value of the output. Per category, with a
+   few overrides for the heavier drafting routines. Sums into the Home automation strip's
+   "hours saved / week" in DB mode (demo mode keeps the prototype's 2.5 h × routines-on). */
+const HOURS_BY_CATEGORY: Record<string, number> = { Content: 0.75, "Paid ads": 0.25, SEO: 0.5, Sales: 0.5, "Email & SMS": 0.75 };
+const HOURS_OVERRIDES: Record<RoutineId, number> = {
+  "D01-W01": 1.5, // 3 founder-voice posts drafted from customer questions
+  "D01-W05": 1.0, // one post → five formats
+  "D03-W02": 1.5, // content-gap analysis across competitor crawls
+  "D04-W01": 1.0, // researching + scoring a day's leads
+  "D04-W02": 1.0, // supervised outbound drafts
+  "D04-W03": 0.75, // a meeting brief per external meeting
+  "D05-W04": 1.5, // winback campaign prepared end to end
+  "D05-W07": 2.0, // a 90-day campaign calendar
+};
+const CAT_BY_ID = new Map(ALL_SYSTEMS.map((s) => [s.id, s.cat]));
+export const HOURS_SAVED_PER_RUN: Record<RoutineId, number> = Object.fromEntries(ALL_SYSTEMS.map((s) => [s.id, HOURS_OVERRIDES[s.id] ?? HOURS_BY_CATEGORY[s.cat] ?? 0.5]));
+
+export function hoursSavedPerRun(id: RoutineId): number {
+  return HOURS_SAVED_PER_RUN[id] ?? HOURS_BY_CATEGORY[CAT_BY_ID.get(id) ?? ""] ?? 0.5;
+}
+
 function spec(id: RoutineId, wave: Wave, nodes: Node[]): RoutineSpec {
   const name = NAME_BY_ID.get(id);
   if (!name) throw new Error(`unknown catalog routine ${id}`);
-  return { id, version: 1, name, wave, mutates: nodes.some((n) => n.kind === "execute"), nodes };
+  const contract = KPI_CONTRACTS[id];
+  return { id, version: 1, name, wave, mutates: nodes.some((n) => n.kind === "execute"), nodes, ...(contract ? { kpi: contract } : {}), hoursSavedPerRun: hoursSavedPerRun(id) };
 }
 
 // ---------- D01 Content ----------

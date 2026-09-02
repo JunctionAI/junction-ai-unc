@@ -224,6 +224,34 @@ export interface ReceiptNode extends NodeBase {
 export type Node = TriggerNode | ReadNode | CheckNode | DecideNode | GateNode | ExecuteNode | ReceiptNode;
 export type NodeKind = Node["kind"];
 
+// ---------- KPI contract (outcome telemetry) ----------
+
+/** Where a KPI's actual value comes from.
+    - read: a certified platform read through the ConnectorReader (the same reader the
+      routines use). `metric` is a key of ReadResult.metrics or "count" (row count);
+      `per` divides by another metric/"count" and `scale` multiplies (e.g. ×100 for a %).
+    - runs: the routine's own ledger in the Store over the window — completed runs, draft
+      receipts, mutation receipts, or approvals the founder approved. */
+export type KpiSource =
+  | { kind: "read"; platform: Platform; resource: string; metric: string; per?: string; scale?: number; query?: Omit<ReadQuery, "resource" | "window"> }
+  | { kind: "runs"; metric: "completed_runs" | "draft_receipts" | "mutation_receipts" | "approved"; multiplier?: number };
+
+/** The measurable promise a routine makes. `op` says which direction is good
+    (gte: actual ≥ target hits; lte: actual ≤ target hits). Measured by
+    src/lib/telemetry/outcomes.ts and written to routine_outcomes. */
+export interface KpiContract {
+  /** Stable key; also the benchmark metric_key when the KPI feeds "The bar". */
+  key: string;
+  label: string;
+  target: number;
+  op: "gte" | "lte";
+  /** Measurement window in days (the window ends at the start of the measuring day, UTC). */
+  windowDays: number;
+  /** Display unit: "drafts / week", "%", "h", "×" … */
+  unit: string;
+  source: KpiSource;
+}
+
 // ---------- spec ----------
 
 export interface RoutineSpec {
@@ -235,6 +263,11 @@ export interface RoutineSpec {
   /** True iff the chain contains an execute node. */
   mutates: boolean;
   nodes: Node[];
+  /** The routine's KPI contract (catalog constant; see KPI_CONTRACTS in catalog-specs.ts). */
+  kpi?: KpiContract;
+  /** Conservative founder-hours one completed run saves (catalog constant; see
+      HOURS_SAVED_PER_RUN in catalog-specs.ts). Feeds the Home automation strip in DB mode. */
+  hoursSavedPerRun?: number;
 }
 
 // ---------- run context + results ----------
