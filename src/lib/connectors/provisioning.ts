@@ -19,8 +19,8 @@
    for the first real tenant), and whether Airbyte's Klaviyo source accepts an OAuth bearer
    token in `api_key` (its spec names a private key — see docs/CONNECTORS-FIRST-BOOT.md). */
 
-import type { DbClient } from "@/lib/db/types";
-import type { Platform } from "@/lib/runtime/types";
+import type { DbClient } from "../db/types";
+import type { Platform } from "../runtime/types";
 import type { FetchLike } from "./oauth";
 import { getConnectorById, updateConnector, type ConnectorRow, type SyncResult } from "./store";
 import type { AccessToken } from "./tokens";

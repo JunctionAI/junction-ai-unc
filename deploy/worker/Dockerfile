@@ -10,6 +10,9 @@ RUN npm ci --ignore-scripts
 COPY tsconfig.json tsconfig.worker.json ./
 COPY src ./src
 RUN npx tsc -p tsconfig.worker.json
+# The standalone build has no path-alias resolver: every lib file the worker pulls in must
+# use relative imports. Fail the image rather than crash at boot with "Cannot find module '@/…'".
+RUN ! grep -rl 'require("@/' dist/worker
 
 FROM node:22-slim
 WORKDIR /app

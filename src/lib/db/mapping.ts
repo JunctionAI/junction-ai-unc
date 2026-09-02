@@ -24,9 +24,9 @@
    nodeVals, chatOpen, setupOpen/Step/Done, readThread/readDraft, chatMode, addOpen,
    obMoneyOpen, obTeamOpen, obDraft, buddyText, typing placeholders. */
 
-import { ALL_SYSTEMS } from "@/lib/platform/catalog";
-import { postureDefs } from "@/lib/platform/derive";
-import type { Posture } from "@/lib/platform/plan";
+import { ALL_SYSTEMS } from "../platform/catalog";
+import { postureDefs } from "../platform/derive";
+import type { Posture } from "../platform/plan";
 import {
   initialState,
   type ApStatus,
@@ -39,8 +39,8 @@ import {
   type Reinvest,
   type TeamMember,
   type WfState,
-} from "@/lib/platform/state";
-import type { BusinessProfile } from "@/lib/unc/scan";
+} from "../platform/state";
+import type { BusinessProfile } from "../unc/scan";
 
 export const CLIENT_STATE_SCHEMA_VERSION = 1;
 

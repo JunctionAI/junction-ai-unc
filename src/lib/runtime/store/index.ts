@@ -12,8 +12,8 @@
 import type { Store } from "./interface";
 import { MemoryStore } from "./memory";
 import { SupabaseStore } from "./supabase";
-import { asDb } from "@/lib/db/client";
-import { getServiceSupabase, isServiceRoleConfigured } from "@/lib/db/server";
+import { asDb } from "../../db/client";
+import { getServiceSupabase, isServiceRoleConfigured } from "../../db/server";
 
 const g = globalThis as typeof globalThis & { __uncRuntimeStore?: Store; __uncRuntimeStoreKind?: string };
 

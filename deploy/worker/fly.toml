@@ -7,6 +7,23 @@
 # One machine, never scaled to zero, never more than one (the scheduler's
 # dedup is per store — two workers on MemoryStore would double-run).
 # Persistence: swap MemoryStore → SupabaseStore before this matters (README).
+#
+# Telemetry cron (docs/IMPROVEMENT-LOOP.md): NOT Fly scheduled machines. The daemon
+# ticks every minute and runs the jobs itself at their UTC slots (src/worker/jobs.ts):
+#     measure       0 2 * * *    daily 02:00 UTC
+#     benchmarks    0 3 * * 1    Mondays 03:00 UTC
+#     self_review   0 6 * * 1    Mondays 06:00 UTC
+# Per-job "already ran" markers live on the heartbeat file (/app/.unc-worker/heartbeat.json)
+# so a restart / redeploy inside the 6 h look-back does not double-run; a fresh machine
+# with no heartbeat re-runs at most one slot per job (every job is idempotent). The same
+# loop sweeps expired oauth_states once an hour when the DB is configured.
+# The one-shot flags (--measure / --self-review / --benchmarks) remain for manual runs:
+#     fly ssh console -C "node dist/worker/worker/main.js --measure"
+#
+# Secrets the daemon honours (fly secrets set …): ANTHROPIC_API_KEY (optional),
+# NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + CONNECTOR_SECRET_KEY (live
+# credentials + DB accounts; without them: fixtures + the demo account, no sweep),
+# GOOGLE_ADS_DEVELOPER_TOKEN / GOOGLE_ADS_LOGIN_CUSTOMER_ID (Ads reads).
 
 app = "unc-worker"
 primary_region = "syd"

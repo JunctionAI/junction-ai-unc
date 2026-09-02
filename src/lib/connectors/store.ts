@@ -4,7 +4,7 @@
    All of these run under the SERVICE ROLE (connector_secrets / oauth_states deny every
    client role). Callers must have checked the session + membership first — see handlers.ts. */
 
-import { unwrap, type DbClient } from "@/lib/db/types";
+import { unwrap, type DbClient } from "../db/types";
 import type { SealedSecret } from "./crypto";
 
 export type ConnectorStatus = "disconnected" | "connecting" | "connected" | "needs_reconnect" | "error";

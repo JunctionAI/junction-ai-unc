@@ -32,7 +32,7 @@ import type {
   SelfReviewRecord,
   Store,
 } from "./interface";
-import { unwrap, type DbClient, type Row } from "@/lib/db/types";
+import { unwrap, type DbClient, type Row } from "../../db/types";
 
 // ---------- helpers ----------
 

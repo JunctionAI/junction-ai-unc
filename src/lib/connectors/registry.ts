@@ -11,10 +11,10 @@
 
    Nothing here reads a secret value: env *names* only; isPlatformConfigured() checks presence. */
 
-import { CONNECTOR_DEFS } from "@/lib/platform/catalog";
-import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
-import { CATALOG_SPECS } from "@/lib/runtime/catalog-specs";
-import type { Platform, RoutineId } from "@/lib/runtime/types";
+import { CONNECTOR_DEFS } from "../platform/catalog";
+import { CONNECTOR_PLATFORMS } from "../db/mapping";
+import { CATALOG_SPECS } from "../runtime/catalog-specs";
+import type { Platform, RoutineId } from "../runtime/types";
 
 export type ConnectorFlow =
   /** Standard authorization-code OAuth (Meta) — optionally with PKCE (Klaviyo, Google). */

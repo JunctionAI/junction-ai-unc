@@ -13,12 +13,12 @@
    owned elsewhere and must stay importable without this module). When the worker is switched
    to live credentials it passes `new ConnectorCredentialProvider(deps)` as `credentials`. */
 
-import type { DbClient } from "@/lib/db/types";
+import type { DbClient } from "../db/types";
 import { needsReseal, open, seal, SecretStoreError, type Keyring } from "./crypto";
 import { bundleFromResponse, refreshTokens, TokenCallError, type FetchLike, type TokenBundle } from "./oauth";
 import { connectorEntry, platformCredentials } from "./registry";
 import { getConnector, getConnectorById, getSecret, putSecret, updateConnector, type ConnectorRow } from "./store";
-import type { Platform } from "@/lib/runtime/types";
+import type { Platform } from "../runtime/types";
 
 export const REFRESH_SKEW_MS = 5 * 60 * 1000;
 

@@ -10,16 +10,26 @@
    every mutation regardless. Credentials are fixture markers unless a real
    CredentialProvider is injected (none is shipped).
 
+   Housekeeping the same tick does, after the routines (both env-gated on a DB):
+     - the telemetry jobs at their UTC slots (src/worker/jobs.ts: measure daily 02:00,
+       benchmarks Mondays 03:00, self-review Mondays 06:00) with per-job "already ran"
+       markers on the heartbeat file so a restart doesn't double-run;
+     - sweepOauthStates() once an hour (expired 10-minute Connect states).
+
    Deps are injected (WorkerDeps) so tests run a tick against MemoryStore and
    a static accounts source with no timers, files or signals. */
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { sweepOauthStates } from "../lib/connectors/store";
+import type { DbClient } from "../lib/db/types";
 import type { RunStatus } from "../lib/runtime/types";
 import type { Heartbeat } from "./health";
+import { DEFAULT_JOB_LOOKBACK_MS, dueJobs, sanitiseMarkers, type JobId, type JobMarkers } from "./jobs";
 import { createLogger, type Logger } from "./log";
 import { dueRoutines, type DueRoutine } from "./scheduler";
 import { buildAdapters, collectCandidates, LIVE_MODE_ENABLED, triggerRun, WORKER_RUN_MODE, type BuiltAdapters, type ServiceDeps } from "./service";
+import { runBenchmarks, runMeasure, runSelfReview, type TelemetryDeps } from "./telemetry";
 
 export interface WorkerOptions {
   /** Seconds between ticks. Default 60. */
@@ -33,9 +43,21 @@ export interface WorkerOptions {
   heartbeatPath?: string | null;
   /** Install SIGTERM/SIGINT handlers in start(). Default true; tests pass false. */
   handleSignals?: boolean;
+  /** Run the scheduled telemetry jobs inside the loop (jobs.ts). Default true. */
+  jobs?: boolean;
+  /** How long a missed job slot is still picked up. Default 6 h. */
+  jobLookbackMs?: number;
+  /** How often expired oauth_states are swept (needs deps.db). Default 1 h. */
+  sweepIntervalMs?: number;
 }
 
-export type WorkerDeps = ServiceDeps;
+export interface WorkerDeps extends ServiceDeps {
+  /** Service-role client for housekeeping (oauth_states sweep, benchmark segments).
+      null / absent in demo mode: nothing DB-shaped runs. */
+  db?: DbClient | null;
+}
+
+export const DEFAULT_SWEEP_INTERVAL_MS = 3_600_000;
 
 export interface TickRunReport {
   accountId: string;
@@ -55,6 +77,10 @@ export interface TickReport {
   started: TickRunReport[];
   /** Due routines not started because the tick budget ran out. */
   deferred: number;
+  /** Scheduled telemetry jobs this tick ran (jobs.ts), in order. */
+  jobs: JobId[];
+  /** True when the hourly oauth_states sweep ran this tick. */
+  swept: boolean;
   ms: number;
 }
 
@@ -65,6 +91,8 @@ export interface WorkerStats {
   lastTickAt: string | null;
   lastTickMs: number | null;
   lastError?: string;
+  jobs: JobMarkers;
+  lastSweepAt: string | null;
 }
 
 export class Worker {
@@ -88,7 +116,10 @@ export class Worker {
     this.adapters = buildAdapters({ ...deps, log: this.log });
     this.intervalMs = Math.max(1, opts.intervalSec ?? 60) * 1000;
     this.tickBudgetMs = opts.tickBudgetMs ?? Math.floor(this.intervalMs * 0.8);
-    this.stats = { startedAt: this.now().toISOString(), ticks: 0, runsStarted: 0, lastTickAt: null, lastTickMs: null };
+    // Job markers survive a restart through the heartbeat file (a restart inside the
+    // look-back window must not re-run the day's jobs).
+    const previous = opts.heartbeatPath ? readHeartbeatFile(opts.heartbeatPath) : null;
+    this.stats = { startedAt: this.now().toISOString(), ticks: 0, runsStarted: 0, lastTickAt: null, lastTickMs: null, jobs: sanitiseMarkers(previous?.jobs), lastSweepAt: null };
   }
 
   // ----- one tick -----
@@ -96,7 +127,7 @@ export class Worker {
   /** Run one scheduling pass. Safe to call directly (tests, --once). */
   async tick(now: Date = this.now()): Promise<TickReport> {
     const t0 = Date.now();
-    const report: TickReport = { at: now.toISOString(), accounts: 0, candidates: 0, due: 0, started: [], deferred: 0, ms: 0 };
+    const report: TickReport = { at: now.toISOString(), accounts: 0, candidates: 0, due: 0, started: [], deferred: 0, jobs: [], swept: false, ms: 0 };
     try {
       const accounts = await this.deps.accounts.listAccounts();
       report.accounts = accounts.length;
@@ -127,6 +158,9 @@ export class Worker {
       this.stats.lastError = message;
       this.log.error("tick.error", { error: message });
     }
+    // Housekeeping after the routines: each part isolates its own failures.
+    if (this.opts.jobs ?? true) report.jobs = await this.runDueJobs(now);
+    report.swept = await this.sweepIfDue(now);
     report.ms = Date.now() - t0;
     this.stats.ticks += 1;
     this.stats.lastTickAt = report.at;
@@ -148,6 +182,65 @@ export class Worker {
       this.log.error("run.error", { ...base, error: message });
       return { ...base, status: "error", error: message };
     }
+  }
+
+  // ----- scheduled telemetry jobs (jobs.ts) -----
+
+  private telemetryDeps(): TelemetryDeps {
+    return { store: this.deps.store, accounts: this.deps.accounts, reader: this.adapters.reader, db: this.deps.db ?? null, llm: this.deps.llm ?? null, now: this.now, log: this.log };
+  }
+
+  /** Run every job whose slot is due and unserved; the marker is written whatever
+      happened, so a failing job waits for its next slot instead of retrying every minute. */
+  private async runDueJobs(now: Date): Promise<JobId[]> {
+    const ran: JobId[] = [];
+    for (const { job, slot } of dueJobs(now, this.stats.jobs, this.opts.jobLookbackMs ?? DEFAULT_JOB_LOOKBACK_MS)) {
+      if (this.stopping) break;
+      const t0 = Date.now();
+      const base = { job: job.id, slot: slot.toISOString() };
+      this.log.info("job.start", base);
+      try {
+        const deps = this.telemetryDeps();
+        if (job.id === "measure") {
+          const r = await runMeasure(deps);
+          this.log.info("job.finish", { ...base, accounts: r.accounts, measured: r.measured, skipped: r.skipped, ms: Date.now() - t0 });
+        } else if (job.id === "benchmarks") {
+          const r = await runBenchmarks(deps);
+          this.log.info("job.finish", { ...base, ...r, ms: Date.now() - t0 });
+        } else {
+          const r = await runSelfReview(deps);
+          this.log.info("job.finish", { ...base, accounts: r.accounts, written: r.written.length, alreadyDone: r.alreadyDone.length, ms: Date.now() - t0 });
+        }
+        this.stats.jobs[job.id] = { lastSlot: base.slot, ranAt: this.now().toISOString(), ok: true, ms: Date.now() - t0 };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.stats.lastError = message;
+        this.log.error("job.error", { ...base, error: message });
+        this.stats.jobs[job.id] = { lastSlot: base.slot, ranAt: this.now().toISOString(), ok: false, error: message, ms: Date.now() - t0 };
+      }
+      ran.push(job.id);
+    }
+    return ran;
+  }
+
+  // ----- oauth_states sweep -----
+
+  private async sweepIfDue(now: Date): Promise<boolean> {
+    const db = this.deps.db;
+    if (!db) return false;
+    const every = this.opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
+    const last = this.stats.lastSweepAt ? new Date(this.stats.lastSweepAt).getTime() : null;
+    if (last !== null && now.getTime() - last < every) return false;
+    try {
+      await sweepOauthStates(db, now.toISOString());
+      this.log.info("sweep.oauth_states", { at: now.toISOString() });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log.warn("sweep.failed", { error: message });
+    }
+    // Either way the next attempt is an interval away — a broken DB must not be hammered per tick.
+    this.stats.lastSweepAt = now.toISOString();
+    return true;
   }
 
   // ----- lifecycle -----
@@ -214,6 +307,8 @@ export class Worker {
       mode: "dry_run",
       liveModeEnabled: false,
       stopping: this.stopping,
+      jobs: this.stats.jobs,
+      lastSweepAt: this.stats.lastSweepAt,
       ...(this.stats.lastError ? { lastError: this.stats.lastError } : {}),
     };
   }

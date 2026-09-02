@@ -8,7 +8,7 @@ import { ALL_SYSTEMS, CATEGORIES, CAT_TAGLINES, CONNECTOR_DEFS, type RoutineDef 
 import { goalMath } from "./goal";
 import { scoreChannels, span, weekSplit, POSTURE_WEIGHTS, type Posture } from "./plan";
 import type { NarrativeState, PlatformState, ScanState, Setter } from "./state";
-import { DEFAULT_FOOTNOTE, type NarrativeRequest } from "@/lib/unc/narrative";
+import { DEFAULT_FOOTNOTE, type NarrativeRequest } from "../unc/narrative";
 
 type Ev = { target: { value: string } };
 type KEv = { key: string };

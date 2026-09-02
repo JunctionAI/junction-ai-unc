@@ -28,7 +28,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   // something calls setEnabled. --enable D01-W01,D05-W02 flips those on.
   for (const routineId of args.enable) await setEnabled({ store }, args.accountId, routineId, true);
 
-  const deps = { store, accounts, credentials: defaultCredentialProvider(process.env, (line) => log.info("credentials", { line })), llm, log };
+  const db = serviceDb();
+  const deps = { store, accounts, credentials: defaultCredentialProvider(process.env, (line) => log.info("credentials", { line })), llm, log, db };
+  // The daemon runs the telemetry jobs itself at their UTC slots (src/worker/jobs.ts); the
+  // one-shot flags below stay for manual / catch-up runs.
   const worker = new Worker(deps, { intervalSec: args.intervalSec, heartbeatPath: args.heartbeatPath });
 
   // Smoke test: --run D05-W02 dry-runs it now (manual trigger, same path as POST /api/routines/run).
@@ -40,7 +43,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   // Telemetry one-shots (the "improves over time" loops). Each runs across the accounts
   // source (or --account) and the process exits afterwards, like --once.
   if (args.measure || args.selfReview || args.benchmarks) {
-    const telemetry = { store, accounts, reader: worker.adapters.reader, db: serviceDb(), llm, log };
+    const telemetry = { store, accounts, reader: worker.adapters.reader, db, llm, log };
     const only = args.accountGiven ? args.accountId : undefined;
     if (args.measure) {
       const r = await runMeasure(telemetry, { accountId: only });

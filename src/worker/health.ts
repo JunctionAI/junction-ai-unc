@@ -3,6 +3,7 @@
    is served; nothing from the request is echoed. */
 
 import { createServer, type Server } from "node:http";
+import type { JobMarkers } from "./jobs";
 
 export interface Heartbeat {
   pid: number;
@@ -14,6 +15,9 @@ export interface Heartbeat {
   mode: "dry_run";
   liveModeEnabled: false;
   stopping: boolean;
+  /** Per-job "already ran" markers for the in-loop scheduler (jobs.ts); reloaded on start. */
+  jobs?: JobMarkers;
+  lastSweepAt?: string | null;
   lastError?: string;
 }
 
