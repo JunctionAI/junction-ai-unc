@@ -3,7 +3,7 @@
 Everything below is env-gated: with none of these variables set, the app runs in **demo mode** (client-side state, canned Unc replies, no accounts, no billing). Each layer switches on independently.
 
 ## Order of operations (one sitting — see PHASE-0-DECISION-BRIEF.md in the Drive folder)
-1. **Database** — `docs/FIRST-BOOT.md`: create the Supabase project, run migrations `supabase/migrations/0001…0005` in order, enable Email (magic link), set Site URL + redirect.
+1. **Database** — `docs/FIRST-BOOT.md`: create the Supabase project, run migrations `supabase/migrations/0001…0006` in order, enable Email (magic link), set Site URL + redirect.
 2. **Secrets** — generate `CONNECTOR_SECRET_KEY` (`openssl rand -base64 32`), set the Anthropic key.
 3. **Hosting** — Vercel project for the app (env vars below), Fly.io for the worker (`deploy/worker/`), domain `unc.getjunction.ai`.
 4. **Billing** — `docs/BILLING-FIRST-BOOT.md`: Stripe product/price, Tax, portal, webhook.
@@ -29,6 +29,7 @@ Everything below is env-gated: with none of these variables set, the app runs in
 | E2E + visual parity | `npm run e2e` · `npm run e2e:parity` (report: `design-reference/parity/REPORT.md`) |
 | Typecheck / build | `npx tsc --noEmit` · `npm run build` |
 | Worker (local, once) | `npx tsc -p tsconfig.worker.json && node dist/worker/worker/main.js --once` |
+| Improvement loops (worker one-shots) | `node dist/worker/worker/main.js --measure` (daily) · `--self-review` (weekly) · `--benchmarks` (weekly) — `docs/IMPROVEMENT-LOOP.md` |
 
 ## Hard product rules encoded in code
 - No external mutation without an approved, unexpired gate belonging to the run (`src/lib/runtime/engine.ts`).
