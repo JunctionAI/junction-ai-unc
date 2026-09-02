@@ -211,9 +211,9 @@ describe("target parser — what it actually does", () => {
 
   it("'$1.2M' reads 1,200,000 after the parser fix", () => {
     const r = goalMath({ goalTitle: "$1.2M revenue", baselineNum: 800000, deadline: "2027-06-30", currency: "USD", currentMRR: 900000 });
-    expect(r.target).toBe(900001);
-    expect(r.onTrack).toBe(true);
-    expect(r.goalPct).toBe("100%");
+    expect(r.target).toBe(1200000);
+    expect(r.onTrack).toBe(true); // 100k gained over the demo's 19 elapsed days projects well past 1.2M by mid-2027
+    expect(r.goalPct).toBe("25%"); // (900k − 800k) / (1.2M − 800k)
   });
 
   /* BUG goal.ts:52–53 — the demo's own brand goal text "25k engaged followers" (state.ts goalTexts.brand)
