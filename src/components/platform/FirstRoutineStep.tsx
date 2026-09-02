@@ -11,8 +11,12 @@
 import React, { useState } from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
 import type { ChannelKey } from "@/lib/platform/plan";
-import { readPlatforms, requiredPlatform, platformName, routineBenefit, routineName, waveOneRoutines } from "@/lib/setup/channels";
-import { cadenceLabel } from "@/lib/setup/home";
+import { readPlatforms, recommendationPool, requiredPlatform, platformName, routineBenefit, routineName, waveOneRoutines } from "@/lib/setup/channels";
+import { businessModelOf, cadenceLabel } from "@/lib/setup/home";
+import { AUDIENCE_WORD, hasStore } from "@/lib/unc/businessType";
+import { ALL_SYSTEMS } from "@/lib/platform/catalog";
+
+const ALL_CAT: Record<string, string> = Object.fromEntries(ALL_SYSTEMS.map((s) => [s.id, s.cat]));
 import { turnOnLine, type TurnOnResult } from "@/lib/setup/routine";
 import { GuidedShell, UncLine } from "./ConnectDataStep";
 
@@ -28,23 +32,26 @@ export interface FirstRoutineStepProps {
 }
 
 export default function FirstRoutineStep({ V, channel, onTurnOn, onContinue, onSkip }: FirstRoutineStepProps) {
-  /* Pinned at mount so the card never jumps mid-step: a phase-1 routine that is already on
-     (a refresh after "Turn it on") is the one shown, else the channel's first wave-1 routine. */
+  /* Pinned at mount so the card never jumps mid-step: the recommended wave-1 routine for THIS
+     business (src/lib/setup/channels.ts recommendedRoutine — fits the business type, reads
+     nothing the founder said they lack); a refresh after "Turn it on" shows that same routine
+     because it is the one already on. */
+  const model = businessModelOf({ scan: V.obScan });
   const [spec] = useState(() => {
-    const wave1 = waveOneRoutines(channel);
-    return wave1.find((s) => V.routineOnById(s.id)) ?? wave1[0] ?? null;
+    const pool = recommendationPool(channel, { model, knownPlatforms: V.obNarrativeRequest.resources.platforms });
+    return pool.find((s) => V.routineOnById(s.id)) ?? pool[0] ?? null;
   });
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TurnOnResult | null>(null);
   const isOn = !!spec && V.routineOnById(spec.id);
 
   if (!spec) {
-    // Paid ads has no draft-only routine yet: say so and move on (never a placeholder card).
+    // Nothing draft-only fits this business and channel: say so and move on (never a placeholder card).
     return (
       <GuidedShell active={8}>
         <div style={stepLabel}>Step 8 · First routine</div>
         <h2 style={stepH2}>Nothing to switch on yet</h2>
-        <UncLine>Your plan starts with {channel}, and every {channel.toLowerCase()} routine changes live spend — those wait for your budget sign-off in wave 2. I&apos;ll propose the first one on Home the moment it is ready.</UncLine>
+        <UncLine>Your plan starts with {channel}, and nothing draft-only fits your business in it yet. I&apos;ll propose the first one on Home the moment it is ready.</UncLine>
         <div style={{ textAlign: "center", marginTop: 28 }}>
           <button onClick={onContinue} className="btn-cyan" style={{ padding: "13px 34px", fontSize: 14.5, fontWeight: 700 }}>
             Continue to Home →
@@ -56,7 +63,15 @@ export default function FirstRoutineStep({ V, channel, onTurnOn, onContinue, onS
 
   const req = requiredPlatform(spec);
   const reqOk = !req || V.connStateByName(platformName(req)) === "ok";
-  const reads = readPlatforms(spec).map(platformName);
+  // a Shopify read is a fallback for a business with no store (research / the site answer it) — not a thing to name
+  const reads = readPlatforms(spec).filter((p) => p !== "shopify" || hasStore(model) || !model.businessType).map(platformName);
+  /* Copy follows the business: a services firm has clients and enquiries, a creator an audience — "customers" and "orders" only for a store. */
+  const who = model.businessType ? AUDIENCE_WORD[model.businessType] : hasStore(model) ? "customers" : "the people you serve";
+  /* The pick came from outside the channel: say why — every routine of the channel changes live
+     spend (Paid ads), or nothing in it fits this business (an Email plan with no store, no email tool yet). */
+  const outsideChannel = (ALL_CAT[spec.id] ?? channel) !== channel;
+  const channelHasWaveOne = waveOneRoutines(channel).length > 0;
+  const why = !outsideChannel ? " — this one first" : channelHasWaveOne ? ` — nothing in ${channel.toLowerCase()} fits your business yet, so this one first` : ` — every ${channel.toLowerCase()} routine changes live spend and waits for your budget sign-off in wave 2, so this one first`;
 
   async function turnOn() {
     setBusy(true);
@@ -72,7 +87,7 @@ export default function FirstRoutineStep({ V, channel, onTurnOn, onContinue, onS
       <div style={stepLabel}>Step 8 · First routine</div>
       <h2 style={stepH2}>Your first routine</h2>
       <UncLine>
-        Your plan starts with <strong>{channel}</strong> — this one first. Draft-only: I prepare the work and hand it to you. Nothing sends without you.
+        Your plan starts with <strong>{channel}</strong>{why}. Draft-only: I prepare the work for {who} and hand it to you. Nothing sends without you.
       </UncLine>
       <div data-testid="first-routine-card" data-routine={spec.id} data-on={isOn ? "1" : "0"} style={{ marginTop: 20, background: "white", border: `1.5px solid ${isOn ? "oklch(0.78 0.13 220)" : "var(--card-border-2)"}`, borderRadius: 14, padding: "18px 20px", boxShadow: "0 6px 24px oklch(0.27 0.055 262 / 0.06)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9 }}>

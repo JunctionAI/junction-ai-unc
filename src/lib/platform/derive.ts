@@ -721,16 +721,24 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
         setupFlow: "connect" as const,
         settlePlan: true,
       })),
+    /* Step 2 "What platforms do you currently use?" — accounts: the answer is a FACT about the
+       founder (resource_profiles.known_platforms), never a connection; the guided Connect step
+       offers exactly these. Demo keeps the prototype's flip-to-connected behaviour. */
     obConns: CONNECTOR_DEFS.slice(0, 10).map((d) => {
-      const on = effConn(d) === "ok";
+      const on = account ? S.obPlatforms.includes(d.name) || effConn(d) === "ok" : effConn(d) === "ok";
       return {
         label: on ? `✓ ${d.name}` : d.name,
         border: on ? "oklch(0.78 0.13 220)" : "oklch(0.87 0.015 260)",
         bg: on ? "oklch(0.94 0.03 225)" : "white",
         color: on ? "oklch(0.35 0.08 240)" : "oklch(0.4 0.04 262)",
-        toggle: () => set((s) => ({ connState: { ...s.connState, [d.name]: on ? "off" : ("ok" as const) } })),
+        toggle: () =>
+          account
+            ? set((s) => ({ obPlatforms: on ? s.obPlatforms.filter((x) => x !== d.name) : [...s.obPlatforms, d.name] }))
+            : set((s) => ({ connState: { ...s.connState, [d.name]: on ? "off" : ("ok" as const) } })),
       };
     }),
+    /** Record a platform the founder named outside the chips (the guided step's email question) — known_platforms, idempotent. */
+    addKnownPlatform: (name: string, replacing: string[] = []) => set((s) => ({ obPlatforms: [...s.obPlatforms.filter((x) => x !== name && !replacing.includes(x)), name] })),
     obConnCount: CONNECTOR_DEFS.filter((d) => effConn(d) === "ok").length,
     obStrengthChips: ["Writing", "Video", "Design", "Sales conversations", "Cold calls", "DMs & outreach", "Email", "Paid media", "SEO", "Community", "Product"].map((t) => {
       const on = S.obStrengths.includes(t);
@@ -1150,7 +1158,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     /** The founder's own answers, for the real Home / guided steps (never demo constants). */
     accountCtx: { currency: S.currency, budgetMonthly: S.budgetMo },
     /** The persisted rows the real Home view model (src/lib/setup/home.ts) reads. */
-    realInputs: { routineOn: S.routineOn, connState: S.connState, posture: S.posture, obStrengths: S.obStrengths, budgetMo: S.budgetMo },
+    realInputs: { routineOn: S.routineOn, connState: S.connState, posture: S.posture, obStrengths: S.obStrengths, budgetMo: S.budgetMo, scan: S.scan, obPlatforms: S.obPlatforms },
     routineNameById: (id: string) => ALL_SYSTEMS.find((x) => x.id === id)?.name ?? id,
   };
 }

@@ -34,7 +34,7 @@ beforeEach(() => {
   user = { id: USER, email: "founder@example.test" };
   db.seed("accounts", [{ id: ACCT, name: "Example Co" }]);
   db.seed("account_members", [{ account_id: ACCT, user_id: USER, role: "owner" }]);
-  db.seed("resource_profiles", [{ account_id: ACCT, budget_monthly: 3600, hours_weekly: 6, skills: ["Writing"], postures: ["brand_led"], breadth: "focused" }]);
+  db.seed("resource_profiles", [{ account_id: ACCT, budget_monthly: 3600, hours_weekly: 6, skills: ["Writing"], postures: ["brand_led"], breadth: "focused", known_platforms: ["Instagram"] }]);
   db.seed("plans", [{ account_id: ACCT, title: "Brand-led organic", phases: [], created_at: "2026-09-01T00:00:00.000Z" }]);
   setStoreForTests(new SupabaseStore(db));
 });
@@ -67,7 +67,7 @@ describe("the spine through the routes", () => {
     expect(p.channel).toBe("Content");
 
     const a1 = await (await postAgree()).json();
-    expect(a1).toMatchObject({ created: false });
+    expect(a1).toMatchObject({ created: false, accountName: "Example Co" });
     expect(a1.agreedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     const a2 = await (await postAgree()).json();
     expect(a2.agreedAt).toBe(a1.agreedAt);

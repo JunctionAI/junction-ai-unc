@@ -20,6 +20,8 @@ import type { ConnectorsStateListing } from "@/lib/connectors/state";
 import type { RoutinesStateListing, RoutineStateView } from "@/lib/runtime/routinesState";
 import { BRIEF_GREETING } from "../TodayBrief";
 import HomeView, { type HomeViewProps } from "../HomeView";
+import ConnectDataStep from "../ConnectDataStep";
+import type { BusinessProfile } from "@/lib/unc/scan";
 import Onboarding, { OB_BUDGET_UNSET_NOTE, OB_PLACEHOLDERS, PLAN_GATE_TITLE } from "../Onboarding";
 import ConnectorsView from "../ConnectorsView";
 import RoutineDetail from "../RoutineDetail";
@@ -226,6 +228,26 @@ describe("Home in accounts mode — no demo constant can render", () => {
     expectNoDemo(blocked);
   });
 
+  it("a services firm (scanned: no store) on an Email plan: no cart, no Shopify anywhere on Home or the Connect step — the demo guard holds too", () => {
+    const profile: BusinessProfile = { name: "Studio North", oneLiner: "A brand studio for founders.", category: "Agency", products: [], audience: "Founders", voice: { tone: null, phrases: [] }, market: { region: "NZ", competitorsMentioned: [] }, signals: [], confidence: "high", sources: [], businessType: "services", sells: "services", storefront: "none", businessTypeSource: "scan", typeEvidence: ["a services section"], platformsSpotted: [{ platform: "hubspot", evidence: "HubSpot forms or tracking on the site" }] };
+    const services: PlatformState = { ...base, posture: "paid", obPostureSet: ["paid"], obStrengths: [], budgetMo: 0, obPlatforms: ["LinkedIn"], scan: { status: "done", key: "k", profile } };
+    const setup = setupState({ resourceProfile: { postures: ["paid_led"], skills: [], budget_monthly: 0, known_platforms: ["LinkedIn"] }, businessProfile: { profile } });
+    const html = render(services, { accountMode: true, live: liveList(), setup });
+    expectNoDemo(html);
+    expect(setup.data?.channel).toBe("Email & SMS");
+    expect(html).not.toContain("Abandoned cart");
+    expect(html).not.toContain("Winback");
+    expect(html).not.toContain("Shopify");
+    expect(html).toContain("Founder content engine"); // the generic wave-1 pick, in "Setting up next"
+    expect(html).toContain("Connect LinkedIn");
+    const step = renderToStaticMarkup(createElement(ConnectDataStep, { V: dv(services, ACCOUNT), channel: "Email & SMS", onConnect: async () => ({ kind: "fallback" as const, reason: "x" }), onContinue: noop, onLater: noop, onTokenLink: noop }));
+    expect(step).not.toContain("connect-card-shopify");
+    expect(step).not.toContain("Shopify");
+    expect(step).toContain('data-testid="connect-card-linkedin"');
+    expect(step).toContain('data-testid="connect-card-hubspot" data-status="off" data-source="spotted"');
+    expect(step).toContain("Which tool sends your email?");
+  });
+
   it("the Getting-set-up card collapses at 5/5 and is gone once dismissed", () => {
     const five = setupState({
       plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }],
@@ -400,6 +422,7 @@ const listingOff = (): RoutinesStateListing => ({
   routines: ALL_SYSTEMS.map<RoutineStateView>((sys) => ({ routineId: sys.id, name: sys.name, category: sys.cat, wave: 1, enabled: false, version: 1, availability: "draft_only" as RoutineStateView["availability"], availabilityCopy: "draft-only for now", canEnable: true, recommended: sys.id === "D01-W01", lastRun: null, lastDraft: null })),
   recommendedFirst: ["D01-W01"],
   planChannel: "Content",
+  business: { businessType: null, sells: null, storefront: null },
   connected: [],
 });
 const acctRun = { accountId: "00000000-0000-4000-8000-00000000acc1", account: { currency: "NZD", budgetMonthly: 1200 }, persisted: true };

@@ -18,13 +18,15 @@ import { scoreChannels, span, type ChannelKey } from "../platform/plan";
 import type { PlatformState } from "../platform/state";
 import { CATALOG_SPECS, CATALOG_SPEC_BY_ID } from "../runtime/catalog-specs";
 import type { Platform, RoutineId } from "../runtime/types";
-import { platformName, requiredPlatform, waveOneRoutines } from "./channels";
+import { modelFromProfile, type BusinessModel } from "../unc/businessType";
+import { platformName, recommendationPool, requiredPlatform } from "./channels";
 
 export const HOME_COPY = {
   nothingWaiting: "Nothing waiting on you right now — I’ll bring the next decision here.",
   noDraftsYet: "Turn on your first routine and I’ll have a draft here within the hour.",
   noDraftsRunning: "Your first routine is on — the first draft lands here within the hour.",
-  noKpi: "Connect Shopify and I’ll read your last 90 days tonight.",
+  /** Generic on purpose: the platform is the founder's own (noKpiLine), never a default. */
+  noKpi: "Connect your first data source and I’ll read your last 90 days tonight.",
   firstDay: "I’ve read your plan. Turn on your first routine and I’ll have something for you within the hour.",
   firstDayRunning: "Your first routine is running. I’ll bring what I draft here and write your first brief tomorrow morning.",
   noReceipts: "No receipts yet — the first run writes one, and it lands here.",
@@ -120,11 +122,23 @@ export function enabledRoutineIds(S: Pick<PlatformState, "routineOn">): RoutineI
   return ALL_SYSTEMS.filter((s) => S.routineOn[s.name] === true).map((s) => s.id as RoutineId);
 }
 
-export function realProposals(S: Pick<PlatformState, "routineOn" | "connState" | "posture" | "obStrengths" | "budgetMo">): ProposalView[] {
+/** "Connect Shopify and I'll read your last 90 days tonight." — with the founder's OWN first platform; the generic line when there is none. */
+export function noKpiLine(anchorName: string | null | undefined): string {
+  return anchorName ? `Connect ${anchorName} and I’ll read your last 90 days tonight.` : HOME_COPY.noKpi;
+}
+
+/** The business model off the client state's scan profile (null fields when nothing is known). */
+export function businessModelOf(S: { scan?: { profile: unknown } | null }): BusinessModel {
+  return modelFromProfile(S.scan?.profile ?? null);
+}
+
+/** "Setting up next" = the recommendation pool (src/lib/setup/channels.ts recommendationPool:
+    phase-1 wave-1 routines that fit the business, else the generic ones) minus what is on. */
+export function realProposals(S: Pick<PlatformState, "routineOn" | "connState" | "posture" | "obStrengths" | "budgetMo"> & { scan?: PlatformState["scan"]; obPlatforms?: string[] }): ProposalView[] {
   const channel = phaseChannels(S)[0];
   const on = new Set(enabledRoutineIds(S));
   const connected = connectedSet(S);
-  return waveOneRoutines(channel)
+  return recommendationPool(channel, { model: businessModelOf(S), knownPlatforms: S.obPlatforms ?? [] })
     .filter((spec) => !on.has(spec.id))
     .map((spec) => {
       const def = NAME_BY_ID.get(spec.id);
