@@ -94,13 +94,37 @@ describe("handleShopifyWebhook", () => {
     expect(db.rows("connectors")[0].status).toBe("connected");
   });
 
-  it("shop/redact → connector disconnected, its secret deleted, receipt written", async () => {
-    const res = await handleShopifyWebhook(deps(), delivery("shop_redact", { shop_id: 954889, shop_domain: SHOP }));
+  it("shop/redact → sync purged through the provisioner, connector disconnected, its secret deleted, receipt written", async () => {
+    const purges: [string, string][] = [];
+    const provisioner = {
+      kind: "airbyte",
+      ensureSource: async () => "x",
+      ensureDestination: async () => "x",
+      ensureConnection: async () => "x",
+      triggerSync: async () => ({ jobId: "x" }),
+      getStatus: async () => ({ state: "ok", result: "ok" }),
+      purgeTenant: async (a: string, p: string) => {
+        purges.push([a, p]);
+        return { purged: true, deleted: ["connection", "source"] };
+      },
+    } as unknown as NonNullable<WebhookDeps["provisioner"]>;
+    const res = await handleShopifyWebhook(deps({ provisioner }), delivery("shop_redact", { shop_id: 954889, shop_domain: SHOP }));
     expect(res).toEqual({ status: 200, body: { ok: true, topic: "shop/redact", recorded: true, accounts: 1 } });
+    expect(purges).toEqual([[accountId, "shopify"]]);
     expect(db.rows("connectors")[0]).toMatchObject({ status: "disconnected", last_sync_result: "error:shop_redacted", last_sync_at: NOW.toISOString() });
-    expect(await getSecret(db, connectorId)).toBeNull();
     expect(db.rows("connector_secrets")).toHaveLength(0);
-    expect(db.rows("receipts")[0].description).toBe(`Shopify shop/redact for ${SHOP} — connector disconnected and its token deleted.`);
+    expect(db.rows("receipts")).toHaveLength(1);
+    expect(db.rows("receipts")[0].description).toBe(`Shopify shop/redact for ${SHOP} — connector disconnected and its token deleted. Warehouse sync torn down (Airbyte connection + source deleted).`);
+    expect(db.rows("receipts")[0].payload).toMatchObject({ topic: "shop/redact", shop_domain: SHOP, sync_purge: { purged: true, deleted: ["connection", "source"] } });
+    expect(JSON.stringify(db.rows("receipts"))).not.toContain("shpat_secret_token");
+  });
+
+  it("shop/redact without a provisioner (or with one that fails) still disconnects and says so in the receipt", async () => {
+    const res = await handleShopifyWebhook(deps(), delivery("shop_redact", { shop_domain: SHOP }));
+    expect(res.status).toBe(200);
+    expect(db.rows("connectors")[0].status).toBe("disconnected");
+    expect(db.rows("receipts")[0].description).toBe(`Shopify shop/redact for ${SHOP} — connector disconnected and its token deleted. Warehouse sync isn’t switched on — nothing to tear down.`);
+    expect(db.rows("receipts")[0].payload).toMatchObject({ sync_purge: { purged: false, reason: "sync_not_configured" } });
   });
 
   it("the header topic wins over the path when both verify (the path is ours, the header is Shopify's)", async () => {

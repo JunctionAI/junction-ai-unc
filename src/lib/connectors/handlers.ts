@@ -19,12 +19,14 @@
    into connector_secrets and appear in no log, no response and no redirect. */
 
 import type { DbClient } from "@/lib/db/types";
-import { seal, type Keyring } from "./crypto";
+import { open, seal, type Keyring } from "./crypto";
 import { bundleFromResponse, callbackUri, codeChallenge, exchangeCode, exchangeMetaLongLived, newCodeVerifier, newState, STATE_TTL_MS, verifyShopifyHmac, type FetchLike, type TokenBundle } from "./oauth";
 import { hasPicker, listAccountOptions, normaliseExternalRef, OptionsError, type AccountOption } from "./options";
+import type { PurgeResult, SyncProvisioner } from "./provisioning";
 import { connectorEntry, normaliseShopDomain, platformCredentials, type ConnectorEntry } from "./registry";
+import { revokeToken, type RevokeResult } from "./revoke";
 import { insertSystemReceipt } from "@/lib/db/receipts";
-import { accountForUser, consumeOauthState, deleteSecret, getConnector, insertOauthState, isMember, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
+import { accountForUser, consumeOauthState, deleteSecret, getConnector, getSecret, insertOauthState, isMember, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
 import { getAccessTokenFor } from "./tokens";
 
 export interface ConnectorConfig {
@@ -46,6 +48,8 @@ export interface HandlerDeps {
   now: () => Date;
   /** Diagnostics only — receives codes, never values. */
   log?: (line: string) => void;
+  /** Per-tenant sync (Airbyte or the Noop); disconnect tears the tenant's sync down through it. */
+  provisioner?: SyncProvisioner;
 }
 
 export type FallbackReason = "unknown_platform" | "platform_not_configured" | "secret_store_not_configured" | "accounts_not_configured" | "developer_token_not_configured";
@@ -185,11 +189,18 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
 
 // ---------- disconnect ----------
 
-export type DisconnectResult = { status: 200; body: { ok: true; status: "disconnected" } } | { status: 200; body: { fallback: true; reason: FallbackReason } } | { status: 401 | 403 | 404; body: { error: string } };
+export type DisconnectResult =
+  | { status: 200; body: { ok: true; status: "disconnected"; revoked: boolean; syncPurged: boolean } }
+  | { status: 200; body: { fallback: true; reason: FallbackReason } }
+  | { status: 401 | 403 | 404; body: { error: string } };
 
-/** Forget a connection: delete the sealed token, mark the row disconnected, leave a receipt.
-    The platform-side revoke (the founder's connected-apps page) is theirs; the receipt says so.
-    Gates mirror start: platform known → DB → session → membership → a row to disconnect. */
+/** Forget a connection, in this order:
+      1. revoke the token on the platform's side (revoke.ts) while we still hold it — best-effort;
+      2. tear down the tenant's warehouse sync (provisioner.purgeTenant) — best-effort;
+      3. delete the sealed secret, mark the row disconnected;
+      4. receipt what happened (+ a separate receipt for a revoke that failed, so the founder
+         knows to revoke from the platform's connected-apps page).
+    Nothing in 1–2 can block 3. Gates mirror start: platform known → DB → session → membership → a row. */
 export async function handleDisconnect(deps: HandlerDeps, platform: string): Promise<DisconnectResult> {
   const entry = connectorEntry(platform);
   if (!entry) return { status: 404, body: { error: "unknown platform" } };
@@ -199,21 +210,71 @@ export async function handleDisconnect(deps: HandlerDeps, platform: string): Pro
   if (!accountId) return { status: 403, body: { error: "no account for this user" } };
   const row = await getConnector(deps.db, accountId, entry.id);
   if (!row) return { status: 404, body: { error: "nothing connected" } };
-
+  const db = deps.db;
   const now = deps.now().toISOString();
-  await deleteSecret(deps.db, row.id);
-  await updateConnector(deps.db, row.id, { status: "disconnected", last_sync_result: null });
-  await insertSystemReceipt(deps.db, {
+
+  // 1. platform-side revoke, while the token is still ours to present
+  const revoke = await revokeSealed(deps, entry, row);
+  // 2. warehouse sync teardown
+  const purge = await purgeSync(deps, accountId, entry.id);
+  // 3. forget the secret
+  await deleteSecret(db, row.id);
+  await updateConnector(db, row.id, { status: "disconnected", last_sync_result: null });
+
+  // 4. receipts
+  const revokeLine = revoke.ok ? `access revoked on ${entry.name}’s side and the token deleted from the secret store` : `token deleted from the secret store`;
+  await insertSystemReceipt(db, {
     accountId,
     kind: "notification",
     platform: entry.id,
-    description: `${entry.name} disconnected — token deleted from the secret store; reads on it stop now. Revoke the app on ${entry.name}’s side too if you want it gone there.`,
-    payload: { connector_id: row.id, platform: entry.id, previous_status: row.status, external_ref: row.external_ref },
+    description: `${entry.name} disconnected — ${revokeLine}; reads on it stop now. ${purgeLine(purge)}`,
+    payload: { connector_id: row.id, platform: entry.id, previous_status: row.status, external_ref: row.external_ref, revoke: revokePayload(revoke), sync_purge: purge },
     now,
   });
-  deps.log?.(`connectors.disconnect platform=${entry.id} account=${accountId}`);
-  return { status: 200, body: { ok: true, status: "disconnected" } };
+  if (!revoke.ok) {
+    await insertSystemReceipt(db, {
+      accountId,
+      kind: "notification",
+      platform: entry.id,
+      description: `Couldn’t revoke ${entry.name}’s access on their side (${revoke.code}) — the token is deleted here, but revoke the app from ${entry.name}’s connected-apps page too if you want it gone there.`,
+      payload: { connector_id: row.id, platform: entry.id, revoke: revokePayload(revoke) },
+      now,
+    });
+  }
+  deps.log?.(`connectors.disconnect platform=${entry.id} account=${accountId} revoke=${revoke.ok ? "ok" : revoke.code} purge=${purge.purged ? "ok" : purge.reason ?? "failed"}`);
+  return { status: 200, body: { ok: true, status: "disconnected", revoked: revoke.ok, syncPurged: purge.purged } };
 }
+
+async function revokeSealed(deps: HandlerDeps, entry: ConnectorEntry, row: ConnectorRow): Promise<RevokeResult> {
+  if (!deps.config.keyring || !deps.db) return { ok: false, code: "not_configured", endpoint: null };
+  try {
+    const sealed = await getSecret(deps.db, row.id);
+    if (!sealed) return { ok: false, code: "no_token", endpoint: null };
+    const bundle = JSON.parse(open(sealed, deps.config.keyring, row.id)) as TokenBundle;
+    const creds = platformCredentials(entry.id, deps.config.env);
+    return await revokeToken(deps.fetch, entry, { bundle, externalRef: row.external_ref, clientId: creds?.clientId, clientSecret: creds?.clientSecret });
+  } catch {
+    // an unreadable secret (rotated-away key, malformed) is still deleted below
+    return { ok: false, code: "no_token", endpoint: null };
+  }
+}
+
+async function purgeSync(deps: HandlerDeps, accountId: string, platform: ConnectorEntry["id"]): Promise<PurgeResult> {
+  if (!deps.provisioner) return { purged: false, deleted: [], reason: "sync_not_configured" };
+  try {
+    return await deps.provisioner.purgeTenant(accountId, platform);
+  } catch (e) {
+    return { purged: false, deleted: [], reason: e instanceof Error && "code" in e ? `airbyte_${String((e as { code: unknown }).code)}` : "purge_failed" };
+  }
+}
+
+export function purgeLine(p: PurgeResult): string {
+  if (p.purged) return p.deleted.length ? "Warehouse sync torn down (Airbyte connection + source deleted)." : "No warehouse sync was provisioned for it.";
+  if (p.reason === "sync_not_configured") return "Warehouse sync isn’t switched on — nothing to tear down.";
+  return `Couldn’t tear down the warehouse sync (${p.reason ?? "failed"}) — it will fail on its next run without a token; see the runbook.`;
+}
+
+const revokePayload = (r: RevokeResult) => (r.ok ? { ok: true, endpoint: r.endpoint } : { ok: false, code: r.code, endpoint: r.endpoint });
 
 // ---------- post-connect account pickers ----------
 

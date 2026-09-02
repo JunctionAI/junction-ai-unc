@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
-import { AIRBYTE_API_BASE, airbyteConfigFromEnv, AirbyteProvisioner, getProvisioner, NoopProvisioner, provisionConnector, recordSyncResult, tenantSchema, type AirbyteConfig } from "../provisioning";
-import { getConnectorById, upsertConnector, type ConnectorRow } from "../store";
+import { AIRBYTE_API_BASE, airbyteConfigFromEnv, AirbyteProvisioner, getProvisioner, NoopProvisioner, provisionConnector, recordSyncResult, tenantSchema, type AirbyteConfig, type SyncProvisioner } from "../provisioning";
+import { getConnectorById, updateConnector, upsertConnector, type ConnectorRow } from "../store";
 import type { AccessToken } from "../tokens";
 import { assertNoLeak, FAKE_ENV, json, NOW, seededDb, stubFetch } from "./helpers";
 
@@ -211,5 +211,42 @@ describe("env gate", () => {
     expect(cfg.warehouse).toEqual({ host: "h", port: 6543, database: "postgres", username: "u", password: "p", sslMode: "require" });
     expect(cfg.clientCredentials?.google).toEqual({ clientId: "google-client-id", clientSecret: "google-client-secret" });
     expect(airbyteConfigFromEnv({ AIRBYTE_API_KEY: "k", AIRBYTE_WORKSPACE_ID: "w" })!.warehouse).toBeUndefined();
+  });
+});
+
+describe("purgeTenant", () => {
+  it("Airbyte: DELETEs the connection then the source, forgets the handles on sync_ref; 404s count as gone", async () => {
+    const { p, calls, routes, logs } = prov();
+    const r = await row("klaviyo", "acct-1");
+    await updateConnector(db, r.id, { sync_ref: { sourceId: "src-9", connectionId: "conn-9", destinationId: "dst-1" } });
+    routes.push((c) => (c.method === "DELETE" && c.url === `${AIRBYTE_API_BASE}/connections/conn-9` ? new Response(null, { status: 204 }) : undefined));
+    routes.push((c) => (c.method === "DELETE" && c.url === `${AIRBYTE_API_BASE}/sources/src-9` ? new Response("gone already", { status: 404 }) : undefined));
+    expect(await p.purgeTenant(accountId, "klaviyo")).toEqual({ purged: true, deleted: ["connection", "source"] });
+    expect(calls.map((c) => [c.method, c.url])).toEqual([
+      ["DELETE", `${AIRBYTE_API_BASE}/connections/conn-9`],
+      ["DELETE", `${AIRBYTE_API_BASE}/sources/src-9`],
+    ]);
+    expect(calls[0].headers.authorization).toBe("Bearer airbyte-key-FIXTURE");
+    expect((await getConnectorById(db, r.id))!.sync_ref).toEqual({ sourceId: null, connectionId: null, destinationId: "dst-1" });
+    expect(logs).toEqual(["airbyte DELETE /connections/conn-9", "airbyte DELETE /sources/src-9"]);
+    // idempotent: nothing left to delete
+    expect(await p.purgeTenant(accountId, "klaviyo")).toEqual({ purged: true, deleted: [], reason: "nothing_provisioned" });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("a failing delete stops there, keeps the remaining handle, and reports the code; unknown connector reads as no_connector", async () => {
+    const { p, routes } = prov();
+    const r = await row("shopify", "acme.myshopify.com");
+    await updateConnector(db, r.id, { sync_ref: { sourceId: "src-1", connectionId: "conn-1" } });
+    routes.push((c) => (c.url.endsWith("/connections/conn-1") ? new Response(null, { status: 204 }) : undefined));
+    routes.push((c) => (c.url.endsWith("/sources/src-1") ? new Response("boom", { status: 503 }) : undefined));
+    expect(await p.purgeTenant(accountId, "shopify")).toEqual({ purged: false, deleted: ["connection"], reason: "airbyte_http_503" });
+    expect((await getConnectorById(db, r.id))!.sync_ref).toEqual({ sourceId: "src-1", connectionId: null });
+    expect(await p.purgeTenant(accountId, "ga4")).toEqual({ purged: false, deleted: [], reason: "no_connector" });
+  });
+
+  it("Noop: never purges, says why", async () => {
+    expect(await (new NoopProvisioner() as SyncProvisioner).purgeTenant(accountId, "shopify")).toEqual({ purged: false, deleted: [], reason: "sync_not_configured" });
+    expect(getProvisioner({ db, fetch: stubFetch().fetch, now: () => NOW }, {}).kind).toBe("noop");
   });
 });

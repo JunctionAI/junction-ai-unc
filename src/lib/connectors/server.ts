@@ -6,6 +6,7 @@ import { asDb, isDbConfigured } from "@/lib/db/client";
 import { getServerSupabase, getServiceSupabase, isServiceRoleConfigured } from "@/lib/db/server";
 import { keyringFromEnv } from "./crypto";
 import type { ConnectorConfig, HandlerDeps } from "./handlers";
+import { getProvisioner } from "./provisioning";
 
 /** APP_URL wins (must match the registered redirect URIs exactly); the request origin is the
     local-dev fallback. */
@@ -40,12 +41,16 @@ export async function handlerDeps(req: Request): Promise<HandlerDeps> {
     }
     db = asDb(getServiceSupabase());
   }
+  const fetchFn = (input: string, init?: RequestInit) => fetch(input, init);
+  const now = () => new Date();
+  const log = (line: string) => console.log(`[connectors] ${line}`);
   return {
     config,
     db,
     userId,
-    fetch: (input, init) => fetch(input, init),
-    now: () => new Date(),
-    log: (line) => console.log(`[connectors] ${line}`),
+    fetch: fetchFn,
+    now,
+    log,
+    provisioner: db ? getProvisioner({ db, fetch: fetchFn, now, log }, process.env) : undefined,
   };
 }

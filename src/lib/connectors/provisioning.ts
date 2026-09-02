@@ -22,7 +22,7 @@
 import type { DbClient } from "../db/types";
 import type { Platform } from "../runtime/types";
 import type { FetchLike } from "./oauth";
-import { getConnectorById, updateConnector, type ConnectorRow, type SyncResult } from "./store";
+import { getConnector, getConnectorById, updateConnector, type ConnectorRow, type SyncResult } from "./store";
 import type { AccessToken } from "./tokens";
 
 export const AIRBYTE_API_BASE = "https://api.airbyte.com/v1";
@@ -36,6 +36,14 @@ export interface SyncStatus {
   at?: string;
 }
 
+/** What a tenant purge did. `purged` is true only when every handle we held is gone. */
+export interface PurgeResult {
+  purged: boolean;
+  /** Airbyte objects deleted (or already absent) this call. */
+  deleted: ("connection" | "source")[];
+  reason?: string;
+}
+
 export interface SyncProvisioner {
   readonly kind: "airbyte" | "noop";
   /** Airbyte source for this connector (created or reused). Returns the source id. */
@@ -46,6 +54,12 @@ export interface SyncProvisioner {
   ensureConnection(connector: ConnectorRow, sourceId: string, destinationId: string): Promise<string>;
   triggerSync(connectionId: string): Promise<{ jobId: string }>;
   getStatus(connectionId: string): Promise<SyncStatus>;
+  /** Tear down this tenant's sync for one platform: the Airbyte connection, then its source
+      (which holds the token), then forget the handles on sync_ref. Idempotent; a handle
+      Airbyte no longer knows (404) counts as gone. Called on Disconnect and shop/redact.
+      The rows already landed in the warehouse schema t_<accountId> are NOT dropped here —
+      see docs/CONNECTORS-FIRST-BOOT.md §9. */
+  purgeTenant(accountId: string, platform: Platform): Promise<PurgeResult>;
 }
 
 /** Postgres-safe tenant schema: t_ + uuid with hyphens as underscores. */
@@ -82,6 +96,9 @@ export class NoopProvisioner implements SyncProvisioner {
   }
   async getStatus(): Promise<SyncStatus> {
     return { state: "error", result: "error:sync_not_configured" };
+  }
+  async purgeTenant(): Promise<PurgeResult> {
+    return { purged: false, deleted: [], reason: "sync_not_configured" };
   }
 }
 
@@ -202,7 +219,7 @@ export class AirbyteProvisioner implements SyncProvisioner {
     private readonly deps: AirbyteDeps,
   ) {}
 
-  private async call<T>(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<T> {
+  private async call<T>(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
     const url = `${AIRBYTE_API_BASE}${path}`;
     this.deps.log?.(`airbyte ${method} ${path}`);
     let res: Response;
@@ -217,10 +234,21 @@ export class AirbyteProvisioner implements SyncProvisioner {
       throw new AirbyteApiError(e instanceof Error && e.name === "TimeoutError" ? "timeout" : "network");
     }
     if (!res.ok) throw new AirbyteApiError(`http_${res.status}`);
+    if (method === "DELETE" || res.status === 204) return undefined as T;
     try {
       return (await res.json()) as T;
     } catch {
       throw new AirbyteApiError("malformed");
+    }
+  }
+
+  /** DELETE that treats "already gone" (404) as success. */
+  private async remove(path: string): Promise<void> {
+    try {
+      await this.call<undefined>("DELETE", path);
+    } catch (e) {
+      if (e instanceof AirbyteApiError && e.code === "http_404") return;
+      throw e;
     }
   }
 
@@ -289,6 +317,32 @@ export class AirbyteProvisioner implements SyncProvisioner {
     const job = await this.call<{ jobId: string | number }>("POST", "/jobs", { connectionId, jobType: "sync" });
     if (job?.jobId === undefined) throw new AirbyteApiError("malformed");
     return { jobId: String(job.jobId) };
+  }
+
+  async purgeTenant(accountId: string, platform: Platform): Promise<PurgeResult> {
+    const connector = await getConnector(this.deps.db, accountId, platform);
+    if (!connector) return { purged: false, deleted: [], reason: "no_connector" };
+    const ref = this.syncRef(connector);
+    const connectionId = typeof ref.connectionId === "string" ? ref.connectionId : null;
+    const sourceId = typeof ref.sourceId === "string" ? ref.sourceId : null;
+    if (!connectionId && !sourceId) return { purged: true, deleted: [], reason: "nothing_provisioned" };
+    const deleted: PurgeResult["deleted"] = [];
+    try {
+      if (connectionId) {
+        await this.remove(`/connections/${encodeURIComponent(connectionId)}`);
+        deleted.push("connection");
+        await this.remember(connector, { connectionId: null });
+      }
+      if (sourceId) {
+        await this.remove(`/sources/${encodeURIComponent(sourceId)}`);
+        deleted.push("source");
+        await this.remember(connector, { sourceId: null });
+      }
+    } catch (e) {
+      const code = e instanceof AirbyteApiError ? e.code : "purge";
+      return { purged: false, deleted, reason: `airbyte_${code}` };
+    }
+    return { purged: true, deleted };
   }
 
   async getStatus(connectionId: string): Promise<SyncStatus> {

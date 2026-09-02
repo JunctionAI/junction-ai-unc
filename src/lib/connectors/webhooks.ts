@@ -11,9 +11,11 @@
    Effects (accounts mode): one receipt row per delivery (kind notification, run_id null) on
    every account the shop belongs to, carrying ids and counts only — never emails, names or
    order contents. shop/redact additionally marks the connector disconnected and deletes its
-   sealed token. We hold no customer data outside the warehouse today (routines are
-   read-only), so data_request / customers_redact are acknowledged and receipted; the
-   warehouse tenant purge is the Airbyte side of this and is noted in the receipt.
+   sealed token and tears the tenant's warehouse sync down (provisioner.purgeTenant: the
+   Airbyte connection + source). We hold no customer data outside the warehouse today
+   (routines are read-only), so data_request / customers_redact are acknowledged and
+   receipted; per-customer redaction inside the warehouse schema is an ops step
+   (docs/CONNECTORS-FIRST-BOOT.md §9).
 
    Shopify retries on anything but 2xx; a verified delivery for a shop we don't know is 200
    with recorded:false — nothing to act on, nothing to retry. */
@@ -21,6 +23,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { insertSystemReceipt } from "@/lib/db/receipts";
 import type { DbClient } from "@/lib/db/types";
+import { purgeLine } from "./handlers";
+import type { PurgeResult, SyncProvisioner } from "./provisioning";
 import { normaliseShopDomain } from "./registry";
 import { deleteSecret, findConnectorsByExternalRef, updateConnector, type ConnectorRow } from "./store";
 
@@ -63,6 +67,8 @@ export interface WebhookDeps {
   secret: string | null;
   now: () => Date;
   log?: (line: string) => void;
+  /** Per-tenant sync; shop/redact tears the shop's sync down through it. */
+  provisioner?: SyncProvisioner;
 }
 
 export interface WebhookRequest {
@@ -117,14 +123,29 @@ export async function handleShopifyWebhook(deps: WebhookDeps, req: WebhookReques
   const now = deps.now().toISOString();
   const { description, payload } = describe(effective, shop, body);
   for (const row of rows) {
-    if (effective === "shop/redact") await redactShop(deps.db, row, now);
+    if (effective === "shop/redact") {
+      const purge = await redactShop({ ...deps, db: deps.db }, row, now);
+      await insertSystemReceipt(deps.db, { accountId: row.account_id, kind: "notification", platform: "shopify", description: `${description} ${purgeLine(purge)}`, payload: { ...payload, sync_purge: purge }, now });
+      continue;
+    }
     await insertSystemReceipt(deps.db, { accountId: row.account_id, kind: "notification", platform: "shopify", description, payload, now });
   }
   deps.log?.(`webhooks.shopify topic=${effective} accounts=${rows.length} result=recorded`);
   return { status: 200, body: { ok: true, topic: effective, recorded: rows.length > 0, accounts: rows.length } };
 }
 
-async function redactShop(db: DbClient, row: ConnectorRow, now: string) {
-  await deleteSecret(db, row.id);
-  await updateConnector(db, row.id, { status: "disconnected", last_sync_result: "error:shop_redacted", last_sync_at: now });
+/** The token is already dead on Shopify's side (the app was uninstalled) — no revoke, just
+    the sync teardown, then the secret. */
+async function redactShop(deps: WebhookDeps & { db: DbClient }, row: ConnectorRow, now: string): Promise<PurgeResult> {
+  let purge: PurgeResult = { purged: false, deleted: [], reason: "sync_not_configured" };
+  if (deps.provisioner) {
+    try {
+      purge = await deps.provisioner.purgeTenant(row.account_id, "shopify");
+    } catch (e) {
+      purge = { purged: false, deleted: [], reason: e instanceof Error && "code" in e ? `airbyte_${String((e as { code: unknown }).code)}` : "purge_failed" };
+    }
+  }
+  await deleteSecret(deps.db, row.id);
+  await updateConnector(deps.db, row.id, { status: "disconnected", last_sync_result: "error:shop_redacted", last_sync_at: now });
+  return purge;
 }
