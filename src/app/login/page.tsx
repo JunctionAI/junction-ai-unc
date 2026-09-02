@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SiteFooter from "@/components/site/SiteFooter";
 import { isDbConfigured } from "@/lib/db/client";
 import LoginForm from "./LoginForm";
 
@@ -19,6 +20,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         background: "var(--cream)",
         color: "var(--ink)",
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         padding: 24,
@@ -73,6 +75,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </>
         )}
       </div>
+      <SiteFooter />
     </main>
   );
 }
