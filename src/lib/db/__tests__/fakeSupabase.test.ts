@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
       "account_state_meta",
       "accounts",
       "approvals",
+      "billing_events",
       "business_profiles",
       "chat_messages",
       "connectors",
@@ -18,6 +19,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "resource_profiles",
       "routine_runs",
       "routine_states",
+      "subscriptions",
       "taste_events",
       "team_members",
     ]);
@@ -25,6 +27,10 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect([...s.chat_messages.columns]).toEqual(expect.arrayContaining(["thread", "position", "meta"])); // 0003
     expect(s.team_members.columns.has("position")).toBe(true);
     expect(s.approvals.columns.has("client_key")).toBe(true);
+    expect(s.subscriptions.primaryKey).toEqual(["account_id"]); // 0004
+    expect(s.subscriptions.enums.status).toEqual(new Set(["trialing", "active", "past_due", "canceled", "incomplete", "none"]));
+    expect(s.subscriptions.uniques).toEqual(expect.arrayContaining([{ columns: ["stripe_subscription_id"], partialNotNull: "stripe_subscription_id" }]));
+    expect(s.billing_events.primaryKey).toEqual(["id"]);
     expect(s.routine_states.primaryKey).toEqual(["account_id", "routine_id"]);
     expect(s.account_members.primaryKey).toEqual(["account_id", "user_id"]);
     expect(s.routine_runs.enums.status).toEqual(new Set(["running", "waiting_approval", "done", "failed", "skipped"]));
