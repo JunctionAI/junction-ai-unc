@@ -5,7 +5,7 @@
    or any error the canned reply (passed by the caller in derive.ts) is used instead —
    the chat is never dead. */
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { UncSend } from "@/lib/platform/derive";
 import type { Msg, PlatformState, Setter } from "@/lib/platform/state";
 import { buildUncContext } from "./context";
@@ -15,7 +15,9 @@ const THREAD_KEY = { corner: "messages", onboarding: "obThread" } as const;
 export function useUncChat(S: PlatformState, set: Setter): UncSend {
   // Always read the freshest state when a send fires (derive closures re-run per render).
   const stateRef = useRef(S);
-  stateRef.current = S;
+  useEffect(() => {
+    stateRef.current = S;
+  }, [S]);
 
   return useCallback<UncSend>(
     ({ surface, text, canned }) => {

@@ -14,7 +14,7 @@ import { buildUncSystemPrompt, type UncSurface } from "@/lib/unc/prompt";
 export const runtime = "nodejs";
 
 const MODEL = "claude-sonnet-5";
-const MAX_REPLY_TOKENS = 500;
+const MAX_REPLY_TOKENS = 2000; // Sonnet 5 adaptive thinking counts against max_tokens; effort pinned low below
 const MAX_TURNS = 24; // most recent turns kept
 const MAX_TURN_CHARS = 4000;
 
@@ -60,6 +60,7 @@ export async function POST(req: Request) {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: MAX_REPLY_TOKENS,
+      output_config: { effort: "low" },
       system: buildUncSystemPrompt(body.context, surface),
       messages,
     });
