@@ -6,6 +6,7 @@ import { useUncChat } from "@/lib/unc/useUncChat";
 import { useAccountPersistence } from "@/lib/db/useAccountPersistence";
 import { usePlatformState } from "./usePlatformState";
 import { useLiveApprovals } from "./useLiveApprovals";
+import { useHomeTelemetry } from "./useHomeTelemetry";
 import Sidebar from "./Sidebar";
 import Onboarding from "./Onboarding";
 import HomeView from "./HomeView";
@@ -32,6 +33,9 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
      (GET /api/approvals). Demo mode: never fetched — the demo cards stay exactly as they are. */
   const inAccount = persistence.mode === "account" && !!persistence.accountId;
   const live = useLiveApprovals(inAccount);
+  /* Accounts mode: Unc's self-review, "The bar" and hours saved from the improvement loops
+     (GET /api/telemetry/home). Demo mode: never fetched — the demo values stay verbatim. */
+  const telemetry = useHomeTelemetry(inAccount);
   const runTarget = { accountId: inAccount ? persistence.accountId! : "demo", account: { currency: S.currency, budgetMonthly: S.budgetMo }, persisted: inAccount };
 
   /* Corner-buddy scroll-spy — port of the prototype's _buddyTick/_buddyScroll:
@@ -116,7 +120,7 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
       <main style={{ flex: 1, minWidth: 0 }}>
         {gated?.state === "past_due" && <BillingBanner />}
         {V.isOnboarding && <Onboarding V={V} />}
-        {V.isToday && <HomeView V={V} live={inAccount ? live : null} />}
+        {V.isToday && <HomeView V={V} live={inAccount ? live : null} telemetry={inAccount ? telemetry : null} />}
         {V.isStrategy && <StrategyView V={V} />}
         {V.isConnectors && <ConnectorsView V={V} />}
         {V.isSystems && <RoutinesView V={V} run={runTarget} />}

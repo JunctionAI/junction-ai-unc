@@ -4,6 +4,8 @@ import React from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
 import { NOTHING_WAITING_COPY } from "@/lib/platform/approvals";
 import type { LiveApprovals } from "./useLiveApprovals";
+import type { HomeTelemetryState } from "./useHomeTelemetry";
+import { barCards, hoursSavedLabel, weekLabel } from "@/lib/platform/telemetry";
 
 const sectionLabel: React.CSSProperties = {
   fontSize: 11,
@@ -129,10 +131,16 @@ const HELD_TEXT = "Held. I’ll re-surface it tomorrow with fresh numbers — no
 /** `live` is null in demo mode (the demo cards render untouched); in accounts mode it is the
     runtime's list — once loaded, the "needs you" list, its count, the drafts and the receipts
     all come from it. */
-export default function HomeView({ V, live = null }: { V: PlatformVals; live?: LiveApprovals | null }) {
+export default function HomeView({ V, live = null, telemetry = null }: { V: PlatformVals; live?: LiveApprovals | null; telemetry?: HomeTelemetryState | null }) {
   const isLive = !!live && live.active;
   const needsCount = isLive ? live.pendingCount + (V.klaviyoDown ? 1 : 0) : V.needsCount;
   const liveNothingWaiting = isLive && live.pendingCount === 0;
+  /* DB mode only (never in demo): the bar from published benchmarks / honest references,
+     hours saved from real runs, and Unc's latest self-review. */
+  const tele = telemetry && telemetry.active ? telemetry.data : null;
+  const review = tele?.review ?? null;
+  const liveBar = tele ? barCards(tele) : null;
+  const hrsLabel = tele ? hoursSavedLabel(tele) : String(V.gamHrs);
   return (
     <div style={{ maxWidth: 940, margin: "0 auto", padding: "50px 48px 96px" }}>
       <div
@@ -197,6 +205,54 @@ export default function HomeView({ V, live = null }: { V: PlatformVals; live?: L
             <span style={{ fontSize: 11, background: "var(--amber-wash)", color: "var(--amber-text)", borderRadius: 999, padding: "2px 9px", fontWeight: 600, marginLeft: 4 }}>{needsCount}</span>
           </div>
         </div>
+        {review && (
+          <div data-testid="unc-self-review" style={{ display: "flex", gap: 12, marginBottom: 14 }}>
+            <img src="/brand/mascot-small.png" alt="" style={{ ...smallMascot, marginTop: 4 }} />
+            <div style={{ background: "white", border: "1px solid var(--card-border-2)", borderRadius: "4px 14px 14px 14px", padding: "14px 18px", flex: 1, minWidth: 0, maxWidth: 760 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <span style={sysTag}>MY REVIEW</span>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                  {weekLabel(review.weekStart)}
+                  {review.author === "deterministic" ? " · from the numbers, no model" : ""}
+                </span>
+              </div>
+              {review.worked && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>What worked</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 3, color: "oklch(0.3 0.06 262)" }}>{review.worked}</div>
+                </div>
+              )}
+              {review.changing && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>What I&apos;m changing</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 3, color: "oklch(0.3 0.06 262)" }}>{review.changing}</div>
+                  {review.changes.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                      {review.changes.map((c) => (
+                        <button
+                          key={`${c.action}:${c.routineId}`}
+                          onClick={() => V.openRoutineById(c.routineId)}
+                          className="hov-bg-cyanwash-deep"
+                          title={c.why}
+                          style={{ border: "none", background: "var(--cyan-wash)", color: "var(--cyan-text)", borderRadius: 999, padding: "4px 11px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}
+                        >
+                          {c.action.replace("_", " ")} {c.routineId}
+                          {c.cadence ? ` → ${c.cadence}` : ""}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {review.ask && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>One ask</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 3, fontWeight: 500 }}>{review.ask}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {!isLive && V.allClear && (
             <div style={{ display: "flex", gap: 10, alignItems: "center", background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "14px 18px" }}>
@@ -344,25 +400,46 @@ export default function HomeView({ V, live = null }: { V: PlatformVals; live?: L
           <span style={{ fontSize: 12, color: "var(--muted)" }}>— what getting there actually takes, from businesses that did it</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-          {V.homeBar.map((hb) => (
-            <div key={hb.what} style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "16px 18px" }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600 }}>{hb.what}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: hb.okColor }}>{hb.status}</span>
+          {!liveBar &&
+            V.homeBar.map((hb) => (
+              <div key={hb.what} style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "16px 18px" }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600 }}>{hb.what}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: hb.okColor }}>{hb.status}</span>
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6, letterSpacing: "-0.01em" }}>{hb.bar}</div>
+                <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>{hb.proof}</div>
+                {hb.behind && (
+                  <button
+                    onClick={hb.fix}
+                    className="hov-bg-cyanwash-deep"
+                    style={{ marginTop: 10, border: "none", background: "var(--cyan-wash)", color: "var(--cyan-text)", borderRadius: 999, padding: "6px 13px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    {hb.fixLabel}
+                  </button>
+                )}
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6, letterSpacing: "-0.01em" }}>{hb.bar}</div>
-              <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>{hb.proof}</div>
-              {hb.behind && (
-                <button
-                  onClick={hb.fix}
-                  className="hov-bg-cyanwash-deep"
-                  style={{ marginTop: 10, border: "none", background: "var(--cyan-wash)", color: "var(--cyan-text)", borderRadius: 999, padding: "6px 13px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}
-                >
-                  {hb.fixLabel}
-                </button>
-              )}
-            </div>
-          ))}
+            ))}
+          {liveBar &&
+            liveBar.map((hb) => (
+              <div key={hb.what} data-testid="bar-card" data-source={hb.source} style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "16px 18px" }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600 }}>{hb.what}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: hb.okColor }}>{hb.status}</span>
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6, letterSpacing: "-0.01em" }}>{hb.bar}</div>
+                <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>{hb.proof}</div>
+                {hb.behind && (
+                  <button
+                    onClick={() => V.openCategory(hb.fixCategory)}
+                    className="hov-bg-cyanwash-deep"
+                    style={{ marginTop: 10, border: "none", background: "var(--cyan-wash)", color: "var(--cyan-text)", borderRadius: 999, padding: "6px 13px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    {hb.fixLabel}
+                  </button>
+                )}
+              </div>
+            ))}
         </div>
       </section>
 
@@ -370,7 +447,7 @@ export default function HomeView({ V, live = null }: { V: PlatformVals; live?: L
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
           <span style={{ flex: "none", ...sectionLabel }}>Automation level</span>
           <span style={{ flex: 1, minWidth: 220, fontSize: 12, color: "var(--muted)" }}>
-            — {V.gamOnCount} of {V.gamTotal} routines running · saving you ~{V.gamHrs} h/week
+            — {V.gamOnCount} of {V.gamTotal} routines running · saving you ~{hrsLabel} h/week
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>

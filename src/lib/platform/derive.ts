@@ -918,6 +918,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     approvals,
     /** Open a routine's detail by catalog id (live approval / draft rows → "Inspect the system →"). */
     openRoutineById: (id: string) => openSys(ALL_SYSTEMS.find((x) => x.id === id)),
+    /** Jump to a routines category (DB-mode "The bar" fix buttons; the demo cards carry their own closures). */
+    openCategory: (cat: string) => set({ view: "systems", selCat: cat, sel: null }),
     pendingCount: S.apStatus.filter((x) => x === "pending").length,
     completed: COMPLETED_DEFS,
     catChips,
