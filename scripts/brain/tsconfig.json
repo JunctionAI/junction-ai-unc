@@ -1,0 +1,18 @@
+{
+  "//": "Standalone build of the brain scripts (no tsx in node_modules — same pattern as scripts/beta/tsconfig.json). `npx tsc -p scripts/brain/tsconfig.json` emits CommonJS to dist/brain; run with `node dist/brain/scripts/import-playbooks.js [--dry-run] [--no-embed]` and `node dist/brain/scripts/eval-chat.js [--only id] [--no-judge]`. dist/ is git-ignored. Relative imports only along the import path (the '@/' imports reachable from here are type-only and erased).",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/brain",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "incremental": false,
+    "sourceMap": false,
+    "plugins": []
+  },
+  "include": ["../import-playbooks.ts", "../eval-chat.ts"],
+  "exclude": ["../../node_modules"]
+}
