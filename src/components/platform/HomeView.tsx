@@ -801,14 +801,18 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
       <div data-buddy="Run rate vs needed — that gap is the whole game. I re-plan it live as the numbers move." style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 20, padding: "30px 34px", boxShadow: "0 8px 30px oklch(0.27 0.055 262 / 0.06)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24 }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <input value={V.goalTitle} onChange={V.onGoalTitle} style={{ display: "block", width: "100%", border: "none", outline: "none", background: "transparent", fontWeight: 700, fontSize: 42, letterSpacing: "-0.025em", color: "var(--ink)", padding: 0 }} />
+            <input value={V.goalTitle} onChange={V.onGoalTitle} placeholder={`e.g. ${V.curSym}40,000 MRR`} aria-label="Your goal" style={{ display: "block", width: "100%", border: "none", outline: "none", background: "transparent", fontWeight: 700, fontSize: 42, letterSpacing: "-0.025em", color: "var(--ink)", padding: 0 }} />
             <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6, fontSize: 13.5, color: "var(--muted)" }}>
               by
               <input type="date" value={V.deadline} onChange={V.onDeadline} style={{ border: "none", background: "transparent", fontSize: 13.5, fontWeight: 500, color: "oklch(0.35 0.05 262)", borderBottom: "1px dashed oklch(0.78 0.02 260)", padding: "1px 2px", outline: "none", cursor: "pointer" }} />
-              <span>· {V.daysLeftLabel} left</span>
+              <span data-testid="days-left">{V.deadlineMissing ? "· no deadline yet" : `· ${V.daysLeftLabel} left`}</span>
             </div>
           </div>
-          {baselineMissing ? (
+          {V.goalMissing ? (
+            <span data-testid="goal-not-set" style={{ flex: "none", marginTop: 8, fontSize: 12.5, fontWeight: 700, color: "var(--amber-text)", background: "var(--amber-wash)", borderRadius: 999, padding: "8px 17px" }}>
+              Goal not set
+            </span>
+          ) : baselineMissing ? (
             <span data-testid="baseline-not-set" style={{ flex: "none", marginTop: 8, fontSize: 12.5, fontWeight: 700, color: "var(--amber-text)", background: "var(--amber-wash)", borderRadius: 999, padding: "8px 17px" }}>
               Baseline not set
             </span>
@@ -817,9 +821,14 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
           )}
         </div>
         <div style={{ marginTop: 22, height: 8, background: "var(--track)", borderRadius: 999 }}>
-          <div style={{ width: baselineMissing ? "0%" : V.goalPct, height: 8, background: "linear-gradient(90deg, oklch(0.78 0.13 220), oklch(0.55 0.16 245))", borderRadius: 999, boxShadow: "0 0 14px oklch(0.78 0.13 220 / 0.5)", transition: "width 0.6s" }}></div>
+          <div style={{ width: baselineMissing || V.goalMissing ? "0%" : V.goalPct, height: 8, background: "linear-gradient(90deg, oklch(0.78 0.13 220), oklch(0.55 0.16 245))", borderRadius: 999, boxShadow: "0 0 14px oklch(0.78 0.13 220 / 0.5)", transition: "width 0.6s" }}></div>
         </div>
-        {baselineMissing ? (
+        {V.goalMissing ? (
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 12 }}>
+            <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
+            <div data-testid="goal-not-set-line" style={{ fontSize: 14.5, color: "oklch(0.4 0.04 262)", lineHeight: 1.5 }}>{HOME_COPY.goalNotSet}</div>
+          </div>
+        ) : baselineMissing ? (
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 12 }}>
             <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
             <div style={{ flex: 1, minWidth: 0 }}>
