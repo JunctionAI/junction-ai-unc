@@ -8,7 +8,14 @@ import { usePlatformState } from "./usePlatformState";
 import { useLiveApprovals } from "./useLiveApprovals";
 import { useHomeTelemetry } from "./useHomeTelemetry";
 import { useOnboardingMemories } from "./useOnboardingMemories";
+import { useSetupProgress } from "@/lib/setup/useSetupProgress";
+import { startConnect } from "@/lib/setup/connect";
+import { turnOnRoutine } from "@/lib/setup/routine";
+import { phaseChannels } from "@/lib/setup/home";
+import type { SetupAnchor } from "@/lib/setup/progress";
 import Sidebar from "./Sidebar";
+import ConnectDataStep from "./ConnectDataStep";
+import FirstRoutineStep from "./FirstRoutineStep";
 import Onboarding from "./Onboarding";
 import HomeView from "./HomeView";
 import StrategyView from "./StrategyView";
@@ -42,6 +49,57 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
   /* Client Brain: "Agree the plan" persists the onboarding answers as memories (accounts mode only). */
   useOnboardingMemories(S, inAccount);
   const runTarget = { accountId: inAccount ? persistence.accountId! : "demo", account: { currency: S.currency, budgetMonthly: S.budgetMo }, persisted: inAccount };
+  /* Guided first run (docs/PRODUCT-EXPERIENCE.md): the five spine steps with real states
+     (GET /api/setup/progress) feed Home's "Getting set up" card and the two guided steps that
+     follow "Agree the plan →" in accounts mode. Demo mode never fetches and lands on Home. */
+  const setup = useSetupProgress(inAccount);
+  const setupData = setup.data;
+  const setPlanAgreedAt = V.setPlanAgreedAt;
+  useEffect(() => {
+    if (setupData) setPlanAgreedAt(setupData.agreedAt);
+  }, [setupData, setPlanAgreedAt]);
+  /* "Agree the plan →" for real: plans.agreed_at. Fires once per session when an onboarded
+     account has no agreed_at yet — the fresh agreement, or a backfill for an account that
+     agreed before the column was written. */
+  const agreeFired = useRef(false);
+  const setupRefresh = setup.refresh;
+  useEffect(() => {
+    if (!inAccount || !S.onboarded || !setupData || setupData.agreedAt || agreeFired.current) return;
+    agreeFired.current = true;
+    fetch("/api/setup/agree", { method: "POST" })
+      .then((r) => r.json().catch(() => ({})))
+      .then((body: { agreedAt?: string }) => {
+        if (typeof body.agreedAt === "string") setPlanAgreedAt(body.agreedAt);
+        setupRefresh();
+      })
+      .catch(() => {});
+  }, [inAccount, S.onboarded, setupData, setPlanAgreedAt, setupRefresh]);
+  const showGuided = inAccount && S.onboarded && S.setupFlow !== "home";
+  const phaseOne = phaseChannels(S)[0];
+  const liveRefresh = live.refresh;
+  const onSetupAction = (anchor: SetupAnchor) => {
+    if (anchor.startsWith("view:")) {
+      const v = anchor.slice(5);
+      if (v === "connectors") V.goConnectors();
+      else if (v === "systems") V.goSystems();
+      else if (v === "strategy") V.goStrategy();
+      return;
+    }
+    if (anchor === "step:connect" || anchor === "step:routine") {
+      V.setSetupFlow(anchor.slice(5) as "connect" | "routine");
+      return;
+    }
+    const el = document.getElementById(anchor.slice(1));
+    if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
+  };
+  const onTurnOn = async (routineId: string) => {
+    V.enableRoutineLocal(routineId);
+    V.setFirstRunPending(true);
+    const r = await turnOnRoutine({ routineId, accountId: runTarget.accountId, account: runTarget.account });
+    setupRefresh();
+    liveRefresh();
+    return r;
+  };
   /* "Models" settings (which brain for which job) — accounts mode only; demo never shows the link. */
   const [modelsOpen, setModelsOpen] = useState(false);
   /* "What Unc knows" (his memory of this founder, correctable) — accounts mode only. */
@@ -125,16 +183,34 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
         WebkitFontSmoothing: "antialiased",
       }}
     >
-      {V.notOnboarding && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} billing={gated} onModels={inAccount ? () => setModelsOpen(true) : undefined} onWhatUncKnows={inAccount ? () => setKnowsOpen(true) : undefined} />}
+      {V.notOnboarding && !showGuided && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} billing={gated} onModels={inAccount ? () => setModelsOpen(true) : undefined} onWhatUncKnows={inAccount ? () => setKnowsOpen(true) : undefined} />}
       <main style={{ flex: 1, minWidth: 0 }}>
         {gated?.state === "past_due" && <BillingBanner />}
         {V.isOnboarding && <Onboarding V={V} />}
-        {V.isToday && <HomeView V={V} live={inAccount ? live : null} telemetry={inAccount ? telemetry : null} accountMode={inAccount} />}
-        {V.isStrategy && <StrategyView V={V} />}
-        {V.isConnectors && <ConnectorsView V={V} />}
-        {V.isSystems && <RoutinesView V={V} run={runTarget} />}
+        {showGuided && S.setupFlow === "connect" && (
+          <ConnectDataStep
+            V={V}
+            channel={phaseOne}
+            onConnect={async (platform, shop) => {
+              const r = await startConnect(platform, { shop });
+              if (r.kind === "redirect") window.location.assign(r.url);
+              return r;
+            }}
+            onContinue={() => V.setSetupFlow("routine")}
+            onLater={V.markConnectLater}
+            onTokenLink={() => {
+              V.setSetupFlow("home");
+              V.goConnectors();
+            }}
+          />
+        )}
+        {showGuided && S.setupFlow === "routine" && <FirstRoutineStep V={V} channel={phaseOne} onTurnOn={onTurnOn} onContinue={() => V.setSetupFlow("home")} onSkip={() => V.setSetupFlow("home")} />}
+        {V.isToday && !showGuided && <HomeView V={V} live={inAccount ? live : null} telemetry={inAccount ? telemetry : null} accountMode={inAccount} setup={inAccount ? setup : null} onSetupAction={onSetupAction} onTurnOn={onTurnOn} />}
+        {V.isStrategy && !showGuided && <StrategyView V={V} />}
+        {V.isConnectors && !showGuided && <ConnectorsView V={V} />}
+        {V.isSystems && !showGuided && <RoutinesView V={V} run={runTarget} />}
       </main>
-      {V.showBuddy && <CornerBuddy V={V} />}
+      {V.showBuddy && !showGuided && <CornerBuddy V={V} />}
       {inAccount && modelsOpen && <ModelSettings onClose={() => setModelsOpen(false)} />}
       {inAccount && knowsOpen && <WhatUncKnows onClose={() => setKnowsOpen(false)} />}
     </div>

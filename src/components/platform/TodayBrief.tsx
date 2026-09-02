@@ -7,7 +7,7 @@
    as short lines with a chip per kind — needs_you links to the approval card on the page,
    reminder shows the date. `initial` lets a server render / test pass a brief in directly. */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { BriefItem, BriefItemKind, DailyBriefRecord } from "@/lib/brain/brief";
 
 export const BRIEF_GREETING = "Morning. Here’s today:";
@@ -78,9 +78,17 @@ export function TodayBriefCard({ brief }: { brief: DailyBriefRecord }) {
 
 type Fetched = { brief: DailyBriefRecord | null } | { fallback: true } | { error: string };
 
-export default function TodayBrief({ accountMode, initial }: { accountMode: boolean; initial?: DailyBriefRecord | null }) {
+export default function TodayBrief({ accountMode, initial, onLoaded }: { accountMode: boolean; initial?: DailyBriefRecord | null; onLoaded?: (brief: DailyBriefRecord | null) => void }) {
   const [state, setState] = useState<{ loaded: boolean; brief: DailyBriefRecord | null; error: string | null }>({ loaded: initial !== undefined, brief: initial ?? null, error: null });
   const [busy, setBusy] = useState(false);
+  /* Home reads whether a brief exists (its headline bubble falls back to the first-day line without one). */
+  const onLoadedRef = useRef(onLoaded);
+  useEffect(() => {
+    onLoadedRef.current = onLoaded;
+  });
+  useEffect(() => {
+    if (state.loaded) onLoadedRef.current?.(state.brief);
+  }, [state.loaded, state.brief]);
 
   useEffect(() => {
     if (!accountMode || initial !== undefined) return;

@@ -1002,6 +1002,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     klaviyoNeedsReconnect: S.connState["Klaviyo"] === "expired",
     /** Open the guided Connect-your-data step's platform in the Connectors view. */
     goConnectorsView: nav("connectors"),
+    /** Routine ids that are really on (routine_states.enabled projection) — never the catalog's demo "Active" defaults. */
+    enabledRoutineIds: ALL_SYSTEMS.filter((x) => S.routineOn[x.name] === true).map((x) => x.id),
     routineOnById: (id: string) => {
       const s2 = ALL_SYSTEMS.find((x) => x.id === id);
       return !!s2 && S.routineOn[s2.name] === true;
@@ -1010,6 +1012,9 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     connStateByName: (name: string) => S.connState[name] ?? "off",
     /** The founder's own answers, for the real Home / guided steps (never demo constants). */
     accountCtx: { currency: S.currency, budgetMonthly: S.budgetMo },
+    /** The persisted rows the real Home view model (src/lib/setup/home.ts) reads. */
+    realInputs: { routineOn: S.routineOn, connState: S.connState, posture: S.posture, obStrengths: S.obStrengths, budgetMo: S.budgetMo },
+    routineNameById: (id: string) => ALL_SYSTEMS.find((x) => x.id === id)?.name ?? id,
   };
 }
 
