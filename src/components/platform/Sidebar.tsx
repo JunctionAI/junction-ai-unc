@@ -39,8 +39,9 @@ function planLine(e: Entitlement): { text: string; action: string } | null {
 
 /** `account` is null in demo mode (no Supabase env / no session) and the sidebar renders exactly as Phase 1.
     `billing` is null unless billing is configured; then it adds the plan/trial line.
-    `onModels` (DB mode only) opens the "Models" settings — which brain for which job. */
-export default function Sidebar({ V, account = null, billing = null, onModels }: { V: PlatformVals; account?: Persistence | null; billing?: Entitlement | null; onModels?: () => void }) {
+    `onModels` (DB mode only) opens the "Models" settings — which brain for which job.
+    `onWhatUncKnows` (DB mode only) opens "What Unc knows" — the founder's view of his memory. */
+export default function Sidebar({ V, account = null, billing = null, onModels, onWhatUncKnows }: { V: PlatformVals; account?: Persistence | null; billing?: Entitlement | null; onModels?: () => void; onWhatUncKnows?: () => void }) {
   const plan = billing ? planLine(billing) : null;
   return (
     <aside
@@ -93,6 +94,14 @@ export default function Sidebar({ V, account = null, billing = null, onModels }:
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ color: account.autosave === "error" ? "var(--amber)" : "var(--faint-on-navy)" }}>{SAVE_LABEL[account.autosave]}</span>
               <span>·</span>
+              {onWhatUncKnows && (
+                <>
+                  <button type="button" onClick={onWhatUncKnows} className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "var(--faint-on-navy)" }}>
+                    What Unc knows
+                  </button>
+                  <span>·</span>
+                </>
+              )}
               {onModels && (
                 <>
                   <button type="button" onClick={onModels} className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "var(--faint-on-navy)" }}>
