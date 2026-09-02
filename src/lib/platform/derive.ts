@@ -454,11 +454,11 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
   const obPlanStep3 = `${span(w2end + 1, weeksLeft)} and beyond: ${obRest} switch on as their numbers earn it. Focus: scaling what’s proven, straight through your goal.`;
   const obSummaryTitle = `${S.obPostureSet.map((k) => postureDefs[k].label).join(" + ")}, ${S.obBreadth === "broad" ? "run broad across channels" : "focused where you’re strongest"}`;
   const obDeadlineLabel = new Date(S.deadline + "T00:00:00").toLocaleDateString("en-NZ", { day: "numeric", month: "short" });
-  const obGap = Math.max(0, S.targetNum - S.baselineNum);
+  const obGap = Math.max(0, S.targetNum - (S.baselineNum ?? 0));
   const obPlanShort = `Your goal needs ${fmt(obGap)} of new ground by ${obDeadlineLabel}. With ${curSym}${Math.round(S.budgetMo / 30)}/day and ${S.hoursWk} h/wk of you, here’s the shortest path I can see:`;
   /* Everything Unc may write the step-6 prose from — the deterministic plan is fixed, the narrative only wraps it. */
   const obNarrativeRequest: NarrativeRequest = {
-    goal: { title: S.goalTitle, deadline: S.deadline, deadlineLabel: obDeadlineLabel, currency: S.currency, currencySymbol: curSym, target: S.targetNum, baseline: S.baselineNum, gap: obGap, gapLabel: fmt(obGap), otherGoals: S.obCats.slice(1).map((k) => S.goalTexts[k]).filter(Boolean) },
+    goal: { title: S.goalTitle, deadline: S.deadline, deadlineLabel: obDeadlineLabel, currency: S.currency, currencySymbol: curSym, target: S.targetNum, baseline: S.baselineNum ?? 0, gap: obGap, gapLabel: fmt(obGap), otherGoals: S.obCats.slice(1).map((k) => S.goalTexts[k]).filter(Boolean) },
     resources: { budgetPerMonth: S.budgetMo, budgetPerDay: Math.round(S.budgetMo / 30), hoursPerWeek: S.hoursWk, strengths: S.obStrengths, platforms: S.obPlatforms, postures: S.obPostureSet.map((k) => postureDefs[k].label), breadth: S.obBreadth, team: S.team.map((t) => ({ name: t.name, role: t.role })) },
     plan: {
       title: obSummaryTitle,
@@ -592,8 +592,10 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     },
     obBaselineNum: S.baselineNum,
     onObBaselineNum: (e: Ev) => {
-      const v = +e.target.value || 0;
-      set({ baselineNum: v, baselineText: `${v}` });
+      // an empty field is "not set" (null), never 0 — a real 0 is typed as 0
+      const raw = e.target.value.trim();
+      const v = raw === "" ? null : +raw || 0;
+      set({ baselineNum: v, baselineText: v === null ? "" : `${v}` });
     },
     obCurrencies: ["NZD", "AUD", "USD", "GBP", "EUR"].map((code) => {
       const on = S.currency === code;
@@ -915,6 +917,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
       turnOn: () => set((s) => ({ propStatus: s.propStatus.map((x, j) => (j === i ? "building" : x)) })),
     })),
     goalPct: gm.goalPct,
+    /** Accounts mode: the goal row's baseline is NULL, so pace/progress above are demo maths — Home says so instead (BASELINE_NOT_SET_COPY). */
+    baselineMissing: S.baselineNum === null,
     approvals,
     /** Open a routine's detail by catalog id (live approval / draft rows → "Inspect the system →"). */
     openRoutineById: (id: string) => openSys(ALL_SYSTEMS.find((x) => x.id === id)),

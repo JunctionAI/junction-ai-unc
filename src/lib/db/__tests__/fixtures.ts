@@ -26,7 +26,6 @@ export const PERSISTED_KEYS = [
   "team",
   "routineOn",
   "connState",
-  "apStatus",
   "messages",
   "humanThread",
   "obThread",

@@ -13,13 +13,16 @@
      scan profile                     business_profiles
      routine on/off                   routine_states.enabled   (name ↔ catalog id)
      connector status                 connectors.status
-     approval decisions               approvals        keyed by client_key "demo-ap-<i>" (Phase-2 demo cards)
      chat threads                     chat_messages    thread ∈ corner | onboarding | human, ordered by position
      everything UI-shaped that has
      no column (goal texts per
      category, plan edits, the Unc
      narrative, wf version …)         account_state_meta.client_state (schema-versioned blob)
 
+   Not persisted: the three demo approval cards (derive.ts AP_DATA / apStatus) — they are demo
+   furniture, never a real account's decisions; accounts mode reads its approvals from the
+   runtime (GET /api/approvals). Before 2026-09-02 they were upserted as approvals rows keyed
+   client_key "demo-ap-<i>"; existing rows are simply ignored now.
    Not persisted (transient UI): view, selCat, sel, draft, apWhy, propStatus, nodeSel,
    nodeVals, chatOpen, setupOpen/Step/Done, readThread/readDraft, chatMode, addOpen,
    obMoneyOpen, obTeamOpen, obDraft, buddyText, typing placeholders. */
@@ -29,7 +32,6 @@ import { postureDefs } from "../platform/derive";
 import type { Posture } from "../platform/plan";
 import {
   initialState,
-  type ApStatus,
   type Breadth,
   type ConnStatus,
   type Msg,
@@ -107,18 +109,6 @@ export interface ConnectorRow {
   platform: string;
   status: "connected" | "disconnected" | "needs_reconnect";
 }
-export interface ApprovalRow {
-  account_id: string;
-  client_key: string;
-  routine_id: string;
-  title: string;
-  detail: string;
-  before_state: string;
-  after_state: string;
-  status: "pending" | "approved" | "held";
-  decided_at: string | null;
-  decided_by: string | null;
-}
 export interface ChatMessageRow {
   account_id: string;
   thread: "corner" | "onboarding" | "human";
@@ -159,7 +149,6 @@ export interface AccountRows {
   businessProfile: BusinessProfileRow;
   routineStates: RoutineStateRow[];
   connectors: ConnectorRow[];
-  approvals: ApprovalRow[];
   chatMessages: ChatMessageRow[];
   stateMeta: StateMetaRow;
 }
@@ -173,7 +162,6 @@ export type LoadedRows = {
   businessProfile: BusinessProfileRow | null;
   routineStates: RoutineStateRow[];
   connectors: ConnectorRow[];
-  approvals: Pick<ApprovalRow, "client_key" | "status">[];
   chatMessages: ChatMessageRow[];
   stateMeta: StateMetaRow | null;
 };
@@ -215,14 +203,6 @@ const CONNECTOR_NAMES: Record<string, string> = Object.fromEntries(Object.entrie
 const ROUTINE_ID_BY_NAME: Record<string, string> = Object.fromEntries(ALL_SYSTEMS.map((s) => [s.name, s.id]));
 const ROUTINE_NAME_BY_ID: Record<string, string> = Object.fromEntries(ALL_SYSTEMS.map((s) => [s.id, s.name]));
 
-/** The three demo approval cards the Phase-2 Home view renders (derive.ts AP_DATA order). */
-export const DEMO_APPROVAL_KEYS = ["demo-ap-0", "demo-ap-1", "demo-ap-2"] as const;
-const DEMO_APPROVALS: Omit<ApprovalRow, "account_id" | "client_key" | "status" | "decided_at" | "decided_by">[] = [
-  { routine_id: "D02-W01", title: "Shift NZ$40/day into Advantage+ retargeting", detail: "Prospecting-B ROAS fell to 1.4× over 7 days; retargeting holds 3.1×. Reversible, inside guardrail.", before_state: "NZ$60/day Prospecting-B", after_state: "NZ$20/day + NZ$40 retargeting" },
-  { routine_id: "D01-W01", title: "Publish founder post “Why we stopped discounting”", detail: "Drafted from 31 customer questions. Zero first-person claims added. Scheduled for 09:00 Tuesday.", before_state: "Staged draft", after_state: "Published to LinkedIn" },
-  { routine_id: "D05-W03", title: "Send winback to 412 lapsed customers", detail: "Zero-recipient test passed. 15% offer respects margin guardrail. Suppresses anyone emailed this week.", before_state: "0 recipients", after_state: "412 recipients, 1 send" },
-];
-
 const THREADS: { thread: ChatMessageRow["thread"]; key: "messages" | "obThread" | "humanThread"; lane: ChatMessageRow["lane"] }[] = [
   { thread: "corner", key: "messages", lane: "ai" },
   { thread: "onboarding", key: "obThread", lane: "ai" },
@@ -253,6 +233,7 @@ export function planPhases(posture: Posture, routineEdits: Record<string, string
 
 // ---------- state → rows ----------
 
+/** `opts.userId` is accepted for call-site compatibility; nothing persisted carries it since the demo approvals went. */
 export function stateToRows(accountId: string, S: PlatformState, opts: { userId?: string; now?: string } = {}): AccountRows {
   const now = opts.now ?? new Date().toISOString();
   const goals: GoalRow[] = S.obCats.map((category, i) => ({
@@ -308,18 +289,6 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
     .filter(([name, st]) => CONNECTOR_PLATFORMS[name] && CONN_TO_DB[st])
     .map(([name, st]) => ({ account_id: accountId, platform: CONNECTOR_PLATFORMS[name], status: CONN_TO_DB[st] }));
 
-  const approvals: ApprovalRow[] = DEMO_APPROVALS.map((a, i) => {
-    const status = S.apStatus[i] ?? "pending";
-    return {
-      account_id: accountId,
-      client_key: DEMO_APPROVAL_KEYS[i],
-      ...a,
-      status,
-      decided_at: status === "pending" ? null : now,
-      decided_by: status === "pending" ? null : opts.userId ?? null,
-    };
-  });
-
   const chatMessages: ChatMessageRow[] = THREADS.flatMap(({ thread, key, lane }) =>
     S[key]
       .filter((m) => !m.typing)
@@ -364,7 +333,6 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
     businessProfile,
     routineStates,
     connectors,
-    approvals,
     chatMessages,
     stateMeta,
   };
@@ -403,7 +371,8 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
     if (!cs?.obCats?.length) S.obCats = [governing.category, ...checkpoints.map((g) => g.category)];
     S.goalTitle = governing.title;
     if (governing.deadline) S.deadline = governing.deadline;
-    if (governing.baseline !== null) S.baselineNum = Number(governing.baseline);
+    // NULL is "not set" — surfaced as such, never replaced by the base state's (demo) number
+    S.baselineNum = governing.baseline === null || governing.baseline === undefined ? null : Number(governing.baseline);
     S.goalTexts = { ...S.goalTexts, ...Object.fromEntries(rows.goals.map((g) => [g.category, g.title])) };
   }
 
@@ -456,14 +425,6 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
       const st = CONN_FROM_DB[c.status];
       if (name && st) S.connState[name] = st;
     }
-  }
-
-  if (rows.approvals.length) {
-    S.apStatus = DEMO_APPROVAL_KEYS.map<ApStatus>((key, i) => {
-      const row = rows.approvals.find((a) => a.client_key === key);
-      if (!row) return base.apStatus[i] ?? "pending";
-      return row.status === "approved" ? "approved" : row.status === "pending" ? "pending" : "held"; // expired → held
-    });
   }
 
   if (rows.chatMessages.length) {

@@ -35,7 +35,7 @@ export async function createAccount(db: DbClient, opts: { name?: string; currenc
 
 export async function loadAccountRows(db: DbClient, accountId: string): Promise<LoadedRows> {
   const byAccount = (table: string, columns: string) => db.from(table).select(columns).eq("account_id", accountId);
-  const [account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, approvals, chatMessages, stateMeta] = await Promise.all([
+  const [account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages, stateMeta] = await Promise.all([
     unwrap<LoadedRows["account"]>("accounts.select", db.from("accounts").select("id, currency").eq("id", accountId).maybeSingle()),
     unwrap<LoadedRows["goals"]>("goals.select", byAccount("goals", "account_id, category, tier, title, baseline, deadline").order("created_at", { ascending: true })),
     unwrap<LoadedRows["resourceProfile"]>(
@@ -46,11 +46,10 @@ export async function loadAccountRows(db: DbClient, accountId: string): Promise<
     unwrap<LoadedRows["businessProfile"]>("business_profiles.select", byAccount("business_profiles", "account_id, scan_status, profile, scanned_at").maybeSingle()),
     unwrap<LoadedRows["routineStates"]>("routine_states.select", byAccount("routine_states", "account_id, routine_id, enabled")),
     unwrap<LoadedRows["connectors"]>("connectors.select", byAccount("connectors", "account_id, platform, status")),
-    unwrap<LoadedRows["approvals"]>("approvals.select", byAccount("approvals", "client_key, status").in("client_key", ["demo-ap-0", "demo-ap-1", "demo-ap-2"])),
     unwrap<LoadedRows["chatMessages"]>("chat_messages.select", byAccount("chat_messages", "account_id, thread, position, lane, sender, body, meta").order("position", { ascending: true })),
     unwrap<LoadedRows["stateMeta"]>("account_state_meta.select", byAccount("account_state_meta", "account_id, schema_version, client_state").maybeSingle()),
   ]);
-  return { account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, approvals, chatMessages, stateMeta };
+  return { account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages, stateMeta };
 }
 
 /** { state, found }: found=false means nothing was ever saved for this account (seed it). */
@@ -95,8 +94,6 @@ export async function saveAccountRows(db: DbClient, rows: AccountRows): Promise<
 
   if (rows.connectors.length)
     await unwrap("connectors.upsert", acct("connectors").upsert(rows.connectors as unknown as Record<string, unknown>[], { onConflict: "account_id,platform" }));
-
-  await unwrap("approvals.upsert", acct("approvals").upsert(rows.approvals as unknown as Record<string, unknown>[], { onConflict: "account_id,client_key" }));
 
   if (rows.chatMessages.length)
     await unwrap("chat_messages.upsert", acct("chat_messages").upsert(rows.chatMessages as unknown as Record<string, unknown>[], { onConflict: "account_id,thread,position" }));

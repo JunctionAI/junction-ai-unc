@@ -50,7 +50,7 @@ describe("BETA_ACCOUNTS", () => {
 });
 
 describe("betaState / betaRows (pure)", () => {
-  it("builds an onboarded state with no demo chat and the demo approval cards held", () => {
+  it("builds an onboarded state with no demo chat, a NULL baseline when unknown, and the demo approval cards held (not that it matters — they are not persisted)", () => {
     const S = betaState(bySlug("avgar"));
     expect(S.onboarded).toBe(true);
     expect(S.goalTitle).toBe("NZ$100,000 monthly revenue");
@@ -60,6 +60,9 @@ describe("betaState / betaRows (pure)", () => {
     expect(S.humanThread).toHaveLength(1);
     expect(S.humanThread[0].text).not.toMatch(/Sam from the Junction team/);
     expect(S.apStatus).toEqual(["held", "held", "held"]);
+    expect(S.baselineNum).toBe(35000);
+    expect(betaState(bySlug("unity-mma")).baselineNum).toBeNull();
+    expect(betaState(bySlug("aerspan")).baselineNum).toBe(0);
     expect(S.connState).toEqual({ Shopify: "off", Klaviyo: "off", "Meta Ads": "off", "Google Ads": "off", "Google Analytics 4": "off" });
     expect(S.team[0]).toMatchObject({ name: "Heather Anderson", role: "Founder" });
   });
@@ -91,6 +94,7 @@ describe("seedBeta against the fake", () => {
     expect(db.rows("business_profiles")).toHaveLength(6);
     expect(db.rows("account_state_meta")).toHaveLength(6);
     expect(db.rows("plans")).toHaveLength(6);
+    expect(db.rows("approvals")).toHaveLength(0); // the demo cards are not persisted
     // connectors only for the platforms we know each founder uses — all 'disconnected'
     const avgarId = results.find((r) => r.slug === "avgar")!.accountId;
     const avgarConns = db.rows("connectors").filter((c) => c.account_id === avgarId);
@@ -162,6 +166,9 @@ describe("seedBeta against the fake", () => {
     expect(state.deadline).toBe("2027-01-15");
     expect(state.baselineNum).toBe(35000);
     expect(state.currency).toBe("NZD");
+    // an unknown baseline hydrates as null — the Home header asks for it instead of showing demo progress
+    const [unity] = await seedBeta(db, [bySlug("unity-mma")], { now: NOW });
+    expect((await loadAccountState(db, unity.accountId!, initialState)).state.baselineNum).toBeNull();
     expect(state.website).toBe("https://avgarsport.com");
     expect(state.connState.Shopify).toBe("off");
     expect(state.scan.profile?.name).toBe("AVGAR Sport");

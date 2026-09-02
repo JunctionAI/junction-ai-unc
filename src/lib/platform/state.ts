@@ -98,7 +98,8 @@ export interface PlatformState {
   baselineText: string;
   currency: string;
   targetNum: number;
-  baselineNum: number;
+  /** Where the goal metric is now. null = not set (an account whose goals.baseline is NULL) — never substitute the demo 28,400. */
+  baselineNum: number | null;
   reinvest: Reinvest;
   marginPct: number;
   obMoneyOpen: boolean;

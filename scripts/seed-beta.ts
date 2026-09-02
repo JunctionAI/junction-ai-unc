@@ -18,8 +18,8 @@
      connectors            status 'disconnected' for the platforms we know they use, so the
                            Connectors card can lead with them
      chat_messages         one honest Unc opener + one human-lane line from Tom (no demo chat)
-     plans, approvals,     what stateToRows always writes (the three Phase-2 demo approval
-     account_state_meta    cards land as 'held' — see docs/BETA.md "Known gaps")
+     plans,                what stateToRows always writes (the three demo approval cards are
+     account_state_meta    NOT persisted — demo furniture, never a founder's decisions)
 
    Membership is NOT seeded: account_members needs an auth.users row, and the founder has not
    signed up yet. The email → account attach happens at first login (docs/BETA.md §Invite flow;
@@ -358,8 +358,8 @@ export function betaState(a: BetaAccount): PlatformState {
     obCats: [a.goal.category],
     goalTexts: { ...initialState.goalTexts, [a.goal.category]: a.goal.title },
     targetNum: a.goal.target,
-    // stateToRows copies this into goals.baseline; betaRows() replaces it with the FOUND value or NULL.
-    baselineNum: a.baseline?.value ?? 0,
+    // stateToRows copies this into goals.baseline: the FOUND value, or NULL (never 0) when unknown.
+    baselineNum: a.baseline ? a.baseline.value : null,
     baselineText: a.baseline ? `${a.baseline.value.toLocaleString("en-NZ")} as of ${a.baseline.asOf}` : "",
     budgetMo: a.budgetMonthly ?? 0,
     hoursWk: a.hoursWeekly ?? 0,
@@ -375,7 +375,7 @@ export function betaState(a: BetaAccount): PlatformState {
     team,
     routineOn: {},
     connState,
-    // The three Phase-2 demo approval cards stateToRows always writes: held, never pending decisions.
+    // The three demo approval cards are demo furniture — not persisted (mapping.ts), never shown in accounts mode.
     apStatus: ["held", "held", "held"],
     messages: [
       {
@@ -403,8 +403,8 @@ export function betaState(a: BetaAccount): PlatformState {
   };
 }
 
-/** The rows for one founder. Two corrections on top of stateToRows: an unknown baseline is
-    NULL (stateToRows can only write a number), and an unknown margin is NULL (not the demo 30). */
+/** The rows for one founder. One correction on top of stateToRows: an unknown margin is NULL
+    (not the demo 30). An unknown baseline is already NULL (baselineNum null → goals.baseline). */
 export function betaRows(a: BetaAccount, accountId: string, now: string): AccountRows {
   const rows = stateToRows(accountId, betaState(a), { now });
   for (const g of rows.goals) if (g.tier === "governing") g.baseline = a.baseline ? a.baseline.value : null;

@@ -17,13 +17,12 @@ function asLoaded(rows: ReturnType<typeof stateToRows>): LoadedRows {
     businessProfile: rows.businessProfile,
     routineStates: rows.routineStates,
     connectors: rows.connectors,
-    approvals: rows.approvals.map((a) => ({ client_key: a.client_key, status: a.status })),
     chatMessages: rows.chatMessages,
     stateMeta: rows.stateMeta,
   };
 }
 
-const EMPTY: LoadedRows = { account: null, goals: [], resourceProfile: null, teamMembers: [], businessProfile: null, routineStates: [], connectors: [], approvals: [], chatMessages: [], stateMeta: null };
+const EMPTY: LoadedRows = { account: null, goals: [], resourceProfile: null, teamMembers: [], businessProfile: null, routineStates: [], connectors: [], chatMessages: [], stateMeta: null };
 
 describe("state → rows → state round-trip", () => {
   const S = richState();
@@ -40,6 +39,8 @@ describe("state → rows → state round-trip", () => {
     expect(back.selCat).toBe(initialState.selCat);
     expect(back.chatOpen).toBe(initialState.chatOpen);
     expect(back.apWhy).toEqual(initialState.apWhy);
+    // the demo approval cards' decisions are demo furniture — never rows, never hydrated
+    expect(back.apStatus).toEqual(initialState.apStatus);
   });
 
   it("the whole persisted slice is equal in one go", () => {
@@ -129,16 +130,24 @@ describe("column mapping (0001 + 0003)", () => {
     ]);
   });
 
-  it("approvals: the 3 demo cards keyed demo-ap-<i>; decided_at/by only once decided", () => {
-    expect(rows.approvals.map((a) => [a.client_key, a.status, a.decided_at, a.decided_by])).toEqual([
-      ["demo-ap-0", "approved", NOW, "user-1"],
-      ["demo-ap-1", "held", NOW, "user-1"],
-      ["demo-ap-2", "pending", null, null],
-    ]);
-    expect(rows.approvals[0]).toMatchObject({ routine_id: "D02-W01", title: "Shift NZ$40/day into Advantage+ retargeting" });
-    // expired in the DB reads back as held (ApStatus has no expired)
-    const back = rowsToState({ ...EMPTY, approvals: [{ client_key: "demo-ap-1", status: "expired" as never }] });
-    expect(back.apStatus).toEqual(["pending", "held", "pending"]);
+  it("approvals: the demo cards are NOT persisted (no approvals rows in the projection, apStatus left to the base)", () => {
+    expect("approvals" in rows).toBe(false);
+    expect(JSON.stringify(rows)).not.toContain("demo-ap-");
+    expect(JSON.stringify(rows)).not.toContain("Advantage+ retargeting");
+    // a decision on a demo card changes nothing persisted → no autosave for it
+    expect(persistedProjection({ ...S, apStatus: ["approved", "approved", "approved"] })).toBe(persistedProjection(S));
+  });
+
+  it("goals.baseline NULL reads back as baselineNum null — never the base state's demo 28,400", () => {
+    const seeded: LoadedRows = { ...EMPTY, goals: [{ account_id: ACCT, category: "revenue", tier: "governing", title: "NZ$100,000 monthly revenue", baseline: null, deadline: "2027-01-15" }] };
+    const back = rowsToState(seeded, initialState);
+    expect(back.baselineNum).toBeNull();
+    expect(back.goalTitle).toBe("NZ$100,000 monthly revenue");
+    // and a null state writes NULL, not 0
+    expect(stateToRows(ACCT, { ...initialState, baselineNum: null }, { now: NOW }).goals[0].baseline).toBeNull();
+    // a found zero is a zero both ways (Aerspan)
+    expect(rowsToState({ ...seeded, goals: [{ ...seeded.goals[0], baseline: 0 }] }, initialState).baselineNum).toBe(0);
+    expect(stateToRows(ACCT, { ...initialState, baselineNum: 0 }, { now: NOW }).goals[0].baseline).toBe(0);
   });
 
   it("chat_messages: three threads, positions, senders, link meta; typing placeholders dropped", () => {
@@ -238,7 +247,6 @@ const VALID_MUTATIONS: Partial<Record<(typeof PERSISTED_KEYS)[number], (v: unkno
   reinvest: () => "steady",
   obBreadth: () => "focused",
   wfState: () => "clean",
-  apStatus: () => ["held", "held", "held"],
   routineOn: (v) => ({ ...(v as Record<string, boolean>), "Trend watch": true }),
   routineEdits: (v) => ({ ...(v as Record<string, string[]>), "brand.0": ["Trend watch"] }),
   connState: (v) => ({ ...(v as Record<string, string>), Slack: "ok" }),

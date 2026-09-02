@@ -149,7 +149,6 @@ describe("save → load through the (schema-checked) fake", () => {
       business_profiles: "account_id",
       routine_states: "account_id,routine_id",
       connectors: "account_id,platform",
-      approvals: "account_id,client_key",
       chat_messages: "account_id,thread,position",
       account_state_meta: "account_id",
     });
@@ -164,7 +163,7 @@ describe("save → load through the (schema-checked) fake", () => {
     expect(db.rows("team_members")).toHaveLength(3);
     expect(db.rows("chat_messages")).toHaveLength(7);
     expect(db.rows("plans")).toHaveLength(1);
-    expect(db.rows("approvals")).toHaveLength(3);
+    expect(db.rows("approvals")).toHaveLength(0);
     expect(db.rows("account_state_meta")).toHaveLength(1);
   });
 
@@ -190,18 +189,20 @@ describe("save → load through the (schema-checked) fake", () => {
     expect((await loadAccountState(db, accountId)).state.routineOn).toEqual({ "Founder content engine": true });
   });
 
-  it("an approval decision persists and reads back", async () => {
+  it("the demo approval cards are never written for a real account, and the runtime's approvals are never read as them", async () => {
     const accountId = await createAccount(db);
-    await saveAccountState(db, accountId, initialState);
-    expect((await loadAccountState(db, accountId)).state.apStatus).toEqual(["pending", "pending", "pending"]);
     await saveAccountState(db, accountId, { ...initialState, apStatus: ["approved", "pending", "held"] }, { userId: "user-1" });
-    expect((await loadAccountState(db, accountId)).state.apStatus).toEqual(["approved", "pending", "held"]);
-    const decided = db.rows("approvals").find((a) => a.client_key === "demo-ap-0")!;
-    expect(decided).toMatchObject({ status: "approved", decided_by: "user-1" });
-    // runtime-created approvals (no client_key) are untouched by the demo upsert
-    db.seed("approvals", [{ account_id: accountId, title: "Real one", status: "pending" }]);
+    expect(db.rows("approvals")).toHaveLength(0);
+    expect(db.callsFor("approvals")).toHaveLength(0);
+    // runtime-created approvals (and a legacy demo-ap row from before 2026-09-02) are left alone and not hydrated into apStatus
+    db.seed("approvals", [
+      { account_id: accountId, title: "Real one", status: "pending" },
+      { account_id: accountId, client_key: "demo-ap-0", title: "legacy demo card", status: "approved" },
+    ]);
     await saveAccountState(db, accountId, initialState);
-    expect(db.rows("approvals")).toHaveLength(4);
+    expect(db.rows("approvals")).toHaveLength(2);
+    expect((await loadAccountState(db, accountId)).state.apStatus).toEqual(initialState.apStatus);
+    expect(db.callsFor("approvals")).toHaveLength(0);
   });
 
   it("chat messages append in order across saves", async () => {

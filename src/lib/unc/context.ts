@@ -13,6 +13,7 @@ const LIST_CAP = 10;
 
 export function buildUncContext(S: PlatformState) {
   const gm = goalMath({ goalTitle: S.goalTitle, baselineNum: S.baselineNum, deadline: S.deadline, currency: S.currency });
+  const baselineSet = S.baselineNum !== null;
 
   const approvals = AP_DATA.slice(0, LIST_CAP).map((a, i) => ({
     routine: a.sys,
@@ -48,16 +49,17 @@ export function buildUncContext(S: PlatformState) {
       title: S.goalTitle,
       currency: S.currency,
       target: gm.target,
-      baseline: gm.baseline,
-      current: gm.cur,
+      // baseline NULL in the account → these are unknown, not the demo 28,400 (Unc must ask, not invent)
+      baseline: baselineSet ? gm.baseline : null,
+      current: baselineSet ? gm.cur : null,
       deadline: S.deadline,
       daysLeft: gm.daysLeftN,
-      pacePerDay: Math.round(gm.pace),
-      neededPerDay: Math.round(gm.needed),
-      projectedAtDeadline: gm.proj,
-      gapAtDeadline: Math.round(gm.gap),
-      onTrack: gm.onTrack,
-      progress: gm.goalPct,
+      pacePerDay: baselineSet ? Math.round(gm.pace) : null,
+      neededPerDay: baselineSet ? Math.round(gm.needed) : null,
+      projectedAtDeadline: baselineSet ? gm.proj : null,
+      gapAtDeadline: baselineSet ? Math.round(gm.gap) : null,
+      onTrack: baselineSet ? gm.onTrack : null,
+      progress: baselineSet ? gm.goalPct : null,
       otherGoals: S.obCats.slice(1).map((k) => S.goalTexts[k]).filter(Boolean),
     },
     founder: {
