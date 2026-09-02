@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
@@ -12,8 +12,10 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "billing_events",
       "business_profiles",
       "chat_messages",
+      "connector_secrets",
       "connectors",
       "goals",
+      "oauth_states",
       "plans",
       "receipts",
       "resource_profiles",
@@ -37,6 +39,11 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.chat_messages.enums.thread).toEqual(new Set(["corner", "onboarding", "human"]));
     expect(s.approvals.uniques).toContainEqual({ columns: ["account_id", "client_key"], partialNotNull: "client_key" });
     expect(s.connectors.uniques).toContainEqual({ columns: ["account_id", "platform"] });
+    expect(s.connectors.columns.has("sync_ref")).toBe(true); // 0005
+    expect(s.connector_secrets.primaryKey).toEqual(["connector_id"]);
+    expect([...s.connector_secrets.columns]).toEqual(expect.arrayContaining(["ciphertext", "iv", "tag", "key_version"]));
+    expect(s.oauth_states.primaryKey).toEqual(["state"]);
+    expect([...s.oauth_states.columns]).toEqual(expect.arrayContaining(["account_id", "platform", "code_verifier", "shop", "expires_at"]));
   });
 
   it("rejects unknown tables and columns loudly", async () => {
