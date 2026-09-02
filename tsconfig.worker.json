@@ -13,6 +13,6 @@
     "sourceMap": true,
     "plugins": []
   },
-  "include": ["src/worker/**/*.ts", "src/lib/runtime/**/*.ts", "src/lib/platform/catalog.ts"],
+  "include": ["src/worker/**/*.ts", "src/lib/runtime/**/*.ts", "src/lib/telemetry/**/*.ts", "src/lib/platform/catalog.ts"],
   "exclude": ["node_modules", "**/__tests__/**", "src/lib/runtime/store/supabase.ts"]
 }

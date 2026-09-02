@@ -10,54 +10,11 @@ import { createLogger } from "./log";
 import { readHeartbeatFile, Worker } from "./loop";
 import { createAnthropicLlmClient } from "./providers/llmDecision";
 import { triggerRun, WORKER_RUN_MODE } from "./service";
+import { parseArgs } from "./cli";
+import { runBenchmarks, runMeasure, runSelfReview } from "./telemetry";
 import { getStore } from "../lib/runtime/store";
 import { setEnabled } from "../lib/runtime/versioning";
-import { defaultAccountsSource, defaultCredentialProvider, describeWiring } from "./wiring";
-
-export interface CliArgs {
-  intervalSec: number;
-  heartbeatPath: string;
-  healthPort: number | null;
-  once: boolean;
-  enable: string[];
-  /** Routines to dry-run immediately (manual trigger), regardless of schedule. */
-  run: string[];
-  accountId: string;
-}
-
-export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { intervalSec: 60, heartbeatPath: ".unc-worker/heartbeat.json", healthPort: null, once: false, enable: [], run: [], accountId: "demo" };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    const next = () => argv[++i];
-    switch (a) {
-      case "--interval":
-        args.intervalSec = Math.max(5, Number(next()) || 60);
-        break;
-      case "--heartbeat":
-        args.heartbeatPath = next();
-        break;
-      case "--health-port":
-        args.healthPort = Number(next()) || null;
-        break;
-      case "--once":
-        args.once = true;
-        break;
-      case "--enable":
-        args.enable = (next() ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-        break;
-      case "--run":
-        args.run = (next() ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-        break;
-      case "--account":
-        args.accountId = next();
-        break;
-      default:
-        throw new Error(`unknown argument ${a}`);
-    }
-  }
-  return args;
-}
+import { defaultAccountsSource, defaultCredentialProvider, describeWiring, serviceDb } from "./wiring";
 
 export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   const args = parseArgs(argv);
@@ -78,6 +35,26 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   for (const routineId of args.run) {
     const result = await triggerRun(deps, { accountId: args.accountId, routineId, triggeredBy: "manual" }, worker.adapters);
     log.info("run.receipts", { routineId, runId: result.runId, status: result.status, receipts: result.receipts.map((r) => `[${r.kind}] ${r.description}`) });
+  }
+
+  // Telemetry one-shots (the "improves over time" loops). Each runs across the accounts
+  // source (or --account) and the process exits afterwards, like --once.
+  if (args.measure || args.selfReview || args.benchmarks) {
+    const telemetry = { store, accounts, reader: worker.adapters.reader, db: serviceDb(), llm, log };
+    const only = args.accountGiven ? args.accountId : undefined;
+    if (args.measure) {
+      const r = await runMeasure(telemetry, { accountId: only });
+      log.info("worker.measure", { accounts: r.accounts, measured: r.measured, skipped: r.skipped });
+    }
+    if (args.selfReview) {
+      const r = await runSelfReview(telemetry, { accountId: only });
+      log.info("worker.self_review", { accounts: r.accounts, written: r.written, alreadyDone: r.alreadyDone });
+    }
+    if (args.benchmarks) {
+      const r = await runBenchmarks(telemetry);
+      log.info("worker.benchmarks", { ...r });
+    }
+    if (!args.once) return;
   }
 
   if (args.once) {

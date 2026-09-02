@@ -66,7 +66,12 @@ Flags (all optional):
 | `--once` | off | Run one tick, exit. |
 | `--enable A,B` | — | `setEnabled(true)` those catalog routines for `--account` on start. MemoryStore starts empty, so nothing is scheduled until something is enabled. |
 | `--run A,B` | — | Dry-run those routines immediately (manual trigger), printing the receipt trail. |
-| `--account <id>` | `demo` | Account the two flags above apply to. |
+| `--account <id>` | `demo` | Account the two flags above apply to (and, when given explicitly, the only account the telemetry one-shots below run for). |
+| `--measure` | off | Measure every routine's KPI contract against actuals → `routine_outcomes`, then exit. Daily. |
+| `--self-review` | off | Write Unc's weekly self-review per account → `self_reviews` (idempotent per ISO week), then exit. Weekly. |
+| `--benchmarks` | off | Aggregate opted-in accounts' outcomes into anonymised p50/p75 (n ≥ 5 only) → `benchmarks`, then exit. Weekly. |
+
+The three telemetry flags are documented, with the suggested cron, in `docs/IMPROVEMENT-LOOP.md`.
 
 Logs are JSON lines on stdout: `worker.start`, `tick.start`/`tick.end`, `run.start`/`run.finish`,
 `run.error`, `tick.budget_exhausted`, `tick.stopping`, `read.ok`/`read.failed`,
