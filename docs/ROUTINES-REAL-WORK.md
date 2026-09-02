@@ -94,9 +94,10 @@ The `check` for each lives in its skill file and is unit-tested on fixture accou
 
 ## Follow-ups outside this change
 
-- `src/lib/runtime/availability.ts` (setup agent's file) still gates on **every** read platform, so
-  D01-W01 shows "needs Gorgias connected" and `canEnable = false` even though its reads are optional.
-  One-line fix: skip `n.optional` reads in `readPlatforms`, or read `spec.minimum.platforms`.
+- ~~`availability.ts` gates on every read platform~~ — done (closing pass): `requiredPlatforms`
+  (non-optional reads + `spec.minimum.platforms`) is the only gate; `helpfulPlatforms` /
+  `betterWith` feed the "Better with Gorgias, LinkedIn connected" hint on the row and the detail.
+  D01-W01 is `ready` with nothing connected.
 - Calendar has no connector yet; Meeting brief asks for HubSpot or the founder's note until it does.
 - Wave-2 routines keep their check → decide chains (they mutate; the produce step is not theirs yet).
 

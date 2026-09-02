@@ -100,7 +100,7 @@ describe("availability by business type (src/lib/runtime/availability.ts)", () =
       expect(fitsBusiness({ id }, UNKNOWN)).toBe(true);
       expect(fitsBusiness({ id }, null)).toBe(true);
     }
-    expect(routineAvailability(CATALOG_SPEC_BY_ID["D01-W01"], [], SERVICES)).toMatch(/^needs_connector:/);
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D01-W01"], [], SERVICES)).toBe("ready"); // every read optional — a site profile is enough
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D04-W01"], ["hubspot"], SERVICES)).toBe("ready");
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify", "klaviyo"], STORE)).toBe("ready");
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify", "klaviyo"])).toBe("ready"); // no model given: as before

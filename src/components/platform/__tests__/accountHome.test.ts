@@ -419,7 +419,7 @@ describe("Home in accounts mode — a brand-new account (nothing typed yet)", ()
 /* ---------------- Routines view + routine detail ---------------- */
 
 const listingOff = (): RoutinesStateListing => ({
-  routines: ALL_SYSTEMS.map<RoutineStateView>((sys) => ({ routineId: sys.id, name: sys.name, category: sys.cat, wave: 1, enabled: false, version: 1, availability: "draft_only" as RoutineStateView["availability"], availabilityCopy: "draft-only for now", canEnable: true, recommended: sys.id === "D01-W01", lastRun: null, lastDraft: null })),
+  routines: ALL_SYSTEMS.map<RoutineStateView>((sys) => ({ routineId: sys.id, name: sys.name, category: sys.cat, wave: 1, enabled: false, version: 1, availability: "draft_only" as RoutineStateView["availability"], availabilityCopy: "draft-only for now", canEnable: true, betterWith: [], betterWithCopy: null, recommended: sys.id === "D01-W01", lastRun: null, lastDraft: null })),
   recommendedFirst: ["D01-W01"],
   planChannel: "Content",
   business: { businessType: null, sells: null, storefront: null },

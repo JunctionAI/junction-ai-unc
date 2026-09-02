@@ -17,7 +17,7 @@ A **Getting set up** card on Home (accounts mode) shows these five with real sta
 ## Non-negotiables
 - **Real only.** In accounts mode every number, list, count, status and example comes from the database or a certified read. Nothing from `derive.ts` demo constants may render for a real account. If there is no data: an empty state in Unc's voice with the one next action (never a spinner forever, never a placeholder card).
 - **Demo sandbox** stays only for "Skip — explore with demo data" when not signed in, with a persistent top banner: *"Demo data — nothing here is yours. Sign in to start for real."*
-- **Routines are the product.** Routines view (accounts mode): real enabled states, "Recommended first" from the plan, honest availability ("draft-only for now", "needs Klaviyo connected"), last run + last draft per routine, turning one on triggers a dry run now.
+- **Routines are the product.** Routines view (accounts mode): real enabled states, "Recommended first" from the plan, honest availability ("draft-only for now", "needs Klaviyo connected" — only a routine's REQUIRED reads and its skill minimum's platforms gate; optional reads surface as "Better with Gorgias connected", a nudge, never a block), last run + last draft per routine, turning one on triggers a dry run now.
 - **Unc's voice everywhere** (README §Voice): first person, proposes, numbers over adjectives, never hype; banned phrases per the eval rubric.
 - **Design system** stays: tokens, pills, cards, chat-bubble grammar, amber only where a decision waits (≤2 per screen), cyan spent like money, jfloat/jpulse only.
 - **Playbooks in the answers**: chat and decision prompts recall relevant playbooks so expertise is visible in real replies.
@@ -28,6 +28,9 @@ A **Getting set up** card on Home (accounts mode) shows these five with real sta
 - Home, no KPI: "Connect {the founder's first platform} and I'll read your last 90 days tonight." — the platform is theirs (picked or spotted); with none: "Connect your first data source and I'll read your last 90 days tonight." (link)
 - The bar with no Junction benchmark: labelled "Industry reference — not yet from Junction accounts"; with no own value: "Not measured yet".
 - Routines with nothing on: "Your plan starts with Content — this one first." (recommended card)
+- Routine row, a required source missing (`needs_connector`): "needs Klaviyo connected" — switch off. Only the spec's required reads + `minimum.platforms` gate (`requiredPlatforms` in `src/lib/runtime/availability.ts`).
+- Routine row, only optional sources missing: "drafts only — nothing goes out without you · **Better with Gorgias, LinkedIn connected**" — the switch stays live; the hint never shows under a block (`betterWith` / `betterWithCopy`).
+- Routine detail, from the skill card: "**Needs:** a scanned site profile or three things I know about the business · I ask you for about the business when I don't have it" (`spec.minimum`); with everything required in hand and optional sources missing: "Everything this routine must have is in hand. Better with Klaviyo connected — then it reads real numbers too."
 - Connectors, platform not configured: "Not switched on yet — I'll tell you the moment it is." Owner sees "Connect with a token" instead.
 
 ## Unc-first (founder direction, 2026-09-02)

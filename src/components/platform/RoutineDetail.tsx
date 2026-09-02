@@ -5,7 +5,7 @@ import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
 import { receiptHandle } from "@/lib/platform/approvals";
 import type { PlatformVals } from "@/lib/platform/derive";
 import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
-import { readPlatforms } from "@/lib/runtime/availability";
+import { readPlatforms, requiredPlatforms } from "@/lib/runtime/availability";
 import type { Node } from "@/lib/runtime/types";
 import RunNowPanel, { type RunNowProps } from "./RunNowPanel";
 import DraftCard, { type ArtifactView } from "./DraftCard";
@@ -144,8 +144,8 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
   const sources = spec ? readPlatforms(spec) : [];
   const have = new Set(connected ?? []);
   const minimum = spec?.minimum ?? null;
-  /* With a stated minimum, only its required platforms gate the routine; the rest help. */
-  const required = new Set<string>(minimum ? minimum.platforms : sources);
+  /* Only required reads + the stated minimum's platforms gate the routine; optional reads help ("Better with …"). */
+  const required = new Set<string>(spec ? requiredPlatforms(spec) : []);
   const stateText = accounts ? (mine ? (mine.enabled ? "On" : "Off") : "…") : V.selState;
   const stateColor = accounts ? (mine?.enabled ? "oklch(0.45 0.1 240)" : "oklch(0.52 0.03 260)") : V.selStateColor;
   const stateBg = accounts ? (mine?.enabled ? "oklch(0.94 0.03 225)" : "oklch(0.945 0.008 260)") : V.selStateBg;
@@ -375,7 +375,7 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
               </>
             ) : sources.some((p) => !have.has(p)) ? (
               <>
-                Everything this routine must have is in hand. Connect {sources.filter((p) => !have.has(p)).map((p) => NAME_BY_PLATFORM[p] ?? p).join(", ")} and it reads real numbers too.{" "}
+                Everything this routine must have is in hand. Better with {sources.filter((p) => !have.has(p)).map((p) => NAME_BY_PLATFORM[p] ?? p).join(", ")} connected — then it reads real numbers too.{" "}
                 <button onClick={V.goConnectors} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", padding: 0 }}>
                   Open Connectors →
                 </button>

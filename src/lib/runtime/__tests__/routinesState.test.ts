@@ -1,10 +1,11 @@
-/* Routines state (GET/POST /api/routines/state): availability from the spec vs the connected
-   platforms, the listing (enabled, version, last run, last draft, recommended-first from the
+/* Routines state (GET/POST /api/routines/state): availability from the spec's REQUIRED reads
+   (+ the skill minimum's platforms) vs the connected platforms — optional reads only ever add a
+   "Better with …" hint — the listing (enabled, version, last run, last draft, recommended-first from the
    plan) on MemoryStore + the schema-checked fake, and switching a routine on. */
 
 import { describe, expect, it } from "vitest";
 import { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
-import { availabilityCopy, canEnable, readPlatforms, routineAvailability, STORE_ONLY_ROUTINES } from "../availability";
+import { availabilityCopy, betterWith, betterWithCopy, canEnable, helpfulPlatforms, readPlatforms, requiredPlatforms, routineAvailability, STORE_ONLY_ROUTINES } from "../availability";
 import { CATALOG_SPEC_BY_ID, CATALOG_SPECS, WAVE_1_IDS } from "../catalog-specs";
 import { recommendedFirstFrom, routinesStateForAccount, setRoutineEnabled } from "../routinesState";
 import { MemoryStore } from "../store/memory";
@@ -21,11 +22,32 @@ describe("availability", () => {
     expect(readPlatforms(CATALOG_SPEC_BY_ID["D03-W03"])).toEqual(["shopify"]);
   });
 
-  it("wave_2 for anything that mutates, needs_connector for a missing card platform, ready / draft_only otherwise", () => {
+  it("splits the card platforms into what gates (required reads + the minimum's platforms) and what helps (optional reads + the minimum's helpful)", () => {
+    // D01-W01: every read optional, minimum names no platform ⇒ nothing gates, three help
+    expect(requiredPlatforms(CATALOG_SPEC_BY_ID["D01-W01"])).toEqual([]);
+    expect(helpfulPlatforms(CATALOG_SPEC_BY_ID["D01-W01"])).toEqual(["gorgias", "linkedin", "shopify"]);
+    // D05-W02: the checkouts read is required (and the minimum says shopify); Klaviyo is optional
+    expect(requiredPlatforms(CATALOG_SPEC_BY_ID["D05-W02"])).toEqual(["shopify"]);
+    expect(helpfulPlatforms(CATALOG_SPEC_BY_ID["D05-W02"])).toEqual(["klaviyo"]);
+    // a wave-2 research chain with plain reads: every card read is required, nothing merely helps
+    expect(requiredPlatforms(CATALOG_SPEC_BY_ID["D03-W03"])).toEqual(["shopify"]);
+    expect(helpfulPlatforms(CATALOG_SPEC_BY_ID["D03-W03"])).toEqual([]);
+  });
+
+  it("wave_2 for anything that mutates, needs_connector only for a missing REQUIRED platform, ready / draft_only otherwise; optional reads surface as 'Better with …'", () => {
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads", "shopify"])).toBe("wave_2");
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], [])).toBe("needs_connector:shopify");
-    expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify"])).toBe("needs_connector:klaviyo");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify"])).toBe("ready"); // Klaviyo is optional — a hint, not a block
+    expect(betterWith(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify"])).toEqual(["klaviyo"]);
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify", "klaviyo"])).toBe("ready");
+    expect(betterWith(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify", "klaviyo"])).toEqual([]);
+    // the founder content engine reads nothing it must have: ready with nothing connected, better with its three sources
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D01-W01"], [])).toBe("ready");
+    expect(betterWith(CATALOG_SPEC_BY_ID["D01-W01"], ["shopify"])).toEqual(["gorgias", "linkedin"]);
+    expect(betterWithCopy(["gorgias", "linkedin"])).toBe("Better with Gorgias, LinkedIn connected");
+    expect(betterWithCopy([])).toBeNull();
+    // no hint under a block — a blocked routine never reads as doubly blocked
+    expect(betterWith(CATALOG_SPEC_BY_ID["D05-W02"], [])).toEqual([]);
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D03-W03"], [])).toBe("needs_connector:shopify");
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D03-W03"], ["shopify"])).toBe("draft_only");
     expect(availabilityCopy("needs_connector:klaviyo")).toBe("needs Klaviyo connected");
@@ -74,7 +96,10 @@ describe("routinesStateForAccount", () => {
     const ac = listing.routines.find((r) => r.routineId === "D05-W02")!;
     expect(ac).toMatchObject({ name: "Abandoned cart recovery", category: "Email & SMS", wave: 1, enabled: false, version: 1, availability: "ready", canEnable: true, recommended: true, lastRun: null, lastDraft: null });
     expect(listing.routines.find((r) => r.routineId === "D02-W01")).toMatchObject({ availability: "wave_2", canEnable: false, recommended: false });
-    expect(listing.routines.find((r) => r.routineId === "D01-W01")).toMatchObject({ availability: "needs_connector:gorgias", availabilityCopy: "needs Gorgias connected", recommended: true });
+    // optional reads never block: the content engine is ready with Shopify alone, better with the other two
+    expect(listing.routines.find((r) => r.routineId === "D01-W01")).toMatchObject({ availability: "ready", availabilityCopy: "drafts only — nothing goes out without you", canEnable: true, betterWith: ["gorgias", "linkedin"], betterWithCopy: "Better with Gorgias, LinkedIn connected", recommended: true });
+    expect(ac.betterWith).toEqual([]);
+    expect(ac.betterWithCopy).toBeNull();
     // demo/no DB: nothing connected, no plan
     const demo = await routinesStateForAccount({ store, db: null }, "demo");
     expect(demo.connected).toEqual([]);

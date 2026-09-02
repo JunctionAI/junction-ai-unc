@@ -6,13 +6,18 @@
                                flows) and this business has none — hidden from "Recommended",
                                shown in the library with the honest line
      wave_2                    the chain mutates (execute node): every executor refuses today
-     needs_connector:<p>       a read platform with a connector card is not connected
-     ready                     launch wave (wave 1), every read answerable — drafts only
+     needs_connector:<p>       a REQUIRED read platform (or one the skill's stated minimum
+                               names) with a connector card is not connected
+     ready                     launch wave (wave 1), every required read answerable — drafts only
      draft_only                wave-2 chain without a mutation (research / notify): runnable,
                                hands over drafts, not in the launch wave
 
-   Research sources (web, llm_search, calendar) never gate a routine; they have no card.
-   An unknown business type (nothing scanned, nothing said) never hides anything. */
+   Optional reads (ReadNode.optional — the wave-1 drafting routines) and the skill minimum's
+   `helpful` platforms never gate: a founder with only a site profile still gets a draft. They
+   surface as the hint "Better with Gorgias, LinkedIn connected" (betterWith / betterWithCopy),
+   which is a nudge, never a block. Research sources (web, llm_search, calendar) never gate a
+   routine; they have no card. An unknown business type (nothing scanned, nothing said) never
+   hides anything. */
 
 import { CONNECTOR_PLATFORMS } from "../db/mapping";
 import { hasStore, modelUnknown, type BusinessModel } from "../unc/businessType";
@@ -47,10 +52,28 @@ export function notForBusinessType(spec: Pick<RoutineSpec, "id">, model: Busines
 /** True when the routine fits the business (or nothing is known about it). */
 export const fitsBusiness = (spec: Pick<RoutineSpec, "id">, model: BusinessModel | null | undefined): boolean => notForBusinessType(spec, model) === null;
 
-/** Read platforms that have a connector card, in chain order, unique. */
+/** Every read platform that has a connector card, in chain order, unique (required and optional). */
 export function readPlatforms(spec: RoutineSpec): Platform[] {
   const out: Platform[] = [];
   for (const n of spec.nodes) if (n.kind === "read" && CARD_PLATFORMS.has(n.source) && !out.includes(n.source)) out.push(n.source);
+  return out;
+}
+
+/** The card platforms that GATE the routine: its required (non-optional) reads plus whatever the
+    skill's stated minimum names, in chain order, unique. */
+export function requiredPlatforms(spec: RoutineSpec): Platform[] {
+  const out: Platform[] = [];
+  for (const n of spec.nodes) if (n.kind === "read" && !n.optional && CARD_PLATFORMS.has(n.source) && !out.includes(n.source)) out.push(n.source);
+  for (const p of spec.minimum?.platforms ?? []) if (CARD_PLATFORMS.has(p) && !out.includes(p)) out.push(p);
+  return out;
+}
+
+/** The card platforms that HELP but never gate: optional reads plus the minimum's `helpful`,
+    minus anything required, in chain order, unique. */
+export function helpfulPlatforms(spec: RoutineSpec): Platform[] {
+  const required = new Set(requiredPlatforms(spec));
+  const out: Platform[] = [];
+  for (const p of [...readPlatforms(spec), ...(spec.minimum?.helpful ?? [])]) if (CARD_PLATFORMS.has(p) && !required.has(p) && !out.includes(p)) out.push(p);
   return out;
 }
 
@@ -58,9 +81,17 @@ export function routineAvailability(spec: RoutineSpec, connected: Iterable<strin
   if (!fitsBusiness(spec, model)) return "not_for_business_type";
   if (spec.mutates) return "wave_2";
   const have = new Set(connected);
-  const missing = readPlatforms(spec).find((p) => !have.has(p));
+  const missing = requiredPlatforms(spec).find((p) => !have.has(p));
   if (missing) return `needs_connector:${missing}`;
   return spec.wave === 1 ? "ready" : "draft_only";
+}
+
+/** Helpful platforms not yet connected — the "Better with …" hint. Empty when the routine is
+    blocked for another reason (a hint under a block would read as a second block). */
+export function betterWith(spec: RoutineSpec, connected: Iterable<string>, model?: BusinessModel | null): Platform[] {
+  if (!canEnable(routineAvailability(spec, connected, model))) return [];
+  const have = new Set(connected);
+  return helpfulPlatforms(spec).filter((p) => !have.has(p));
 }
 
 export function missingPlatform(a: Availability): string | null {
@@ -89,4 +120,11 @@ export function availabilityCopy(a: Availability): string {
 
 export function canEnable(a: Availability): boolean {
   return a === "ready" || a === "draft_only";
+}
+
+/** The hint line for helpful-but-missing platforms (the copy floor in docs/PRODUCT-EXPERIENCE.md);
+    null with nothing to suggest. A nudge, never a block. */
+export function betterWithCopy(platforms: readonly string[]): string | null {
+  if (!platforms.length) return null;
+  return `Better with ${platforms.map((p) => NAME_BY_PLATFORM[p] ?? p).join(", ")} connected`;
 }

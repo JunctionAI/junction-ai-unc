@@ -4,6 +4,9 @@
                           recommended (the agreed plan's phase-1, wave-1 routines)
      once                 recommendedFirst[] · planChannel · connected platforms
 
+   Only a routine's REQUIRED reads (and its skill minimum's platforms) gate availability; optional
+   reads surface as "Better with X connected" (betterWith) — a hint, never a block.
+
    Three store reads (states, newest runs, newest draft receipts) + three DB reads (connectors,
    the latest plan, the business profile) — never one query per routine. Store-agnostic
    (MemoryStore in tests). The business type (business_profiles.profile — scan / founder) gates
@@ -13,7 +16,7 @@
 import { unwrap, type DbClient } from "../db/types";
 import { ALL_SYSTEMS } from "../platform/catalog";
 import { modelFromProfile, type BusinessModel } from "../unc/businessType";
-import { availabilityCopy, canEnable, fitsBusiness, routineAvailability, type Availability } from "./availability";
+import { availabilityCopy, betterWith, betterWithCopy, canEnable, fitsBusiness, routineAvailability, type Availability } from "./availability";
 import { CATALOG_SPECS, CATALOG_SPEC_BY_ID } from "./catalog-specs";
 import type { Store } from "./store/interface";
 import type { Receipt, RunStatus } from "./types";
@@ -44,6 +47,10 @@ export interface RoutineStateView {
   availability: Availability;
   availabilityCopy: string;
   canEnable: boolean;
+  /** Helpful platforms (optional reads, the skill minimum's `helpful`) not yet connected — a nudge, never a block. */
+  betterWith: string[];
+  /** "Better with Gorgias, LinkedIn connected", or null. */
+  betterWithCopy: string | null;
   recommended: boolean;
   lastRun: RoutineLastRun | null;
   lastDraft: RoutineLastDraft | null;
@@ -136,6 +143,7 @@ export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId
     const def = catalog.get(spec.id);
     const st = stateById.get(spec.id);
     const availability = routineAvailability(spec, connected, business);
+    const helpful = betterWith(spec, connected, business);
     return {
       routineId: spec.id,
       name: def?.name ?? spec.name,
@@ -146,6 +154,8 @@ export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId
       availability,
       availabilityCopy: availabilityCopy(availability),
       canEnable: canEnable(availability),
+      betterWith: helpful,
+      betterWithCopy: betterWithCopy(helpful),
       recommended: recommendedFirst.includes(spec.id),
       lastRun: lastRunById.get(spec.id) ?? null,
       lastDraft: lastDraftById.get(spec.id) ?? null,
