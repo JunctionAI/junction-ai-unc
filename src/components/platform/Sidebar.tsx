@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
 import type { Persistence } from "@/lib/db/useAccountPersistence";
 import type { Entitlement } from "@/lib/billing/gate";
 import { openPortal } from "@/lib/billing/clientActions";
+import { connectorSummary, enabledCount, publishPersistence, useAccountFacts } from "@/lib/unc/accountFacts";
+import DemoBanner from "./DemoBanner";
 
 const navBtn: React.CSSProperties = {
   display: "flex",
@@ -37,12 +40,31 @@ function planLine(e: Entitlement): { text: string; action: string } | null {
   }
 }
 
-/** `account` is null in demo mode (no Supabase env / no session) and the sidebar renders exactly as Phase 1.
+/** Accounts-mode copy under the nav: real connector state, or the honest empty line while the facts load. */
+export function accountConnectorLine(facts: Parameters<typeof connectorSummary>[0], loading: boolean): string {
+  if (!facts && loading) return "Reading your connections…";
+  return connectorSummary(facts);
+}
+
+/** `account` is null in demo mode (no Supabase env / no session) and the sidebar renders exactly as Phase 1,
+    plus the demo banner over the whole app. In accounts mode the connector line and the routines count
+    come from the account's own rows (src/lib/unc/accountFacts.ts) — never the catalog's demo defaults.
     `billing` is null unless billing is configured; then it adds the plan/trial line.
     `onModels` (DB mode only) opens the "Models" settings — which brain for which job.
     `onWhatUncKnows` (DB mode only) opens "What Unc knows" — the founder's view of his memory. */
 export default function Sidebar({ V, account = null, billing = null, onModels, onWhatUncKnows }: { V: PlatformVals; account?: Persistence | null; billing?: Entitlement | null; onModels?: () => void; onWhatUncKnows?: () => void }) {
   const plan = billing ? planLine(billing) : null;
+  const accountMode = account?.mode ?? null;
+  const accountId = account?.accountId ?? null;
+  useEffect(() => {
+    publishPersistence(accountMode ? { mode: accountMode, accountId } : null);
+  }, [accountMode, accountId]);
+  const factsState = useAccountFacts();
+  const inAccount = !!account || factsState.mode === "account";
+  const demo = !account && factsState.mode === "demo";
+  const facts = inAccount ? factsState.facts : null;
+  const routinesCount = inAccount ? `${enabledCount(facts)} on` : String(V.libTotal);
+  const connLine = inAccount ? accountConnectorLine(facts, factsState.loading) : V.connSummary;
   return (
     <aside
       style={{
@@ -54,10 +76,11 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
         flexDirection: "column",
         padding: "24px 16px 20px",
         position: "sticky",
-        top: 0,
-        height: "100vh",
+        top: "var(--demo-banner-h, 0px)",
+        height: "calc(100vh - var(--demo-banner-h, 0px))",
       }}
     >
+      {demo && <DemoBanner />}
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 8px" }}>
         <img src="/brand/mascot-small.png" alt="Junction" style={{ width: 42, height: 45, objectFit: "contain" }} />
         <div>
@@ -73,7 +96,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
           <span style={dot(V.strategyDot)}></span>Strategy
         </button>
         <button onClick={V.goSystems} className="hov-bg-navylift" style={{ ...navBtn, background: V.systemsBg }}>
-          <span style={dot(V.systemsDot)}></span>Routines <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--on-navy-dim)" }}>{V.libTotal}</span>
+          <span style={dot(V.systemsDot)}></span>Routines <span data-testid="sidebar-routines-count" style={{ marginLeft: "auto", fontSize: 11, color: "var(--on-navy-dim)" }}>{routinesCount}</span>
         </button>
         <button onClick={V.goConnectors} className="hov-bg-navylift" style={{ ...navBtn, background: V.connectorsBg }}>
           <span style={dot(V.connectorsDot)}></span>Connectors
@@ -84,9 +107,10 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
         <button
           onClick={V.goConnectors}
           className="hov-fg-onnavy"
+          data-testid="sidebar-connector-line"
           style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", fontSize: 12, color: "oklch(0.82 0.03 250)", lineHeight: 1.6 }}
         >
-          {V.connSummary} →
+          {connLine} →
         </button>
         {account ? (
           <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid oklch(0.34 0.05 262)", fontSize: 10, lineHeight: 1.6, color: "var(--faint-on-navy)" }}>
@@ -125,7 +149,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
                 </button>
               </div>
             )}
-            <div style={{ marginTop: 6 }}>No live connectors or outward actions.</div>
+            <div style={{ marginTop: 6 }}>Nothing sends or spends without your okay.</div>
           </div>
         ) : (
           <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid oklch(0.34 0.05 262)", fontSize: 10, lineHeight: 1.6, color: "var(--faint-on-navy)" }}>
