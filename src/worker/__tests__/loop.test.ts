@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { runRoutine } from "../../lib/runtime/engine";
 import { MemoryStore } from "../../lib/runtime/store/memory";
 import { setEnabled } from "../../lib/runtime/versioning";
-import { budgetMoveSpec, clock, input, SPEND_FIXTURE } from "../../lib/runtime/__tests__/helpers";
+import { budgetMoveSpec, clock, FakeProducer, input, SPEND_FIXTURE } from "../../lib/runtime/__tests__/helpers";
 import { StaticAccountsSource, type WorkerAccount } from "../accounts";
 import { FixtureCredentialProvider } from "../credentials";
 import { heartbeatIsFresh } from "../health";
@@ -21,7 +21,7 @@ function harness(startAt = "2026-09-02T07:00:30.000Z") {
   const clk = clock(startAt);
   const store = new MemoryStore();
   const { sink, entries } = memorySink();
-  const deps: WorkerDeps = { store, accounts: new StaticAccountsSource([ACCT]), credentials: new FixtureCredentialProvider(), llm: null, now: clk.now, log: createLogger(sink, {}, clk.now) };
+  const deps: WorkerDeps = { store, accounts: new StaticAccountsSource([ACCT]), credentials: new FixtureCredentialProvider(), llm: null, producer: new FakeProducer(), db: null, now: clk.now, log: createLogger(sink, {}, clk.now) };
   return { clk, store, deps, entries };
 }
 
@@ -60,12 +60,17 @@ describe("a full loop tick against MemoryStore", () => {
     expect(runs[0].snapshot).toBeUndefined();
 
     const receipts = await store.listReceipts("acct-1", { runId: runs[0].id });
-    expect(receipts.map((r) => r.kind)).toEqual(["read", "read", "read", "notification", "draft", "draft", "draft"]);
+    // read ×3 → the produce step's "Drafted:" receipt → the gate preview → the run receipt
+    expect(receipts.map((r) => r.kind)).toEqual(["read", "read", "read", "draft", "draft", "draft"]);
     // reads are fixture-provenanced, never mistaken for live data
     for (const r of receipts.filter((x) => x.kind === "read")) expect(r.payload.provenance).toBe("fixture");
-    // the gate became a "Would ask" draft preview — no approval was created in dry run
+    // the artifact is stored and linked from its draft receipt
+    const drafted = receipts.find((r) => r.description.startsWith("Drafted:"))!;
+    expect((await store.listArtifacts("acct-1")).map((a) => a.id)).toEqual([drafted.payload.artifactId]);
+    // the gate became a "Would ask" draft preview carrying the artifact — no approval was created in dry run
     const gate = receipts.find((r) => r.description.startsWith("Would ask"))!;
-    expect(gate.description).toBe("Would ask Tom: 5 carts abandoned this week (NZD 510) — recovery drafts ready");
+    expect(gate.description).toBe("Would ask Tom: 3 founder posts: why we ship from Auckland — from 5 carts abandoned this week");
+    expect((gate.payload.approvalPreview as { artifactId: string }).artifactId).toBe(drafted.payload.artifactId);
     expect(await store.listApprovals("acct-1")).toHaveLength(0);
     // no mutation receipts, no spend
     expect(receipts.some((r) => r.kind === "mutation")).toBe(false);
