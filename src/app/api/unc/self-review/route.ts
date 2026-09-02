@@ -17,6 +17,7 @@ import { createTextClient } from "@/lib/llm/router";
 import { requireAccountSession, type AccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { homeTelemetryForAccount } from "@/lib/telemetry/home";
+import { afterSelfReview } from "@/lib/brain/hooks";
 import { generateSelfReview, SELF_REVIEW_EFFORT, SELF_REVIEW_MAX_TOKENS, type SelfReviewLlm } from "@/lib/telemetry/selfReview";
 
 export const runtime = "nodejs";
@@ -43,6 +44,8 @@ export async function POST() {
   try {
     const store = getStore();
     const g = await generateSelfReview({ store, accountId: session.accountId, llm: reviewLlm(session.accountId, session.service) });
+    // Client Brain: lessons + change rationale become durable memories (fire-and-forget; never blocks the reply).
+    void afterSelfReview(g.record).catch(() => undefined);
     const t = await homeTelemetryForAccount(store, session.accountId);
     return Response.json({ review: t.review, author: g.author, liveFields: g.liveFields, rejected: g.rejected });
   } catch (err) {

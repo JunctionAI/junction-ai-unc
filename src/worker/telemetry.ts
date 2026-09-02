@@ -26,6 +26,7 @@ import { computeBenchmarks, type AccountBenchmarkRows } from "../lib/telemetry/b
 import { measureOutcomes, type MeasureReport } from "../lib/telemetry/outcomes";
 import { segmentsForAccount } from "../lib/telemetry/segments";
 import { generateSelfReview, weekStartUtc, type SelfReviewLlm } from "../lib/telemetry/selfReview";
+import { afterSelfReview } from "../lib/brain/hooks";
 import type { AccountsSource, WorkerAccount } from "./accounts";
 import type { Logger } from "./log";
 
@@ -103,6 +104,8 @@ export async function runSelfReview(deps: TelemetryDeps, opts: { accountId?: str
     }
     const g = await generateSelfReview({ store: deps.store, accountId: id, now: deps.now, llm: deps.llm ?? null, log: deps.log ? (event, fields) => deps.log!.info(event, fields) : undefined });
     out.written.push({ accountId: id, weekStart: g.record.weekStart, author: g.author, liveFields: g.liveFields, changes: g.record.changes.length });
+    // Client Brain: the review's lessons become memories; failures are logged, never fatal for the job.
+    try { await afterSelfReview(g.record); } catch (err) { deps.log?.warn?.("self_review.memory_hook_failed", { accountId: id, error: err instanceof Error ? err.message : String(err) }); }
   }
   deps.log?.info("self_review.done", { accounts: out.accounts, written: out.written.length, alreadyDone: out.alreadyDone.length });
   return out;
