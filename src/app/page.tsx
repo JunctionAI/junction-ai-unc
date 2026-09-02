@@ -199,7 +199,7 @@ export default function Landing() {
               margin: "20px 0 0",
             }}
           >
-            Meet Unc: He&rsquo;ll help you grow your business
+            Meet Unc: He'll help you grow your business
           </h1>
           <p
             style={{
@@ -228,6 +228,12 @@ export default function Landing() {
             <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
               5 quick questions and you&rsquo;re away&nbsp;🚀
             </span>
+          </div>
+          {/* prototype's (empty) stats row — kept for identical vertical centering of the hero column */}
+          <div style={{ display: "flex", gap: 26, marginTop: 36 }}>
+            <div />
+            <div />
+            <div />
           </div>
         </div>
         <div style={{ flex: "none", position: "relative" }}>
