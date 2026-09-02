@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
-import { availabilityCopy, canEnable, readPlatforms, routineAvailability } from "../availability";
+import { availabilityCopy, canEnable, readPlatforms, routineAvailability, STORE_ONLY_ROUTINES } from "../availability";
 import { CATALOG_SPEC_BY_ID, CATALOG_SPECS, WAVE_1_IDS } from "../catalog-specs";
 import { recommendedFirstFrom, routinesStateForAccount, setRoutineEnabled } from "../routinesState";
 import { MemoryStore } from "../store/memory";
@@ -111,5 +111,45 @@ describe("routinesStateForAccount", () => {
     const off = await setRoutineEnabled({ store, db }, ACCT, "D05-W02", false);
     expect(off.enabled).toBe(false);
     await expect(setRoutineEnabled({ store, db }, ACCT, "D99-W99", true)).rejects.toThrow(/not in the catalog/);
+  });
+});
+
+describe("routinesStateForAccount — business type", () => {
+  const ACCT2 = "00000000-0000-4000-8000-00000000acc2";
+  function services() {
+    const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT2, name: "Studio North", currency: "NZD" }]);
+    db.seed("connectors", [
+      { account_id: ACCT2, platform: "shopify", status: "connected" },
+      { account_id: ACCT2, platform: "klaviyo", status: "connected" },
+      { account_id: ACCT2, platform: "hubspot", status: "connected" },
+    ]);
+    db.seed("plans", [{ account_id: ACCT2, title: "Retention", phases: [{ n: "1", routines: ["Abandoned cart recovery", "Winback campaign prep", "Founder content engine"] }], created_at: "2026-09-01T00:00:00.000Z" }]);
+    db.seed("business_profiles", [{ account_id: ACCT2, scan_status: "done", profile: { name: "Studio North", businessType: "services", sells: "services", storefront: "none" } }]);
+    return db;
+  }
+
+  it("a services firm: store-only routines read 'For stores — not your model', can't be switched on, are never recommended — even with Shopify connected", async () => {
+    const listing = await routinesStateForAccount({ store: new MemoryStore(), db: services() }, ACCT2);
+    expect(listing.business).toEqual({ businessType: "services", sells: "services", storefront: "none" });
+    const cart = listing.routines.find((r) => r.routineId === "D05-W02")!;
+    expect(cart).toMatchObject({ availability: "not_for_business_type", availabilityCopy: "For stores — not your model", canEnable: false, recommended: false });
+    expect(listing.routines.find((r) => r.routineId === "D05-W04")).toMatchObject({ availability: "not_for_business_type", recommended: false });
+    expect(listing.recommendedFirst).toEqual(["D01-W01"]);
+    expect(listing.planChannel).toBe("Content");
+    // the rest of the library is untouched
+    expect(listing.routines.find((r) => r.routineId === "D04-W01")).toMatchObject({ availability: "ready", canEnable: true });
+    expect(listing.routines.filter((r) => r.availability === "not_for_business_type").map((r) => r.routineId)).toEqual(Object.keys(STORE_ONLY_ROUTINES));
+  });
+
+  it("no business profile (nothing scanned, nothing said): nothing is hidden", async () => {
+    const listing = await routinesStateForAccount({ store: new MemoryStore(), db: (() => {
+      const db = services();
+      db.rows("business_profiles").splice(0);
+      return db;
+    })() }, ACCT2);
+    expect(listing.business).toEqual({ businessType: null, sells: null, storefront: null });
+    expect(listing.routines.find((r) => r.routineId === "D05-W02")).toMatchObject({ availability: "ready", recommended: true });
+    expect(listing.recommendedFirst).toEqual(["D05-W02", "D01-W01"]);
   });
 });

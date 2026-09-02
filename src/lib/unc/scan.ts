@@ -18,8 +18,10 @@
 import { complete, resolveModel } from "../llm/router";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { classifyBusiness, isBusinessType, isSells, isStorefront, type BusinessType, type BusinessTypeSource, type Classification, type PlatformEvidence, type Sells, type Storefront } from "./businessType";
 
 export type Confidence = "low" | "medium" | "high";
+export type { BusinessType, Sells, Storefront, PlatformEvidence } from "./businessType";
 
 export interface BusinessProfile {
   name: string | null;
@@ -35,6 +37,37 @@ export interface BusinessProfile {
   sources: string[];
   /** Present when the scan degraded (site unreachable, thin text, analysis unavailable). */
   note?: string;
+  /* ---- business type (2026-09-03, additive — absent on profiles scanned before; read as null) ----
+     Inferred from the fetched HTML/text with evidence; null when unsure. The founder can override
+     in onboarding step 4 (businessTypeSource "founder" then wins over every later scan). */
+  businessType?: BusinessType | null;
+  sells?: Sells | null;
+  storefront?: Storefront | null;
+  businessTypeSource?: BusinessTypeSource | null;
+  /** What the classification rests on ("a Shopify storefront", "a book-a-call call to action"). */
+  typeEvidence?: string[];
+  /** Tools evidenced in the page source (pixels / scripts) — "I spotted this on your site". */
+  platformsSpotted?: PlatformEvidence[];
+}
+
+/** The classification slice of a profile, with the founder's override respected. */
+export function applyClassification(profile: BusinessProfile, c: Classification): BusinessProfile {
+  const founder = profile.businessTypeSource === "founder";
+  return {
+    ...profile,
+    businessType: founder ? profile.businessType : c.businessType,
+    sells: founder ? (profile.sells ?? c.sells) : c.sells,
+    storefront: c.storefront ?? (founder ? profile.storefront : null) ?? null,
+    businessTypeSource: founder ? "founder" : c.businessType ? "scan" : null,
+    typeEvidence: c.evidence,
+    platformsSpotted: c.platformsSpotted,
+  };
+}
+
+/** Keep the founder's own pick (and a storefront the scan already saw) when a newer scan lands. */
+export function mergeFounderOverride(fresh: BusinessProfile, previous: BusinessProfile | null): BusinessProfile {
+  if (!previous || previous.businessTypeSource !== "founder") return fresh;
+  return { ...fresh, businessType: previous.businessType ?? fresh.businessType, sells: previous.sells ?? fresh.sells, businessTypeSource: "founder" };
 }
 
 export interface SocialHandle {
@@ -167,7 +200,7 @@ async function readCapped(res: Response, max: number): Promise<string> {
   return Buffer.concat(chunks).subarray(0, max).toString("utf8");
 }
 
-interface FetchedPage {
+export interface FetchedPage {
   url: string;
   html: string;
 }
@@ -307,6 +340,12 @@ const emptyProfile = (sources: string[], confidence: Confidence, note?: string):
   signals: [],
   confidence,
   sources,
+  businessType: null,
+  sells: null,
+  storefront: null,
+  businessTypeSource: null,
+  typeEvidence: [],
+  platformsSpotted: [],
   ...(note ? { note } : {}),
 });
 
@@ -331,6 +370,25 @@ function coerceProfile(raw: unknown, sources: string[]): BusinessProfile | null 
     signals: strList(r.signals, 10, 160),
     confidence: conf,
     sources,
+    // The model may name the type from the text; the deterministic classifier (applyClassification) overrides it when it has evidence.
+    businessType: isBusinessType(r.businessType) ? r.businessType : null,
+    sells: isSells(r.sells) ? r.sells : null,
+    storefront: isStorefront(r.storefront) ? r.storefront : null,
+    businessTypeSource: isBusinessType(r.businessType) ? "scan" : null,
+    typeEvidence: [],
+    platformsSpotted: [],
+  };
+}
+
+/** The classifier's call wins where it has evidence; the model's reading fills what it left null. */
+function combineClassification(profile: BusinessProfile, c: Classification): BusinessProfile {
+  const merged = applyClassification(profile, c);
+  return {
+    ...merged,
+    businessType: merged.businessType ?? profile.businessType ?? null,
+    sells: merged.sells ?? profile.sells ?? null,
+    storefront: merged.storefront ?? profile.storefront ?? null,
+    businessTypeSource: merged.businessType ? (merged.businessTypeSource ?? "scan") : null,
   };
 }
 
@@ -353,8 +411,10 @@ Rules (absolute):
 - Product names come from the text as written. Competitors only if the text names them.
 - signals: short factual observations about the marketing surface that the text evidences (e.g. "runs a newsletter signup", "lists 4 product lines", "prices shown in NZD", "ships internationally"). No advice, no judgement.
 - confidence: "high" if the homepage plus another page clearly describe what the business sells and to whom; "medium" if one page is clear; "low" if the text is thin, blocked, or ambiguous.
+- businessType: what kind of business the text evidences — "ecommerce" (sells products through a cart), "services" (an agency, consultancy, studio or practice selling its work), "saas" (software sold as a subscription), "local" (a place people visit or book), "creator" (an audience-led media business), "b2b" (wholesale, trade or enterprise accounts), "other". null when the text does not make it clear. Never assume a store: only "ecommerce" when the text shows a cart, checkout, shipping or product listings.
+- sells: "products" | "services" | "subscriptions" | "mixed" | null. storefront: "shopify" | "woocommerce" | "other" | "none" | null — only from explicit evidence.
 - Output ONLY a JSON object with exactly these keys:
-{"name": string|null, "oneLiner": string|null, "category": string|null, "products": string[], "audience": string|null, "voice": {"tone": string|null, "phrases": string[]}, "market": {"region": string|null, "competitorsMentioned": string[]}, "signals": string[], "confidence": "low"|"medium"|"high"}
+{"name": string|null, "oneLiner": string|null, "category": string|null, "products": string[], "audience": string|null, "voice": {"tone": string|null, "phrases": string[]}, "market": {"region": string|null, "competitorsMentioned": string[]}, "signals": string[], "confidence": "low"|"medium"|"high", "businessType": string|null, "sells": string|null, "storefront": string|null}
 - oneLiner: one plain sentence, ≤ 25 words, describing what the business does, from the text. No markdown, no commentary.`;
 
 function buildScanUserMessage(pages: PageText[], socials: SocialHandle[]): string {
@@ -372,30 +432,48 @@ function buildScanUserMessage(pages: PageText[], socials: SocialHandle[]): strin
   return `SOURCE TEXT\n\n${parts.join("\n\n")}\n\nReturn the JSON profile now.`;
 }
 
-/** Heuristic profile from title/meta only — used when the model is unavailable. */
-function heuristicProfile(pages: PageText[], sources: string[], note: string): BusinessProfile {
+/** Heuristic profile from title/meta only — used when the model is unavailable. The business
+    type still comes from the deterministic classifier, so a services site never reads as a store
+    just because the model was off. */
+function heuristicProfile(pages: PageText[], sources: string[], note: string, classification: Classification): BusinessProfile {
   const home = pages[0];
   const p = emptyProfile(sources, "low", note);
   p.name = home?.title ? home.title.split(/[|–—-]/)[0].trim().slice(0, 120) || null : null;
   p.oneLiner = home?.description ?? null;
-  return p;
+  return applyClassification(p, classification);
 }
 
-async function fetchCandidatePages(website: string): Promise<PageText[]> {
+/** Fetched pages with both the raw HTML (for the classifier: scripts, pixels, storefront hosts)
+    and the reduced text (for the model). Pages with nothing readable are dropped. */
+async function fetchCandidatePages(website: string): Promise<{ pages: PageText[]; raw: FetchedPage[] }> {
   const base = new URL(normalizeWebsite(website));
   const at = (path: string) => new URL(path, base).toString();
   const home = safeFetchPage(base.toString());
   const aboutC = ["/about", "/pages/about", "/pages/about-us", "/about-us"].map((p) => safeFetchPage(at(p)));
-  const prodC = ["/products", "/collections", "/collections/all", "/shop"].map((p) => safeFetchPage(at(p)));
+  const prodC = ["/products", "/collections", "/collections/all", "/shop", "/services", "/pricing"].map((p) => safeFetchPage(at(p)));
   const [h, abouts, prods] = await Promise.all([home, Promise.all(aboutC), Promise.all(prodC)]);
-  const pages: FetchedPage[] = [];
-  if (h) pages.push(h);
-  const firstDistinct = (list: (FetchedPage | null)[]) => list.find((p): p is FetchedPage => !!p && !pages.some((q) => q.url === p.url));
+  const fetched: FetchedPage[] = [];
+  if (h) fetched.push(h);
+  const firstDistinct = (list: (FetchedPage | null)[]) => list.find((p): p is FetchedPage => !!p && !fetched.some((q) => q.url === p.url));
   const about = firstDistinct(abouts);
-  if (about) pages.push(about);
+  if (about) fetched.push(about);
   const prod = firstDistinct(prods);
-  if (prod) pages.push(prod);
-  return pages.map((p) => htmlToText(p.url, p.html)).filter((p) => p.text.length > 40 || p.title || p.description);
+  if (prod) fetched.push(prod);
+  const pages: PageText[] = [];
+  const raw: FetchedPage[] = [];
+  for (const f of fetched) {
+    const t = htmlToText(f.url, f.html);
+    if (t.text.length > 40 || t.title || t.description) {
+      pages.push(t);
+      raw.push(f);
+    }
+  }
+  return { pages, raw };
+}
+
+/** The deterministic classification of fetched pages (exported for the route + tests). */
+export function classifyPages(pages: PageText[], raw: FetchedPage[]): Classification {
+  return classifyBusiness(pages.map((p, i) => ({ url: p.url, html: raw[i]?.html ?? "", text: [p.title ?? "", p.description ?? "", p.text].join("\n") })));
 }
 
 /** The scan. Never throws — every failure path returns a low-confidence profile with a note. */
@@ -405,14 +483,17 @@ export async function scanBusiness(input: ScanInput): Promise<BusinessProfile> {
   const socialSources = socials.map((s) => (s.url ? s.url : `${s.platform}:@${s.handle}`));
 
   let pages: PageText[] = [];
+  let raw: FetchedPage[] = [];
   if (website) {
     try {
-      pages = await fetchCandidatePages(website);
+      ({ pages, raw } = await fetchCandidatePages(website));
     } catch {
       pages = [];
+      raw = [];
     }
   }
   const sources = [...pages.map((p) => p.url), ...socialSources];
+  const classification = classifyPages(pages, raw);
 
   if (!pages.length) {
     const note = website
@@ -424,7 +505,7 @@ export async function scanBusiness(input: ScanInput): Promise<BusinessProfile> {
   }
 
   if (!resolveModel("business_scan")) {
-    return heuristicProfile(pages, sources, "I read the site but couldn't analyse it yet — I'll use what you've told me for now.");
+    return heuristicProfile(pages, sources, "I read the site but couldn't analyse it yet — I'll use what you've told me for now.", classification);
   }
 
   try {
@@ -439,9 +520,9 @@ export async function scanBusiness(input: ScanInput): Promise<BusinessProfile> {
     const profile = coerceProfile(extractJson(response.text), sources);
     if (!profile) throw new Error("unparseable");
     if (profile.confidence === "low" && !profile.note) profile.note = "I could only read a little of the site — I'll lean on what you've told me and look again tonight.";
-    return profile;
+    return combineClassification(profile, classification);
   } catch {
     // Provider errors never reach the client (and nothing key-shaped is surfaced).
-    return heuristicProfile(pages, sources, "I read the site but couldn't finish analysing it — I'll use what you've told me and look again tonight.");
+    return heuristicProfile(pages, sources, "I read the site but couldn't finish analysing it — I'll use what you've told me and look again tonight.", classification);
   }
 }
