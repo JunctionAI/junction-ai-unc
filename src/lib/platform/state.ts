@@ -4,6 +4,8 @@
 
 import type { RoutineDef } from "./catalog";
 import type { Posture } from "./plan";
+import type { BusinessProfile } from "@/lib/unc/scan";
+import type { PlanNarrative } from "@/lib/unc/narrative";
 
 export type View = "today" | "systems" | "connectors" | "strategy";
 export type ApStatus = "pending" | "approved" | "held";
@@ -35,6 +37,26 @@ export interface Profile {
   strength: string;
   belief: string;
   team: string;
+}
+
+export type AsyncStatus = "idle" | "running" | "done" | "failed";
+
+/** Onboarding step-4 site/socials scan (fired in the background on leaving step 4). */
+export interface ScanState {
+  status: AsyncStatus;
+  /** JSON key of the {website, socials} input this result belongs to. */
+  key: string | null;
+  profile: BusinessProfile | null;
+}
+
+/** Unc's prose for the step-6 plan card; the deterministic copy is the instant fallback. */
+export interface NarrativeState {
+  status: AsyncStatus;
+  /** Key of the full request (plan + resources + goal + profile) the value answers. */
+  key: string | null;
+  /** Key of the request minus the profile — lets the last narrative stay up while the scan sharpens it. */
+  baseKey: string | null;
+  value: PlanNarrative | null;
 }
 
 export interface PlatformState {
@@ -91,6 +113,8 @@ export interface PlatformState {
   goalTexts: Record<string, string>;
   messages: Msg[];
   buddyText: string;
+  scan: ScanState;
+  narrative: NarrativeState;
 }
 
 export type Patch = Partial<PlatformState>;
@@ -164,4 +188,6 @@ export const initialState: PlatformState = {
     { from: "j", text: "Prospecting-B’s 7-day ROAS fell to 1.4× while Advantage+ retargeting held 3.1× on the same certified revenue definition. The shift stays inside your NZ$120/day guardrail and is reversible. This comes from Daily paid decisioning — you can inspect every step.", link: "D02-W01", linkLabel: "Inspect the system →" },
   ],
   buddyText: "",
+  scan: { status: "idle", key: null, profile: null },
+  narrative: { status: "idle", key: null, baseKey: null, value: null },
 };

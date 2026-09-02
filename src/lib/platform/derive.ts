@@ -7,7 +7,8 @@
 import { ALL_SYSTEMS, CATEGORIES, CAT_TAGLINES, CONNECTOR_DEFS, type RoutineDef } from "./catalog";
 import { goalMath } from "./goal";
 import { scoreChannels, span, weekSplit, POSTURE_WEIGHTS, type Posture } from "./plan";
-import type { PlatformState, Setter } from "./state";
+import type { NarrativeState, PlatformState, ScanState, Setter } from "./state";
+import { DEFAULT_FOOTNOTE, type NarrativeRequest } from "@/lib/unc/narrative";
 
 type Ev = { target: { value: string } };
 type KEv = { key: string };
@@ -444,6 +445,27 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
   const obPlanStep1 = `${span(1, w1)}: our world-class ${obFirst.k.toLowerCase()} routines, built around what you do best. Focus: a working engine — drafts flowing, your taste applied, first wins on the board.`;
   const obPlanStep2 = `${span(w1 + 1, w2end)}: we add ${obSecond.k.toLowerCase()} — ${obSecond.why}. Focus: converting the momentum into revenue.`;
   const obPlanStep3 = `${span(w2end + 1, weeksLeft)} and beyond: ${obRest} switch on as their numbers earn it. Focus: scaling what’s proven, straight through your goal.`;
+  const obSummaryTitle = `${S.obPostureSet.map((k) => postureDefs[k].label).join(" + ")}, ${S.obBreadth === "broad" ? "run broad across channels" : "focused where you’re strongest"}`;
+  const obDeadlineLabel = new Date(S.deadline + "T00:00:00").toLocaleDateString("en-NZ", { day: "numeric", month: "short" });
+  const obGap = Math.max(0, S.targetNum - S.baselineNum);
+  const obPlanShort = `Your goal needs ${fmt(obGap)} of new ground by ${obDeadlineLabel}. With ${curSym}${Math.round(S.budgetMo / 30)}/day and ${S.hoursWk} h/wk of you, here’s the shortest path I can see:`;
+  /* Everything Unc may write the step-6 prose from — the deterministic plan is fixed, the narrative only wraps it. */
+  const obNarrativeRequest: NarrativeRequest = {
+    goal: { title: S.goalTitle, deadline: S.deadline, deadlineLabel: obDeadlineLabel, currency: S.currency, currencySymbol: curSym, target: S.targetNum, baseline: S.baselineNum, gap: obGap, gapLabel: fmt(obGap), otherGoals: S.obCats.slice(1).map((k) => S.goalTexts[k]).filter(Boolean) },
+    resources: { budgetPerMonth: S.budgetMo, budgetPerDay: Math.round(S.budgetMo / 30), hoursPerWeek: S.hoursWk, strengths: S.obStrengths, platforms: S.obPlatforms, postures: S.obPostureSet.map((k) => postureDefs[k].label), breadth: S.obBreadth, team: S.team.map((t) => ({ name: t.name, role: t.role })) },
+    plan: {
+      title: obSummaryTitle,
+      mathLine: obPlanShort,
+      footnote: DEFAULT_FOOTNOTE,
+      weeksTotal: weeksLeft,
+      phases: [
+        { n: 1, spanLabel: span(1, w1), channel: obFirst.k, why: obFirst.why, text: obPlanStep1 },
+        { n: 2, spanLabel: span(w1 + 1, w2end), channel: obSecond.k, why: obSecond.why, text: obPlanStep2 },
+        { n: 3, spanLabel: `${span(w2end + 1, weeksLeft)} and beyond`, channel: obRest, why: "switch on as their numbers earn it", text: obPlanStep3 },
+      ],
+    },
+    profile: S.scan.status === "done" ? S.scan.profile : null,
+  };
 
   const obVolume = (() => {
     const plats = S.obBreadth === "broad" ? Math.max(3, S.obPlatforms.length) : Math.min(2, Math.max(1, S.obPlatforms.length));
@@ -685,10 +707,15 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     onObWebsite: (e: Ev) => set({ website: e.target.value }),
     obSocials: S.socials,
     onObSocials: (e: Ev) => set({ socials: e.target.value }),
-    obPlanShort: `Your goal needs ${fmt(Math.max(0, S.targetNum - S.baselineNum))} of new ground by ${new Date(S.deadline + "T00:00:00").toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}. With ${curSym}${Math.round(S.budgetMo / 30)}/day and ${S.hoursWk} h/wk of you, here’s the shortest path I can see:`,
+    obPlanShort,
     obPlanStep1,
     obPlanStep2,
     obPlanStep3,
+    obScan: S.scan,
+    obSetScan: (scan: ScanState) => set({ scan }),
+    obNarrative: S.narrative,
+    obSetNarrative: (narrative: NarrativeState) => set({ narrative }),
+    obNarrativeRequest,
     obToggleMoney: () => set((s) => ({ obMoneyOpen: !s.obMoneyOpen })),
     obMoneyOpen: S.obMoneyOpen,
     /* Not defined in the prototype's renderVals (markup references it) — mirrored from obTeamChevron. */
@@ -737,7 +764,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     })),
     obAddPerson: () => set((s) => ({ team: [...s.team, { name: "", role: "Marketing", areas: [] }] })),
     obVolume,
-    obSummaryTitle: `${S.obPostureSet.map((k) => postureDefs[k].label).join(" + ")}, ${S.obBreadth === "broad" ? "run broad across channels" : "focused where you’re strongest"}`,
+    obSummaryTitle,
     obSummaryBody: `You want ${S.goalTitle || "to grow"}. With your budget, your ${S.profile.time}, and what you’re good at (${S.obStrengths.slice(0, 3).join(", ").toLowerCase() || "writing"}), that’s the way I’d grow you. I do the day-to-day work; you okay the things that matter.`,
     obStrengthSummary: S.obStrengths.slice(0, 3).join(" · ") || "Writing · Product",
     obPaceChips: ["Sprint · 2 weeks", "Steady · 4 weeks", "Gentle · 8 weeks"].map((t) => {

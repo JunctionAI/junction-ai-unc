@@ -1,7 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
+import type { PlanNarrative } from "@/lib/unc/narrative";
+import type { BusinessProfile } from "@/lib/unc/scan";
 import TypingDots from "./TypingDots";
 
 const stepLabel: React.CSSProperties = {
@@ -51,7 +53,97 @@ const textInput: React.CSSProperties = {
   color: "var(--ink)",
 };
 
+/* ---- Phase 3 wiring: background site scan + Unc-written plan narrative ----
+   Both are fire-and-forget: the deterministic copy is always on screen first and stays
+   as the instant fallback; nothing here ever blocks "Agree the plan →". */
+
+const scanKeyOf = (website: string, socials: string) => JSON.stringify({ website: website.trim(), socials: socials.trim() });
+
+/** Fires once per distinct {website, socials} when the founder leaves step 4 (steps 5/6). */
+function useOnboardingScan(V: PlatformVals) {
+  const inflight = useRef<string | null>(null);
+  const setScan = useRef(V.obSetScan);
+  useEffect(() => {
+    setScan.current = V.obSetScan;
+  });
+  const armed = V.ob5 || V.ob6;
+  const website = V.obWebsite.trim();
+  const socials = V.obSocials.trim();
+  const scanKey = V.obScan.key;
+  useEffect(() => {
+    if (!armed || (!website && !socials)) return;
+    const key = scanKeyOf(website, socials);
+    if (scanKey === key || inflight.current === key) return;
+    inflight.current = key;
+    setScan.current({ status: "running", key, profile: null });
+    fetch("/api/unc/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website, socials }) })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { profile?: BusinessProfile; fallback?: boolean }) => {
+        if (inflight.current !== key) return; // a newer input superseded this scan
+        if (!data.fallback && data.profile) setScan.current({ status: "done", key, profile: data.profile });
+        else setScan.current({ status: "failed", key, profile: null });
+      })
+      .catch(() => {
+        if (inflight.current === key) setScan.current({ status: "failed", key, profile: null });
+      });
+  }, [armed, website, socials, scanKey]);
+}
+
+/** Requests Unc's prose for the plan card whenever the step-6 request changes (incl. when the scan lands). */
+function useOnboardingNarrative(V: PlatformVals) {
+  const inflight = useRef<string | null>(null);
+  const setNarrative = useRef(V.obSetNarrative);
+  useEffect(() => {
+    setNarrative.current = V.obSetNarrative;
+  });
+  const req = V.obNarrativeRequest;
+  const key = JSON.stringify(req);
+  const baseKey = JSON.stringify({ ...req, profile: null });
+  const scanRunning = V.obScan.status === "running";
+  const current = V.obNarrative;
+  useEffect(() => {
+    if (!V.ob6 || scanRunning) return; // wait for the scan so the prose can use it (deterministic copy shows meanwhile)
+    if (current.key === key || inflight.current === key) return;
+    inflight.current = key;
+    setNarrative.current({ ...current, status: "running", key, baseKey });
+    fetch("/api/unc/narrative", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: Partial<PlanNarrative> & { fallback?: boolean }) => {
+        if (inflight.current !== key) return;
+        const ok = !data.fallback && typeof data.title === "string" && typeof data.mathLine === "string" && Array.isArray(data.phaseNotes) && typeof data.footnote === "string";
+        setNarrative.current(ok ? { status: "done", key, baseKey, value: { title: data.title!, mathLine: data.mathLine!, phaseNotes: data.phaseNotes!, footnote: data.footnote! } } : { status: "failed", key, baseKey, value: null });
+      })
+      .catch(() => {
+        if (inflight.current === key) setNarrative.current({ status: "failed", key, baseKey, value: null });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `req` is fully captured by `key`
+  }, [V.ob6, key, baseKey, scanRunning, current.key]);
+}
+
 export default function Onboarding({ V }: { V: PlatformVals }) {
+  useOnboardingScan(V);
+  useOnboardingNarrative(V);
+
+  /* Live narrative only when it answers the current plan (profile may lag — that's fine). */
+  const narrativeBaseKey = JSON.stringify({ ...V.obNarrativeRequest, profile: null });
+  const live = V.obNarrative.value && V.obNarrative.baseKey === narrativeBaseKey ? V.obNarrative.value : null;
+  const phases = V.obNarrativeRequest.plan.phases;
+  const planTitle = live?.title ?? V.obSummaryTitle;
+  const planMath = live?.mathLine ?? V.obPlanShort;
+  const planSteps = live && live.phaseNotes.length === phases.length ? phases.map((p, i) => `${p.spanLabel}: ${live.phaseNotes[i]}`) : [V.obPlanStep1, V.obPlanStep2, V.obPlanStep3];
+  const planFootnote = live?.footnote ?? "I do the work — you bring taste and okays. I’ll scan your site and socials tonight and sharpen this before anything runs.";
+  const scanLine = (() => {
+    const sc = V.obScan;
+    if (!V.obWebsite.trim() && !V.obSocials.trim()) return null;
+    if (sc.status === "running") return "Reading your site now — I’ll sharpen this the moment I’m done.";
+    if (sc.status === "failed") return "Couldn’t reach your site — I’ll use what you told me.";
+    if (sc.status === "done" && sc.profile) {
+      if (sc.profile.note) return sc.profile.note;
+      return sc.profile.oneLiner ? `Scanned your site ✓ — as I read it: ${sc.profile.oneLiner}` : "Scanned your site ✓";
+    }
+    return null;
+  })();
+
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px", position: "relative" }}>
       <div style={{ width: 680, maxWidth: "100%" }}>
@@ -428,27 +520,22 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
                   boxShadow: "0 6px 24px oklch(0.27 0.055 262 / 0.08)",
                 }}
               >
-                <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em" }}>{V.obSummaryTitle}</div>
-                <div style={{ fontSize: 13.5, lineHeight: 1.65, color: "oklch(0.4 0.04 262)", marginTop: 8 }}>{V.obPlanShort}</div>
+                <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em" }}>{planTitle}</div>
+                <div style={{ fontSize: 13.5, lineHeight: 1.65, color: "oklch(0.4 0.04 262)", marginTop: 8 }}>{planMath}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 14, fontSize: 13, color: "oklch(0.35 0.05 262)" }}>
-                  <div style={{ display: "flex", gap: 9 }}>
-                    <span style={{ color: "var(--cyan-link)", fontWeight: 700 }}>1</span>
-                    {V.obPlanStep1}
-                  </div>
-                  <div style={{ display: "flex", gap: 9 }}>
-                    <span style={{ color: "var(--cyan-link)", fontWeight: 700 }}>2</span>
-                    {V.obPlanStep2}
-                  </div>
-                  <div style={{ display: "flex", gap: 9 }}>
-                    <span style={{ color: "var(--cyan-link)", fontWeight: 700 }}>3</span>
-                    {V.obPlanStep3}
-                  </div>
+                  {planSteps.map((step, i) => (
+                    <div key={i} style={{ display: "flex", gap: 9 }}>
+                      <span style={{ color: "var(--cyan-link)", fontWeight: 700 }}>{i + 1}</span>
+                      {step}
+                    </div>
+                  ))}
                 </div>
-                <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 14, lineHeight: 1.6 }}>
-                  I do the work — you bring taste and okays. I’ll scan your site and socials tonight and sharpen this before anything runs.
-                </div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 14, lineHeight: 1.6 }}>{planFootnote}</div>
               </div>
             </div>
+            {scanLine && (
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 10, marginLeft: 58, lineHeight: 1.5 }}>{scanLine}</div>
+            )}
             {V.obThreadMsgs.map((om, i) => (
               <React.Fragment key={i}>
                 {om.fromUser && (
