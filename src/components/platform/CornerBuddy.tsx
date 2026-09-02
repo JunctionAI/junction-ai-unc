@@ -4,6 +4,7 @@ import type { PlatformVals } from "@/lib/platform/derive";
 import { initialState } from "@/lib/platform/state";
 import { connectorSummary, enabledCount, homeBubble, stripDemoSeed, useAccountFacts, type AccountFacts } from "@/lib/unc/accountFacts";
 import TypingDots from "./TypingDots";
+import { mergeThread, useChannelThread, viaLabel, type ThreadRow } from "./useChannelThread";
 
 /* Accounts mode (docs/PRODUCT-EXPERIENCE.md): the buddy's bubbles carry real facts — routines
    on, decisions waiting, drafts this week, connector state — never the prototype's demo lines,
@@ -18,6 +19,14 @@ const DEMO_CORNER_SEED = initialState.messages.map((m) => m.text);
 const DEMO_HUMAN_SEED = initialState.humanThread.map((m) => m.text);
 
 type ChatMsg = PlatformVals["chatMsgs"][number];
+/** One bubble; `via` is set on turns said on a channel ("via Telegram") — app turns carry none. */
+export type Bubble = ChatMsg & { via?: string | null };
+
+const chipStyle: React.CSSProperties = { display: "inline-block", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--cyan-text)", background: "var(--cyan-wash)", borderRadius: 999, padding: "2px 8px", marginTop: 3 };
+
+export function bubbleFromRow(r: ThreadRow): Bubble {
+  return { text: r.body, fromUser: r.sender === "user", fromJunction: r.sender !== "user", typing: false, link: false, linkLabel: undefined, linkGo: () => {}, via: viaLabel(r.channel) };
+}
 
 /** The bubble text for the current view in accounts mode. Strategy carries its own real-fact
     data-buddy attributes, so its text passes straight through. */
@@ -31,18 +40,23 @@ export function accountBubble(V: Pick<PlatformVals, "isStrategy" | "isSystems" |
   return homeBubble(facts, now);
 }
 
-/** The thread to render in accounts mode: the real history, minus any demo-seeded opening lines. */
-export function accountThread(msgs: ChatMsg[], lane: "ai" | "human"): ChatMsg[] {
+/** The thread to render in accounts mode: the real history, minus any demo-seeded opening lines,
+    with the channel turns (Telegram / WhatsApp / Slack / text) interleaved by time — one conversation. */
+export function accountThread(msgs: ChatMsg[], lane: "ai" | "human", remote: ThreadRow[] = []): Bubble[] {
   const real = stripDemoSeed(msgs, lane === "ai" ? DEMO_CORNER_SEED : DEMO_HUMAN_SEED);
-  if (real.length || lane === "human") return real;
+  if (lane === "human") return real;
+  const merged = mergeThread<Bubble>(real, remote, bubbleFromRow);
+  if (merged.length) return merged;
   return [{ text: FIRST_UNC_LINE, fromUser: false, fromJunction: true, typing: false, link: false, linkLabel: undefined, linkGo: () => {} }];
 }
 
-export default function CornerBuddy({ V }: { V: PlatformVals }) {
+/** `initialThread` — server render / tests: channel rows in hand (the hook polls only in the browser). */
+export default function CornerBuddy({ V, initialThread = null }: { V: PlatformVals; initialThread?: ThreadRow[] | null }) {
   const { mode, facts } = useAccountFacts();
   const acct = mode === "account";
   const lane = V.chatIsHuman ? "human" : "ai";
-  const msgs = acct ? accountThread(V.chatMsgs, lane) : V.chatMsgs;
+  const remote = useChannelThread(acct && lane === "ai", V.chatOpen, initialThread);
+  const msgs: Bubble[] = acct ? accountThread(V.chatMsgs, lane, remote) : V.chatMsgs;
   const humanOffline = acct && V.chatIsHuman;
   const bubbleText = acct ? accountBubble(V, facts) : V.buddyText;
   const showBubble = V.hasBuddyText && !!bubbleText;
@@ -104,12 +118,23 @@ export default function CornerBuddy({ V }: { V: PlatformVals }) {
             )}
             {msgs.map((m, i) => (
               <div key={i} style={{ display: "contents" }}>
-                {m.fromUser && (
+                {m.fromUser && !m.via && (
                   <div style={{ alignSelf: "flex-end", maxWidth: "82%", background: "var(--navy)", color: "var(--on-navy)", borderRadius: "13px 13px 4px 13px", padding: "9px 13px", fontSize: 12.5, lineHeight: 1.5 }}>{m.text}</div>
                 )}
+                {m.fromUser && m.via && (
+                  <div data-testid="channel-turn" style={{ alignSelf: "flex-end", maxWidth: "82%", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                    <div style={{ background: "var(--navy)", color: "var(--on-navy)", borderRadius: "13px 13px 4px 13px", padding: "9px 13px", fontSize: 12.5, lineHeight: 1.5 }}>{m.text}</div>
+                    <span data-testid="via-chip" style={chipStyle}>{m.via}</span>
+                  </div>
+                )}
                 {m.fromJunction && (
-                  <div style={{ alignSelf: "flex-start", maxWidth: "88%", background: "var(--cream-dim)", border: "1px solid var(--card-border)", borderRadius: "13px 13px 13px 4px", padding: "9px 13px", fontSize: 12.5, lineHeight: 1.5 }}>
+                  <div data-testid={m.via ? "channel-turn" : undefined} style={{ alignSelf: "flex-start", maxWidth: "88%", background: "var(--cream-dim)", border: "1px solid var(--card-border)", borderRadius: "13px 13px 13px 4px", padding: "9px 13px", fontSize: 12.5, lineHeight: 1.5 }}>
                     {m.typing ? <TypingDots /> : m.text}
+                    {m.via && (
+                      <div>
+                        <span data-testid="via-chip" style={chipStyle}>{m.via}</span>
+                      </div>
+                    )}
                     {m.link && (
                       <div style={{ marginTop: 7 }}>
                         <button

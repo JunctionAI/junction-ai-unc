@@ -22,7 +22,7 @@ Unc's line for it, used everywhere in the UI: *"Wherever you talk to me, it's th
 
 Safety rails hold: nothing publishes, sends to customers or spends from a channel. A decision on a channel is the same decision as the Approve / Hold button in the app (same `taste_event`, same receipt); with the shipped `RefusingExecutor` an approval still fails closed and Unc says so ("Nothing changes yet: live mode is off").
 
-## The two mount lines (coordinator — Platform.tsx / Sidebar.tsx are not mine)
+## The two mount lines (mounted 2026-09-02 — Sidebar.tsx `{ key: "channels" }` entry in accounts mode only; Platform.tsx renders `<ChannelsSettings />` for `view === "channels"`)
 
 **First run** (Platform.tsx, in the guided spine after the first routine is on — step 3 → this → step 4/5):
 
@@ -43,14 +43,14 @@ case "channels": return <ChannelsSettings />;
 
 Both are `"use client"`, accounts-mode only (they fetch `/api/channels/links`; demo mode gets `{ fallback: true }` and should not mount them). Both accept `initial` for a server render / tests.
 
-## The chip (agent C — CornerBuddy.tsx)
+## The chip (built 2026-09-02 — CornerBuddy.tsx + useChannelThread.ts)
 
-The corner chat renders the client's own `S.messages` (channel `app`, persisted by the autosave at positions 0..n). Channel turns never enter that array (`loadAccountRows` hydrates only `channel = 'app'` rows), so the corner UI merges them from the API:
+The corner chat renders the client's own `S.messages` (channel `app`, persisted by the autosave at positions 0..n). Channel turns never enter that array (`loadAccountRows` hydrates only `channel = 'app'` rows), so the corner UI merges them from the API (`src/components/platform/useChannelThread.ts`):
 
-- Poll `GET /api/channels/thread?since=<last seen ISO>` (every ~5 s while the corner is open; the response carries `now` to use as the next `since`).
-- Rows with `channel !== "app"` are interleaved by `at` (ISO) with the local messages and rendered as the same bubbles (`sender: "user"` → founder bubble, `"unc"` → Unc bubble) with a small chip under the bubble: **"via Telegram"** / "via WhatsApp" / "via Slack" / "via Text" (`CHANNEL_LABEL[channel]` from `src/lib/channels/types.ts`). Chip style: `fontSize 10.5, color var(--muted), marginTop 3` — no amber, no cyan.
-- App turns come back from the endpoint too (`channel: "app"`) — skip those client-side (the local state already has them) or use the endpoint as the only source in accounts mode; either is one conversation.
-- Nothing to render while `fallback: true` (demo mode).
+- Accounts mode only, AI lane only: `GET /api/channels/thread?since=<last now>` on open, then every **20 s** while the corner is open (`THREAD_POLL_MS`); the response's `now` is the next `since`; rows are deduplicated by id; errors are silent.
+- `mergeThread(local, remote)` (pure, tested) interleaves the non-app rows with the local bubbles by time, using the thread's own app rows as anchors: a channel row said after k app turns sits after the k-th local bubble (a stripped demo seed offsets the anchors; unsaved local turns stay at the end). Staff rows never sit on this thread.
+- Channel rows render as the same bubbles (`sender: "user"` → founder bubble, `"unc"` → Unc bubble) with a chip under the bubble: **"via Telegram"** / "via WhatsApp" / "via Slack" / "via Text" (`viaLabel()` over `CHANNEL_LABEL`). Chip style: **10px, uppercase, `var(--cyan-text)` on `var(--cyan-wash)`**, pill — no amber. App messages are unchanged.
+- Nothing polls in demo mode; `initialThread` lets a server render / test pass rows in.
 
 ## Per channel — what Tom must create, env vars, webhook URLs
 
@@ -137,4 +137,4 @@ Optional CLI one-shot for `main.ts`: `--channels` → `runChannelsTick(deps)`.
 - Slack: an unknown user DMing the bot in an installed workspace gets no reply (we don't guess which account's token to use).
 - WhatsApp: the `unc_brief` template must be approved by Meta before out-of-window briefs deliver; until then they read `failed` in the ledger.
 - SMS is text-only — long briefs are cut at ~1500 chars.
-- The corner chip (agent C) and the two mounts (coordinator) are documented above, not wired here.
+- (closed 2026-09-02) The corner chip and the two mounts are wired: Sidebar "Channels" entry (accounts mode), Platform view switch, CornerBuddy 20-s poll + "via …" chip.

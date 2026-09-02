@@ -13,6 +13,7 @@ import { initialState, type PlatformState } from "@/lib/platform/state";
 import { __setAccountFactsForTests, type AccountFacts, type AccountFactsState } from "@/lib/unc/accountFacts";
 import type { Persistence } from "@/lib/db/useAccountPersistence";
 import CornerBuddy, { accountBubble, accountThread, FIRST_UNC_LINE, HUMAN_LANE_NOTE } from "../CornerBuddy";
+import { mergeThread, viaLabel, type ThreadRow } from "../useChannelThread";
 import { DEMO_BANNER_COPY } from "../DemoBanner";
 import Sidebar, { accountConnectorLine } from "../Sidebar";
 import StrategyView, { accountPhases, accountWhy } from "../StrategyView";
@@ -214,5 +215,68 @@ describe("CornerBuddy", () => {
     expect(accountThread(seed, "ai").map((m) => m.text)).toEqual([FIRST_UNC_LINE]);
     expect(accountThread([...seed, msg("hi", true)], "ai").map((m) => m.text)).toEqual(["hi"]);
     expect(accountThread([], "human")).toEqual([]);
+  });
+});
+
+describe("Sidebar — Channels entry (docs/CHANNELS.md mount)", () => {
+  it("accounts mode has the Channels nav entry; demo mode never does (the view fetches /api/channels/links)", () => {
+    __setAccountFactsForTests(account());
+    const acct = renderToStaticMarkup(createElement(Sidebar, { V: V(state()), account: persistence }));
+    expect(acct).toContain('data-testid="sidebar-channels"');
+    expect(acct).toContain(">Channels<");
+    __setAccountFactsForTests(null);
+    const demo = renderToStaticMarkup(createElement(Sidebar, { V: V(state()), account: null }));
+    expect(demo).not.toContain("sidebar-channels");
+  });
+});
+
+describe("CornerBuddy — one conversation: channel turns with a 'via' chip, in time order", () => {
+  const rows: ThreadRow[] = [
+    { id: "t1", at: "2026-09-02T08:00:00.000Z", sender: "user", body: "Approve the welcome email", channel: "telegram" },
+    { id: "t2", at: "2026-09-02T08:00:05.000Z", sender: "unc", body: "Done — approved. Receipt lands in the app.", channel: "telegram" },
+    { id: "s1", at: "2026-09-02T08:00:06.000Z", sender: "staff", body: "never on this thread", channel: "app" },
+  ];
+
+  it("accounts mode renders the Telegram turns as the same bubbles with the chip; no 'first line' placeholder once there is a thread", () => {
+    __setAccountFactsForTests(account());
+    const html = renderToStaticMarkup(createElement(CornerBuddy, { V: V(state({ chatOpen: true, messages: [] })), initialThread: rows }));
+    expect((html.match(/data-testid="via-chip"/g) ?? []).length).toBe(2);
+    expect(html).toContain("via Telegram");
+    expect(html).toContain("Approve the welcome email");
+    expect(html).toContain("Done — approved. Receipt lands in the app.");
+    expect(html).not.toContain(FIRST_UNC_LINE);
+    expect(html).not.toContain("never on this thread");
+    // the chip: 10px, uppercase, cyan wash — never amber
+    expect(html).toMatch(/via-chip" style="[^"]*font-size:10px[^"]*text-transform:uppercase[^"]*background:var\(--cyan-wash\)/);
+  });
+
+  it("demo mode ignores channel rows entirely (the prototype's thread, no chip)", () => {
+    __setAccountFactsForTests(null);
+    const html = renderToStaticMarkup(createElement(CornerBuddy, { V: V(state({ chatOpen: true })), initialThread: rows }));
+    expect(html).not.toContain("via-chip");
+    expect(html).not.toContain("via Telegram");
+  });
+
+  it("mergeThread interleaves by time using the app's own rows as anchors; staff rows are dropped; a stripped demo seed offsets the anchors", () => {
+    const local = ["a", "b"];
+    const remote: ThreadRow[] = [
+      { id: "r1", at: "2026-09-02T08:00:00.000Z", sender: "user", body: "a", channel: "app" },
+      { id: "r2", at: "2026-09-02T08:01:00.000Z", sender: "user", body: "tg1", channel: "telegram" },
+      { id: "r3", at: "2026-09-02T08:02:00.000Z", sender: "unc", body: "b", channel: "app" },
+      { id: "r4", at: "2026-09-02T08:03:00.000Z", sender: "unc", body: "wa1", channel: "whatsapp" },
+      { id: "r5", at: "2026-09-02T08:00:30.000Z", sender: "staff", body: "staff", channel: "slack" },
+    ];
+    expect(mergeThread(local, remote, (r) => r.body)).toEqual(["a", "tg1", "b", "wa1"]);
+    // three seed rows were stripped from `local` but still sit in the thread as app rows
+    const seeded: ThreadRow[] = [
+      ...["s1", "s2", "s3"].map((id, i) => ({ id, at: `2026-09-01T00:0${i}:00.000Z`, sender: "unc" as const, body: id, channel: "app" as const })),
+      ...remote,
+    ];
+    expect(mergeThread(local, seeded, (r) => r.body)).toEqual(["a", "tg1", "b", "wa1"]);
+    // channel rows before any app row lead; rows after unsaved local turns land at the end
+    expect(mergeThread(["x"], [{ id: "e", at: "2026-09-01T00:00:00.000Z", sender: "user", body: "early", channel: "sms" }], (r) => r.body)).toEqual(["early", "x"]);
+    expect(viaLabel("sms")).toBe("via Text");
+    expect(viaLabel("whatsapp")).toBe("via WhatsApp");
+    expect(viaLabel("app")).toBeNull();
   });
 });

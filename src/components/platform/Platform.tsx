@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { derive } from "@/lib/platform/derive";
 import { useUncChat } from "@/lib/unc/useUncChat";
 import { useAccountPersistence } from "@/lib/db/useAccountPersistence";
+import { useAccountFacts } from "@/lib/unc/accountFacts";
 import { usePlatformState } from "./usePlatformState";
 import { useLiveApprovals } from "./useLiveApprovals";
 import { useHomeTelemetry } from "./useHomeTelemetry";
@@ -22,6 +23,7 @@ import HomeView from "./HomeView";
 import StrategyView from "./StrategyView";
 import RoutinesView from "./RoutinesView";
 import ConnectorsView from "./ConnectorsView";
+import ChannelsSettings from "./ChannelsSettings";
 import CornerBuddy from "./CornerBuddy";
 import Paywall from "./Paywall";
 import BillingBanner from "./BillingBanner";
@@ -36,13 +38,16 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
   const { S, set } = usePlatformState();
   const gated = billing?.configured ? billing.entitlement : null;
   const uncSend = useUncChat(S, set);
-  const V = derive(S, set, undefined, uncSend);
   /* Phase 2: a no-op in demo mode (no Supabase env); with an account it hydrates on mount
      and autosaves every change (debounced). */
   const persistence = useAccountPersistence(S, set);
+  const inAccount = persistence.mode === "account" && !!persistence.accountId;
+  /* The account's own rows (receipts, approvals, connector + routine states) — derive reads them in
+     accounts mode so nothing a real account never touched can fall back to the catalog's demo defaults. */
+  const { facts } = useAccountFacts();
+  const V = derive(S, set, undefined, uncSend, { mode: inAccount ? "account" : "demo", facts: inAccount ? facts : null });
   /* Accounts mode: the "needs you" list, receipts and drafts come from the runtime
      (GET /api/approvals). Demo mode: never fetched — the demo cards stay exactly as they are. */
-  const inAccount = persistence.mode === "account" && !!persistence.accountId;
   const live = useLiveApprovals(inAccount);
   /* Accounts mode: Unc's self-review, "The bar" and hours saved from the improvement loops
      (GET /api/telemetry/home). Demo mode: never fetched — the demo values stay verbatim. */
@@ -215,6 +220,8 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
         {V.isStrategy && !showGuided && <StrategyView V={V} />}
         {V.isConnectors && !showGuided && <ConnectorsView V={V} />}
         {V.isSystems && !showGuided && <RoutinesView V={V} run={runTarget} />}
+        {/* Channels (docs/CHANNELS.md): accounts mode only — the view fetches /api/channels/links, which demo mode cannot answer. */}
+        {V.isChannels && !showGuided && inAccount && <ChannelsSettings />}
       </main>
       {V.showBuddy && !showGuided && <CornerBuddy V={V} />}
       {inAccount && modelsOpen && <ModelSettings onClose={() => setModelsOpen(false)} />}

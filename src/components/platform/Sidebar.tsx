@@ -101,6 +101,11 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
         <button onClick={V.goConnectors} className="hov-bg-navylift" style={{ ...navBtn, background: V.connectorsBg }}>
           <span style={dot(V.connectorsDot)}></span>Connectors
         </button>
+        {inAccount && (
+          <button onClick={V.goChannels} data-testid="sidebar-channels" className="hov-bg-navylift" style={{ ...navBtn, background: V.channelsBg }}>
+            <span style={dot(V.channelsDot)}></span>Channels
+          </button>
+        )}
       </nav>
       <div style={{ flex: 1 }}></div>
       <div style={{ padding: "0 8px" }}>
