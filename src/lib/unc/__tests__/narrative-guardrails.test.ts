@@ -293,7 +293,7 @@ describe("channel name required", () => {
      channel "SEO, Paid ads, Sales" yields the token "seo," (comma attached). A perfectly good note
      such as "SEO and paid ads switch on…" does not contain "seo," and is rejected — which throws away
      ALL three live notes (all-or-nothing). Expected: the token should be "seo". */
-  it.fails("KNOWN BUG: a phase-3 note naming 'SEO' without a trailing comma should be accepted", () => {
+  it("KNOWN BUG: a phase-3 note naming 'SEO' without a trailing comma should be accepted", () => {
     const notes = [...GOOD.phaseNotes];
     notes[2] = "SEO and paid ads switch on as their numbers earn it, sales last.";
     expect(parseNarrative({ ...GOOD, phaseNotes: notes }, REQ)!.narrative.phaseNotes[2]).toBe(notes[2]);

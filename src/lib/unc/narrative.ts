@@ -284,7 +284,7 @@ export function parseNarrative(raw: unknown, req: NarrativeRequest): ParsedNarra
       if (!t || !numbersOk(t, allowed)) return null;
       // The channel must still be named; the model can't quietly swap it.
       const ch = req.plan.phases[i].channel.toLowerCase();
-      const first = ch.split(/\s|&/)[0];
+      const first = ch.split(/[\s&,]+/)[0];
       if (!t.toLowerCase().includes(first)) return null;
       return t;
     });

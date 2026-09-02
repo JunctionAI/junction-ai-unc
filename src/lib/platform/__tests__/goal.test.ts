@@ -205,7 +205,7 @@ describe("target parser — what it actually does", () => {
   /* BUG goal.ts:52–53 — the `\d[\d,]*` digit-run regex has no notion of M/k suffixes or decimals, so "$1.2M revenue"
      reads as 1, which the guard then floors to current + 1 → the founder is told they're On track at 100%.
      Inherited verbatim from design-reference/platform-v2-logic.js:121–122. Expected: 1,200,000. */
-  it.fails("KNOWN BUG: '$1.2M revenue' should read 1,200,000 (currently reads 1 → floored to current + 1)", () => {
+  it("KNOWN BUG: '$1.2M revenue' should read 1,200,000 (currently reads 1 → floored to current + 1)", () => {
     expect(parse("$1.2M revenue", 800000, 900000)).toBe(1200000);
   });
 
@@ -218,7 +218,7 @@ describe("target parser — what it actually does", () => {
 
   /* BUG goal.ts:52–53 — the demo's own brand goal text "25k engaged followers" (state.ts goalTexts.brand)
      reads as 25 and is floored to current + 1. Expected: 25,000. */
-  it.fails("KNOWN BUG: '25k engaged followers' should read 25,000 (currently reads 25)", () => {
+  it("KNOWN BUG: '25k engaged followers' should read 25,000 (currently reads 25)", () => {
     expect(parse("25k engaged followers", 12000, 14000)).toBe(25000);
   });
 
@@ -248,7 +248,7 @@ describe("divide-by-zero and bad input guards", () => {
      needed/proj/gap are NaN and the pill renders "Behind by NZ$NaN". The UI's date input makes this
      hard to reach today, but the guard is documented as guarding division by zero and it doesn't
      guard this. Expected: finite numbers (e.g. treat as 1 day left). */
-  it.fails("KNOWN BUG: an unparseable deadline should not produce NaN money", () => {
+  it("KNOWN BUG: an unparseable deadline should not produce NaN money", () => {
     const r = goalMath({ ...DEMO, deadline: "not-a-date" });
     expect(Number.isFinite(r.gap)).toBe(true);
   });

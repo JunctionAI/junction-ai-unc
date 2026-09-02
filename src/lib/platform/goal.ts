@@ -45,18 +45,30 @@ export interface GoalMath {
   fmt: (n: number) => string;
 }
 
+
+/** First number in a goal string, honouring thousands separators, decimals and k/M suffixes:
+ *  "NZ$40,000 MRR" → 40000 · "$1.2M revenue" → 1200000 · "25k followers" → 25000 · "63% margin" → 63. */
+export function parseGoalTarget(title: string): number | null {
+  const m = title.match(/(\d[\d,]*(?:\.\d+)?)\s*([kKmM])?(?![\w.])/);
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(n)) return null;
+  const mult = m[2] ? (m[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1;
+  return Math.round(n * mult);
+}
+
 export function goalMath(input: GoalMathInput): GoalMath {
   const baseline = input.baselineNum || DEMO_DEFAULT_BASELINE;
   const cur = input.currentMRR ?? (baseline !== DEMO_DEFAULT_BASELINE ? baseline : DEMO_DEFAULT_CURRENT);
   const curSym = currencySymbol(input.currency);
-  const digitsM = input.goalTitle.match(/\d[\d,]*/);
-  const target = Math.max((digitsM ? parseInt(digitsM[0].replace(/,/g, ""), 10) : 40000) || 40000, cur + 1);
+  const target = Math.max(parseGoalTarget(input.goalTitle) || 40000, cur + 1);
   const today = new Date(DEMO_TODAY);
   const start = new Date(DEMO_START);
   const dl = new Date(input.deadline + "T00:00:00");
   const elapsed = Math.max(1, Math.round((today.getTime() - start.getTime()) / 864e5));
   const pace = (cur - baseline) / elapsed;
-  const daysLeftN = Math.max(1, Math.round((dl.getTime() - today.getTime()) / 864e5));
+  const dlMs = Number.isFinite(dl.getTime()) ? dl.getTime() : today.getTime() + 30 * 864e5; // unparseable deadline → 30 days, never NaN
+  const daysLeftN = Math.max(1, Math.round((dlMs - today.getTime()) / 864e5));
   const needed = Math.max(0, (target - cur) / daysLeftN);
   const proj = Math.round(cur + pace * daysLeftN);
   const gap = target - proj;

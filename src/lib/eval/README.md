@@ -54,7 +54,7 @@ may quote in replies, so its key set is golden-locked and it must serialise as p
 5. **Context:** if you intentionally add a field to `buildUncContext`, update `GOLDEN_KEYS` in
    the same commit and say why in the message; that is the review hook.
 
-Known bugs are locked with `it.fails(...)`: the assertion states the *correct* behaviour and the
+Known bugs are locked with `it(...)`: the assertion states the *correct* behaviour and the
 test is expected to fail. When the code is fixed the test errors with "expected to fail" — drop
 the `.fails` and delete the paired "documents the actual behaviour" test.
 

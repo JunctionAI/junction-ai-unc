@@ -151,7 +151,7 @@ describe("isPrivateAddress — the post-DNS range check", () => {
      "::ffff:a.b.c.d". The equivalent hex form "::ffff:7f00:1" (= 127.0.0.1) passes as public.
      Node's dns.lookup formats mapped addresses in dotted form, so this is not reachable through
      isSafeUrl today; it is a gap in the pure function, not a live hole. */
-  it.fails("KNOWN GAP: hex-form v4-mapped loopback ::ffff:7f00:1 should be private", () => {
+  it("KNOWN GAP: hex-form v4-mapped loopback ::ffff:7f00:1 should be private", () => {
     expect(isPrivateAddress("::ffff:7f00:1")).toBe(true);
   });
 });

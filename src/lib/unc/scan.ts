@@ -94,6 +94,11 @@ function isPrivateV6(ip: string): boolean {
   if (/^fe[89ab]/.test(l)) return true; // link-local fe80::/10
   const mapped = l.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
   if (mapped) return isPrivateV4(mapped[1]);
+  const hexMapped = l.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/); // ::ffff:7f00:1 form
+  if (hexMapped) {
+    const a = parseInt(hexMapped[1], 16), b = parseInt(hexMapped[2], 16);
+    return isPrivateV4(`${a >> 8}.${a & 255}.${b >> 8}.${b & 255}`);
+  }
   return false;
 }
 
