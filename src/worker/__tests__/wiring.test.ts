@@ -6,7 +6,7 @@ import { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
 import { keyringFromKeys } from "@/lib/connectors/crypto";
 import { ConnectorCredentialProvider } from "@/lib/connectors/tokens";
 import { DbAccountsSource, DEFAULT_APPROVER, StaticAccountsSource } from "../accounts";
-import { FixtureCredentialProvider } from "../credentials";
+import { FixtureCredentialProvider, NoCredentialsProvider } from "../credentials";
 import { accountsKind, credentialsKind, defaultAccountsSource, defaultCredentialProvider, describeWiring, envKeyring, selectAccountsSource, selectCredentialProvider } from "../wiring";
 
 const KEYRING = keyringFromKeys({ version: 1, key: Buffer.alloc(32, 7) });
@@ -30,14 +30,15 @@ function withEnv(env: Partial<Record<(typeof SUPA)[number], string>>) {
 }
 
 describe("credential provider selection", () => {
-  it("fixture unless BOTH the DB and the secret store are configured", () => {
+  it("fixtures only without a DB; a real DB without a secret store means nothing is connected — never fixtures", () => {
     const db = new FakeSupabase();
     expect(selectCredentialProvider({ db: null, keyring: null, env: {} })).toBeInstanceOf(FixtureCredentialProvider);
-    expect(selectCredentialProvider({ db, keyring: null, env: {} })).toBeInstanceOf(FixtureCredentialProvider);
+    expect(selectCredentialProvider({ db, keyring: null, env: {} })).toBeInstanceOf(NoCredentialsProvider);
     expect(selectCredentialProvider({ db: null, keyring: KEYRING, env: {} })).toBeInstanceOf(FixtureCredentialProvider);
     expect(selectCredentialProvider({ db, keyring: KEYRING, env: {} })).toBeInstanceOf(ConnectorCredentialProvider);
     expect(credentialsKind({ db, keyring: KEYRING })).toBe("connectors");
-    expect(credentialsKind({ db, keyring: null })).toBe("fixture");
+    expect(credentialsKind({ db, keyring: null })).toBe("none");
+    expect(credentialsKind({ db: null, keyring: null })).toBe("fixture");
   });
   it("the connectors provider answers null (nothing connected) for an account with no connector row — the honest 'couldn't ask' path", async () => {
     const db = new FakeSupabase();

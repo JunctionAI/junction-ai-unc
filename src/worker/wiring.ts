@@ -15,9 +15,9 @@ import type { DbClient } from "../lib/db/types";
 import { keyringFromEnv, type Keyring } from "../lib/connectors/crypto";
 import { ConnectorCredentialProvider } from "../lib/connectors/tokens";
 import { DbAccountsSource, StaticAccountsSource, type AccountsSource } from "./accounts";
-import { FixtureCredentialProvider, type CredentialProvider } from "./credentials";
+import { FixtureCredentialProvider, NoCredentialsProvider, type CredentialProvider } from "./credentials";
 
-export type CredentialsKind = "fixture" | "connectors";
+export type CredentialsKind = "fixture" | "none" | "connectors";
 export type AccountsKind = "static" | "db";
 
 export interface WiringInputs {
@@ -32,11 +32,16 @@ export interface WiringInputs {
 }
 
 export function credentialsKind(inputs: Pick<WiringInputs, "db" | "keyring">): CredentialsKind {
-  return inputs.db && inputs.keyring ? "connectors" : "fixture";
+  if (inputs.db && inputs.keyring) return "connectors";
+  // A real database means real accounts: without a secret store nothing is connected — never fixtures.
+  if (inputs.db) return "none";
+  return "fixture";
 }
 
 export function selectCredentialProvider(inputs: WiringInputs): CredentialProvider {
-  if (credentialsKind(inputs) === "fixture" || !inputs.db || !inputs.keyring) return new FixtureCredentialProvider();
+  const kind = credentialsKind(inputs);
+  if (kind === "fixture" || !inputs.db) return new FixtureCredentialProvider();
+  if (kind === "none" || !inputs.keyring) return new NoCredentialsProvider();
   return new ConnectorCredentialProvider({
     db: inputs.db,
     keyring: inputs.keyring,
