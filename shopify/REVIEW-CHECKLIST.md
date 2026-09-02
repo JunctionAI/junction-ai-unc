@@ -22,7 +22,8 @@ exact clicks for Tom. Companion to `shopify.app.toml`, `LISTING.md` and
 | **Uninstall handling** | `webhooks.ts` `redactShop` (via `shop/redact`) | Token dead on Shopify's side at uninstall; 48h later `shop/redact` clears ours + tears down the tenant sync (`SyncProvisioner.purgeTenant`, `src/lib/connectors/provisioning.ts`). |
 | Merchant-initiated disconnect revokes on Shopify's side | `src/lib/connectors/revoke.ts` (`DELETE /admin/api/<ver>/api_permissions/current.json`), `handlers.ts` `handleDisconnect` | Best-effort, receipted either way. |
 | Rate-limit-respectful sync | Airbyte source per tenant (`provisioning.ts`), nightly cron | Reviewers test with large dev stores; the app itself makes no bulk Admin API calls. |
-| Tests, no network | `src/lib/connectors/__tests__/` | Shopify start/callback/HMAC/webhook/revoke paths covered against the schema-checked fake. |
+| **App Store install entry** (`application_url` → OAuth immediately) | `src/app/api/connectors/shopify/install/route.ts` + `…/install/resume/route.ts` → `src/lib/connectors/install.ts`; landing forward in `src/app/page.tsx` via `src/lib/connectors/installForward.ts` | `?shop=&hmac=&timestamp=&host=` on `/` is forwarded, query intact, to the install route: shop shape (400) → app creds (bounce) → HMAC (401) → timestamp ±5 min (401, replay) → no session: shop parked in a signed 10-minute httpOnly cookie + `/login?next=…/install/resume` (magic link honours `next`) → session: same `handleStart` as the card → 302 to the authorize URL. Merchant with no account yet gets one created (or their beta invite accepted) first. Built 2026-09-02. |
+| Tests, no network | `src/lib/connectors/__tests__/` | Shopify start/callback/HMAC/webhook/revoke/**install** paths covered against the schema-checked fake (`install.test.ts`: fixed HMACs, stale/replayed timestamp, cookie tamper/expiry, both happy paths); landing forward pinned by `tests/e2e/landing.spec.ts`. |
 | Privacy policy + terms live | `src/app/privacy`, `src/app/terms` (another agent's lane) | URLs in `LISTING.md`. |
 
 ## 2. Outstanding — Tom, in order
@@ -45,29 +46,28 @@ Dev Dashboard → App → **API access** → *Protected customer data access* �
 ### 2c. External-billing exemption (before submission — the pack's "big one")
 Partner Dashboard → **Support** → *Contact support* → topic *App review / billing* (or the "Request an exemption from the Billing API" form if the App Store submission page shows one). Paste the pricing section of `LISTING.md` verbatim: Shopify is one of several optional integrations of an external platform; sign-up and billing live entirely off-Shopify; a merchant can pay Junction with no Shopify store. Ask for written confirmation and keep the ticket id in the submission notes. **If refused:** the fallback is Shopify Billing (`appSubscriptionCreate`, US$100/mo) for App-Store-installed merchants — a Wave-2 build in `src/lib/billing/` (another agent's lane), not this pass.
 
-### 2d. Install entry from the App Store — **code spec for the next code pass (no `src/` edits here)**
-Today the only way in is the Connectors card: the founder types `their-store.myshopify.com`,
-`POST /api/connectors/shopify/start` builds the authorize URL. The App Store **Install** button
-does not go through that card: Shopify sends the merchant to `application_url` with
-`?shop=<domain>&hmac=<hex>&timestamp=<unix>&host=<b64>` (and, with managed installation, the
-scopes already granted). The landing page ignores those params, so the reviewer's "OAuth must
-complete immediately after install" check would fail. Required:
+### 2d. Install entry from the App Store — **built 2026-09-02** (was the spec for this pass)
+`application_url` (`/` on getjunction.ai) forwards a request carrying `?shop=&hmac=` — every
+param, because Shopify signs them all — to:
 
 ```
 GET /api/connectors/shopify/install?shop=&hmac=&timestamp=&host=
 ```
+(`src/app/api/connectors/shopify/install/route.ts` → `src/lib/connectors/install.ts`). What it does, in order:
 1. `normaliseShopDomain(shop)` — 400 on anything else.
-2. `verifyShopifyHmac(searchParams, SHOPIFY_CLIENT_SECRET)` (`src/lib/connectors/oauth.ts` — same rule: every param except `hmac`/`signature`, sorted, hex) — 401 on failure. Reject `timestamp` older than 24h (replay).
-3. Not configured (`!isPlatformConfigured("shopify")` / no keyring / no DB) → 302 `/app?connect_error=shopify` (never a stack trace).
-4. **No session:** set an httpOnly, SameSite=Lax cookie `unc_shopify_install=<shop>` (10-min TTL, value already validated) and 302 to `/login?next=/api/connectors/shopify/install/resume` (magic-link sign-up/sign-in). The auth callback honours `next`; on resume, read the cookie, clear it, and continue at step 5. New users go through `ensureAccount()` first (and `accept_beta_invites()` — docs/BETA.md) so a membership exists.
-5. **Session present:** `handleStart(deps, "shopify", { shop })` (`src/lib/connectors/handlers.ts`) → 302 to `body.url`. Fallback bodies → `/app?connect_error=shopify`. Shopify then bounces straight back to `/api/connectors/shopify/callback` with a code (consent already granted under managed installation) and the existing callback finishes: HMAC, `shop` matches the state row, token exchange, sealed secret, `/app?connected=shopify`.
-6. `application_url` itself (`/` on getjunction.ai) must forward: when `?shop=` + `?hmac=` are present on `/`, 302 to `/api/connectors/shopify/install` with the same query — a tiny check in the landing route or `middleware`. (Alternative: set `application_url` to `https://getjunction.ai/api/connectors/shopify/install` directly. That is simpler, but the listing's "app URL" then isn't a page — decide with the landing-page owner.)
-7. Tests: HMAC pass/fail, no-session cookie + redirect, session → authorize URL, replayed timestamp, unknown shop shape — against the fake, no network.
+2. App credentials present, else 302 `/app?connect_error=shopify` (the HMAC can't be checked without the secret).
+3. `verifyShopifyHmac(searchParams, SHOPIFY_CLIENT_SECRET)` — 401 `bad hmac`. `timestamp` must be within **±5 minutes** of our clock — 401 `stale timestamp` (replay; tighter than the 24 h first drafted here).
+4. No keyring / no accounts DB → 302 `/app?connect_error=shopify` (never a stack trace).
+5. **No session:** the shop is parked in `unc_shopify_install` — httpOnly, SameSite=Lax, path-scoped to the install routes, 10-minute Max-Age, value `<shop>.<expiresMs>.<hmac-sha256 under the app secret>` (re-validated and re-signed on the way back, so a tampered cookie can only fail) — and the merchant goes to `/login?next=/api/connectors/shopify/install/resume`. `/login` passes `next` into the magic link's `emailRedirectTo`; `/auth/callback` already honoured it; the proxy's signed-in `/login` redirect now honours it too. **Resume** (`…/install/resume/route.ts`) reads + clears the cookie and continues at 6. A merchant arriving straight from the magic link has no account yet: both routes run `requireAccountSession({ createAccount: true })` first — which accepts a beta invite (docs/BETA.md) before creating anything — so a membership exists.
+6. **Session:** `handleStart(deps, "shopify", { shop })` — the Connectors card's own path — → 302 to the authorize URL (state row bound to the shop, connector row `connecting`). Shopify bounces back to `/api/connectors/shopify/callback` with a code and the existing callback finishes: HMAC, `shop` matches the state row, token exchange, sealed secret, `/app?connected=shopify`. Any fallback/403 → `/app?connect_error=shopify`.
+7. Tests: `src/lib/connectors/__tests__/install.test.ts` (fixed HMACs: pass/fail/tamper/malformed, stale + future + missing timestamp, unconfigured, no-session cookie + redirect, session → authorize URL, resume happy/tamper/expiry/wrong-secret, landing forward) and `tests/e2e/landing.spec.ts` (`/?shop=&hmac=` redirects through the install route on the demo server).
 
-Also worth adding in the same pass: `app/uninstalled` webhook (`[[webhooks.subscriptions]] topics = ["app/uninstalled"]` → `/api/webhooks/shopify/app_uninstalled`) for a same-day disconnect receipt; today the receipt arrives with `shop/redact` 48h later.
+Keep `application_url = https://getjunction.ai` in `shopify.app.toml` (the listing's app URL stays a page; the forward does the rest).
+
+**Still not built:** `app/uninstalled` webhook (`[[webhooks.subscriptions]] topics = ["app/uninstalled"]` → `/api/webhooks/shopify/app_uninstalled`) for a same-day disconnect receipt; today the receipt arrives with `shop/redact` 48h later. Tom should also confirm the Supabase Auth redirect allow-list covers `https://getjunction.ai/auth/callback?next=*` (the `next` value now varies).
 
 ### 2e. Test-store walkthrough (record it; it is the screencast)
-On the dev store, as a reviewer would: App Store-style install (once 2d exists — until then, from the Connectors card) → grant screen shows exactly the three read scopes → land on `/app?connected=shopify` → Connectors card *Connected* with the shop domain → open a routine → run a dry run → receipts show Shopify reads → Approve gate on a proposed action → Disconnect → receipt "access revoked on Shopify's side" → reinstall works. Then: Settings → Apps → uninstall on the dev store → 48h later (or force via the Dev Dashboard webhook tester) `shop/redact` lands → connector `disconnected`, no `connector_secrets` row.
+On the dev store, as a reviewer would: App Store-style install (Dev Dashboard → Test on development store → Install lands on `/` with the signed query → sign in via magic link → Shopify's grant screen) → grant screen shows exactly the three read scopes → land on `/app?connected=shopify` → Connectors card *Connected* with the shop domain → open a routine → run a dry run → receipts show Shopify reads → Approve gate on a proposed action → Disconnect → receipt "access revoked on Shopify's side" → reinstall works. Then: Settings → Apps → uninstall on the dev store → 48h later (or force via the Dev Dashboard webhook tester) `shop/redact` lands → connector `disconnected`, no `connector_secrets` row.
 
 ### 2f. Screencast + listing
 3–5 min, the prep pack's template: sign-up → connect Shopify → data appears → Unc proposes → Approve gate → receipts. Upload with the listing (`LISTING.md`): screenshots 1–3, icon 1200×1200, support email, privacy URL, categories. Partner Dashboard → Apps → Junction — Unc → **Distribution** → *Shopify App Store* → **Create listing** → fill → **Submit for review**. Expect 1–2 weeks to first response, 1–2 revision cycles (pack §3 timeline).
@@ -80,6 +80,6 @@ On the dev store, as a reviewer would: App Store-style install (once 2d exists �
 1. Partner org verified as the legal entity; Dev Dashboard app created; client id/secret → Vercel env; `shopify app config link` + `deploy`. **Tom.**
 2. Protected customer data request (name, email) + `read_all_orders` request. **Tom** (answers prepared above).
 3. External-billing exemption request in writing, ticket id kept. **Tom.**
-4. `/api/connectors/shopify/install` entry (+ landing forward, + optional `app/uninstalled`). **Next code pass** (spec §2d).
-5. Test-store walkthrough + screencast. **Tom** once 1 and 4 exist.
+4. ~~`/api/connectors/shopify/install` entry + landing forward~~ **built 2026-09-02** (§2d). Optional `app/uninstalled` webhook still open.
+5. Test-store walkthrough + screencast. **Tom** once 1 exists (4 is done).
 6. Listing submitted. **Tom.**

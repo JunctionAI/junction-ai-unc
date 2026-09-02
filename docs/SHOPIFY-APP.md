@@ -7,7 +7,7 @@ Shopify-side packaging around it.
 |---|---|
 | `shopify/shopify.app.toml` | Shopify CLI config: name, `application_url`, redirect URL, scopes, three compliance webhooks, `embedded = false`, dev-store placeholder, `api_version`. Mirrors `src/lib/connectors/registry.ts` + `src/app/api/webhooks/shopify/[topic]/route.ts` — change the code first, then this. |
 | `shopify/LISTING.md` | App Store listing draft: name, tagline, descriptions, 3 benefits, external-billing pricing text + exemption rationale, screenshot list, support/privacy, categories. |
-| `shopify/REVIEW-CHECKLIST.md` | What review already gets from the code (with file cites), what's outstanding, Tom's exact dashboard clicks, and the **`/api/connectors/shopify/install` spec** for the next code pass. |
+| `shopify/REVIEW-CHECKLIST.md` | What review already gets from the code (with file cites), what's outstanding, Tom's exact dashboard clicks, and how the **App Store install entry** (`/api/connectors/shopify/install`, built 2026-09-02) works. |
 | `docs/CONNECTORS-FIRST-BOOT.md` | Env, migration 0005, per-platform flow, webhook registration, disconnect/purge — the wiring this sits on. |
 | OAUTH-PREP-PACK.md §3 (Drive) | Review process, scope justifications, billing gotcha, timeline. |
 
@@ -46,6 +46,6 @@ Shopify button stops answering "Not switched on yet".
 1. Partner org + Dev Dashboard app + env + `config link`/`deploy` — Tom.
 2. Protected customer data (name, email) + `read_all_orders` requests — Tom.
 3. External-billing exemption in writing — Tom.
-4. `/api/connectors/shopify/install` entry + landing forward — next code pass.
+4. ~~`/api/connectors/shopify/install` entry + landing forward~~ — built 2026-09-02 (`src/lib/connectors/install.ts`; `app/uninstalled` webhook still optional/open).
 5. Dev-store walkthrough + screencast — Tom.
 6. Listing submission — Tom.
