@@ -8,7 +8,11 @@
 
      STRIPE_SECRET_KEY       sk_live_… / sk_test_…   server-only
      STRIPE_WEBHOOK_SECRET   whsec_…                 server-only; signs every webhook POST
-     STRIPE_PRICE_ID         price_…                 the $100 USD / month recurring price
+     STRIPE_PRICE_ID         price_…                 the US$100 / month recurring price (fallback)
+     STRIPE_PRICE_ID_<CUR>   price_…                 optional per-currency prices (USD, NZD, AUD,
+                                                     GBP, INR — src/lib/locale/countries.ts);
+                                                     Checkout picks the visitor's currency and
+                                                     falls back to STRIPE_PRICE_ID when unset
      NEXT_PUBLIC_APP_URL     https://<domain>        success/cancel/return URLs for Checkout + Portal
 
    SUPABASE_SERVICE_ROLE_KEY is also needed at runtime (subscriptions rows are written by the
@@ -16,6 +20,8 @@
    silently doing nothing. docs/BILLING-FIRST-BOOT.md has the full sequence. */
 
 import Stripe from "stripe";
+import { selectPriceId } from "@/lib/locale/resolve";
+import type { CountryPricing } from "@/lib/locale/countries";
 
 export * from "./plan";
 
@@ -42,6 +48,12 @@ export function billingEnv(): BillingEnv | null {
     line and every /api/billing route key off this. */
 export function isBillingConfigured(): boolean {
   return billingEnv() !== null;
+}
+
+/** The Stripe price to charge for a resolved locale: STRIPE_PRICE_ID_<CUR> when set, else
+    the base STRIPE_PRICE_ID (which billingEnv() already guarantees is present). */
+export function priceIdFor(env: BillingEnv, locale: Pick<CountryPricing, "stripePriceEnv">): string {
+  return selectPriceId(locale).priceId || env.priceId;
 }
 
 let stripeClient: Stripe | null = null;

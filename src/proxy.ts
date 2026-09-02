@@ -1,6 +1,9 @@
 /* Auth proxy (Next 16 name for middleware — src/proxy.ts replaces src/middleware.ts).
 
-   No-op unless Supabase is configured. When it is:
+   Landing (/): pins a `?country=XX` override into the unc_country cookie so the pricing
+   locale sticks for the session (src/lib/locale/resolve.ts). No Supabase call on that path.
+
+   Auth — no-op unless Supabase is configured. When it is:
      - refreshes the session cookies on every matched request (@supabase/ssr pattern);
      - /app/*  without a session → /login
      - /login  with a session    → /app
@@ -9,8 +12,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { publicSupabaseEnv } from "@/lib/db/client";
+import { COUNTRY_COOKIE, COUNTRY_COOKIE_MAX_AGE, COUNTRY_QUERY, normalizeCountry } from "@/lib/locale/resolve";
 
 export async function proxy(request: NextRequest) {
+  if (request.nextUrl.pathname === "/") {
+    const res = NextResponse.next();
+    const pin = normalizeCountry(request.nextUrl.searchParams.get(COUNTRY_QUERY));
+    if (pin) res.cookies.set(COUNTRY_COOKIE, pin, { path: "/", maxAge: COUNTRY_COOKIE_MAX_AGE, sameSite: "lax" });
+    return res;
+  }
+
   const env = publicSupabaseEnv();
   if (!env) return NextResponse.next();
 
@@ -48,5 +59,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/login"],
+  matcher: ["/", "/app/:path*", "/login"],
 };

@@ -6,16 +6,20 @@
 import { useState } from "react";
 import { startCheckout } from "@/lib/billing/clientActions";
 import { PLAN_COPY } from "@/lib/billing/plan";
+import type { LocalePricing } from "@/lib/locale/countries";
 
 const HEADLINE: Record<"none" | "canceled", { title: string; sub: string }> = {
   none: { title: "Ready when you are.", sub: "Start the trial and I get to work on your goal today. A card gets things moving — nothing is charged for 14 days." },
   canceled: { title: "Your plan ended.", sub: "Everything you agreed with me is still here. Start again and I pick up where we left off." },
 };
 
-export default function Paywall({ state, email = null }: { state: "none" | "canceled"; email?: string | null }) {
+/** `pricing` is the visitor's resolved country row (src/lib/locale); without it the card
+    falls back to the plan constants (US$100 / month). */
+export default function Paywall({ state, email = null, pricing }: { state: "none" | "canceled"; email?: string | null; pricing?: LocalePricing }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const h = HEADLINE[state];
+  const price = pricing ? { label: pricing.copy?.pricingLabel ?? PLAN_COPY.label, display: pricing.display, suffix: pricing.suffix } : { label: PLAN_COPY.label, display: PLAN_COPY.price, suffix: PLAN_COPY.priceSuffix };
 
   const go = async () => {
     setBusy(true);
@@ -60,10 +64,10 @@ export default function Paywall({ state, email = null }: { state: "none" | "canc
             boxShadow: "0 18px 50px oklch(0.27 0.055 262 / 0.1)",
           }}
         >
-          <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--cyan-text)", fontWeight: 600 }}>{PLAN_COPY.label}</div>
+          <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--cyan-text)", fontWeight: 600 }}>{price.label}</div>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 6, marginTop: 16 }}>
-            <span style={{ fontSize: 54, fontWeight: 700, letterSpacing: "-0.03em" }}>{PLAN_COPY.price}</span>
-            <span style={{ fontSize: 15, color: "var(--muted)" }}>{PLAN_COPY.priceSuffix}</span>
+            <span style={{ fontSize: 54, fontWeight: 700, letterSpacing: "-0.03em" }}>{price.display}</span>
+            <span style={{ fontSize: 15, color: "var(--muted)" }}>{price.suffix}</span>
           </div>
           <div style={{ display: "inline-block", fontSize: 12.5, fontWeight: 700, color: "oklch(0.22 0.05 262)", background: "var(--cyan)", borderRadius: 999, padding: "6px 16px", marginTop: 12 }}>
             {PLAN_COPY.trialBadge}

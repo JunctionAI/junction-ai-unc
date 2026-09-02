@@ -29,17 +29,27 @@ export async function ensureCustomer(stripe: StripeSlice, service: DbClient, opt
   return customer.id;
 }
 
-export function checkoutParams(env: BillingEnv, opts: { accountId: string; customerId: string }): Stripe.Checkout.SessionCreateParams {
+export interface CheckoutOpts {
+  accountId: string;
+  customerId: string;
+  /** Per-country price (src/lib/billing/config.ts priceIdFor). Defaults to env.priceId. */
+  priceId?: string;
+  /** Resolved locale, recorded on the subscription's metadata for reconciliation. */
+  locale?: { country: string; currency: string };
+}
+
+export function checkoutParams(env: BillingEnv, opts: CheckoutOpts): Stripe.Checkout.SessionCreateParams {
   const urls = billingUrls(env);
+  const localeMeta: Record<string, string> = opts.locale ? { country: opts.locale.country, currency: opts.locale.currency } : {};
   return {
     mode: "subscription",
     customer: opts.customerId,
     client_reference_id: opts.accountId,
-    line_items: [{ price: env.priceId, quantity: 1 }],
+    line_items: [{ price: opts.priceId || env.priceId, quantity: 1 }],
     // Card required to start the trial; cancel any time (the Portal handles it).
     payment_method_collection: "always",
-    subscription_data: { trial_period_days: TRIAL_DAYS, metadata: { account_id: opts.accountId } },
-    metadata: { account_id: opts.accountId },
+    subscription_data: { trial_period_days: TRIAL_DAYS, metadata: { account_id: opts.accountId, ...localeMeta } },
+    metadata: { account_id: opts.accountId, ...localeMeta },
     allow_promotion_codes: true,
     automatic_tax: { enabled: true },
     customer_update: { address: "auto", name: "auto" },
@@ -48,9 +58,9 @@ export function checkoutParams(env: BillingEnv, opts: { accountId: string; custo
   };
 }
 
-export async function createCheckoutSession(stripe: StripeSlice, service: DbClient, env: BillingEnv, opts: { accountId: string; email: string | null; userId: string }): Promise<{ url: string }> {
+export async function createCheckoutSession(stripe: StripeSlice, service: DbClient, env: BillingEnv, opts: { accountId: string; email: string | null; userId: string; priceId?: string; locale?: CheckoutOpts["locale"] }): Promise<{ url: string }> {
   const customerId = await ensureCustomer(stripe, service, opts);
-  const session = await stripe.checkout.sessions.create(checkoutParams(env, { accountId: opts.accountId, customerId }));
+  const session = await stripe.checkout.sessions.create(checkoutParams(env, { accountId: opts.accountId, customerId, priceId: opts.priceId, locale: opts.locale }));
   if (!session.url) throw new Error("Stripe returned a Checkout Session without a url");
   return { url: session.url };
 }

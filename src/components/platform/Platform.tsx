@@ -102,7 +102,7 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
   }
 
   if (gated && !isOpen(gated)) {
-    return <Paywall state={gated.state === "canceled" ? "canceled" : "none"} email={persistence.mode === "account" ? persistence.userEmail : null} />;
+    return <Paywall state={gated.state === "canceled" ? "canceled" : "none"} email={persistence.mode === "account" ? persistence.userEmail : null} pricing={billing?.pricing} />;
   }
 
   return (
