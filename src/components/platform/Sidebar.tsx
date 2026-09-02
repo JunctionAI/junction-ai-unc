@@ -38,8 +38,9 @@ function planLine(e: Entitlement): { text: string; action: string } | null {
 }
 
 /** `account` is null in demo mode (no Supabase env / no session) and the sidebar renders exactly as Phase 1.
-    `billing` is null unless billing is configured; then it adds the plan/trial line. */
-export default function Sidebar({ V, account = null, billing = null }: { V: PlatformVals; account?: Persistence | null; billing?: Entitlement | null }) {
+    `billing` is null unless billing is configured; then it adds the plan/trial line.
+    `onModels` (DB mode only) opens the "Models" settings — which brain for which job. */
+export default function Sidebar({ V, account = null, billing = null, onModels }: { V: PlatformVals; account?: Persistence | null; billing?: Entitlement | null; onModels?: () => void }) {
   const plan = billing ? planLine(billing) : null;
   return (
     <aside
@@ -92,6 +93,14 @@ export default function Sidebar({ V, account = null, billing = null }: { V: Plat
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ color: account.autosave === "error" ? "var(--amber)" : "var(--faint-on-navy)" }}>{SAVE_LABEL[account.autosave]}</span>
               <span>·</span>
+              {onModels && (
+                <>
+                  <button type="button" onClick={onModels} className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "var(--faint-on-navy)" }}>
+                    Models
+                  </button>
+                  <span>·</span>
+                </>
+              )}
               <form action="/auth/signout" method="post" style={{ display: "inline" }}>
                 <button type="submit" className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "var(--faint-on-navy)" }}>
                   Sign out
