@@ -21,9 +21,11 @@
 import type { DbClient } from "@/lib/db/types";
 import { seal, type Keyring } from "./crypto";
 import { bundleFromResponse, callbackUri, codeChallenge, exchangeCode, exchangeMetaLongLived, newCodeVerifier, newState, STATE_TTL_MS, verifyShopifyHmac, type FetchLike, type TokenBundle } from "./oauth";
+import { hasPicker, listAccountOptions, normaliseExternalRef, OptionsError, type AccountOption } from "./options";
 import { connectorEntry, normaliseShopDomain, platformCredentials, type ConnectorEntry } from "./registry";
 import { insertSystemReceipt } from "@/lib/db/receipts";
-import { accountForUser, consumeOauthState, deleteSecret, getConnector, insertOauthState, isMember, putSecret, updateConnector, upsertConnector } from "./store";
+import { accountForUser, consumeOauthState, deleteSecret, getConnector, insertOauthState, isMember, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
+import { getAccessTokenFor } from "./tokens";
 
 export interface ConnectorConfig {
   /** Public base URL the callbacks are registered under (APP_URL), no trailing slash. */
@@ -46,7 +48,7 @@ export interface HandlerDeps {
   log?: (line: string) => void;
 }
 
-export type FallbackReason = "unknown_platform" | "platform_not_configured" | "secret_store_not_configured" | "accounts_not_configured";
+export type FallbackReason = "unknown_platform" | "platform_not_configured" | "secret_store_not_configured" | "accounts_not_configured" | "developer_token_not_configured";
 
 export type StartResult = { status: 200; body: { url: string } } | { status: 200; body: { fallback: true; reason: FallbackReason } } | { status: 400 | 401 | 403 | 404; body: { error: string } };
 
@@ -211,6 +213,100 @@ export async function handleDisconnect(deps: HandlerDeps, platform: string): Pro
   });
   deps.log?.(`connectors.disconnect platform=${entry.id} account=${accountId}`);
   return { status: 200, body: { ok: true, status: "disconnected" } };
+}
+
+// ---------- post-connect account pickers ----------
+
+/* GET  …/options  → { platform, externalRef, options[] }   the founder's choices (listed only
+                                                            while external_ref is null, or ?refresh=1)
+   POST …/select   { externalRef } → { ok, externalRef }    stores the choice; status → connected
+
+   Gates mirror disconnect (platform known → picker exists → DB → session → membership → a
+   connected row), then the sealed token is opened through getAccessTokenFor (refreshing it
+   if needed) for the platform list call. A token that can't be opened/refreshed → 409 with
+   the row already flipped to needs_reconnect by tokens.ts, so the card shows Reconnect. */
+
+export type OptionsResult =
+  | { status: 200; body: { platform: string; externalRef: string | null; options: AccountOption[]; listed: boolean } }
+  | { status: 200; body: { fallback: true; reason: FallbackReason } }
+  | { status: 401 | 403 | 404 | 409 | 502; body: { error: string } };
+
+type PickerGate = { ok: true; accountId: string; row: ConnectorRow; entry: ConnectorEntry } | { ok: false; result: { status: 200; body: { fallback: true; reason: FallbackReason } } | { status: 401 | 403 | 404; body: { error: string } } };
+
+async function pickerGate(deps: HandlerDeps, platform: string): Promise<PickerGate> {
+  const entry = connectorEntry(platform);
+  if (!entry) return { ok: false, result: { status: 404, body: { error: "unknown platform" } } };
+  if (!hasPicker(entry.id)) return { ok: false, result: { status: 404, body: { error: "this platform has no account picker" } } };
+  if (!deps.config.dbConfigured || !deps.db) return { ok: false, result: { status: 200, body: { fallback: true, reason: "accounts_not_configured" } } };
+  if (!deps.userId) return { ok: false, result: { status: 401, body: { error: "sign in first" } } };
+  const accountId = await accountForUser(deps.db, deps.userId);
+  if (!accountId) return { ok: false, result: { status: 403, body: { error: "no account for this user" } } };
+  const row = await getConnector(deps.db, accountId, entry.id);
+  if (!row || row.status !== "connected") return { ok: false, result: { status: 404, body: { error: "nothing connected" } } };
+  return { ok: true, accountId, row, entry };
+}
+
+export async function handleOptions(deps: HandlerDeps, platform: string, opts: { refresh?: boolean } = {}): Promise<OptionsResult> {
+  const gate = await pickerGate(deps, platform);
+  if (!gate.ok) return gate.result;
+  const { accountId, row, entry } = gate;
+  const db = deps.db!;
+  if (row.external_ref && !opts.refresh) return { status: 200, body: { platform: entry.id, externalRef: row.external_ref, options: [], listed: false } };
+  if (!deps.config.keyring) return { status: 200, body: { fallback: true, reason: "secret_store_not_configured" } };
+  if (entry.id === "google_ads" && !(deps.config.env.GOOGLE_ADS_DEVELOPER_TOKEN || "").trim()) return { status: 200, body: { fallback: true, reason: "developer_token_not_configured" } };
+
+  const token = await getAccessTokenFor(accountId, entry.id, { db, keyring: deps.config.keyring, env: deps.config.env, fetch: deps.fetch, now: deps.now, log: deps.log });
+  if (!token) {
+    deps.log?.(`connectors.options platform=${entry.id} account=${accountId} result=needs_reconnect`);
+    return { status: 409, body: { error: "needs reconnect" } };
+  }
+  try {
+    const options = await listAccountOptions(entry.id, token.accessToken, { fetch: deps.fetch, env: deps.config.env });
+    deps.log?.(`connectors.options platform=${entry.id} account=${accountId} options=${options.length}`);
+    return { status: 200, body: { platform: entry.id, externalRef: row.external_ref, options, listed: true } };
+  } catch (e) {
+    const code = e instanceof OptionsError ? e.code : "unexpected";
+    deps.log?.(`connectors.options platform=${entry.id} account=${accountId} result=list_${code}`);
+    return { status: 502, body: { error: `couldn't list accounts (${code})` } };
+  }
+}
+
+export type SelectResult = { status: 200; body: { ok: true; externalRef: string } } | { status: 200; body: { fallback: true; reason: FallbackReason } } | { status: 400 | 401 | 403 | 404; body: { error: string } };
+
+/** Store the founder's choice. The value is validated for shape only — a wrong account reads
+    as an honest "couldn't ask" on the next run, never as invented data. */
+export async function handleSelect(deps: HandlerDeps, platform: string, body: unknown): Promise<SelectResult> {
+  const gate = await pickerGate(deps, platform);
+  if (!gate.ok) return gate.result;
+  const { accountId, row, entry } = gate;
+  const raw = body && typeof body === "object" ? (body as { externalRef?: unknown }).externalRef : undefined;
+  const externalRef = normaliseExternalRef(entry.id, raw);
+  if (!externalRef) return { status: 400, body: { error: "externalRef must be a valid account id for this platform" } };
+  const now = deps.now().toISOString();
+  await updateConnector(deps.db!, row.id, { external_ref: externalRef, status: "connected" });
+  await insertSystemReceipt(deps.db!, {
+    accountId,
+    kind: "notification",
+    platform: entry.id,
+    description: `${entry.name}: reading ${describeRef(entry.id, externalRef)} from now on.${row.external_ref && row.external_ref !== externalRef ? ` (was ${row.external_ref})` : ""}`,
+    payload: { connector_id: row.id, platform: entry.id, external_ref: externalRef, previous_external_ref: row.external_ref },
+    now,
+  });
+  deps.log?.(`connectors.select platform=${entry.id} account=${accountId}`);
+  return { status: 200, body: { ok: true, externalRef } };
+}
+
+function describeRef(platform: string, ref: string): string {
+  switch (platform) {
+    case "ga4":
+      return `property ${ref}`;
+    case "google_ads":
+      return `customer ${ref.replace(/^(\d{3})(\d{3})(\d{4})$/, "$1-$2-$3")}`;
+    case "meta_ads":
+      return `ad account ${ref}`;
+    default:
+      return ref;
+  }
 }
 
 // ---------- external_ref discovery (best-effort, never fatal) ----------

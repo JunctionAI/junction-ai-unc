@@ -62,4 +62,12 @@ export const CONNECT_COPY = {
   shopPrompt: "your-store.myshopify.com",
   disconnected: "Disconnected — token deleted. Reconnect any time; revoke the app on their side too if you want it gone there.",
   disconnectFailed: "Couldn't disconnect it just now — nothing changed. Try again in a minute.",
+  /** Post-connect picker (GA4 property / Google Ads customer / Meta ad account). */
+  chooseLabel: "Choose account",
+  choosePrompt: "Which one should I read?",
+  choosePlaceholder: "Pick one…",
+  chosen: "Got it. I'll read that one tonight and show you the receipt.",
+  chooseNone: "I can see the login but no accounts on it yet. Add one on their side, then reload.",
+  chooseReconnect: "That token has lapsed — reconnect and I'll list them again.",
+  chooseFailed: "Couldn't fetch the list just now. Try again in a minute.",
 } as const;

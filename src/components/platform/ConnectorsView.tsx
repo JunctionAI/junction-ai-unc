@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PICKER_PLATFORMS, type AccountOption } from "@/lib/connectors/options";
 import { clearConnectReturn, CONNECT_COPY, peekConnectReturn } from "@/lib/connectors/returnParams";
 import { isDbConfigured } from "@/lib/db/client";
 import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
@@ -9,10 +10,19 @@ import type { PlatformVals } from "@/lib/platform/derive";
 /* Connect / Reconnect: in demo mode (no Supabase configured) the button does exactly what the
    prototype did — flips the card to Connected client-side. With accounts on, it asks
    /api/connectors/<platform>/start and either follows the returned authorize URL or shows one
-   line in Unc's voice when the platform isn't switched on yet. */
+   line in Unc's voice when the platform isn't switched on yet.
+
+   Post-connect picker (accounts mode only): a Connected GA4 / Google Ads / Meta Ads card whose
+   connector has no external_ref yet asks GET …/options and shows "Which one should I read?"
+   with a small select; choosing posts …/select. Until then the status pill reads
+   "Choose account" (cyan wash — a step, not a decision, so no amber). Demo mode never
+   fetches, so the prototype's cards are untouched. */
 
 type StartResponse = { url?: string; fallback?: boolean; reason?: string; error?: string };
 type DisconnectResponse = { ok?: boolean; fallback?: boolean; error?: string };
+type OptionsResponse = { externalRef?: string | null; options?: AccountOption[]; listed?: boolean; fallback?: boolean; error?: string };
+type SelectResponse = { ok?: boolean; externalRef?: string; fallback?: boolean; error?: string };
+type Picker = { externalRef: string | null; options: AccountOption[]; note?: string };
 
 export default function ConnectorsView({ V }: { V: PlatformVals }) {
   // Seeded from the OAuth return (if any) on first render; cleared once shown so it doesn't replay.
@@ -24,11 +34,67 @@ export default function ConnectorsView({ V }: { V: PlatformVals }) {
   const [shop, setShop] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
+  const [pickers, setPickers] = useState<Record<string, Picker>>({});
+
   useEffect(() => clearConnectReturn(), []);
 
   const note = (name: string, text: string) => setNotes((n) => ({ ...n, [name]: text }));
   // Accounts mode only: the demo cards have no token to forget.
   const canDisconnect = isDbConfigured();
+
+  // Which Connected cards may still need an account chosen (accounts mode only).
+  const pickerKey = canDisconnect
+    ? V.connectors
+        .filter((c) => c.ok && (PICKER_PLATFORMS as string[]).includes(CONNECTOR_PLATFORMS[c.name] ?? ""))
+        .map((c) => c.name)
+        .join("|")
+    : "";
+
+  useEffect(() => {
+    if (!pickerKey) return;
+    let cancelled = false;
+    for (const name of pickerKey.split("|")) {
+      const platform = CONNECTOR_PLATFORMS[name];
+      void (async () => {
+        try {
+          const res = await fetch(`/api/connectors/${platform}/options`);
+          const data = (await res.json().catch(() => ({}))) as OptionsResponse;
+          if (cancelled) return;
+          if (res.ok && !data.fallback && data.externalRef !== undefined) {
+            const options = data.options ?? [];
+            setPickers((p) => ({ ...p, [name]: { externalRef: data.externalRef ?? null, options, note: data.externalRef || options.length ? undefined : CONNECT_COPY.chooseNone } }));
+          } else if (res.status === 409) setPickers((p) => ({ ...p, [name]: { externalRef: null, options: [], note: CONNECT_COPY.chooseReconnect } }));
+          else if (res.status === 502) setPickers((p) => ({ ...p, [name]: { externalRef: null, options: [], note: CONNECT_COPY.chooseFailed } }));
+          // fallback / 401 / 403 / 404: nothing to pick — the card stays as it is
+        } catch {
+          /* network blip: the card stays Connected; the next visit asks again */
+        }
+      })();
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [pickerKey]);
+
+  async function select(name: string, externalRef: string) {
+    const platform = CONNECTOR_PLATFORMS[name];
+    if (!platform || !externalRef) return;
+    setBusy(name);
+    try {
+      const res = await fetch(`/api/connectors/${platform}/select`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ externalRef }) });
+      const data = (await res.json().catch(() => ({}))) as SelectResponse;
+      if (res.status === 401) note(name, CONNECT_COPY.signIn);
+      else if (res.ok && data.ok && data.externalRef) {
+        setPickers((p) => ({ ...p, [name]: { externalRef: data.externalRef!, options: p[name]?.options ?? [] } }));
+        note(name, CONNECT_COPY.chosen);
+      } else if (res.ok && data.fallback) note(name, CONNECT_COPY.notSwitchedOn);
+      else note(name, data.error ? `${CONNECT_COPY.chooseFailed} (${data.error})` : CONNECT_COPY.chooseFailed);
+    } catch {
+      note(name, CONNECT_COPY.chooseFailed);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function disconnect(name: string, demoDisconnect: () => void) {
     const platform = CONNECTOR_PLATFORMS[name];
@@ -125,13 +191,45 @@ export default function ConnectorsView({ V }: { V: PlatformVals }) {
                   </button>
                 </form>
               )}
+              {cn.ok && pickers[cn.name] && pickers[cn.name].externalRef === null && (
+                <div style={{ marginTop: 8 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--cyan-text)", fontWeight: 500 }}>
+                    <span>{CONNECT_COPY.choosePrompt}</span>
+                    {pickers[cn.name].options.length > 0 && (
+                      <select
+                        defaultValue=""
+                        disabled={busy === cn.name}
+                        onChange={(e) => void select(cn.name, e.target.value)}
+                        aria-label={`${cn.name} — ${CONNECT_COPY.choosePrompt}`}
+                        style={{ flex: 1, minWidth: 0, maxWidth: 260, fontSize: 12, padding: "4px 8px", border: "1px solid var(--card-border)", borderRadius: 8, background: "white", color: "var(--ink)" }}
+                      >
+                        <option value="" disabled>
+                          {CONNECT_COPY.choosePlaceholder}
+                        </option>
+                        {pickers[cn.name].options.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </label>
+                  {pickers[cn.name].note && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, lineHeight: 1.45 }}>{pickers[cn.name].note}</div>}
+                </div>
+              )}
               {notes[cn.name] && (
                 <div style={{ fontSize: 12, color: "var(--amber-text)", marginTop: 6, lineHeight: 1.45 }}>{notes[cn.name]}</div>
               )}
             </div>
             {cn.ok && (
               <span style={{ flex: "none", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--cyan-text)", fontWeight: 600 }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan)" }}></span>Connected
+                {pickers[cn.name] && pickers[cn.name].externalRef === null ? (
+                  <span style={{ background: "var(--cyan-wash)", borderRadius: 999, padding: "4px 11px" }}>{CONNECT_COPY.chooseLabel}</span>
+                ) : (
+                  <>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan)" }}></span>Connected
+                  </>
+                )}
                 {canDisconnect && (
                   <button
                     onClick={() => void disconnect(cn.name, cn.disconnect)}
