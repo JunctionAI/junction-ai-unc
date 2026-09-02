@@ -32,6 +32,8 @@ import { createLogger, type Logger } from "./log";
 import { dueRoutines, type DueRoutine } from "./scheduler";
 import { buildAdapters, collectCandidates, LIVE_MODE_ENABLED, triggerRun, WORKER_RUN_MODE, type BuiltAdapters, type ServiceDeps } from "./service";
 import { runBenchmarks, runDailyBrief, runKpiSnapshot, runMeasure, runSelfReview, type TelemetryDeps } from "./telemetry";
+import { runChannelsTick, type ChannelsTickReport } from "./channels";
+import { keyringFromEnv } from "../lib/connectors/crypto";
 import type { SelfReviewLlm } from "../lib/telemetry/selfReview";
 import { readTimezone, type BriefLlm } from "../lib/brain/brief";
 
@@ -81,6 +83,8 @@ export interface TickRunReport {
 }
 
 export interface TickReport {
+  /** Channel pushes (briefs, drafts, approvals, reminders) sent this tick; undefined in demo mode. */
+  channels?: ChannelsTickReport;
   at: string;
   accounts: number;
   candidates: number;
@@ -175,6 +179,13 @@ export class Worker {
     // Housekeeping after the routines: each part isolates its own failures.
     if (this.opts.jobs ?? true) report.jobs = await this.runDueJobs(now);
     if (this.opts.briefs ?? true) report.briefs = await this.runDueBriefs(now);
+    if (this.deps.db) {
+      try {
+        report.channels = await runChannelsTick({ store: this.deps.store, db: this.deps.db, now: this.now, log: this.log, env: process.env, keyring: keyringFromEnv(process.env) });
+      } catch (err) {
+        this.log.warn("channels.tick_failed", { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
     report.swept = await this.sweepIfDue(now);
     report.ms = Date.now() - t0;
     this.stats.ticks += 1;
