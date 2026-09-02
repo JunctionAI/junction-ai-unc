@@ -1,0 +1,18 @@
+{
+  "//": "Standalone build of scripts/seed-beta.ts (no tsx in node_modules — same pattern as tsconfig.worker.json). `npx tsc -p scripts/beta/tsconfig.json` emits CommonJS to dist/beta; run with `node dist/beta/scripts/seed-beta.js [--dry-run] [--only slug,slug]`. dist/ is git-ignored. tsc follows the imports into src/lib/db + src/lib/platform (relative imports; the only '@/' imports on that path are type-only and erased).",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/beta",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "incremental": false,
+    "sourceMap": false,
+    "plugins": []
+  },
+  "include": ["../seed-beta.ts"],
+  "exclude": ["../../node_modules"]
+}
