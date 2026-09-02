@@ -150,7 +150,7 @@ export const fakeUuid = () => {
 export class FakeSupabase implements DbClient {
   readonly tables = new Map<string, Row[]>();
   readonly calls: Call[] = [];
-  /** RPCs the fake answers; create_account and accept_beta_invites are built in. */
+  /** RPCs the fake answers; create_account, accept_beta_invites and match_memories (0010) are built in. */
   readonly rpcs: Record<string, (args: Record<string, unknown>) => unknown> = {};
   /** auth.uid() for the built-in RPCs. */
   userId: string | null = "user-1";
@@ -181,6 +181,19 @@ export class FakeSupabase implements DbClient {
         attached.push(inv.account_id as string);
       }
       return attached;
+    };
+    // 0010: cosine similarity over live memories that carry an embedding, best first.
+    this.rpcs.match_memories = (args) => {
+      const q = args.query_embedding;
+      if (!Array.isArray(q)) throw new Error("match_memories: query_embedding must be a vector");
+      const acct = args.acct;
+      const kinds = Array.isArray(args.kinds) ? (args.kinds as string[]) : null;
+      const count = typeof args.match_count === "number" ? args.match_count : 12;
+      return (this.tables.get("memories") ?? [])
+        .filter((m) => m.account_id === acct && (m.valid_to === null || m.valid_to === undefined) && Array.isArray(m.embedding) && (!kinds || kinds.includes(String(m.kind))))
+        .map((m) => ({ id: m.id, kind: m.kind, text: m.text, importance: m.importance, confidence: m.confidence, happens_at: m.happens_at ?? null, similarity: cosine(q as number[], m.embedding as number[]) }))
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, count);
     };
   }
 
@@ -309,6 +322,19 @@ class DbErr extends Error {
   ) {
     super(message);
   }
+}
+
+function cosine(a: number[], b: number[]): number {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
 }
 
 const cmp = (a: unknown, b: unknown): number => {

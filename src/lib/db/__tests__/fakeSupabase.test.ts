@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
       "account_model_prefs",
+      "account_profiles",
       "account_state_meta",
       "accounts",
       "approvals",
@@ -18,10 +19,16 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "chat_messages",
       "connector_secrets",
       "connectors",
+      "daily_briefs",
       "goals",
+      "intake_events",
+      "intake_keys",
+      "kpi_snapshots",
       "llm_usage",
+      "memories",
       "oauth_states",
       "plans",
+      "playbooks",
       "receipts",
       "resource_profiles",
       "routine_outcomes",
@@ -64,6 +71,32 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.beta_invites.uniques).toContainEqual({ columns: ["email", "account_id"], partialNotNull: undefined }); // 0009
     expect(s.beta_invites.enums.role).toEqual(new Set(["owner", "member"]));
     expect([...s.beta_invites.columns]).toEqual(expect.arrayContaining(["email", "invited_by", "note", "accepted_at", "accepted_user_id"]));
+    // 0010 client brain
+    expect(s.memories.enums.kind).toEqual(new Set(["fact", "preference", "constraint", "decision", "relationship", "event", "lesson", "summary"]));
+    expect(s.memories.enums.source).toEqual(new Set(["chat", "onboarding", "scan", "receipt", "self_review", "intake", "founder", "brief"]));
+    expect([...s.memories.columns]).toEqual(expect.arrayContaining(["embedding", "happens_at", "valid_from", "valid_to", "superseded_by", "source_ref", "tags"]));
+    expect(s.account_profiles.primaryKey).toEqual(["account_id"]);
+    expect([...s.account_profiles.columns]).toEqual(expect.arrayContaining(["tone", "decision_style", "cadence", "channels", "founder_notes"]));
+    expect(s.kpi_snapshots.uniques).toContainEqual({ columns: ["account_id", "metric_key", "window_end"] });
+    expect(s.daily_briefs.uniques).toContainEqual({ columns: ["account_id", "day"] });
+    expect(s.intake_keys.uniques).toContainEqual({ columns: ["key_hash"] });
+    expect(s.playbooks.uniques).toContainEqual({ columns: ["domain", "title"] });
+  });
+
+  it("answers match_memories (0010) with cosine similarity over live embedded memories", async () => {
+    const db = new FakeSupabase();
+    db.seed("accounts", [{ id: "a1", name: "x" }]);
+    db.seed("memories", [
+      { id: "m1", account_id: "a1", kind: "fact", text: "north", source: "chat", embedding: [0, 1], valid_from: "2026-01-01" },
+      { id: "m2", account_id: "a1", kind: "fact", text: "east", source: "chat", embedding: [1, 0], valid_from: "2026-01-01" },
+      { id: "m3", account_id: "a1", kind: "event", text: "north-east", source: "chat", embedding: [1, 1], valid_from: "2026-01-01" },
+      { id: "m4", account_id: "a1", kind: "fact", text: "gone", source: "chat", embedding: [0, 1], valid_from: "2026-01-01", valid_to: "2026-02-01" },
+      { id: "m5", account_id: "a1", kind: "fact", text: "no vector", source: "chat", valid_from: "2026-01-01" },
+    ]);
+    const { data } = await db.rpc("match_memories", { acct: "a1", query_embedding: [0, 1], match_count: 2, kinds: null });
+    expect((data as { id: string }[]).map((r) => r.id)).toEqual(["m1", "m3"]);
+    const onlyEvents = await db.rpc("match_memories", { acct: "a1", query_embedding: [0, 1], match_count: 5, kinds: ["event"] });
+    expect((onlyEvents.data as { id: string; similarity: number }[]).map((r) => r.id)).toEqual(["m3"]);
   });
 
   it("rejects unknown tables and columns loudly", async () => {
