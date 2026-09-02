@@ -123,7 +123,7 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
       <main style={{ flex: 1, minWidth: 0 }}>
         {gated?.state === "past_due" && <BillingBanner />}
         {V.isOnboarding && <Onboarding V={V} />}
-        {V.isToday && <HomeView V={V} live={inAccount ? live : null} telemetry={inAccount ? telemetry : null} />}
+        {V.isToday && <HomeView V={V} live={inAccount ? live : null} telemetry={inAccount ? telemetry : null} accountMode={inAccount} />}
         {V.isStrategy && <StrategyView V={V} />}
         {V.isConnectors && <ConnectorsView V={V} />}
         {V.isSystems && <RoutinesView V={V} run={runTarget} />}

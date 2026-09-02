@@ -35,7 +35,7 @@ export async function createAccount(db: DbClient, opts: { name?: string; currenc
 
 export async function loadAccountRows(db: DbClient, accountId: string): Promise<LoadedRows> {
   const byAccount = (table: string, columns: string) => db.from(table).select(columns).eq("account_id", accountId);
-  const [account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, approvals, chatMessages, stateMeta] = await Promise.all([
+  const [account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages, stateMeta] = await Promise.all([
     unwrap<LoadedRows["account"]>("accounts.select", db.from("accounts").select("id, currency").eq("id", accountId).maybeSingle()),
     unwrap<LoadedRows["goals"]>("goals.select", byAccount("goals", "account_id, category, tier, title, baseline, deadline").order("created_at", { ascending: true })),
     unwrap<LoadedRows["resourceProfile"]>(
@@ -46,11 +46,10 @@ export async function loadAccountRows(db: DbClient, accountId: string): Promise<
     unwrap<LoadedRows["businessProfile"]>("business_profiles.select", byAccount("business_profiles", "account_id, scan_status, profile, scanned_at").maybeSingle()),
     unwrap<LoadedRows["routineStates"]>("routine_states.select", byAccount("routine_states", "account_id, routine_id, enabled")),
     unwrap<LoadedRows["connectors"]>("connectors.select", byAccount("connectors", "account_id, platform, status")),
-    unwrap<LoadedRows["approvals"]>("approvals.select", byAccount("approvals", "client_key, status").in("client_key", ["demo-ap-0", "demo-ap-1", "demo-ap-2"])),
     unwrap<LoadedRows["chatMessages"]>("chat_messages.select", byAccount("chat_messages", "account_id, thread, position, lane, sender, body, meta").order("position", { ascending: true })),
     unwrap<LoadedRows["stateMeta"]>("account_state_meta.select", byAccount("account_state_meta", "account_id, schema_version, client_state").maybeSingle()),
   ]);
-  return { account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, approvals, chatMessages, stateMeta };
+  return { account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages, stateMeta };
 }
 
 /** { state, found }: found=false means nothing was ever saved for this account (seed it). */
@@ -96,8 +95,6 @@ export async function saveAccountRows(db: DbClient, rows: AccountRows): Promise<
   if (rows.connectors.length)
     await unwrap("connectors.upsert", acct("connectors").upsert(rows.connectors as unknown as Record<string, unknown>[], { onConflict: "account_id,platform" }));
 
-  await unwrap("approvals.upsert", acct("approvals").upsert(rows.approvals as unknown as Record<string, unknown>[], { onConflict: "account_id,client_key" }));
-
   if (rows.chatMessages.length)
     await unwrap("chat_messages.upsert", acct("chat_messages").upsert(rows.chatMessages as unknown as Record<string, unknown>[], { onConflict: "account_id,thread,position" }));
 
@@ -111,13 +108,36 @@ export async function saveAccountState(db: DbClient, accountId: string, state: P
   await saveAccountRows(db, stateToRows(accountId, state, opts));
 }
 
-/** First sign-in bootstrap: find the user's account or create one and seed it with whatever
-    the client already holds (the onboarding answers), so nothing typed before sign-in is lost. */
+/** Attach any open beta invite for the signed-in user's confirmed email (0009 RPC, runs as the
+    user under RLS): the seeded account becomes theirs before anything else looks for a
+    membership. Idempotent, safe on every sign-in. Returns the account ids attached now.
+    A project that hasn't applied 0009 yet answers "function not found" — that is logged and
+    read as "no invites" rather than blocking every sign-in; any other failure propagates. */
+export async function acceptBetaInvites(db: DbClient): Promise<string[]> {
+  try {
+    const ids = await unwrap<unknown>("rpc.accept_beta_invites", db.rpc("accept_beta_invites"));
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string") : [];
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/PGRST202|could not find the function|does not exist|not found/i.test(msg)) {
+      console.warn(`[accounts] accept_beta_invites unavailable (migration 0009 not applied?): ${msg}`);
+      return [];
+    }
+    throw e;
+  }
+}
+
+/** First sign-in bootstrap: accept any beta invite, then find the user's account or create one
+    and seed it with whatever the client already holds (the onboarding answers), so nothing
+    typed before sign-in is lost. Order matters: an invited founder must land in the seeded
+    account (found=true → hydrated from its rows, the client seed is NOT written over it),
+    never in a fresh empty one. */
 export async function ensureAccount(
   db: DbClient,
   seed: PlatformState,
   opts: { userId?: string } = {},
 ): Promise<{ accountId: string; created: boolean; state: PlatformState }> {
+  await acceptBetaInvites(db);
   const memberships = await listMemberships(db);
   if (memberships.length) {
     const accountId = memberships[0].accountId;

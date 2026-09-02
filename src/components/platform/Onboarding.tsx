@@ -221,7 +221,7 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
                 <span style={microLabel}>Where it is now</span>
                 <input
                   type="number"
-                  value={V.obBaselineNum}
+                  value={V.obBaselineNum ?? ""}
                   onChange={V.onObBaselineNum}
                   style={{ display: "block", width: "100%", marginTop: 6, ...textInput, fontSize: 16, fontWeight: 600, color: "var(--muted)" }}
                 />

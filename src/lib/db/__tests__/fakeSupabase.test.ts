@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
@@ -12,6 +12,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "approvals",
       "benchmark_optins",
       "benchmarks",
+      "beta_invites",
       "billing_events",
       "business_profiles",
       "chat_messages",
@@ -60,6 +61,9 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect([...s.connector_secrets.columns]).toEqual(expect.arrayContaining(["ciphertext", "iv", "tag", "key_version"]));
     expect(s.oauth_states.primaryKey).toEqual(["state"]);
     expect([...s.oauth_states.columns]).toEqual(expect.arrayContaining(["account_id", "platform", "code_verifier", "shop", "expires_at"]));
+    expect(s.beta_invites.uniques).toContainEqual({ columns: ["email", "account_id"], partialNotNull: undefined }); // 0009
+    expect(s.beta_invites.enums.role).toEqual(new Set(["owner", "member"]));
+    expect([...s.beta_invites.columns]).toEqual(expect.arrayContaining(["email", "invited_by", "note", "accepted_at", "accepted_user_id"]));
   });
 
   it("rejects unknown tables and columns loudly", async () => {

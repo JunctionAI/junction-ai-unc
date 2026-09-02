@@ -158,3 +158,25 @@ test.describe("Landing", () => {
     }
   });
 });
+
+/* Shopify App Store install entry (shopify/REVIEW-CHECKLIST.md §2d): the landing is the app's
+   application_url, so ?shop=&hmac= on / must forward to /api/connectors/shopify/install with
+   the query intact. The demo server has no SHOPIFY_CLIENT_ID/SECRET, so that route's honest
+   answer is the connect_error bounce — the forward itself is what this pins. */
+test.describe("Landing → Shopify install forward", () => {
+  test("?shop=&hmac= on / redirects through the install route", async ({ page }) => {
+    const hmac = "0".repeat(64);
+    const res = await page.goto(`/?shop=acme.myshopify.com&hmac=${hmac}&timestamp=1&host=aG9zdA`);
+    expect(res).not.toBeNull();
+    const chain: string[] = [];
+    for (let r = res!.request(); r; r = r.redirectedFrom()!) chain.push(r.url());
+    expect(chain.some((u) => u.includes(`/api/connectors/shopify/install?shop=acme.myshopify.com&hmac=${hmac}&timestamp=1&host=aG9zdA`))).toBe(true);
+    expect(res!.url()).toMatch(/\/app\?connect_error=shopify$/);
+  });
+
+  test("a plain landing request is not forwarded", async ({ page }) => {
+    const res = await page.goto("/?shop=acme.myshopify.com");
+    expect(res!.url()).toMatch(/\/\?shop=acme\.myshopify\.com$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  });
+});

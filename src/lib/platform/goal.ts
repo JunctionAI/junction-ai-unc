@@ -21,9 +21,13 @@ export const DEMO_START = "2026-08-12T00:00:00";
 export const DEMO_DEFAULT_CURRENT = 31650;
 export const DEMO_DEFAULT_BASELINE = 28400;
 
+/** What Unc says on Home (accounts mode) when the baseline is NULL — instead of fake progress off the demo 28,400. */
+export const BASELINE_NOT_SET_COPY = "Baseline not set yet — tell me where you started and I’ll work the pace out from there.";
+
 export interface GoalMathInput {
   goalTitle: string;
-  baselineNum: number;
+  /** null = not set; goalMath still falls back to the demo baseline for the maths, and the caller decides whether to show it. */
+  baselineNum: number | null;
   deadline: string; // yyyy-mm-dd
   currency: string;
   currentMRR?: number;

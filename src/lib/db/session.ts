@@ -8,13 +8,16 @@
      no service role             → 503 { error }            (nothing server-side can be written)
      no session                  → 401 { error }
      session, no account         → 403 { error }  — or the account is created when
-                                                     `createAccount` is set (billing does that:
-                                                     first sign-in raced the client bootstrap)
+                                                     `createAccount` is set (billing and the
+                                                     Shopify install entry do that: first sign-in
+                                                     raced the client bootstrap). Before either,
+                                                     an open beta invite for the user's email is
+                                                     accepted (0009) so a seeded account wins.
 
    Returns either the session or the Response to send instead. Reads process.env only. */
 
 import { asDb, isDbConfigured } from "./client";
-import { createAccount, listMemberships } from "./accountState";
+import { acceptBetaInvites, createAccount, listMemberships } from "./accountState";
 import { getServerSupabase, getServiceSupabase, isServiceRoleConfigured } from "./server";
 import type { DbClient } from "./types";
 
@@ -40,7 +43,11 @@ export async function requireAccountSession(opts: { createAccount?: boolean } = 
   } = await supabase.auth.getUser();
   if (!user) return json({ error: "sign in first" }, 401);
   const db = asDb(supabase);
-  const memberships = await listMemberships(db);
+  let memberships = await listMemberships(db);
+  if (!memberships.length) {
+    await acceptBetaInvites(db);
+    memberships = await listMemberships(db);
+  }
   let accountId: string;
   if (memberships.length) accountId = memberships[0].accountId;
   else if (opts.createAccount) accountId = await createAccount(db);

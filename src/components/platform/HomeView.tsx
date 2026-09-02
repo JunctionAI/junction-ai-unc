@@ -3,6 +3,7 @@
 import React from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
 import { NOTHING_WAITING_COPY } from "@/lib/platform/approvals";
+import { BASELINE_NOT_SET_COPY } from "@/lib/platform/goal";
 import type { LiveApprovals } from "./useLiveApprovals";
 import type { HomeTelemetryState } from "./useHomeTelemetry";
 import { barCards, hoursSavedLabel, weekLabel } from "@/lib/platform/telemetry";
@@ -130,11 +131,17 @@ const HELD_TEXT = "Held. I’ll re-surface it tomorrow with fresh numbers — no
 
 /** `live` is null in demo mode (the demo cards render untouched); in accounts mode it is the
     runtime's list — once loaded, the "needs you" list, its count, the drafts and the receipts
-    all come from it. */
-export default function HomeView({ V, live = null, telemetry = null }: { V: PlatformVals; live?: LiveApprovals | null; telemetry?: HomeTelemetryState | null }) {
+    all come from it. `accountMode` (Supabase configured + session) is what keeps the demo
+    approval cards off the page while that list is still loading or failed — a real account
+    never sees them — and what turns a NULL baseline into Unc's ask instead of demo progress. */
+export default function HomeView({ V, live = null, telemetry = null, accountMode = false }: { V: PlatformVals; live?: LiveApprovals | null; telemetry?: HomeTelemetryState | null; accountMode?: boolean }) {
   const isLive = !!live && live.active;
-  const needsCount = isLive ? live.pendingCount + (V.klaviyoDown ? 1 : 0) : V.needsCount;
+  /* The three demo cards + "nothing needs you" are demo furniture: only when there is no account. */
+  const showDemoCards = !accountMode && !isLive;
+  const liveLoading = accountMode && !isLive && !live?.error;
+  const needsCount = isLive ? live.pendingCount + (V.klaviyoDown ? 1 : 0) : accountMode ? (V.klaviyoDown ? 1 : 0) : V.needsCount;
   const liveNothingWaiting = isLive && live.pendingCount === 0;
+  const baselineMissing = accountMode && V.baselineMissing;
   /* DB mode only (never in demo): the bar from published benchmarks / honest references,
      hours saved from real runs, and Unc's latest self-review. */
   const tele = telemetry && telemetry.active ? telemetry.data : null;
@@ -165,12 +172,18 @@ export default function HomeView({ V, live = null, telemetry = null }: { V: Plat
               <span>· {V.daysLeftLabel} left</span>
             </div>
           </div>
-          <span style={{ flex: "none", marginTop: 8, fontSize: 12.5, fontWeight: 700, color: V.statusColor, background: V.statusBg, borderRadius: 999, padding: "8px 17px" }}>{V.statusLabel}</span>
+          {baselineMissing ? (
+            <span data-testid="baseline-not-set" style={{ flex: "none", marginTop: 8, fontSize: 12.5, fontWeight: 700, color: "var(--amber-text)", background: "var(--amber-wash)", borderRadius: 999, padding: "8px 17px" }}>
+              Baseline not set
+            </span>
+          ) : (
+            <span style={{ flex: "none", marginTop: 8, fontSize: 12.5, fontWeight: 700, color: V.statusColor, background: V.statusBg, borderRadius: 999, padding: "8px 17px" }}>{V.statusLabel}</span>
+          )}
         </div>
         <div style={{ marginTop: 22, height: 8, background: "var(--track)", borderRadius: 999 }}>
           <div
             style={{
-              width: V.goalPct,
+              width: baselineMissing ? "0%" : V.goalPct,
               height: 8,
               background: "linear-gradient(90deg, oklch(0.78 0.13 220), oklch(0.55 0.16 245))",
               borderRadius: 999,
@@ -179,7 +192,27 @@ export default function HomeView({ V, live = null, telemetry = null }: { V: Plat
             }}
           ></div>
         </div>
-        <div style={{ fontSize: 14.5, marginTop: 12, color: "oklch(0.4 0.04 262)" }}>{V.homePlain}</div>
+        {baselineMissing ? (
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginTop: 12 }}>
+            <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, color: "oklch(0.4 0.04 262)", lineHeight: 1.5 }}>{BASELINE_NOT_SET_COPY}</div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12.5, color: "var(--muted)" }}>
+                Where it is now
+                <input
+                  type="number"
+                  aria-label="Where it is now"
+                  value={V.obBaselineNum ?? ""}
+                  onChange={V.onObBaselineNum}
+                  placeholder={V.obIsMoney ? V.obBudgetMin : "0"}
+                  style={{ width: 160, padding: "7px 10px", fontSize: 14, fontWeight: 600, border: "1px solid var(--input-border)", borderRadius: 8, background: "white", color: "var(--ink)", outline: "none" }}
+                />
+              </label>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 14.5, marginTop: 12, color: "oklch(0.4 0.04 262)" }}>{V.homePlain}</div>
+        )}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 14, paddingTop: 14, borderTop: "1px solid oklch(0.945 0.008 260)" }}>
           {V.homeSetup.map((hs) => (
             <div key={hs.title} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "oklch(0.45 0.03 262)" }}>
@@ -254,7 +287,12 @@ export default function HomeView({ V, live = null, telemetry = null }: { V: Plat
           </div>
         )}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {!isLive && V.allClear && (
+          {liveLoading && (
+            <div data-testid="needs-you-loading" style={{ fontSize: 12.5, color: "var(--muted-2)", lineHeight: 1.5, paddingLeft: 36 }}>
+              Checking what’s waiting on you…
+            </div>
+          )}
+          {showDemoCards && V.allClear && (
             <div style={{ display: "flex", gap: 10, alignItems: "center", background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "14px 18px" }}>
               <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
               <div style={{ fontSize: 13, color: "var(--muted-2)", lineHeight: 1.5 }}>
@@ -268,7 +306,7 @@ export default function HomeView({ V, live = null, telemetry = null }: { V: Plat
               <div style={{ fontSize: 13, color: "var(--muted-2)", lineHeight: 1.5 }}>{NOTHING_WAITING_COPY}</div>
             </div>
           )}
-          {!isLive &&
+          {showDemoCards &&
             V.approvals.map((ap, i) => (
               <ApprovalCard
                 key={i}
@@ -313,7 +351,7 @@ export default function HomeView({ V, live = null, telemetry = null }: { V: Plat
                 why={ap.why}
               />
             ))}
-          {isLive && live.error && (
+          {accountMode && live?.error && (
             <div style={{ fontSize: 12.5, color: "var(--amber-text)", lineHeight: 1.5, paddingLeft: 36 }}>Couldn’t reach the runtime just now: {live.error}</div>
           )}
           {V.klaviyoDown && (
