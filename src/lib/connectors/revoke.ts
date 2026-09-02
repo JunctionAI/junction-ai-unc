@@ -20,7 +20,7 @@ import type { ConnectorEntry } from "./registry";
 export const REVOKE_TIMEOUT_MS = 10_000;
 /** Same Admin API version the worker's Shopify reader uses (src/worker/readers/shopify.ts). */
 export const SHOPIFY_REVOKE_API_VERSION = "2026-01";
-export const META_GRAPH_VERSION = "v21.0";
+export const META_GRAPH_VERSION = "v23.0";
 
 export type RevokeCode = `http_${number}` | "timeout" | "network" | "no_revoke_endpoint" | "no_token" | "no_shop" | "not_configured";
 

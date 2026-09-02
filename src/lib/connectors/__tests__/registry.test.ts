@@ -5,7 +5,7 @@ import { CONNECTOR_BY_ID, CONNECTOR_REGISTRY, connectorEntry, isPlatformConfigur
 import { readConnectReturn } from "../returnParams";
 import { FAKE_ENV } from "./helpers";
 
-const LAUNCH = ["shopify", "klaviyo", "meta_ads", "ga4", "google_ads", "hubspot"] as const;
+const LAUNCH = ["shopify", "klaviyo", "meta_ads", "ga4", "google_ads", "search_console", "hubspot"] as const;
 
 describe("connector registry", () => {
   it("has one entry per connector card, in card order, carrying the card's reads line", () => {
@@ -18,7 +18,7 @@ describe("connector registry", () => {
     expect(new Set(CONNECTOR_REGISTRY.map((e) => e.id)).size).toBe(CONNECTOR_REGISTRY.length);
   });
 
-  it("the five launch platforms + HubSpot have read-only scopes, env var names and a flow", () => {
+  it("the five launch platforms + Search Console + HubSpot have read-only scopes, env var names and a flow", () => {
     expect(LAUNCH_PLATFORMS.sort()).toEqual([...LAUNCH].sort());
     for (const id of LAUNCH) {
       const e = CONNECTOR_BY_ID[id];
@@ -116,8 +116,8 @@ describe("connector registry", () => {
 
 describe("return params", () => {
   it("maps ?connected / ?connect_error to the card name", () => {
-    expect(readConnectReturn("?connected=shopify")).toEqual({ kind: "connected", platform: "shopify", name: "Shopify" });
-    expect(readConnectReturn("?connect_error=meta_ads")).toEqual({ kind: "error", platform: "meta_ads", name: "Meta Ads" });
+    expect(readConnectReturn("?connected=shopify")).toEqual({ kind: "connected", platform: "shopify", name: "Shopify", names: ["Shopify"] });
+    expect(readConnectReturn("?connect_error=meta_ads")).toEqual({ kind: "error", platform: "meta_ads", name: "Meta Ads", names: ["Meta Ads"] });
     expect(readConnectReturn("?connected=nope")).toBeNull();
     expect(readConnectReturn("")).toBeNull();
   });

@@ -19,7 +19,7 @@ export const OPTIONS_TIMEOUT_MS = 10_000;
 /** Google Ads API version the picker calls. Versions sunset ~12 months after release —
     only verifiable live; bump here when the first real customer list answers 404. */
 export const GOOGLE_ADS_API_VERSION = "v22";
-export const META_GRAPH_VERSION = "v21.0";
+export const META_GRAPH_VERSION = "v23.0";
 const MAX_PAGES = 5;
 
 export interface AccountOption {

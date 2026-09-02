@@ -253,7 +253,7 @@ describe("GET …/callback", () => {
     const { d, state } = await startFlow("meta_ads");
     d.routes.push((c) => {
       const u = new URL(c.url);
-      if (u.pathname !== "/v21.0/oauth/access_token") return undefined;
+      if (u.pathname !== "/v23.0/oauth/access_token") return undefined;
       if (u.searchParams.get("grant_type") === "fb_exchange_token") {
         expect(u.searchParams.get("fb_exchange_token")).toBe("short-FIXTURE");
         return json({ access_token: "long-FIXTURE", token_type: "bearer", expires_in: 5183944 });
@@ -262,7 +262,7 @@ describe("GET …/callback", () => {
       expect(u.searchParams.get("client_secret")).toBe(FAKE_ENV.META_APP_SECRET);
       return json({ access_token: "short-FIXTURE", token_type: "bearer", expires_in: 5000 });
     });
-    d.routes.push((c) => (c.url.startsWith("https://graph.facebook.com/v21.0/me/adaccounts") ? json({ data: [{ account_id: "123456" }] }) : undefined));
+    d.routes.push((c) => (c.url.startsWith("https://graph.facebook.com/v23.0/me/adaccounts") ? json({ data: [{ account_id: "123456" }] }) : undefined));
     expect(await handleCallback(d, "meta_ads", cb("meta_ads", { code: "m-code", state }))).toEqual({ redirect: "/app?connected=meta_ads" });
     expect(d.calls.map((c) => c.method)).toEqual(["GET", "GET", "GET"]);
     const conn = db.rows("connectors")[0];

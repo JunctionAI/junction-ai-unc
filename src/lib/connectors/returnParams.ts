@@ -12,11 +12,16 @@ import type { Setter } from "@/lib/platform/state";
 export interface ConnectReturn {
   kind: "connected" | "error";
   platform: string;
-  /** Card name (connState key). */
+  /** Card name (connState key) — "Google" for the umbrella, whose `names` are the three children. */
   name: string;
+  /** Every card the return touches (one, or the three Google children). */
+  names: string[];
 }
 
 const NAME_BY_PLATFORM: Record<string, string> = Object.fromEntries(Object.entries(CONNECTOR_PLATFORMS).map(([n, p]) => [p, n]));
+/** Mirrors registry.ts GOOGLE_CHILDREN (kept here so this client module needs no registry import). */
+export const GOOGLE_UMBRELLA_NAME = "Google";
+const GOOGLE_CHILD_NAMES = ["Google Analytics 4", "Google Ads", "Google Search Console"];
 
 export function readConnectReturn(search: string): ConnectReturn | null {
   const params = new URLSearchParams(search);
@@ -24,9 +29,10 @@ export function readConnectReturn(search: string): ConnectReturn | null {
   const failed = params.get("connect_error");
   const platform = connected || failed;
   if (!platform) return null;
+  if (platform === "google") return { kind: connected ? "connected" : "error", platform, name: GOOGLE_UMBRELLA_NAME, names: [...GOOGLE_CHILD_NAMES] };
   const name = NAME_BY_PLATFORM[platform];
   if (!name) return null;
-  return { kind: connected ? "connected" : "error", platform, name };
+  return { kind: connected ? "connected" : "error", platform, name, names: [name] };
 }
 
 let parked: ConnectReturn | null = null;
@@ -46,7 +52,7 @@ export function applyConnectReturn(set: Setter): void {
   const r = readConnectReturn(window.location.search);
   if (!r) return;
   parked = r;
-  set((s) => ({ connState: { ...s.connState, [r.name]: r.kind === "connected" ? "ok" : "expired" }, view: "connectors" }));
+  set((s) => ({ connState: { ...s.connState, ...Object.fromEntries(r.names.map((n) => [n, r.kind === "connected" ? "ok" : "expired"])) }, view: "connectors" }));
   const url = new URL(window.location.href);
   url.searchParams.delete("connected");
   url.searchParams.delete("connect_error");

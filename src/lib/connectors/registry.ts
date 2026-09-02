@@ -32,7 +32,10 @@ export type RefreshSemantics =
   /** Offline token with no expiry (Shopify). */
   | "none";
 
-export type ExternalRefKind = "shop_domain" | "klaviyo_account_id" | "ad_account_id" | "ga4_property_id" | "google_ads_customer_id" | "hubspot_portal_id";
+export type ExternalRefKind = "shop_domain" | "klaviyo_account_id" | "ad_account_id" | "ga4_property_id" | "google_ads_customer_id" | "gsc_site_url" | "hubspot_portal_id";
+
+/** Connector ids: every Platform with a card, plus the `google` umbrella (one consent for GA4 + Ads + Search Console). */
+export type ConnectorId = Platform | "google";
 
 export interface AuthorizeParams {
   clientId: string;
@@ -46,7 +49,7 @@ export interface AuthorizeParams {
 }
 
 export interface ConnectorEntry {
-  id: Platform;
+  id: ConnectorId;
   /** Card name — the key of PlatformState.connState. */
   name: string;
   category: string;
@@ -84,7 +87,7 @@ const q = (params: Record<string, string | undefined>) =>
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join("&");
 
-export const META_GRAPH_VERSION = "v21.0";
+export const META_GRAPH_VERSION = "v23.0";
 
 const googleAuthorize = (p: AuthorizeParams) =>
   `https://accounts.google.com/o/oauth2/v2/auth?${q({
@@ -228,7 +231,21 @@ const FLOWS: Record<Platform, Omit<ConnectorEntry, "name" | "category" | "reads"
   tiktok: none("tiktok"),
   linkedin: none("linkedin"),
   youtube: none("youtube"),
-  search_console: none("search_console"),
+  search_console: {
+    id: "search_console",
+    // Read-only Search Console; the site URL (external_ref) is a later picker — reads are Wave 2.
+    flow: "oauth",
+    scopes: ["https://www.googleapis.com/auth/webmasters.readonly"],
+    pkce: true,
+    refresh: "refresh_token",
+    externalRef: "gsc_site_url",
+    env: GOOGLE_ENV,
+    unlocks: unlocksFor("search_console"),
+    authorizeUrl: googleAuthorize,
+    tokenEndpoint: () => GOOGLE_TOKEN,
+    tokenAuth: "body",
+    refreshEndpoint: GOOGLE_TOKEN,
+  },
   gmail: none("gmail"),
   gorgias: none("gorgias"),
   xero: none("xero"),
@@ -247,10 +264,38 @@ export const CONNECTOR_REGISTRY: ConnectorEntry[] = CONNECTOR_DEFS.map((d) => {
   return { ...FLOWS[id], name: d.name, category: d.cat, reads: d.note };
 });
 
-export const CONNECTOR_BY_ID: Record<string, ConnectorEntry> = Object.fromEntries(CONNECTOR_REGISTRY.map((e) => [e.id, e]));
+/** The three Google cards one consent screen covers. */
+export const GOOGLE_CHILDREN: Platform[] = ["ga4", "google_ads", "search_console"];
+
+/** "Connect Google" — one OAuth consent for GA4 + Google Ads + Search Console (the union of the
+    three children's read-only scopes, offline + incremental so an earlier per-platform grant is
+    kept). Not a card: the callback fans the sealed token out to the three child rows. */
+export const GOOGLE_UMBRELLA: ConnectorEntry = {
+  id: "google",
+  name: "Google",
+  category: "Analytics · Ads · Search",
+  reads: "GA4 · Google Ads · Search Console",
+  flow: "oauth",
+  scopes: [...new Set(GOOGLE_CHILDREN.flatMap((c) => FLOWS[c].scopes))],
+  pkce: true,
+  refresh: "refresh_token",
+  externalRef: null,
+  env: GOOGLE_ENV,
+  unlocks: [...new Set(GOOGLE_CHILDREN.flatMap((c) => FLOWS[c].unlocks))],
+  authorizeUrl: googleAuthorize,
+  tokenEndpoint: () => GOOGLE_TOKEN,
+  tokenAuth: "body",
+  refreshEndpoint: GOOGLE_TOKEN,
+};
+
+export const CONNECTOR_BY_ID: Record<string, ConnectorEntry> = { ...Object.fromEntries(CONNECTOR_REGISTRY.map((e) => [e.id, e])), google: GOOGLE_UMBRELLA };
+
+export function isGoogleUmbrella(platform: string): boolean {
+  return platform === GOOGLE_UMBRELLA.id;
+}
 
 /** Platforms with a real connect flow (the five launch platforms + HubSpot). */
-export const LAUNCH_PLATFORMS: Platform[] = CONNECTOR_REGISTRY.filter((e) => e.flow !== "none").map((e) => e.id);
+export const LAUNCH_PLATFORMS: Platform[] = CONNECTOR_REGISTRY.filter((e) => e.flow !== "none").map((e) => e.id as Platform);
 
 export function connectorEntry(platform: string): ConnectorEntry | null {
   return CONNECTOR_BY_ID[platform] ?? null;

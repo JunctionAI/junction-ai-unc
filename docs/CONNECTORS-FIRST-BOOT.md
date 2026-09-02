@@ -307,3 +307,95 @@ Still open — none of it buildable without a founder / infra decision:
   the prep pack's *Tom personally* checklist.
 - Google Ads **live reads** in the worker (GAQL `searchStream`) — the picker gives the
   customer id; the reader is Wave 2 with the rest of the live-mode work.
+
+## 12. Connect with a token (the owner path)
+
+`POST /api/connectors/<platform>/manual` — session-bound, **owner role only**, needs the DB +
+`CONNECTOR_SECRET_KEY`. The Connectors card shows "Connect with a token" to the owner: a
+quiet link under Connect when the platform's OAuth app is configured, the only action when it
+isn't (a member never sees it). The form is the platform's fields (`src/lib/connectors/manualFields.ts`),
+the key input is masked, "Test & connect" runs ONE cheap read against the platform (10 s
+timeout) and only a key that answered is sealed into `connector_secrets`.
+
+| Platform | Body | Validation read | `external_ref` |
+|---|---|---|---|
+| `shopify` | `{ token: <Admin API access token>, extra: { shop: "x.myshopify.com" } }` | `GET /admin/api/2026-07/shop.json` | the shop domain |
+| `klaviyo` | `{ token: <private key pk_…> }` | `GET /api/accounts/` | the account id |
+| `meta_ads` | `{ token: <system-user / long-lived token>, external_ref: "act_…", extra?: { expires_at } }` | `GET /<act_id>?fields=name,account_status,currency` | the ad account |
+| `ga4` | `{ token: <OAuth refresh token>, external_ref: <property id> }` | refresh grant (needs `GOOGLE_CLIENT_ID/SECRET`) → `GET analyticsadmin/v1beta/properties/<id>` | the property |
+| `google_ads` | `{ token: <OAuth refresh token>, external_ref: "123-456-7890" }` | refresh grant → with `GOOGLE_ADS_DEVELOPER_TOKEN`, `customers:listAccessibleCustomers` must list it | the customer id |
+| `hubspot` | `{ token: <private app token pat-…> }` | `GET /account-info/v3/details` | the portal id |
+
+Answers: `200 { ok, platform, externalRef, label, reading }`; `400 { error: "<Platform> said: …", code }`
+carries the platform's own refusal (token-shaped strings stripped); `403 owner_only`; `503` when
+the secret store / DB isn't configured. GA4 service-account JSON is **not** accepted (refresh
+token only). A receipt records the connect (never the key); the client autosave keeps the card
+in step. `docs/PRODUCT-EXPERIENCE.md` copy floor: "Paste the key and I'll test it before I keep it."
+
+## 13. On connect → read now ("Reading your last 90 days")
+
+Every path that makes a row readable — the OAuth callback (Shopify / Klaviyo / HubSpot / Meta
+with one ad account), a picker choice (GA4 property, Ads customer, Meta ad account), a pasted
+key — fires `HandlerDeps.onConnected`, which the routes run after the response (`next/server`
+`after`): `src/lib/connectors/firstRead.ts` writes a "Reading your last 90 days from X now…"
+receipt, runs `snapshotKpis` for THAT platform only (the same reader + fixed KPI set as the
+nightly job — `src/lib/brain/kpi.ts`), then sets `connectors.last_sync_at` / `last_sync_result`
+(`ok` | `empty` | `error:first_read` | `error:no_reader`) and, best-effort, `last_read_metrics`
+(**migration 0011** — apply it or the card shows "Read ✓" without the count). Platforms outside
+the KPI set (HubSpot, Google Ads) get one probe read instead. The card polls
+`GET /api/connectors/state` every 3 s (2 min cap): "Reading…" → "Read ✓ · N metrics" / "Couldn't
+read: <reason> — Reconnect". A failure is a receipt + `error:first_read`, never a zero.
+
+```bash
+npx supabase db push   # applies 0011_first_read.sql (connectors.last_read_metrics)
+```
+
+## 14. Connect Google (one consent for GA4 · Google Ads · Search Console)
+
+`google` is an umbrella entry in the registry (not a card): its authorize URL asks for the union
+of the three read-only scopes (`analytics.readonly`, `adwords`, `webmasters.readonly`) with
+`access_type=offline` + `include_granted_scopes=true`, so an earlier per-platform grant is kept.
+Register **one more redirect URI**: `https://<APP_URL>/api/connectors/google/callback`. The
+callback exchanges one code and fans the sealed token out to the three child rows (`ga4`,
+`google_ads`, `search_console` → `connected`; a property / customer chosen earlier is kept,
+otherwise the existing pickers ask). No `google` row is ever written. In the grid the Google
+card sits first with "Connect Google"; the three cards show "via Connect Google ↑" instead of
+their own Connect and keep their own status / read line. The per-platform Google entries keep
+working (Search Console is now a real Google entry with `webmasters.readonly`; its reader is
+Wave 2, so after a connect its row reads `error:no_reader` — "key sealed, reads come in wave 2").
+Disconnecting one child revokes the Google grant for all three (Google revokes the whole refresh
+token) — the others flip to `needs_reconnect` on their next read.
+
+**Beta: add founders as test users.** Until the Google OAuth app passes verification it runs in
+*Testing* mode: only e-mails listed under *OAuth consent screen → Test users* (max 100) can
+complete the flow, refresh tokens expire after 7 days, and everyone sees Google's "This app
+isn't verified" interstitial (Advanced → Go to Junction (unsafe)). Nothing to code — add each
+founder's Google account as a test user before their session, tell them the warning is
+expected, and expect a re-connect a week later until the app is verified (sensitive-scope
+verification needs the privacy policy + a demo video — prep pack §2).
+
+## 15. The founder's 30-second check: `--probe`
+
+```bash
+npx tsc -p tsconfig.worker.json
+node dist/worker/worker/main.js --probe shopify --account <account uuid>            # orders, last 7d
+node dist/worker/worker/main.js --probe klaviyo --account <uuid> --resource flows   # any reader resource
+node dist/worker/worker/main.js --probe meta_ads --account <uuid> --window 28d
+```
+
+Runs one read through the same credential provider + reader the routines use (the real sealed
+token when the DB + `CONNECTOR_SECRET_KEY` are configured) and prints the shaped result:
+credential kind (never the value), metrics, the columns, two sample rows with e-mails / names /
+long strings / anything token-shaped redacted, provenance — or the honest "couldn't ask"
+reason. Exit 1 on failure. Defaults per platform are in `src/worker/probe.ts`.
+
+## 16. Only verifiable with a real token
+
+Request shaping follows the current docs but no live account was used: Shopify 2026-07
+`orders.json` paging via the Link header and `current_total_price`; Klaviyo `2025-07-15`
+revision, `GET /api/metrics` name match (Shopify integration preferred), `metric-aggregates`
+`by: ["$attributed_channel"]`, `flow-values-reports` statistics names; Meta `v23.0`
+`time_range`, `purchase_roas` / `omni_purchase` action types, cursor paging, budgets in minor
+units; GA4 `runReport` `rowCount`; HubSpot `account-info/v3/details`. `--probe` is how each is
+confirmed on the first real connection; bump the constants in the readers if a platform answers
+400/404.
