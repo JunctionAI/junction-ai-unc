@@ -6,7 +6,7 @@
 
 import { ALL_SYSTEMS, CATEGORIES, CAT_TAGLINES, CONNECTOR_DEFS, type RoutineDef } from "./catalog";
 import { goalMath } from "./goal";
-import { scoreChannels, span, weekSplit, POSTURE_WEIGHTS, type Posture } from "./plan";
+import { planReasoning, scoreChannels, span, weekSplit, POSTURE_WEIGHTS, type PhaseReasoning, type Posture } from "./plan";
 import { postureDefs } from "./postures";
 export { postureDefs };
 import type { ConnStatus, NarrativeState, PlatformState, ScanState, Setter } from "./state";
@@ -490,6 +490,19 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
   const obFirst = obChans[0];
   const obSecond = obChans[1];
   const obRest = obChans.slice(2).map((c) => c.k).join(", ");
+  /* plan.ts §Reasoning for the three phases (phase 3 = the first of the rest), from the founder's
+     own answers — hours only once answered, the business type only once scanned. The step-6 card
+     renders it collapsed under each phase and the narrative may fold each gate into its note. */
+  const obReasoning = planReasoning({
+    posture: S.posture,
+    strengths: S.obStrengths || [],
+    budgetMo: S.budgetMo,
+    hoursWk: S.obAnswered.hours ? S.hoursWk : null,
+    businessType: S.scan.status === "done" ? (S.scan.profile?.businessType ?? null) : null,
+    currencySymbol: curSym,
+  });
+  const obPhaseReasoning: PhaseReasoning[] = [obFirst.k, obSecond.k, obChans[2]?.k ?? obSecond.k].map((k) => obReasoning.byChannel[k]);
+  const obNarrativeReasoning = obPhaseReasoning.map((r) => ({ whyThisOrder: r.whyThisOrder, evidenceGate: r.evidenceGate, risk: r.risk }));
   const obPlanStep1 = `${span(1, w1)}: our world-class ${obFirst.k.toLowerCase()} routines, built around what you do best. Focus: a working engine — drafts flowing, your taste applied, first wins on the board.`;
   const obPlanStep2 = `${span(w1 + 1, w2end)}: we add ${obSecond.k.toLowerCase()} — ${obSecond.why}. Focus: converting the momentum into revenue.`;
   const obPlanStep3 = `${span(w2end + 1, weeksLeft)} and beyond: ${obRest} switch on as their numbers earn it. Focus: scaling what’s proven, straight through your goal.`;
@@ -517,9 +530,9 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
       footnote: DEFAULT_FOOTNOTE,
       weeksTotal: weeksLeft,
       phases: [
-        { n: 1, spanLabel: span(1, w1), channel: obFirst.k, why: obFirst.why, text: obPlanStep1 },
-        { n: 2, spanLabel: span(w1 + 1, w2end), channel: obSecond.k, why: obSecond.why, text: obPlanStep2 },
-        { n: 3, spanLabel: `${span(w2end + 1, weeksLeft)} and beyond`, channel: obRest, why: "switch on as their numbers earn it", text: obPlanStep3 },
+        { n: 1, spanLabel: span(1, w1), channel: obFirst.k, why: obFirst.why, text: obPlanStep1, reasoning: obNarrativeReasoning[0] },
+        { n: 2, spanLabel: span(w1 + 1, w2end), channel: obSecond.k, why: obSecond.why, text: obPlanStep2, reasoning: obNarrativeReasoning[1] },
+        { n: 3, spanLabel: `${span(w2end + 1, weeksLeft)} and beyond`, channel: obRest, why: "switch on as their numbers earn it", text: obPlanStep3, reasoning: obNarrativeReasoning[2] },
       ],
     },
     profile: S.scan.status === "done" ? S.scan.profile : null,
@@ -837,6 +850,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     obNarrative: S.narrative,
     obSetNarrative: (narrative: NarrativeState) => set({ narrative }),
     obNarrativeRequest,
+    /** plan.ts §Reasoning per step-6 phase (Why this order · What flips it · The risk · weekly), same source as Strategy's. */
+    obPhaseReasoning,
     obToggleMoney: () => set((s) => ({ obMoneyOpen: !s.obMoneyOpen })),
     obMoneyOpen: S.obMoneyOpen,
     /* Not defined in the prototype's renderVals (markup references it) — mirrored from obTeamChevron. */

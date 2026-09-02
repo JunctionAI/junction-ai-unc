@@ -12,6 +12,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AP_DATA, AP_WHY_TEXTS, COMPLETED_DEFS, LEVER_DEFS, SIGNAL_DEFS, derive, type DeriveOptions } from "@/lib/platform/derive";
 import { ALL_SYSTEMS } from "@/lib/platform/catalog";
+import { planReasoning } from "@/lib/platform/plan";
 import { accountInitialState, currencyForLocale, initialState, type PlatformState } from "@/lib/platform/state";
 import { HOME_COPY } from "@/lib/setup/home";
 import { computeSetupProgress } from "@/lib/setup/progress";
@@ -517,6 +518,15 @@ describe("Onboarding in accounts mode — empty inputs with placeholders, a plan
     const s6 = ob({ ...initialState, obStep: 6 });
     expect(s6).not.toContain(esc(PLAN_GATE_TITLE));
     expect(s6).toContain("Agree the plan");
+    // the judgement under each phase, collapsed — the same source as Strategy's, the demo strings untouched
+    expect((s6.match(/data-testid="onboarding-phase-why"/g) ?? []).length).toBe(3);
+    expect(s6).toContain("Why this order · What flips it · The risk");
+    expect(s6).toContain("<details");
+    expect(s6).not.toContain("<details open");
+    const demoReasoning = planReasoning({ posture: "brand", strengths: ["Writing", "Product"], budgetMo: 3600, hoursWk: 6, businessType: null, currencySymbol: "NZ$" });
+    expect(s6).toContain(esc(demoReasoning.byChannel["Content"].whyThisOrder));
+    expect(s6).toContain(esc(demoReasoning.byChannel["Email & SMS"].evidenceGate));
+    expect(s6).toContain(esc(demoReasoning.byChannel["SEO"].risk));
   });
 
   it("step 1: no pre-filled goal, baseline or deadline — placeholders only", () => {
@@ -553,6 +563,7 @@ describe("Onboarding in accounts mode — empty inputs with placeholders, a plan
     expect(plan).toContain("Agree the plan →");
     expect(plan).toContain("here’s the shortest path");
     expect(plan).toContain("NZ$50,000 of new ground by 31 Dec");
+    expect((plan.match(/data-testid="onboarding-phase-why"/g) ?? []).length).toBe(3);
     expectNoDemo(plan);
   });
 });

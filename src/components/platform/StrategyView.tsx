@@ -4,6 +4,7 @@ import { CATEGORIES } from "@/lib/platform/catalog";
 import type { PlatformVals } from "@/lib/platform/derive";
 import { planReasoning, reasonOrganization, type ChannelKey, type PhaseReasoning, type PlanReasoning, type Posture, type ReasoningInput } from "@/lib/platform/plan";
 import { enabledRoutines, useAccountFacts, type AccountFacts } from "@/lib/unc/accountFacts";
+import PhaseWhy from "./PhaseWhy";
 
 /* Accounts mode (docs/PRODUCT-EXPERIENCE.md): every date, count and pill on this screen comes
    from the account's rows — the agreed `plans` row, `routine_states`, `resource_profiles` —
@@ -96,24 +97,6 @@ export function reasoningInputs(V: Pick<PlatformVals, "realInputs" | "obHoursWk"
 export function phaseReasoning(reasoning: PlanReasoning, name: string, routines: string[]): PhaseReasoning {
   const k = phaseChannel(name, routines);
   return k ? reasoning.byChannel[k] : reasonOrganization();
-}
-
-function PhaseWhy({ r, testId }: { r: PhaseReasoning; testId: string }) {
-  const row = (label: string, text: string) => (
-    <div style={{ display: "flex", gap: 8, marginTop: 7 }}>
-      <span style={{ flex: "none", width: 92, fontSize: 10.5, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, color: "oklch(0.4 0.04 262)", paddingTop: 1 }}>{label}</span>
-      <span style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>{text}</span>
-    </div>
-  );
-  return (
-    <details data-testid={testId} style={{ marginTop: 12, borderTop: "1px solid var(--hairline)", paddingTop: 10 }}>
-      <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--cyan-link)", listStyle: "none" }}>Why this order · What flips it · The risk</summary>
-      {row("Why this order", r.whyThisOrder)}
-      {row("What flips it", r.evidenceGate)}
-      {row("The risk", r.risk)}
-      {row("Weekly, from me", r.whatIDoWeekly)}
-    </details>
-  );
 }
 
 /** "Why this is yours" for a real account — the founder's own budget, hours and strengths, and

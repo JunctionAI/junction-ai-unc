@@ -5,6 +5,7 @@ import type { PlatformVals } from "@/lib/platform/derive";
 import type { PlanNarrative } from "@/lib/unc/narrative";
 import type { BusinessProfile } from "@/lib/unc/scan";
 import { BUSINESS_TYPE_CHIPS, BUSINESS_TYPE_LABEL, DEFAULT_SELLS, type BusinessType } from "@/lib/unc/businessType";
+import PhaseWhy from "./PhaseWhy";
 import TypingDots from "./TypingDots";
 
 const stepLabel: React.CSSProperties = {
@@ -632,7 +633,10 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
                   {planSteps.map((step, i) => (
                     <div key={i} style={{ display: "flex", gap: 9 }}>
                       <span style={{ color: "var(--cyan-link)", fontWeight: 700 }}>{i + 1}</span>
-                      {step}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {step}
+                        {V.obPhaseReasoning[i] && <PhaseWhy r={V.obPhaseReasoning[i]} testId="onboarding-phase-why" />}
+                      </div>
                     </div>
                   ))}
                 </div>

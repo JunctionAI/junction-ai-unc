@@ -12,9 +12,15 @@
 
 import { describe, expect, it } from "vitest";
 import { derive } from "@/lib/platform/derive";
+import { planReasoning, type PhaseReasoning } from "@/lib/platform/plan";
 import { initialState } from "@/lib/platform/state";
 import { DEFAULT_FOOTNOTE, allowedNumbers, buildNarrativeUserMessage, coerceNarrativeRequest, extractJsonObject, numbersOk, parseNarrative, type NarrativeRequest, type PlanNarrative } from "../narrative";
 import type { BusinessProfile } from "../scan";
+
+/* plan.ts §Reasoning for the demo founder (brand-led, Writing + Product, NZ$3,600/mo, 6 h/wk) — the
+   request carries the three fields the narrative may use, from the same function derive() calls. */
+const DEMO_REASONING = planReasoning({ posture: "brand", strengths: ["Writing", "Product"], budgetMo: 3600, hoursWk: 6, businessType: null, currencySymbol: "NZ$" });
+const reasoningOf = (r: PhaseReasoning) => ({ whyThisOrder: r.whyThisOrder, evidenceGate: r.evidenceGate, risk: r.risk });
 
 /* The demo founder's request, exactly as derive() builds it from state.ts. */
 const REQ: NarrativeRequest = {
@@ -52,6 +58,7 @@ const REQ: NarrativeRequest = {
         channel: "Content",
         why: "organic compounds and costs hours, not dollars",
         text: "Weeks 1–2: our world-class content routines, built around what you do best. Focus: a working engine — drafts flowing, your taste applied, first wins on the board.",
+        reasoning: reasoningOf(DEMO_REASONING.byChannel["Content"]),
       },
       {
         n: 2,
@@ -59,6 +66,7 @@ const REQ: NarrativeRequest = {
         channel: "Email & SMS",
         why: "the cheapest revenue is the customers you already have",
         text: "Week 3: we add email & sms — the cheapest revenue is the customers you already have. Focus: converting the momentum into revenue.",
+        reasoning: reasoningOf(DEMO_REASONING.byChannel["Email & SMS"]),
       },
       {
         n: 3,
@@ -66,6 +74,7 @@ const REQ: NarrativeRequest = {
         channel: "SEO, Paid ads, Sales",
         why: "switch on as their numbers earn it",
         text: "Week 4 and beyond: SEO, Paid ads, Sales switch on as their numbers earn it. Focus: scaling what’s proven, straight through your goal.",
+        reasoning: reasoningOf(DEMO_REASONING.byChannel["SEO"]), // phase 3 = the first of the rest
       },
     ],
   },
