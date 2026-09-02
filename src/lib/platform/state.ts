@@ -62,7 +62,7 @@ export interface NarrativeState {
 /** Where the founder is in the guided first run after "Agree the plan →" (accounts mode):
     connect → the "Connect your data" step, routine → the "First routine on" step, home → Home.
     Persisted in account_state_meta.client_state so a refresh lands on the same step. */
-export type SetupFlow = "connect" | "routine" | "home";
+export type SetupFlow = "connect" | "routine" | "channel" | "home";
 
 export interface PlatformState {
   view: View;

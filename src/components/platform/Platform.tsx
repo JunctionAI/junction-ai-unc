@@ -16,6 +16,7 @@ import type { SetupAnchor } from "@/lib/setup/progress";
 import Sidebar from "./Sidebar";
 import ConnectDataStep from "./ConnectDataStep";
 import FirstRoutineStep from "./FirstRoutineStep";
+import ConnectChannelStep from "./ConnectChannelStep";
 import Onboarding from "./Onboarding";
 import HomeView from "./HomeView";
 import StrategyView from "./StrategyView";
@@ -86,7 +87,7 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
       return;
     }
     if (anchor === "step:connect" || anchor === "step:routine") {
-      V.setSetupFlow(anchor.slice(5) as "connect" | "routine");
+      V.setSetupFlow(anchor.slice(5) as "connect" | "routine" | "channel");
       return;
     }
     const el = document.getElementById(anchor.slice(1));
@@ -204,7 +205,12 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
             }}
           />
         )}
-        {showGuided && S.setupFlow === "routine" && <FirstRoutineStep V={V} channel={phaseOne} onTurnOn={onTurnOn} onContinue={() => V.setSetupFlow("home")} onSkip={() => V.setSetupFlow("home")} />}
+        {showGuided && S.setupFlow === "routine" && <FirstRoutineStep V={V} channel={phaseOne} onTurnOn={onTurnOn} onContinue={() => V.setSetupFlow("channel")} onSkip={() => V.setSetupFlow("channel")} />}
+        {showGuided && S.setupFlow === "channel" && (
+          <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px" }}>
+            <ConnectChannelStep onDone={() => V.setSetupFlow("home")} />
+          </div>
+        )}
         {V.isToday && !showGuided && <HomeView V={V} live={inAccount ? live : null} telemetry={inAccount ? telemetry : null} accountMode={inAccount} setup={inAccount ? setup : null} onSetupAction={onSetupAction} onTurnOn={onTurnOn} />}
         {V.isStrategy && !showGuided && <StrategyView V={V} />}
         {V.isConnectors && !showGuided && <ConnectorsView V={V} />}
