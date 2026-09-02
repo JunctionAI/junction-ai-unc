@@ -150,10 +150,13 @@ export const fakeUuid = () => {
 export class FakeSupabase implements DbClient {
   readonly tables = new Map<string, Row[]>();
   readonly calls: Call[] = [];
-  /** RPCs the fake answers; create_account is built in. */
+  /** RPCs the fake answers; create_account and accept_beta_invites are built in. */
   readonly rpcs: Record<string, (args: Record<string, unknown>) => unknown> = {};
   /** auth.uid() for the built-in RPCs. */
   userId: string | null = "user-1";
+  /** The signed-in user's CONFIRMED email (auth.users.email with email_confirmed_at set) for
+      accept_beta_invites; null = unconfirmed / unknown, which attaches nothing. */
+  userEmail: string | null = null;
   now: () => string = () => new Date().toISOString();
 
   constructor(readonly schema: Schema = migrationSchema()) {
@@ -163,6 +166,21 @@ export class FakeSupabase implements DbClient {
       this.insertRow("accounts", { id, name: (args.p_name as string) ?? "", currency: (args.p_currency as string) || "NZD" });
       this.insertRow("account_members", { account_id: id, user_id: this.userId, role: "owner" });
       return id;
+    };
+    // 0009: open invites for the confirmed address → account_members (idempotent), invite marked accepted.
+    this.rpcs.accept_beta_invites = () => {
+      if (!this.userId) throw new Error("not signed in");
+      const addr = this.userEmail?.trim().toLowerCase();
+      if (!addr) return [];
+      const attached: string[] = [];
+      const open = (this.tables.get("beta_invites") ?? []).filter((r) => r.email === addr && (r.accepted_at === null || r.accepted_at === undefined)).sort((a, b) => cmp(a.created_at, b.created_at));
+      for (const inv of open) {
+        this.upsertRow("account_members", { account_id: inv.account_id, user_id: this.userId, role: inv.role ?? "owner" });
+        inv.accepted_at = this.now();
+        inv.accepted_user_id = this.userId;
+        attached.push(inv.account_id as string);
+      }
+      return attached;
     };
   }
 

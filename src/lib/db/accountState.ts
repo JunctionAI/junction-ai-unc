@@ -111,13 +111,36 @@ export async function saveAccountState(db: DbClient, accountId: string, state: P
   await saveAccountRows(db, stateToRows(accountId, state, opts));
 }
 
-/** First sign-in bootstrap: find the user's account or create one and seed it with whatever
-    the client already holds (the onboarding answers), so nothing typed before sign-in is lost. */
+/** Attach any open beta invite for the signed-in user's confirmed email (0009 RPC, runs as the
+    user under RLS): the seeded account becomes theirs before anything else looks for a
+    membership. Idempotent, safe on every sign-in. Returns the account ids attached now.
+    A project that hasn't applied 0009 yet answers "function not found" — that is logged and
+    read as "no invites" rather than blocking every sign-in; any other failure propagates. */
+export async function acceptBetaInvites(db: DbClient): Promise<string[]> {
+  try {
+    const ids = await unwrap<unknown>("rpc.accept_beta_invites", db.rpc("accept_beta_invites"));
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string") : [];
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/PGRST202|could not find the function|does not exist|not found/i.test(msg)) {
+      console.warn(`[accounts] accept_beta_invites unavailable (migration 0009 not applied?): ${msg}`);
+      return [];
+    }
+    throw e;
+  }
+}
+
+/** First sign-in bootstrap: accept any beta invite, then find the user's account or create one
+    and seed it with whatever the client already holds (the onboarding answers), so nothing
+    typed before sign-in is lost. Order matters: an invited founder must land in the seeded
+    account (found=true → hydrated from its rows, the client seed is NOT written over it),
+    never in a fresh empty one. */
 export async function ensureAccount(
   db: DbClient,
   seed: PlatformState,
   opts: { userId?: string } = {},
 ): Promise<{ accountId: string; created: boolean; state: PlatformState }> {
+  await acceptBetaInvites(db);
   const memberships = await listMemberships(db);
   if (memberships.length) {
     const accountId = memberships[0].accountId;

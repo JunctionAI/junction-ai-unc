@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "@/lib/platform/state";
 import { createAccount, ensureAccount, listMemberships, loadAccountState, saveAccountState } from "../accountState";
 import { FakeSupabase } from "./fakeSupabase";
@@ -43,6 +43,89 @@ describe("first sign-in bootstrap", () => {
   it("the RPC refuses when there is no signed-in user", async () => {
     db.userId = null;
     await expect(createAccount(db)).rejects.toThrow(/not signed in/);
+  });
+});
+
+describe("beta invites (0009) — attach on first login", () => {
+  /** A seeded account the way scripts/seed-beta.ts leaves it: rows saved, no membership, one open invite. */
+  async function seeded(email: string, name = "AVGAR Sport") {
+    const accountId = db.insertRow("accounts", { name, currency: "NZD" }).id as string;
+    await saveAccountState(db, accountId, { ...richState(), goalTitle: "NZ$100,000 monthly revenue" });
+    db.seed("beta_invites", [{ account_id: accountId, email, invited_by: "tom", note: "avgar" }]);
+    return accountId;
+  }
+
+  it("an invited founder's first sign-in lands in the seeded account — hydrated from its rows, not the client seed, and no second account", async () => {
+    const seededId = await seeded("heather@example.com");
+    db.userEmail = "Heather@Example.com"; // the RPC matches lower-cased
+    const res = await ensureAccount(db, initialState, { userId: "user-1" });
+    expect(res).toMatchObject({ accountId: seededId, created: false });
+    expect(res.state.goalTitle).toBe("NZ$100,000 monthly revenue");
+    expect(db.rows("accounts")).toHaveLength(1);
+    expect(db.rows("account_members")).toEqual([expect.objectContaining({ account_id: seededId, user_id: "user-1", role: "owner" })]);
+    expect(db.rows("beta_invites")[0]).toMatchObject({ accepted_user_id: "user-1", accepted_at: "2026-09-02T09:00:00.000Z" });
+    // the RPC ran before any membership lookup / create_account
+    const rpcCall = db.calls.findIndex((c) => c.table === "account_members" && c.op === "select");
+    expect(rpcCall).toBeGreaterThanOrEqual(0);
+    expect(db.callsFor("accounts", "insert")).toHaveLength(0);
+  });
+
+  it("a second sign-in is a no-op on the invite (already accepted) and still finds the account", async () => {
+    const seededId = await seeded("heather@example.com");
+    db.userEmail = "heather@example.com";
+    await ensureAccount(db, initialState, { userId: "user-1" });
+    const again = await ensureAccount(db, initialState, { userId: "user-1" });
+    expect(again.accountId).toBe(seededId);
+    expect(db.rows("account_members")).toHaveLength(1);
+    expect(db.rows("beta_invites").every((i) => i.accepted_user_id === "user-1")).toBe(true);
+  });
+
+  it("the wrong mailbox (no invite for it) gets an empty account as before — and the seeded one is left for a second invite", async () => {
+    const seededId = await seeded("heather@example.com");
+    db.userEmail = "someone.else@example.com";
+    const res = await ensureAccount(db, initialState, { userId: "user-1" });
+    expect(res.created).toBe(true);
+    expect(res.accountId).not.toBe(seededId);
+    expect(db.rows("beta_invites")[0].accepted_at).toBeNull();
+    expect(db.rows("account_members")).toEqual([expect.objectContaining({ account_id: res.accountId })]);
+    // recovery: a second invite row for that address, then sign in again (after the empty account is deleted by hand)
+    db.seed("beta_invites", [{ account_id: seededId, email: "someone.else@example.com", invited_by: "tom" }]);
+    db.tables.set("account_members", []);
+    const fixed = await ensureAccount(db, initialState, { userId: "user-1" });
+    expect(fixed.accountId).toBe(seededId);
+  });
+
+  it("an unconfirmed email attaches nothing; two invites for one address attach both (the first one is home)", async () => {
+    const a = await seeded("heather@example.com", "AVGAR Sport");
+    db.userEmail = null;
+    expect((await ensureAccount(db, initialState, { userId: "user-1" })).created).toBe(true);
+    db.tables.set("account_members", []);
+    const b = db.insertRow("accounts", { name: "Second Co", currency: "NZD" }).id as string;
+    db.seed("beta_invites", [{ account_id: b, email: "heather@example.com", role: "member", created_at: "2026-09-02T10:00:00.000Z" }]);
+    db.userEmail = "heather@example.com";
+    const res = await ensureAccount(db, initialState, { userId: "user-1" });
+    expect(res.accountId).toBe(a);
+    expect(await listMemberships(db)).toEqual([
+      { accountId: a, role: "owner" },
+      { accountId: b, role: "member" },
+    ]);
+  });
+
+  it("a project without 0009 (function not found) is logged, not fatal — sign-in falls through to create_account", async () => {
+    // PostgREST's answer for a missing function (the fake wraps a handler throw into { error })
+    db.rpcs.accept_beta_invites = () => {
+      throw new Error("Could not find the function public.accept_beta_invites without parameters in the schema cache (PGRST202)");
+    };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await ensureAccount(db, initialState, { userId: "user-1" });
+    expect(res.created).toBe(true);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/accept_beta_invites unavailable/));
+    warn.mockRestore();
+    // …but a real failure (not signed in) still propagates
+    db.rpcs.accept_beta_invites = () => {
+      throw new Error("not signed in");
+    };
+    await expect(ensureAccount(db, initialState, { userId: "user-1" })).rejects.toThrow(/not signed in/);
   });
 });
 

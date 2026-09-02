@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { BETA_ACCOUNTS, betaRows, betaState, seedBeta } from "../../../../scripts/seed-beta";
 import { initialState } from "@/lib/platform/state";
-import { loadAccountState } from "../accountState";
+import { ensureAccount, loadAccountState } from "../accountState";
 import { FakeSupabase } from "./fakeSupabase";
 
 let db: FakeSupabase;
@@ -166,6 +166,23 @@ describe("seedBeta against the fake", () => {
     expect(state.connState.Shopify).toBe("off");
     expect(state.scan.profile?.name).toBe("AVGAR Sport");
     expect(state.messages[0].text).toMatch(/Tom set this account up/);
+  });
+
+  it("invite flow end to end: seed → beta_invites row → the founder's first magic-link login attaches to the seeded account (docs/BETA.md §Invite flow)", async () => {
+    const [avgar] = await seedBeta(db, [bySlug("avgar")], { now: NOW });
+    db.seed("beta_invites", [{ account_id: avgar.accountId, email: "heather@example.com", invited_by: "tom", note: "avgar" }]);
+    db.userId = "user-heather";
+    db.userEmail = "heather@example.com";
+    // the client arrives with its demo/onboarding state — it must NOT overwrite the seed
+    const res = await ensureAccount(db, { ...initialState, goalTitle: "NZ$40,000 MRR" }, { userId: "user-heather" });
+    expect(res).toMatchObject({ accountId: avgar.accountId, created: false });
+    expect(res.state.goalTitle).toBe("NZ$100,000 monthly revenue");
+    expect(res.state.onboarded).toBe(true);
+    expect(res.state.team[0].name).toBe("Heather Anderson");
+    expect(db.rows("accounts")).toHaveLength(1);
+    expect(db.rows("account_members")).toEqual([expect.objectContaining({ account_id: avgar.accountId, user_id: "user-heather", role: "owner" })]);
+    expect(db.rows("beta_invites")[0].accepted_user_id).toBe("user-heather");
+    expect(db.rows("goals")[0].title).toBe("NZ$100,000 monthly revenue");
   });
 
   it("--dry-run writes nothing", async () => {
