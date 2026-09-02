@@ -83,9 +83,11 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
       {demo && <DemoBanner />}
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 8px" }}>
         <img src="/brand/mascot-small.png" alt="Junction" style={{ width: 42, height: 45, objectFit: "contain" }} />
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: "0.01em" }}>Junction</div>
-          <div style={{ fontSize: 10, color: "var(--on-navy-dim)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Growth agent</div>
+        <div style={{ minWidth: 0 }}>
+          <div data-testid="sidebar-account-name" style={{ fontWeight: 700, fontSize: 16, letterSpacing: "0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={account?.accountName || undefined}>
+            {account?.accountName?.trim() || "Junction"}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--on-navy-dim)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{account?.accountName?.trim() ? "Junction · Growth agent" : "Growth agent"}</div>
         </div>
       </div>
       <nav style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 32 }}>

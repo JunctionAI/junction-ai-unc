@@ -26,6 +26,10 @@ export interface Persistence {
   mode: PersistenceMode;
   accountId: string | null;
   userEmail: string | null;
+  /** accounts.name — '' until the plan is agreed (then the scan's business name / website host / goal text). */
+  accountName: string;
+  /** "Agree the plan" names the account server-side; the response hands the name back here. */
+  setAccountName: (name: string) => void;
   autosave: AutosaveStatus;
   error: string | null;
 }
@@ -44,6 +48,7 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
   const [accountId, setAccountId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [accountName, setAccountName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,6 +68,7 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
         setUserId(data.user.id);
         setUserEmail(data.user.email ?? null);
         setAccountId(res.accountId);
+        setAccountName(res.name ?? "");
         // created → the empty seed; existing → the rows hydrated over that seed. Either way, never the demo state.
         set(() => res.state);
         setMode("account");
@@ -88,5 +94,5 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
     persistedProjection,
   );
 
-  return { mode, accountId, userEmail, autosave: autosave.status, error: error ?? autosave.error };
+  return { mode, accountId, userEmail, accountName, setAccountName, autosave: autosave.status, error: error ?? autosave.error };
 }

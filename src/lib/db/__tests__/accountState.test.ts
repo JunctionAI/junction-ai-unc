@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "@/lib/platform/state";
-import { createAccount, ensureAccount, listMemberships, loadAccountState, saveAccountState } from "../accountState";
+import { accountDisplayName, createAccount, ensureAccount, ensureAccountName, listMemberships, loadAccountState, saveAccountState } from "../accountState";
 import { FakeSupabase } from "./fakeSupabase";
 import { expectedAfterRoundTrip, pick, richState } from "./fixtures";
 
@@ -232,5 +232,35 @@ describe("save → load through the (schema-checked) fake", () => {
     const broken = new FakeSupabase({ ...db.schema, goals: { ...db.schema.goals, uniques: [{ columns: ["id"] }] } });
     broken.tables.set("accounts", db.rows("accounts"));
     await expect(saveAccountState(broken, accountId, initialState)).rejects.toThrow(/goals\.upsert|not a unique key/);
+  });
+});
+
+describe("the account's name (accounts.name was '' for real accounts)", () => {
+  it("accountDisplayName: the scan's business name, else the website host, else the goal text, else ''", () => {
+    expect(accountDisplayName({ profileName: " Harbour Physio ", website: "harbourphysio.co.nz", goalTitle: "40 leads" })).toBe("Harbour Physio");
+    expect(accountDisplayName({ profileName: null, website: "https://www.harbourphysio.co.nz/book", goalTitle: "40 leads" })).toBe("harbourphysio.co.nz");
+    expect(accountDisplayName({ profileName: "", website: "", goalTitle: "NZ$40,000 MRR" })).toBe("NZ$40,000 MRR");
+    expect(accountDisplayName({ profileName: null, website: "not a url at all ://", goalTitle: "" })).toBe("");
+    expect(accountDisplayName({})).toBe("");
+  });
+
+  it("a brand-new account is created with the best name in hand (the website host before any scan), never ''", async () => {
+    const seed = { ...initialState, website: "studionorth.example", goalTitle: "40 qualified leads/mo", scan: { status: "idle" as const, key: null, profile: null } };
+    const res = await ensureAccount(db, seed, { userId: "user-1" });
+    expect(res.name).toBe("studionorth.example");
+    expect(db.rows("accounts")[0].name).toBe("studionorth.example");
+    // second sign-in hands the stored name back
+    const again = await ensureAccount(db, initialState, { userId: "user-1" });
+    expect(again.name).toBe("studionorth.example");
+  });
+
+  it("ensureAccountName names a blank account from its rows once and leaves a named one alone", async () => {
+    const id = db.insertRow("accounts", { name: "", currency: "NZD" }).id as string;
+    expect(await ensureAccountName(db, id)).toBeNull(); // nothing known yet
+    db.insertRow("resource_profiles", { account_id: id, budget_monthly: 0, hours_weekly: 2, website: "https://www.ledgerly.app", breadth: "focused" });
+    expect(await ensureAccountName(db, id)).toBe("ledgerly.app");
+    db.insertRow("business_profiles", { account_id: id, scan_status: "done", profile: { name: "Ledgerly" } });
+    expect(await ensureAccountName(db, id)).toBe("ledgerly.app"); // named already — kept
+    expect(db.rows("accounts").find((a) => a.id === id)?.name).toBe("ledgerly.app");
   });
 });

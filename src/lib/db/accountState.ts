@@ -41,7 +41,7 @@ export async function createAccount(db: DbClient, opts: { name?: string; currenc
 export async function loadAccountRows(db: DbClient, accountId: string): Promise<LoadedRows> {
   const byAccount = (table: string, columns: string) => db.from(table).select(columns).eq("account_id", accountId);
   const [account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages, stateMeta] = await Promise.all([
-    unwrap<LoadedRows["account"]>("accounts.select", db.from("accounts").select("id, currency").eq("id", accountId).maybeSingle()),
+    unwrap<LoadedRows["account"]>("accounts.select", db.from("accounts").select("id, currency, name").eq("id", accountId).maybeSingle()),
     unwrap<LoadedRows["goals"]>("goals.select", byAccount("goals", "account_id, category, tier, title, baseline, deadline").order("created_at", { ascending: true })),
     unwrap<LoadedRows["resourceProfile"]>(
       "resource_profiles.select",
@@ -63,10 +63,53 @@ export async function loadAccountRows(db: DbClient, accountId: string): Promise<
   return { account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages: appMessages, stateMeta };
 }
 
-/** { state, found }: found=false means nothing was ever saved for this account (seed it). */
-export async function loadAccountState(db: DbClient, accountId: string, base?: PlatformState): Promise<{ state: PlatformState; found: boolean }> {
+/** { state, found, name }: found=false means nothing was ever saved for this account (seed it). */
+export async function loadAccountState(db: DbClient, accountId: string, base?: PlatformState): Promise<{ state: PlatformState; found: boolean; name: string }> {
   const rows = await loadAccountRows(db, accountId);
-  return { state: rowsToState(rows, base), found: rows.stateMeta !== null };
+  return { state: rowsToState(rows, base), found: rows.stateMeta !== null, name: rows.account?.name ?? "" };
+}
+
+// ---------- the account's name ----------
+
+/** "avgarsport.com" → "avgarsport.com"; "https://www.avgarsport.com/shop" → "avgarsport.com". */
+export function websiteHost(website: string | null | undefined): string | null {
+  const t = (website ?? "").trim();
+  if (!t) return null;
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`).hostname.replace(/^www\./, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+/** The account's display name from what is known: the scan's business name, else the website
+    host, else the founder's goal text. '' when nothing is known yet (never a placeholder). */
+export function accountDisplayName(input: { profileName?: string | null; website?: string | null; goalTitle?: string | null }): string {
+  const name = (input.profileName ?? "").trim();
+  if (name) return name.slice(0, 120);
+  const host = websiteHost(input.website);
+  if (host) return host;
+  const goal = (input.goalTitle ?? "").trim();
+  return goal ? goal.slice(0, 120) : "";
+}
+
+/** Name a still-blank account from its own rows (business profile → website → governing goal).
+    Idempotent: a named account keeps its name. Returns the name (or null when still unknown). */
+export async function ensureAccountName(db: DbClient, accountId: string): Promise<string | null> {
+  const acct = await unwrap<{ name: string | null } | null>("accounts.select", db.from("accounts").select("name").eq("id", accountId).maybeSingle());
+  const current = (acct?.name ?? "").trim();
+  if (current) return current;
+  const [bp, rp, goals] = await Promise.all([
+    unwrap<{ profile: { name?: unknown } | null } | null>("business_profiles.select", db.from("business_profiles").select("profile").eq("account_id", accountId).maybeSingle()),
+    unwrap<{ website: string | null } | null>("resource_profiles.select", db.from("resource_profiles").select("website").eq("account_id", accountId).maybeSingle()),
+    unwrap<{ title: string; tier: string }[]>("goals.select", db.from("goals").select("title, tier").eq("account_id", accountId)),
+  ]);
+  const profileName = bp?.profile && typeof bp.profile === "object" && typeof bp.profile.name === "string" ? bp.profile.name : null;
+  const governing = goals.find((g) => g.tier === "governing") ?? goals[0];
+  const name = accountDisplayName({ profileName, website: rp?.website ?? null, goalTitle: governing?.title ?? null });
+  if (!name) return null;
+  await unwrap("accounts.update", db.from("accounts").update({ name }).eq("id", accountId));
+  return name;
 }
 
 export async function saveAccountRows(db: DbClient, rows: AccountRows): Promise<void> {
@@ -147,19 +190,20 @@ export async function ensureAccount(
   db: DbClient,
   seed: PlatformState,
   opts: { userId?: string } = {},
-): Promise<{ accountId: string; created: boolean; state: PlatformState }> {
+): Promise<{ accountId: string; created: boolean; state: PlatformState; name: string }> {
   await acceptBetaInvites(db);
   const memberships = await listMemberships(db);
   if (memberships.length) {
     const accountId = memberships[0].accountId;
-    const { state, found } = await loadAccountState(db, accountId, seed);
+    const { state, found, name } = await loadAccountState(db, accountId, seed);
     if (!found) {
       await saveAccountState(db, accountId, seed, opts);
-      return { accountId, created: false, state: seed };
+      return { accountId, created: false, state: seed, name };
     }
-    return { accountId, created: false, state };
+    return { accountId, created: false, state, name };
   }
-  const accountId = await createAccount(db, { name: seed.scan.profile?.name ?? "", currency: seed.currency });
+  const name = accountDisplayName({ profileName: seed.scan.profile?.name ?? null, website: seed.website, goalTitle: seed.goalTitle });
+  const accountId = await createAccount(db, { name, currency: seed.currency });
   await saveAccountState(db, accountId, seed, opts);
-  return { accountId, created: true, state: seed };
+  return { accountId, created: true, state: seed, name };
 }

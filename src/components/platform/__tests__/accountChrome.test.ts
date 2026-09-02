@@ -57,7 +57,7 @@ const facts = (over: Partial<AccountFacts> = {}): AccountFacts => ({
 });
 
 const account = (over: Partial<AccountFactsState> = {}): AccountFactsState => ({ mode: "account", accountId: "acct-1", facts: facts(), loading: false, error: null, ...over });
-const persistence: Persistence = { mode: "account", accountId: "acct-1", userEmail: "ana@example.test", autosave: "saved", error: null };
+const persistence: Persistence = { mode: "account", accountId: "acct-1", userEmail: "ana@example.test", accountName: "", setAccountName: () => {}, autosave: "saved", error: null };
 
 const state = (over: Partial<PlatformState> = {}): PlatformState => ({ ...initialState, onboarded: true, view: "today", ...over });
 const V = (S: PlatformState) => derive(S, noop);
