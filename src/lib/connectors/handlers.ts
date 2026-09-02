@@ -313,8 +313,10 @@ function describeRef(platform: string, ref: string): string {
 
 const IDENTIFY_TIMEOUT_MS = 5_000;
 
-/** Meta: the ad account when the user manages exactly one; Klaviyo: the account id.
-    Google: the GA4 property / Ads customer is chosen later (many per login) → null. */
+/** Meta: the ad account when the user manages exactly one; Klaviyo: the account id;
+    HubSpot: the portal id. Google: the GA4 property / Ads customer is chosen later (many
+    per login) → null, and Meta with several ad accounts likewise — the post-connect picker
+    (handleOptions / handleSelect) fills it in. */
 export async function identifyExternalRef(fetchFn: FetchLike, entry: ConnectorEntry, bundle: TokenBundle): Promise<string | null> {
   try {
     if (entry.id === "meta_ads") {
@@ -330,6 +332,13 @@ export async function identifyExternalRef(fetchFn: FetchLike, entry: ConnectorEn
       const j = (await res.json()) as { data?: { id?: string }[] };
       const id = j.data?.[0]?.id;
       return typeof id === "string" ? id : null;
+    }
+    if (entry.id === "hubspot") {
+      // account-info needs no extra scope; the portal id is non-secret (it is in every HubSpot URL).
+      const res = await fetchFn("https://api.hubapi.com/account-info/v3/details", { headers: { authorization: `Bearer ${bundle.accessToken}`, accept: "application/json" }, signal: AbortSignal.timeout(IDENTIFY_TIMEOUT_MS) });
+      if (!res.ok) return null;
+      const j = (await res.json()) as { portalId?: unknown };
+      return typeof j.portalId === "number" || (typeof j.portalId === "string" && j.portalId) ? String(j.portalId) : null;
     }
   } catch {
     /* identification is a nicety; the connection stands without it */

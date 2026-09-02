@@ -5,7 +5,7 @@ import { CONNECTOR_BY_ID, CONNECTOR_REGISTRY, connectorEntry, isPlatformConfigur
 import { readConnectReturn } from "../returnParams";
 import { FAKE_ENV } from "./helpers";
 
-const LAUNCH = ["shopify", "klaviyo", "meta_ads", "ga4", "google_ads"] as const;
+const LAUNCH = ["shopify", "klaviyo", "meta_ads", "ga4", "google_ads", "hubspot"] as const;
 
 describe("connector registry", () => {
   it("has one entry per connector card, in card order, carrying the card's reads line", () => {
@@ -18,7 +18,7 @@ describe("connector registry", () => {
     expect(new Set(CONNECTOR_REGISTRY.map((e) => e.id)).size).toBe(CONNECTOR_REGISTRY.length);
   });
 
-  it("the five launch platforms have read-only scopes, env var names and a flow", () => {
+  it("the five launch platforms + HubSpot have read-only scopes, env var names and a flow", () => {
     expect(LAUNCH_PLATFORMS.sort()).toEqual([...LAUNCH].sort());
     for (const id of LAUNCH) {
       const e = CONNECTOR_BY_ID[id];
@@ -33,12 +33,16 @@ describe("connector registry", () => {
     expect(CONNECTOR_BY_ID.meta_ads.scopes).toEqual(["ads_read", "read_insights", "business_management"]);
     expect(CONNECTOR_BY_ID.ga4.scopes).toEqual(["https://www.googleapis.com/auth/analytics.readonly"]);
     expect(CONNECTOR_BY_ID.google_ads.scopes).toEqual(["https://www.googleapis.com/auth/adwords"]);
+    expect(CONNECTOR_BY_ID.hubspot.scopes).toEqual(["crm.objects.deals.read", "crm.objects.contacts.read", "crm.objects.owners.read"]);
+    expect(CONNECTOR_BY_ID.hubspot.scopes.every((s) => s.endsWith(".read"))).toBe(true);
     // env names, not values
     expect(CONNECTOR_BY_ID.shopify.env).toEqual({ clientId: "SHOPIFY_CLIENT_ID", clientSecret: "SHOPIFY_CLIENT_SECRET" });
     expect(CONNECTOR_BY_ID.klaviyo.env).toEqual({ clientId: "KLAVIYO_CLIENT_ID", clientSecret: "KLAVIYO_CLIENT_SECRET" });
     expect(CONNECTOR_BY_ID.meta_ads.env).toEqual({ clientId: "META_APP_ID", clientSecret: "META_APP_SECRET" });
     expect(CONNECTOR_BY_ID.ga4.env).toEqual({ clientId: "GOOGLE_CLIENT_ID", clientSecret: "GOOGLE_CLIENT_SECRET" });
     expect(CONNECTOR_BY_ID.google_ads.env).toEqual(CONNECTOR_BY_ID.ga4.env);
+    expect(CONNECTOR_BY_ID.hubspot.env).toEqual({ clientId: "HUBSPOT_CLIENT_ID", clientSecret: "HUBSPOT_CLIENT_SECRET" });
+    expect(CONNECTOR_BY_ID.hubspot).toMatchObject({ pkce: false, refresh: "refresh_token", externalRef: "hubspot_portal_id", tokenAuth: "body", refreshEndpoint: "https://api.hubapi.com/oauth/v1/token" });
     // PKCE + refresh semantics
     expect(CONNECTOR_BY_ID.klaviyo.pkce).toBe(true);
     expect(CONNECTOR_BY_ID.ga4.pkce).toBe(true);
@@ -80,6 +84,12 @@ describe("connector registry", () => {
     expect(ga4.searchParams.get("access_type")).toBe("offline");
     expect(ga4.searchParams.get("prompt")).toBe("consent");
     expect(ga4.searchParams.get("code_challenge")).toBe("ch4llenge");
+
+    const hubspot = new URL(CONNECTOR_BY_ID.hubspot.authorizeUrl({ ...p, scopes: CONNECTOR_BY_ID.hubspot.scopes }));
+    expect(hubspot.origin + hubspot.pathname).toBe("https://app.hubspot.com/oauth/authorize");
+    expect(hubspot.searchParams.get("scope")).toBe("crm.objects.deals.read crm.objects.contacts.read crm.objects.owners.read");
+    expect(hubspot.searchParams.get("state")).toBe("st4te");
+    expect(hubspot.searchParams.has("code_challenge")).toBe(false);
   });
 
   it("isPlatformConfigured keys off the env var pair; catalogued-only platforms are never configured", () => {

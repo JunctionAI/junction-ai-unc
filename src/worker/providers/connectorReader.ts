@@ -9,7 +9,7 @@
                            answered; there was nothing)
      fixture data        → provenance "fixture" so no receipt can be mistaken
                            for a live read
-   Platforms with no reader yet (instagram, gorgias, hubspot, …) answer an
+   Platforms with no reader yet (instagram, gorgias, gmail, …) answer an
    empty fixture result under fixture credentials and "couldn't ask" under
    anything else. */
 
@@ -18,6 +18,7 @@ import { describeCredential, type CredentialProvider } from "../credentials";
 import type { Logger } from "../log";
 import * as ga4 from "../readers/ga4";
 import * as googleAds from "../readers/googleAds";
+import * as hubspot from "../readers/hubspot";
 import * as klaviyo from "../readers/klaviyo";
 import * as meta from "../readers/meta";
 import * as shopify from "../readers/shopify";
@@ -29,6 +30,7 @@ export const READERS: Partial<Record<Platform, Reader>> = {
   ga4: ga4.read,
   meta_ads: meta.read,
   google_ads: googleAds.read,
+  hubspot: hubspot.read,
 };
 
 export interface WorkerConnectorReaderDeps {

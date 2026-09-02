@@ -121,7 +121,8 @@ export type PlatformCredential =
   | { kind: "klaviyo"; apiKey: string }
   | { kind: "ga4"; propertyId: string; accessToken: string }
   | { kind: "meta_ads"; adAccountId: string; accessToken: string }
-  | { kind: "google_ads"; customerId: string; developerToken: string; accessToken: string; loginCustomerId?: string };
+  | { kind: "google_ads"; customerId: string; developerToken: string; accessToken: string; loginCustomerId?: string }
+  | { kind: "hubspot"; accessToken: string; portalId?: string };
 
 export interface CredentialProviderShape {
   get(accountId: string, platform: Platform): Promise<PlatformCredential | null>;
@@ -151,6 +152,8 @@ export class ConnectorCredentialProvider implements CredentialProviderShape {
         if (!tok.externalRef || !developerToken) return null;
         return { kind: "google_ads", customerId: tok.externalRef, developerToken, accessToken: tok.accessToken, ...(loginCustomerId ? { loginCustomerId } : {}) };
       }
+      case "hubspot":
+        return { kind: "hubspot", accessToken: tok.accessToken, ...(tok.externalRef ? { portalId: tok.externalRef } : {}) };
       default:
         return null;
     }

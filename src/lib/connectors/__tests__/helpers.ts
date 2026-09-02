@@ -20,6 +20,8 @@ export const FAKE_ENV: Record<string, string> = {
   GOOGLE_CLIENT_ID: "google-client-id",
   GOOGLE_CLIENT_SECRET: "google-client-secret",
   GOOGLE_ADS_DEVELOPER_TOKEN: "dev-token-fixture",
+  HUBSPOT_CLIENT_ID: "hubspot-client-id",
+  HUBSPOT_CLIENT_SECRET: "hubspot-client-secret",
 };
 
 export const APP_URL = "https://unc.test";

@@ -1,8 +1,8 @@
 /* Connector registry — one typed entry per connector card (the 16 in CONNECTOR_DEFS).
 
-   Five launch platforms carry a real OAuth flow (Shopify, Klaviyo, Meta Ads, GA4, Google
-   Ads); the rest are catalogued with flow "none" so the UI can say "not switched on yet"
-   honestly. Scopes are the phase-1 READ-ONLY sets from the legal/OAuth prep pack
+   Six platforms carry a real OAuth flow (Shopify, Klaviyo, Meta Ads, GA4, Google Ads,
+   HubSpot); the rest are catalogued with flow "none" so the UI can say "not switched on
+   yet" honestly. Scopes are the phase-1 READ-ONLY sets from the legal/OAuth prep pack
    (clients/junction-ai/product/unc-growth-agent-design-2026-09-01/legal-and-oauth/
    OAUTH-PREP-PACK.md) — least privilege, listed to the founder before they approve.
 
@@ -32,7 +32,7 @@ export type RefreshSemantics =
   /** Offline token with no expiry (Shopify). */
   | "none";
 
-export type ExternalRefKind = "shop_domain" | "klaviyo_account_id" | "ad_account_id" | "ga4_property_id" | "google_ads_customer_id";
+export type ExternalRefKind = "shop_domain" | "klaviyo_account_id" | "ad_account_id" | "ga4_property_id" | "google_ads_customer_id" | "hubspot_portal_id";
 
 export interface AuthorizeParams {
   clientId: string;
@@ -208,12 +208,27 @@ const FLOWS: Record<Platform, Omit<ConnectorEntry, "name" | "category" | "reads"
     tokenAuth: "body",
     refreshEndpoint: GOOGLE_TOKEN,
   },
+  hubspot: {
+    id: "hubspot",
+    // Read-only CRM scopes: deals + contacts (the D04 routines' reads) + owners (names on
+    // deals). The D04-W05/W06 mutations need crm.objects.deals.write — Wave 2, not requested.
+    flow: "oauth",
+    scopes: ["crm.objects.deals.read", "crm.objects.contacts.read", "crm.objects.owners.read"],
+    pkce: false,
+    refresh: "refresh_token",
+    externalRef: "hubspot_portal_id",
+    env: { clientId: "HUBSPOT_CLIENT_ID", clientSecret: "HUBSPOT_CLIENT_SECRET" },
+    unlocks: unlocksFor("hubspot"),
+    authorizeUrl: (p) => `https://app.hubspot.com/oauth/authorize?${q({ client_id: p.clientId, redirect_uri: p.redirectUri, scope: p.scopes.join(" "), state: p.state })}`,
+    tokenEndpoint: () => "https://api.hubapi.com/oauth/v1/token",
+    tokenAuth: "body",
+    refreshEndpoint: "https://api.hubapi.com/oauth/v1/token",
+  },
   instagram: none("instagram"),
   tiktok: none("tiktok"),
   linkedin: none("linkedin"),
   youtube: none("youtube"),
   search_console: none("search_console"),
-  hubspot: none("hubspot"),
   gmail: none("gmail"),
   gorgias: none("gorgias"),
   xero: none("xero"),
@@ -234,7 +249,7 @@ export const CONNECTOR_REGISTRY: ConnectorEntry[] = CONNECTOR_DEFS.map((d) => {
 
 export const CONNECTOR_BY_ID: Record<string, ConnectorEntry> = Object.fromEntries(CONNECTOR_REGISTRY.map((e) => [e.id, e]));
 
-/** Platforms with a real connect flow at launch. */
+/** Platforms with a real connect flow (the five launch platforms + HubSpot). */
 export const LAUNCH_PLATFORMS: Platform[] = CONNECTOR_REGISTRY.filter((e) => e.flow !== "none").map((e) => e.id);
 
 export function connectorEntry(platform: string): ConnectorEntry | null {

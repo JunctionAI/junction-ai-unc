@@ -18,7 +18,8 @@ export type PlatformCredential =
   | { kind: "klaviyo"; apiKey: string }
   | { kind: "ga4"; propertyId: string; accessToken: string }
   | { kind: "meta_ads"; adAccountId: string; accessToken: string }
-  | { kind: "google_ads"; customerId: string; developerToken: string; accessToken: string; loginCustomerId?: string };
+  | { kind: "google_ads"; customerId: string; developerToken: string; accessToken: string; loginCustomerId?: string }
+  | { kind: "hubspot"; accessToken: string; portalId?: string };
 
 export interface CredentialProvider {
   /** null = nothing connected for this account + platform. */
