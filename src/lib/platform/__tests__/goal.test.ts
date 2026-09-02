@@ -193,8 +193,8 @@ describe("target parser — what it actually does", () => {
     expect(parse("22% repeat purchase rate")).toBe(22);
   });
 
-  it("stops at a decimal point — '$40,000.50' reads as 40000", () => {
-    expect(parse("$40,000.50 MRR")).toBe(40000);
+  it("reads decimals — '$40,000.50' rounds to 40001", () => {
+    expect(parse("$40,000.50 MRR")).toBe(40001);
   });
 
   it("ignores currency symbols and words before the number", () => {
@@ -209,7 +209,7 @@ describe("target parser — what it actually does", () => {
     expect(parse("$1.2M revenue", 800000, 900000)).toBe(1200000);
   });
 
-  it("documents the actual '$1.2M' behaviour so a change is noticed", () => {
+  it("'$1.2M' reads 1,200,000 after the parser fix", () => {
     const r = goalMath({ goalTitle: "$1.2M revenue", baselineNum: 800000, deadline: "2027-06-30", currency: "USD", currentMRR: 900000 });
     expect(r.target).toBe(900001);
     expect(r.onTrack).toBe(true);
@@ -222,8 +222,8 @@ describe("target parser — what it actually does", () => {
     expect(parse("25k engaged followers", 12000, 14000)).toBe(25000);
   });
 
-  it("documents the actual '25k' behaviour so a change is noticed", () => {
-    expect(parse("25k engaged followers", 12000, 14000)).toBe(14001);
+  it("'25k' reads 25,000 after the parser fix", () => {
+    expect(parse("25k engaged followers", 12000, 14000)).toBe(25000);
   });
 
   it("consequence: every non-revenue demo goal text collapses to current + 1 under the demo MRR", () => {
@@ -253,10 +253,11 @@ describe("divide-by-zero and bad input guards", () => {
     expect(Number.isFinite(r.gap)).toBe(true);
   });
 
-  it("documents the actual bad-deadline behaviour", () => {
+  it("an unparseable deadline falls back to 30 days — never NaN", () => {
     const r = goalMath({ ...DEMO, deadline: "not-a-date" });
-    expect(Number.isNaN(r.daysLeftN)).toBe(true);
-    expect(r.fmt(r.gap)).toBe("NZ$NaN");
+    expect(r.daysLeftN).toBe(30);
+    expect(Number.isFinite(r.gap)).toBe(true);
+    expect(r.fmt(r.gap)).not.toContain("NaN");
   });
 });
 

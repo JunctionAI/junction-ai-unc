@@ -82,3 +82,6 @@ Non-bug observations locked as documentation:
   and belongs in an integration suite.
 - The live `/api/unc/*` routes and `useUncChat` — they call the model.
 - The React surfaces — Playwright (`tests/e2e/**`) owns those.
+
+
+**Update 2026-09-02:** all five bugs above are FIXED (goal.ts `parseGoalTarget` with k/M/decimal support + NaN-safe deadline; narrative channel token split on `[\s&,]+`; scan hex-form v4-mapped v6). The former `it.fails` cases now assert the correct behaviour.

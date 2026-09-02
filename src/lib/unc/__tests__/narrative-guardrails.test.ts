@@ -299,10 +299,10 @@ describe("channel name required", () => {
     expect(parseNarrative({ ...GOOD, phaseNotes: notes }, REQ)!.narrative.phaseNotes[2]).toBe(notes[2]);
   });
 
-  it("documents the actual phase-3 behaviour so a fix is noticed", () => {
+  it("a phase-3 note naming 'SEO' (comma-joined channel) is accepted after the token fix", () => {
     const notes = [...GOOD.phaseNotes];
     notes[2] = "SEO and paid ads switch on as their numbers earn it, sales last.";
-    expect(parseNarrative({ ...GOOD, phaseNotes: notes }, REQ)!.narrative.phaseNotes).toEqual(FALLBACK_NOTES);
+    expect(parseNarrative({ ...GOOD, phaseNotes: notes }, REQ)!.narrative.phaseNotes[2]).toBe(notes[2]);
   });
 });
 
