@@ -7,13 +7,15 @@
       with every hop re-checked against the SSRF guard. HTML is reduced to plain text.
    2. Social URLs/handles are NOT scraped (platforms block it and it's fragile) — the
       platform + handle are recorded as sources only.
-   3. One Sonnet call turns the fetched text into a strict-JSON BusinessProfile. The
+   3. One model call (the "business_scan" task — a fast-tier model by default, see
+      docs/MODELS.md) turns the fetched text into a strict-JSON BusinessProfile. The
       prompt forbids invention: anything not in the text is null.
 
    Never throws to the caller: an unreachable site yields a `confidence: "low"` profile
-   with a plain `note`. The API key is read from process.env only, never logged. */
+   with a plain `note`. Provider keys are read by the model layer from process.env only,
+   never logged. */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { complete, resolveModel } from "../llm/router";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
@@ -44,11 +46,12 @@ export interface SocialHandle {
 export interface ScanInput {
   website: string;
   socials: string;
+  /** When known (signed-in founder): honours their model choice and attributes the ledger row. */
+  accountId?: string | null;
 }
 
-const MODEL = "claude-sonnet-5";
-/* Sonnet 5 thinks adaptively by default (thinking tokens count against max_tokens and are
-   not returned), so the cap is generous and effort is pinned low for this extraction job. */
+/* Sonnet-class models think adaptively by default (thinking tokens count against max_tokens
+   and are not returned), so the cap is generous and effort is pinned low for this extraction job. */
 const MAX_PROFILE_TOKENS = 4000;
 const PROFILE_EFFORT = "low" as const;
 const PAGE_TIMEOUT_MS = 5000;
@@ -420,25 +423,20 @@ export async function scanBusiness(input: ScanInput): Promise<BusinessProfile> {
     return emptyProfile(sources, "low", note);
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!resolveModel("business_scan")) {
     return heuristicProfile(pages, sources, "I read the site but couldn't analyse it yet — I'll use what you've told me for now.");
   }
 
   try {
-    const client = new Anthropic({ maxRetries: 1 });
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: MAX_PROFILE_TOKENS,
-      output_config: { effort: PROFILE_EFFORT },
-      system: SCAN_SYSTEM,
-      messages: [{ role: "user", content: buildScanUserMessage(pages, socials) }],
-    });
-    if (response.stop_reason === "refusal") throw new Error("refused");
-    const text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-    const profile = coerceProfile(extractJson(text), sources);
+    const response = await complete(
+      "business_scan",
+      { system: SCAN_SYSTEM, messages: [{ role: "user", content: buildScanUserMessage(pages, socials) }], maxTokens: MAX_PROFILE_TOKENS, effort: PROFILE_EFFORT, jsonMode: true },
+      { accountId: input.accountId ?? null },
+    );
+    if (!response) throw new Error("no provider");
+    if (response.stopReason === "refusal") throw new Error("refused");
+    if (response.stopReason === "error") throw new Error(response.errorCode ?? "error");
+    const profile = coerceProfile(extractJson(response.text), sources);
     if (!profile) throw new Error("unparseable");
     if (profile.confidence === "low" && !profile.note) profile.note = "I could only read a little of the site — I'll lean on what you've told me and look again tonight.";
     return profile;

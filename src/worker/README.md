@@ -86,7 +86,7 @@ Fields whose key looks like a secret, or whose value looks like a token, are rep
 
 | Var | Required | Used by |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | no | The Anthropic SDK, for `LlmDecisionProvider` (Sonnet, `claude-sonnet-5`, `max_tokens` 4000, effort low) and the self-review. Without it every `llm`-rule decide node resolves to its declared fallback with a reasoning line that says so. The worker never reads or logs the value. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY` / `LLM_CUSTOM_BASE_URL` | no | Model providers for `LlmDecisionProvider` (task `routine_decision`: fast tier by default, `max_tokens` 4000, effort low) and the self-review (task `self_review`: Sonnet 5 by default). Per-task overrides `LLM_MODEL_<TASK>`; per-account picks in `account_model_prefs`. See `docs/MODELS.md`. Without any provider every `llm`-rule decide node resolves to its declared fallback with a reasoning line that says so. The worker never reads or logs the values. |
 | `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | no | `wiring.ts`: DB accounts source, the `oauth_states` sweep, benchmark segments. Absent → the static `demo` account, no sweep. |
 | `CONNECTOR_SECRET_KEY` (+ `_VERSION`, `_PREVIOUS`) | no | With the DB: `ConnectorCredentialProvider` (live tokens from `connector_secrets`). Absent → `FixtureCredentialProvider`. |
 | `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | no | The Google Ads credential shape (reads are fixture-only today regardless). |

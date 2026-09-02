@@ -10,23 +10,27 @@
    reasoning line that says so. The model never gets to invent an option and
    its reasoning is capped and trimmed before it reaches a receipt/approval.
 
-   The Anthropic client is env-gated on ANTHROPIC_API_KEY the same way
-   src/app/api/unc/chat/route.ts is; the key is read by the SDK, never by us,
-   and never logged. Tests inject a fake LlmClient — no live calls. */
+   The production client comes from the model-provider layer
+   (src/lib/llm/router.ts, task "routine_decision": account setting →
+   LLM_MODEL_ROUTINE_DECISION → the first configured provider's fast tier).
+   Keys are read there from process.env, never by us, never logged. Tests
+   inject a fake LlmClient — no live calls. */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { createTextClient, describeLlm, type CompleteContext } from "../../lib/llm/router";
 import { renderParams, renderTemplate, resolveSpend } from "../../lib/runtime/context";
 import { DeterministicDecisionProvider } from "../../lib/runtime/providers";
 import type { DecideNode, Decision, DecisionOption, DecisionProvider, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
 
-export const LLM_MODEL = "claude-sonnet-5";
 export const LLM_MAX_TOKENS = 4000; // adaptive thinking counts against max_tokens; effort pinned low below
+export const LLM_EFFORT = "low" as const;
 export const MAX_REASONING_CHARS = 600;
 
 export interface LlmPrompt {
   system: string;
   user: string;
+  /** Set by the provider so a shared client can honour the account's model setting. */
+  accountId?: string;
 }
 
 export interface LlmClient {
@@ -146,7 +150,7 @@ export class LlmDecisionProvider implements DecisionProvider {
 
     let text: string;
     try {
-      text = await this.client.complete(buildDecisionPrompt(node, ctx));
+      text = await this.client.complete({ ...buildDecisionPrompt(node, ctx), accountId: ctx.account.accountId });
     } catch (err) {
       // Log the failure class only — never the error body (it could echo request details).
       this.opts.log?.warn("decision.llm_failed", { runId: ctx.runId, routineId: ctx.routineId, node: node.id, error: err instanceof Error ? err.name : "unknown" });
@@ -162,28 +166,13 @@ export class LlmDecisionProvider implements DecisionProvider {
   }
 }
 
-// ---------- Anthropic client (env-gated) ----------
+// ---------- router-backed client (env-gated) ----------
 
-/** null when ANTHROPIC_API_KEY is absent — the provider then always falls
-    back. The SDK reads the key itself; this module never touches its value. */
-export function createAnthropicLlmClient(): LlmClient | null {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  const client = new Anthropic({ maxRetries: 1 });
-  return {
-    async complete({ system, user }) {
-      const response = await client.messages.create({
-        model: LLM_MODEL,
-        max_tokens: LLM_MAX_TOKENS,
-        output_config: { effort: "low" },
-        system,
-        messages: [{ role: "user", content: user }],
-      });
-      if (response.stop_reason === "refusal") throw new Error("refusal");
-      return response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("")
-        .trim();
-    },
-  };
+/** null when no provider is configured — the provider then always falls back.
+    The router reads the keys itself; this module never touches a value. */
+export function createLlmClient(ctx: CompleteContext = {}): LlmClient | null {
+  return createTextClient("routine_decision", { maxTokens: LLM_MAX_TOKENS, effort: LLM_EFFORT, jsonMode: true }, ctx);
 }
+
+/** For the boot log. */
+export const describeLlmClient = describeLlm;

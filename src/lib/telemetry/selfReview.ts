@@ -15,7 +15,8 @@
      (idempotent per ISO week; the Monday (UTC) is the key).
 
    SDK-free and relative-imports-only so it compiles into the worker; the API route and the
-   worker inject the model client (same shape as src/worker/providers/llmDecision.ts LlmClient). */
+   worker inject the model client (same shape as src/worker/providers/llmDecision.ts LlmClient;
+   production wiring is src/lib/llm/router.ts createTextClient("self_review", …)). */
 
 import { ALL_SYSTEMS } from "../platform/catalog";
 import { CATALOG_SPEC_BY_ID } from "../runtime/catalog-specs";
@@ -366,7 +367,8 @@ export function splitBody(body: string): { worked: string; changing: string; ask
 // ---------- generate + store ----------
 
 export interface SelfReviewLlm {
-  complete(prompt: { system: string; user: string }): Promise<string>;
+  /** accountId lets a shared client (the worker's router-backed one) honour per-account model settings. */
+  complete(prompt: { system: string; user: string; accountId?: string }): Promise<string>;
 }
 
 export interface GenerateSelfReviewDeps {
@@ -393,7 +395,7 @@ export async function generateSelfReview(deps: GenerateSelfReviewDeps): Promise<
   let author: GeneratedSelfReview["author"] = "deterministic";
   if (deps.llm) {
     try {
-      const text = await deps.llm.complete({ system: SELF_REVIEW_SYSTEM, user: buildSelfReviewUserMessage(evidence) });
+      const text = await deps.llm.complete({ system: SELF_REVIEW_SYSTEM, user: buildSelfReviewUserMessage(evidence), accountId: deps.accountId });
       const p = parseSelfReview(extractJsonObject(text), evidence);
       if (p.liveFields > 0) {
         parsed = p;

@@ -2,13 +2,17 @@
    command and flags. Everything wired here is dry-run + refusing-executor.
    Credentials and accounts come from wiring.ts: real tokens + DB accounts when
    Supabase (service role) and CONNECTOR_SECRET_KEY are configured, fixture
-   markers + the static `demo` account otherwise. ANTHROPIC_API_KEY is read by
-   the SDK (optional — without it llm-rule decisions take their declared fallback). */
+   markers + the static `demo` account otherwise. Model provider keys (ANTHROPIC_API_KEY,
+   OPENAI_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, LLM_CUSTOM_BASE_URL — see
+   docs/MODELS.md) are read by the model layer (optional — without any, llm-rule decisions
+   take their declared fallback and the self-review is deterministic). */
 
 import { startHealthServer } from "./health";
 import { createLogger } from "./log";
 import { readHeartbeatFile, Worker } from "./loop";
-import { createAnthropicLlmClient } from "./providers/llmDecision";
+import { createLlmClient, describeLlmClient } from "./providers/llmDecision";
+import { createTextClient } from "../lib/llm/router";
+import { SELF_REVIEW_EFFORT, SELF_REVIEW_MAX_TOKENS } from "../lib/telemetry/selfReview";
 import { triggerRun, WORKER_RUN_MODE } from "./service";
 import { parseArgs } from "./cli";
 import { runBenchmarks, runMeasure, runSelfReview } from "./telemetry";
@@ -21,15 +25,16 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   const log = createLogger(undefined, { worker: "unc", mode: WORKER_RUN_MODE });
   const store = getStore();
   const accounts = defaultAccountsSource();
-  const llm = createAnthropicLlmClient();
-  log.info("worker.config", { ...args, ...describeWiring(), llm: llm ? "anthropic (ANTHROPIC_API_KEY present)" : "none (fallback decisions)" });
+  const llm = createLlmClient();
+  const reviewLlm = createTextClient("self_review", { maxTokens: SELF_REVIEW_MAX_TOKENS, effort: SELF_REVIEW_EFFORT, jsonMode: true });
+  log.info("worker.config", { ...args, ...describeWiring(), llm: describeLlmClient() });
 
   // Demo convenience: MemoryStore starts empty, so nothing is enabled until
   // something calls setEnabled. --enable D01-W01,D05-W02 flips those on.
   for (const routineId of args.enable) await setEnabled({ store }, args.accountId, routineId, true);
 
   const db = serviceDb();
-  const deps = { store, accounts, credentials: defaultCredentialProvider(process.env, (line) => log.info("credentials", { line })), llm, log, db };
+  const deps = { store, accounts, credentials: defaultCredentialProvider(process.env, (line) => log.info("credentials", { line })), llm, reviewLlm, log, db };
   // The daemon runs the telemetry jobs itself at their UTC slots (src/worker/jobs.ts); the
   // one-shot flags below stay for manual / catch-up runs.
   const worker = new Worker(deps, { intervalSec: args.intervalSec, heartbeatPath: args.heartbeatPath });
@@ -43,7 +48,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   // Telemetry one-shots (the "improves over time" loops). Each runs across the accounts
   // source (or --account) and the process exits afterwards, like --once.
   if (args.measure || args.selfReview || args.benchmarks) {
-    const telemetry = { store, accounts, reader: worker.adapters.reader, db, llm, log };
+    const telemetry = { store, accounts, reader: worker.adapters.reader, db, llm: reviewLlm, log };
     const only = args.accountGiven ? args.accountId : undefined;
     if (args.measure) {
       const r = await runMeasure(telemetry, { accountId: only });

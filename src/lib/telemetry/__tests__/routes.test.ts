@@ -6,6 +6,9 @@ import { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
 import { clearBillingEnv, restoreEnv, setFakeEnv } from "@/lib/billing/__tests__/env";
 import { setStoreForTests } from "@/lib/runtime/store";
 import { SupabaseStore } from "@/lib/runtime/store/supabase";
+import { clearLlmEnv, restoreLlmEnv } from "@/lib/llm/__tests__/env";
+import { setLlmDbForTests, setProviderFactoryForTests } from "@/lib/llm/router";
+import type { LlmProvider } from "@/lib/llm/types";
 
 let db: FakeSupabase;
 let user: { id: string; email?: string } | null = null;
@@ -26,7 +29,7 @@ const RUN = "00000000-0000-4000-8000-00000000f001";
 
 beforeEach(() => {
   setFakeEnv();
-  delete process.env.ANTHROPIC_API_KEY;
+  clearLlmEnv(); // no provider keys → the deterministic review (the dev shell may carry real keys)
   serviceRole = true;
   db = new FakeSupabase();
   db.now = () => "2026-09-02T09:00:00.000Z";
@@ -44,6 +47,9 @@ beforeEach(() => {
 });
 afterEach(() => {
   restoreEnv();
+  restoreLlmEnv();
+  setProviderFactoryForTests(undefined);
+  setLlmDbForTests(undefined);
   setStoreForTests(undefined);
 });
 
@@ -93,6 +99,25 @@ describe("self-review", () => {
     const got = await (await getReview()).json();
     expect(got.review.weekStart).toBe("2026-08-31");
     expect((await (await getHome()).json()).review.weekStart).toBe("2026-08-31");
+  });
+  it("with a provider configured, the self_review task writes the review through the router (fake provider), honours the account's model pick and ledgers the call", async () => {
+    clearLlmEnv({ ANTHROPIC_API_KEY: "fake", OPENAI_API_KEY: "fake" });
+    db.seed("account_model_prefs", [{ account_id: ACCT, task: "self_review", model_id: "gpt-5", updated_at: "2026-09-01T00:00:00.000Z" }]);
+    const seen: { provider: string; model: string; maxTokens: number; effort?: string }[] = [];
+    const fake = (id: LlmProvider["id"]): LlmProvider => ({
+      id,
+      async complete(req) {
+        seen.push({ provider: id, model: req.model, maxTokens: req.maxTokens, effort: req.effort });
+        return { text: JSON.stringify({ worked: "I completed 1 run and handed over 1 draft.", changing: "Nothing yet.", ask: "Shall I keep going?", changes: [] }), stopReason: "end", usage: { input: 900, output: 120 }, provider: id, model: req.model, latencyMs: 42 };
+      },
+    });
+    setProviderFactoryForTests((id) => fake(id));
+    const posted = await (await postReview()).json();
+    expect(posted.author).toBe("sonnet");
+    expect(posted.review.worked).toBe("I completed 1 run and handed over 1 draft.");
+    expect(seen).toEqual([{ provider: "openai", model: "gpt-5", maxTokens: 4000, effort: "low" }]);
+    expect(db.rows("llm_usage")).toHaveLength(1);
+    expect(db.rows("llm_usage")[0]).toMatchObject({ account_id: ACCT, task: "self_review", provider: "openai", model: "gpt-5", input_tokens: 900, output_tokens: 120, est_cost_usd: 0.002325, latency_ms: 42, stop_reason: "end" });
   });
   it("is session-bound: another user's account is never read", async () => {
     db.seed("self_reviews", [{ account_id: "00000000-0000-4000-8000-00000000acc2", week_start: "2026-08-31", body: "not yours", changes: [], evidence: {} }]);

@@ -2,14 +2,16 @@
 
    Body: { website: string, socials: string }
    →     { profile: BusinessProfile }   (see src/lib/unc/scan.ts)
-   or    { fallback: true }             (no ANTHROPIC_API_KEY, or an internal failure)
+   or    { fallback: true }             (no model provider configured, or an internal failure)
    or    400 { error }                  (bad body, or the SSRF guard rejected the URL)
 
    SSRF guard: http(s) only; localhost / IP literals / private + link-local ranges
    (incl. DNS that resolves to them) are rejected here and again on every redirect hop
-   inside scanBusiness (≤ 3 redirects). The key never reaches the client and is never
-   logged. */
+   inside scanBusiness (≤ 3 redirects). Model: the "business_scan" task through
+   src/lib/llm/router.ts (fast tier by default). Keys never reach the client. */
 
+import { optionalAccountContext } from "@/lib/llm/accountContext";
+import { resolveModel } from "@/lib/llm/router";
 import { isSafeUrl, scanBusiness } from "@/lib/unc/scan";
 
 export const runtime = "nodejs";
@@ -20,7 +22,7 @@ const MAX_SOCIALS_CHARS = 1000;
 const fallback = () => Response.json({ fallback: true });
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) return fallback();
+  if (!resolveModel("business_scan")) return fallback();
 
   let body: { website?: unknown; socials?: unknown };
   try {
@@ -39,7 +41,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const profile = await scanBusiness({ website, socials });
+    const account = await optionalAccountContext();
+    const profile = await scanBusiness({ website, socials, accountId: account?.accountId ?? null });
     return Response.json({ profile });
   } catch {
     // scanBusiness never throws by contract; this is belt-and-braces.

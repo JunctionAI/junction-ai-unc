@@ -30,6 +30,7 @@ import { createLogger, type Logger } from "./log";
 import { dueRoutines, type DueRoutine } from "./scheduler";
 import { buildAdapters, collectCandidates, LIVE_MODE_ENABLED, triggerRun, WORKER_RUN_MODE, type BuiltAdapters, type ServiceDeps } from "./service";
 import { runBenchmarks, runMeasure, runSelfReview, type TelemetryDeps } from "./telemetry";
+import type { SelfReviewLlm } from "../lib/telemetry/selfReview";
 
 export interface WorkerOptions {
   /** Seconds between ticks. Default 60. */
@@ -55,6 +56,9 @@ export interface WorkerDeps extends ServiceDeps {
   /** Service-role client for housekeeping (oauth_states sweep, benchmark segments).
       null / absent in demo mode: nothing DB-shaped runs. */
   db?: DbClient | null;
+  /** Model client for the weekly self-review (task "self_review"); falls back to `llm`
+      so existing fixtures keep working. null = deterministic review. */
+  reviewLlm?: SelfReviewLlm | null;
 }
 
 export const DEFAULT_SWEEP_INTERVAL_MS = 3_600_000;
@@ -187,7 +191,7 @@ export class Worker {
   // ----- scheduled telemetry jobs (jobs.ts) -----
 
   private telemetryDeps(): TelemetryDeps {
-    return { store: this.deps.store, accounts: this.deps.accounts, reader: this.adapters.reader, db: this.deps.db ?? null, llm: this.deps.llm ?? null, now: this.now, log: this.log };
+    return { store: this.deps.store, accounts: this.deps.accounts, reader: this.adapters.reader, db: this.deps.db ?? null, llm: this.deps.reviewLlm ?? this.deps.llm ?? null, now: this.now, log: this.log };
   }
 
   /** Run every job whose slot is due and unserved; the marker is written whatever
