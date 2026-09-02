@@ -29,3 +29,10 @@ A **Getting set up** card on Home (accounts mode) shows these five with real sta
 - The bar with no Junction benchmark: labelled "Industry reference — not yet from Junction accounts"; with no own value: "Not measured yet".
 - Routines with nothing on: "Your plan starts with Content — this one first." (recommended card)
 - Connectors, platform not configured: "Not switched on yet — I'll tell you the moment it is." Owner sees "Connect with a token" instead.
+
+## Unc-first (founder direction, 2026-09-02)
+**Unc is the product; the UI is his hands.** He guides every step on whatever channel the founder lives in — Telegram, WhatsApp, Slack, text, or the app — and it is **one conversation**: anything said on any channel is in the corner thread, and every decision (approve / hold / why) taken anywhere lands in the app with its receipt. The UI's job is to make the next step, the approval and the feedback tangible: never a second brain, never a second thread.
+- First-run adds **"Where should I reach you?"** after the plan (Telegram / WhatsApp / Slack / Text / just the app).
+- Proactive moments (morning brief, a draft landed, a decision waiting or expiring) go to the founder's channel with actions; quiet hours respected.
+- Channel messages carry a small "via Telegram" chip in the app thread; app messages are the same thread with channel 'app'.
+- See docs/CHANNELS.md once built.
