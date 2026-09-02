@@ -306,7 +306,14 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
   const effConn = (d: (typeof CONNECTOR_DEFS)[number]) => S.connState[d.name] || d.st;
   const connectors = CONNECTOR_DEFS.map((d) => {
     const st = effConn(d);
-    return { ...d, ok: st === "ok", expired: st === "expired", off: st === "off", connect: () => set((s) => ({ connState: { ...s.connState, [d.name]: "ok" } })) };
+    return {
+      ...d,
+      ok: st === "ok",
+      expired: st === "expired",
+      off: st === "off",
+      connect: () => set((s) => ({ connState: { ...s.connState, [d.name]: "ok" } })),
+      disconnect: () => set((s) => ({ connState: { ...s.connState, [d.name]: "off" } })),
+    };
   });
   const connSummary = `${connectors.filter((c) => c.ok).length} connected · ${connectors.filter((c) => c.expired).length} needs attention · ${connectors.filter((c) => c.off).length} available`;
 
@@ -909,6 +916,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     })),
     goalPct: gm.goalPct,
     approvals,
+    /** Open a routine's detail by catalog id (live approval / draft rows → "Inspect the system →"). */
+    openRoutineById: (id: string) => openSys(ALL_SYSTEMS.find((x) => x.id === id)),
     pendingCount: S.apStatus.filter((x) => x === "pending").length,
     completed: COMPLETED_DEFS,
     catChips,

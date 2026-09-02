@@ -2,11 +2,12 @@
 
 import React from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
+import RunNowPanel, { type RunNowProps } from "./RunNowPanel";
 
 const contractCard: React.CSSProperties = { background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "17px 19px" };
 const contractLabel: React.CSSProperties = { fontSize: 10, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 };
 
-export default function RoutineDetail({ V }: { V: PlatformVals }) {
+export default function RoutineDetail({ V, run }: { V: PlatformVals; run: Omit<RunNowProps, "routineId"> }) {
   return (
     <>
       <button
@@ -109,6 +110,7 @@ export default function RoutineDetail({ V }: { V: PlatformVals }) {
             </div>
           )}
         </div>
+        {V.selId && <RunNowPanel routineId={V.selId} accountId={run.accountId} account={run.account} persisted={run.persisted} />}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10, background: "var(--cyan-wash)", borderRadius: 13, padding: "16px 20px" }}>

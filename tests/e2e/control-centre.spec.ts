@@ -316,6 +316,36 @@ test.describe("Routines", () => {
   });
 });
 
+test.describe("Routines — Run now (dry run)", () => {
+  test("manual trigger from the routine detail: the receipts trail appears inline (demo mode, MemoryStore)", async ({ page }) => {
+    await openControlCentre(page);
+    await nav.routines(page).click();
+    await page.getByRole("button", { name: /^Content\s*Get seen consistently/ }).click();
+    await page.getByRole("button", { name: "Tutorial →" }).first().click();
+    await expect(page.getByText("D01-W01 · Content")).toBeVisible();
+
+    // The ghost pill sits with the workflow inspector; the draft-only validate button is absent until an edit.
+    const runNow = page.getByRole("button", { name: "Run now (dry run)" });
+    await expect(runNow).toBeVisible();
+    await expect(page.getByRole("button", { name: "Run dry-run validation" })).toHaveCount(0);
+    await expect(page.getByText(/Demo mode: runs live in memory and vanish when the server restarts/)).toBeVisible();
+
+    // POSTs /api/routines/run for this routine and renders id · kind · description rows
+    const [req] = await Promise.all([page.waitForRequest((r) => r.url().endsWith("/api/routines/run") && r.method() === "POST"), runNow.click()]);
+    expect(req.postDataJSON()).toMatchObject({ accountId: "demo", routineId: "D01-W01" });
+    const trail = page.getByTestId("run-trail");
+    await expect(trail).toBeVisible();
+    const rows = page.getByTestId("run-trail-row");
+    expect(await rows.count()).toBeGreaterThanOrEqual(3);
+    await expect(rows.first()).toContainText("read");
+    await expect(rows.first().locator("span").first()).toHaveText(/^[0-9a-f]{8}$/);
+    await expect(rows.first()).toContainText(/Read /);
+    await expect(page.getByText(/^(Dry run complete|Nothing to do today)/)).toBeVisible();
+    // dry run only: no mutation receipt, ever
+    await expect(page.getByTestId("run-trail-row").filter({ hasText: /^\S+\s*mutation/ })).toHaveCount(0);
+  });
+});
+
 test.describe("Connectors", () => {
   test("grid statuses match the summary; Reconnect / Connect flip a card", async ({ page }) => {
     await openControlCentre(page);

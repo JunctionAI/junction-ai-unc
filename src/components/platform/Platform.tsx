@@ -5,6 +5,7 @@ import { derive } from "@/lib/platform/derive";
 import { useUncChat } from "@/lib/unc/useUncChat";
 import { useAccountPersistence } from "@/lib/db/useAccountPersistence";
 import { usePlatformState } from "./usePlatformState";
+import { useLiveApprovals } from "./useLiveApprovals";
 import Sidebar from "./Sidebar";
 import Onboarding from "./Onboarding";
 import HomeView from "./HomeView";
@@ -27,6 +28,11 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
   /* Phase 2: a no-op in demo mode (no Supabase env); with an account it hydrates on mount
      and autosaves every change (debounced). */
   const persistence = useAccountPersistence(S, set);
+  /* Accounts mode: the "needs you" list, receipts and drafts come from the runtime
+     (GET /api/approvals). Demo mode: never fetched — the demo cards stay exactly as they are. */
+  const inAccount = persistence.mode === "account" && !!persistence.accountId;
+  const live = useLiveApprovals(inAccount);
+  const runTarget = { accountId: inAccount ? persistence.accountId! : "demo", account: { currency: S.currency, budgetMonthly: S.budgetMo }, persisted: inAccount };
 
   /* Corner-buddy scroll-spy — port of the prototype's _buddyTick/_buddyScroll:
      the topmost [data-buddy] section whose rect crosses 55% viewport height wins. */
@@ -110,10 +116,10 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
       <main style={{ flex: 1, minWidth: 0 }}>
         {gated?.state === "past_due" && <BillingBanner />}
         {V.isOnboarding && <Onboarding V={V} />}
-        {V.isToday && <HomeView V={V} />}
+        {V.isToday && <HomeView V={V} live={inAccount ? live : null} />}
         {V.isStrategy && <StrategyView V={V} />}
         {V.isConnectors && <ConnectorsView V={V} />}
-        {V.isSystems && <RoutinesView V={V} />}
+        {V.isSystems && <RoutinesView V={V} run={runTarget} />}
       </main>
       {V.showBuddy && <CornerBuddy V={V} />}
     </div>

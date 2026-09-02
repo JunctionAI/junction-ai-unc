@@ -2,6 +2,8 @@
 
 import React from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
+import { NOTHING_WAITING_COPY } from "@/lib/platform/approvals";
+import type { LiveApprovals } from "./useLiveApprovals";
 
 const sectionLabel: React.CSSProperties = {
   fontSize: 11,
@@ -35,7 +37,102 @@ const uncReceiptRow: React.CSSProperties = { display: "flex", gap: 10 };
 const uncReceiptText: React.CSSProperties = { fontSize: 12.5, color: "var(--muted-2)", lineHeight: 1.5, paddingTop: 5 };
 const smallMascot: React.CSSProperties = { width: 26, height: 28, objectFit: "contain", flex: "none" };
 
-export default function HomeView({ V }: { V: PlatformVals }) {
+/** One approval as a chat-style bubble from Unc + the founder's reply + Unc's receipt. The
+    demo cards (derive.ts) and the live ones (useLiveApprovals) both render through here —
+    same copy structure: routine tag, title, detail, before → after, expiry. */
+export interface ApprovalCardProps {
+  sys: string;
+  title: string;
+  detail: string;
+  before: string;
+  after: string;
+  expiry: string;
+  pending: boolean;
+  approved: boolean;
+  held: boolean;
+  showWhy: boolean;
+  whyText: string;
+  /** Unc's line under "Approved" (the demo passes its receipt id line; live passes the runtime's outcome). */
+  approvedText: string;
+  heldText: string;
+  busy?: boolean;
+  approve: () => void;
+  hold: () => void;
+  why: () => void;
+}
+
+export function ApprovalCard(ap: ApprovalCardProps) {
+  return (
+    <>
+      <div style={{ display: "flex", gap: 10 }}>
+        <img src="/brand/mascot-small.png" alt="" style={{ ...smallMascot, marginTop: 4 }} />
+        <div style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: "4px 14px 14px 14px", padding: "14px 18px", flex: 1, minWidth: 0, maxWidth: 760 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+            <span style={sysTag}>{ap.sys}</span>
+            <span style={{ fontSize: 14, fontWeight: 500 }}>{ap.title}</span>
+          </div>
+          <div style={{ fontSize: 12.5, color: "var(--muted-2)", marginTop: 5, lineHeight: 1.5 }}>{ap.detail}</div>
+          <div style={{ fontSize: 12, marginTop: 7 }}>
+            {ap.before} <span style={{ color: "oklch(0.65 0.02 260)" }}>→</span> <span style={{ fontWeight: 600 }}>{ap.after}</span>
+            <span style={{ color: "oklch(0.5 0.12 75)", marginLeft: 12 }}>{ap.expiry}</span>
+          </div>
+          {ap.pending && (
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button onClick={ap.approve} disabled={ap.busy} className="btn-navy" style={{ padding: "8px 18px", fontSize: 12.5, fontWeight: 600 }}>
+                Approve
+              </button>
+              <button
+                onClick={ap.hold}
+                disabled={ap.busy}
+                className="hov-border-muted"
+                style={{ border: "1px solid oklch(0.88 0.015 260)", background: "transparent", color: "var(--muted-2)", borderRadius: 999, padding: "8px 16px", fontSize: 12.5, cursor: "pointer" }}
+              >
+                Hold
+              </button>
+              <button onClick={ap.why} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", padding: "8px 6px" }}>
+                Why?
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {ap.showWhy && (
+        <div style={{ display: "flex", gap: 10 }}>
+          <img src="/brand/mascot-small.png" alt="" style={{ ...smallMascot, marginTop: 2 }} />
+          <div style={{ background: "var(--cyan-wash)", borderRadius: "4px 14px 14px 14px", padding: "12px 16px", fontSize: 12.5, lineHeight: 1.55, color: "oklch(0.3 0.06 262)", maxWidth: 680 }}>{ap.whyText}</div>
+        </div>
+      )}
+      {ap.approved && (
+        <>
+          <div style={userBubble}>Approved</div>
+          <div style={uncReceiptRow}>
+            <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
+            <div style={uncReceiptText}>{ap.approvedText}</div>
+          </div>
+        </>
+      )}
+      {ap.held && (
+        <>
+          <div style={userBubble}>Hold for now</div>
+          <div style={uncReceiptRow}>
+            <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
+            <div style={uncReceiptText}>{ap.heldText}</div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+const HELD_TEXT = "Held. I’ll re-surface it tomorrow with fresh numbers — nothing moves meanwhile.";
+
+/** `live` is null in demo mode (the demo cards render untouched); in accounts mode it is the
+    runtime's list — once loaded, the "needs you" list, its count, the drafts and the receipts
+    all come from it. */
+export default function HomeView({ V, live = null }: { V: PlatformVals; live?: LiveApprovals | null }) {
+  const isLive = !!live && live.active;
+  const needsCount = isLive ? live.pendingCount + (V.klaviyoDown ? 1 : 0) : V.needsCount;
+  const liveNothingWaiting = isLive && live.pendingCount === 0;
   return (
     <div style={{ maxWidth: 940, margin: "0 auto", padding: "50px 48px 96px" }}>
       <div
@@ -97,11 +194,11 @@ export default function HomeView({ V }: { V: PlatformVals }) {
           <img src="/brand/mascot-small.png" alt="Unc" style={{ width: 34, height: 36, objectFit: "contain", flex: "none" }} />
           <div style={{ background: "white", border: "1px solid var(--card-border-2)", borderRadius: "4px 14px 14px 14px", padding: "10px 16px", fontSize: 13.5, color: "oklch(0.3 0.06 262)" }}>
             I&apos;ve done the work below — review it, tweak it, and give me the okay.{" "}
-            <span style={{ fontSize: 11, background: "var(--amber-wash)", color: "var(--amber-text)", borderRadius: 999, padding: "2px 9px", fontWeight: 600, marginLeft: 4 }}>{V.needsCount}</span>
+            <span style={{ fontSize: 11, background: "var(--amber-wash)", color: "var(--amber-text)", borderRadius: 999, padding: "2px 9px", fontWeight: 600, marginLeft: 4 }}>{needsCount}</span>
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {V.allClear && (
+          {!isLive && V.allClear && (
             <div style={{ display: "flex", gap: 10, alignItems: "center", background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "14px 18px" }}>
               <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
               <div style={{ fontSize: 13, color: "var(--muted-2)", lineHeight: 1.5 }}>
@@ -109,65 +206,60 @@ export default function HomeView({ V }: { V: PlatformVals }) {
               </div>
             </div>
           )}
-          {V.approvals.map((ap, i) => (
-            <React.Fragment key={i}>
-              <div style={{ display: "flex", gap: 10 }}>
-                <img src="/brand/mascot-small.png" alt="" style={{ ...smallMascot, marginTop: 4 }} />
-                <div style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: "4px 14px 14px 14px", padding: "14px 18px", flex: 1, minWidth: 0, maxWidth: 760 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                    <span style={sysTag}>{ap.sys}</span>
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>{ap.title}</span>
-                  </div>
-                  <div style={{ fontSize: 12.5, color: "var(--muted-2)", marginTop: 5, lineHeight: 1.5 }}>{ap.detail}</div>
-                  <div style={{ fontSize: 12, marginTop: 7 }}>
-                    {ap.before} <span style={{ color: "oklch(0.65 0.02 260)" }}>→</span> <span style={{ fontWeight: 600 }}>{ap.after}</span>
-                    <span style={{ color: "oklch(0.5 0.12 75)", marginLeft: 12 }}>{ap.expiry}</span>
-                  </div>
-                  {ap.pending && (
-                    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                      <button onClick={ap.approve} className="btn-navy" style={{ padding: "8px 18px", fontSize: 12.5, fontWeight: 600 }}>
-                        Approve
-                      </button>
-                      <button
-                        onClick={ap.hold}
-                        className="hov-border-muted"
-                        style={{ border: "1px solid oklch(0.88 0.015 260)", background: "transparent", color: "var(--muted-2)", borderRadius: 999, padding: "8px 16px", fontSize: 12.5, cursor: "pointer" }}
-                      >
-                        Hold
-                      </button>
-                      <button onClick={ap.why} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", padding: "8px 6px" }}>
-                        Why?
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {ap.showWhy && (
-                <div style={{ display: "flex", gap: 10 }}>
-                  <img src="/brand/mascot-small.png" alt="" style={{ ...smallMascot, marginTop: 2 }} />
-                  <div style={{ background: "var(--cyan-wash)", borderRadius: "4px 14px 14px 14px", padding: "12px 16px", fontSize: 12.5, lineHeight: 1.55, color: "oklch(0.3 0.06 262)", maxWidth: 680 }}>{ap.whyText}</div>
-                </div>
-              )}
-              {ap.approved && (
-                <>
-                  <div style={userBubble}>Approved</div>
-                  <div style={uncReceiptRow}>
-                    <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
-                    <div style={uncReceiptText}>On it — executing only the approved scope, reading the result back, then receipt {ap.receipt} lands here.</div>
-                  </div>
-                </>
-              )}
-              {ap.held && (
-                <>
-                  <div style={userBubble}>Hold for now</div>
-                  <div style={uncReceiptRow}>
-                    <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
-                    <div style={uncReceiptText}>Held. I’ll re-surface it tomorrow with fresh numbers — nothing moves meanwhile.</div>
-                  </div>
-                </>
-              )}
-            </React.Fragment>
-          ))}
+          {liveNothingWaiting && (
+            <div data-testid="nothing-waiting" style={{ display: "flex", gap: 10, alignItems: "center", background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "14px 18px" }}>
+              <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
+              <div style={{ fontSize: 13, color: "var(--muted-2)", lineHeight: 1.5 }}>{NOTHING_WAITING_COPY}</div>
+            </div>
+          )}
+          {!isLive &&
+            V.approvals.map((ap, i) => (
+              <ApprovalCard
+                key={i}
+                sys={ap.sys}
+                title={ap.title}
+                detail={ap.detail}
+                before={ap.before}
+                after={ap.after}
+                expiry={ap.expiry}
+                pending={ap.pending}
+                approved={ap.approved}
+                held={ap.held}
+                showWhy={ap.showWhy}
+                whyText={ap.whyText}
+                approvedText={`On it — executing only the approved scope, reading the result back, then receipt ${ap.receipt} lands here.`}
+                heldText={HELD_TEXT}
+                approve={ap.approve}
+                hold={ap.hold}
+                why={ap.why}
+              />
+            ))}
+          {isLive &&
+            live.approvals.map((ap) => (
+              <ApprovalCard
+                key={ap.key}
+                sys={ap.sys}
+                title={ap.title}
+                detail={ap.detail}
+                before={ap.before}
+                after={ap.after}
+                expiry={ap.expiry}
+                pending={ap.pending}
+                approved={ap.approved}
+                held={ap.held}
+                showWhy={ap.showWhy}
+                whyText={ap.whyText}
+                approvedText={ap.outcomeText}
+                heldText={ap.outcomeText || HELD_TEXT}
+                busy={ap.busy}
+                approve={ap.approve}
+                hold={ap.hold}
+                why={ap.why}
+              />
+            ))}
+          {isLive && live.error && (
+            <div style={{ fontSize: 12.5, color: "var(--amber-text)", lineHeight: 1.5, paddingLeft: 36 }}>Couldn’t reach the runtime just now: {live.error}</div>
+          )}
           {V.klaviyoDown && (
             <div style={{ display: "flex", gap: 10 }}>
               <img src="/brand/mascot-small.png" alt="" style={{ ...smallMascot, marginTop: 4 }} />
@@ -198,6 +290,30 @@ export default function HomeView({ V }: { V: PlatformVals }) {
             </>
           )}
         </div>
+        {isLive && live.drafts.length > 0 && (
+          <div data-testid="what-i-drafted" style={{ marginTop: 22 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <span style={{ fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>What I drafted</span>
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>— dry runs, zero outward actions; nothing here needs you</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {live.drafts.map((d) => (
+                <div key={d.runId} style={{ display: "flex", alignItems: "center", gap: 16, background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "12px 18px" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                      <span style={sysTag}>{d.sys}</span>
+                      <span style={{ fontSize: 13.5, fontWeight: 500 }}>{d.title}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--muted-2)", marginTop: 4, lineHeight: 1.5 }}>{d.line}</div>
+                  </div>
+                  <button onClick={() => V.openRoutineById(d.sys)} className="hov-underline" style={{ flex: "none", border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                    Inspect the system →
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section data-buddy="Your plan, on one timeline. The phase we're in is lit up." style={{ marginTop: 34 }}>
@@ -316,16 +432,31 @@ export default function HomeView({ V }: { V: PlatformVals }) {
         <section>
           <div style={{ fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 14, fontWeight: 600 }}>Completed today</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {V.completed.map((c) => (
-              <div key={c.receipt} style={{ display: "flex", gap: 11 }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan)", marginTop: 5.5, flex: "none" }}></span>
-                <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
-                  {c.text}
-                  <br />
-                  <a href="#">{c.receipt}</a>
+            {!isLive &&
+              V.completed.map((c) => (
+                <div key={c.receipt} style={{ display: "flex", gap: 11 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan)", marginTop: 5.5, flex: "none" }}></span>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
+                    {c.text}
+                    <br />
+                    <a href="#">{c.receipt}</a>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            {isLive &&
+              live.receipts.map((r) => (
+                <div key={r.id} style={{ display: "flex", gap: 11 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan)", marginTop: 5.5, flex: "none" }}></span>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
+                    {r.text}
+                    <br />
+                    <span style={{ color: "var(--muted)", fontSize: 12 }}>
+                      {r.kind} · receipt {r.handle}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            {isLive && live.receipts.length === 0 && <div style={{ fontSize: 13, color: "var(--muted-2)", lineHeight: 1.5 }}>No receipts yet — the first run writes one, and it lands here.</div>}
           </div>
         </section>
         <section>

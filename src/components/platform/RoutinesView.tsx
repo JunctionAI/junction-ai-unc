@@ -1,9 +1,13 @@
 "use client";
 
 import type { PlatformVals } from "@/lib/platform/derive";
+import type { RunNowProps } from "./RunNowPanel";
 import RoutineDetail from "./RoutineDetail";
 
-export default function RoutinesView({ V }: { V: PlatformVals }) {
+/** `run` = who a manual "Run now (dry run)" runs for (Platform decides: the account, or `demo`). */
+export type RunTarget = Omit<RunNowProps, "routineId">;
+
+export default function RoutinesView({ V, run }: { V: PlatformVals; run: RunTarget }) {
   return (
     <div style={{ maxWidth: 1020, margin: "0 auto", padding: "50px 48px 96px" }}>
       {V.noSel && (
@@ -73,7 +77,7 @@ export default function RoutinesView({ V }: { V: PlatformVals }) {
           )}
         </>
       )}
-      {V.hasSel && <RoutineDetail V={V} />}
+      {V.hasSel && <RoutineDetail V={V} run={run} />}
     </div>
   );
 }
