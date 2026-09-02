@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { derive } from "@/lib/platform/derive";
 import { useUncChat } from "@/lib/unc/useUncChat";
+import { useAccountPersistence } from "@/lib/db/useAccountPersistence";
 import { usePlatformState } from "./usePlatformState";
 import Sidebar from "./Sidebar";
 import Onboarding from "./Onboarding";
@@ -16,6 +17,9 @@ export default function Platform() {
   const { S, set } = usePlatformState();
   const uncSend = useUncChat(S, set);
   const V = derive(S, set, undefined, uncSend);
+  /* Phase 2: a no-op in demo mode (no Supabase env); with an account it hydrates on mount
+     and autosaves every change (debounced). */
+  const persistence = useAccountPersistence(S, set);
 
   /* Corner-buddy scroll-spy — port of the prototype's _buddyTick/_buddyScroll:
      the topmost [data-buddy] section whose rect crosses 55% viewport height wins. */
@@ -72,6 +76,14 @@ export default function Platform() {
     return () => clearTimeout(t);
   }, [msgN, S.chatOpen, S.chatMode]);
 
+  if (persistence.mode === "connecting") {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--cream)", color: "var(--muted)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif", fontSize: 14 }}>
+        Fetching your account…
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -83,7 +95,7 @@ export default function Platform() {
         WebkitFontSmoothing: "antialiased",
       }}
     >
-      {V.notOnboarding && <Sidebar V={V} />}
+      {V.notOnboarding && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} />}
       <main style={{ flex: 1, minWidth: 0 }}>
         {V.isOnboarding && <Onboarding V={V} />}
         {V.isToday && <HomeView V={V} />}

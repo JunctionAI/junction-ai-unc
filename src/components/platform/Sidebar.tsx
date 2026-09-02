@@ -1,6 +1,7 @@
 "use client";
 
 import type { PlatformVals } from "@/lib/platform/derive";
+import type { Persistence } from "@/lib/db/useAccountPersistence";
 
 const navBtn: React.CSSProperties = {
   display: "flex",
@@ -18,7 +19,10 @@ const navBtn: React.CSSProperties = {
 
 const dot = (bg: string): React.CSSProperties => ({ width: 7, height: 7, borderRadius: "50%", background: bg });
 
-export default function Sidebar({ V }: { V: PlatformVals }) {
+const SAVE_LABEL: Record<Persistence["autosave"], string> = { idle: "Saved", pending: "Saving…", saving: "Saving…", saved: "Saved", error: "Not saved — retrying" };
+
+/** `account` is null in demo mode (no Supabase env / no session) and the sidebar renders exactly as Phase 1. */
+export default function Sidebar({ V, account = null }: { V: PlatformVals; account?: Persistence | null }) {
   return (
     <aside
       style={{
@@ -64,11 +68,27 @@ export default function Sidebar({ V }: { V: PlatformVals }) {
         >
           {V.connSummary} →
         </button>
-        <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid oklch(0.34 0.05 262)", fontSize: 10, lineHeight: 1.6, color: "var(--faint-on-navy)" }}>
-          Demonstration data.
-          <br />
-          No live connectors or outward actions.
-        </div>
+        {account ? (
+          <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid oklch(0.34 0.05 262)", fontSize: 10, lineHeight: 1.6, color: "var(--faint-on-navy)" }}>
+            <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{account.userEmail ?? "Signed in"}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ color: account.autosave === "error" ? "var(--amber)" : "var(--faint-on-navy)" }}>{SAVE_LABEL[account.autosave]}</span>
+              <span>·</span>
+              <form action="/auth/signout" method="post" style={{ display: "inline" }}>
+                <button type="submit" className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "var(--faint-on-navy)" }}>
+                  Sign out
+                </button>
+              </form>
+            </div>
+            <div style={{ marginTop: 6 }}>No live connectors or outward actions.</div>
+          </div>
+        ) : (
+          <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid oklch(0.34 0.05 262)", fontSize: 10, lineHeight: 1.6, color: "var(--faint-on-navy)" }}>
+            Demonstration data.
+            <br />
+            No live connectors or outward actions.
+          </div>
+        )}
       </div>
     </aside>
   );

@@ -1,0 +1,490 @@
+/* PlatformState ↔ database rows — pure functions, no I/O. This is where the persistence
+   correctness lives; src/lib/db/__tests__/mapping.test.ts round-trips every field.
+
+   Column homes (supabase/migrations/0001 + 0003):
+     currency                         accounts.currency
+     goal (title/deadline/baseline)   goals            one row per selected category; governing = obCats[0]
+     budget/hours/reinvest/margin,
+     website/socials, strengths,
+     known platforms, postures,
+     breadth                          resource_profiles
+     team                             team_members     ordered by position; areas → approves ("A, B")
+     plan (current play + phases)     plans            derived view for readers; edits round-trip via client_state
+     scan profile                     business_profiles
+     routine on/off                   routine_states.enabled   (name ↔ catalog id)
+     connector status                 connectors.status
+     approval decisions               approvals        keyed by client_key "demo-ap-<i>" (Phase-2 demo cards)
+     chat threads                     chat_messages    thread ∈ corner | onboarding | human, ordered by position
+     everything UI-shaped that has
+     no column (goal texts per
+     category, plan edits, the Unc
+     narrative, wf version …)         account_state_meta.client_state (schema-versioned blob)
+
+   Not persisted (transient UI): view, selCat, sel, draft, apWhy, propStatus, nodeSel,
+   nodeVals, chatOpen, setupOpen/Step/Done, readThread/readDraft, chatMode, addOpen,
+   obMoneyOpen, obTeamOpen, obDraft, buddyText, typing placeholders. */
+
+import { ALL_SYSTEMS } from "@/lib/platform/catalog";
+import { postureDefs } from "@/lib/platform/derive";
+import type { Posture } from "@/lib/platform/plan";
+import {
+  initialState,
+  type ApStatus,
+  type Breadth,
+  type ConnStatus,
+  type Msg,
+  type NarrativeState,
+  type PlatformState,
+  type Profile,
+  type Reinvest,
+  type TeamMember,
+  type WfState,
+} from "@/lib/platform/state";
+import type { BusinessProfile } from "@/lib/unc/scan";
+
+export const CLIENT_STATE_SCHEMA_VERSION = 1;
+
+// ---------- row shapes (subset of columns the client reads/writes) ----------
+
+export interface AccountRow {
+  id: string;
+  currency: string;
+}
+export interface GoalRow {
+  account_id: string;
+  category: string;
+  tier: "governing" | "checkpoint";
+  title: string;
+  baseline: number | null;
+  deadline: string | null;
+}
+export interface ResourceProfileRow {
+  account_id: string;
+  budget_monthly: number;
+  hours_weekly: number;
+  reinvestment: "steady" | "balanced" | "all_in";
+  gross_margin_pct: number | null;
+  website: string | null;
+  socials: string[];
+  skills: string[];
+  known_platforms: string[];
+  postures: string[];
+  breadth: Breadth;
+}
+export interface TeamMemberRow {
+  account_id: string;
+  position: number;
+  name: string;
+  role: string;
+  approves: string | null;
+}
+export interface PlanPhaseJson {
+  n: string;
+  name: string;
+  status: string;
+  routines: string[];
+  from_you: string;
+}
+export interface PlanRow {
+  account_id: string;
+  title: string;
+  phases: PlanPhaseJson[];
+  narrative: string | null;
+}
+export interface BusinessProfileRow {
+  account_id: string;
+  scan_status: "pending" | "running" | "done" | "failed";
+  profile: Record<string, unknown>;
+  scanned_at: string | null;
+}
+export interface RoutineStateRow {
+  account_id: string;
+  routine_id: string;
+  enabled: boolean;
+}
+export interface ConnectorRow {
+  account_id: string;
+  platform: string;
+  status: "connected" | "disconnected" | "needs_reconnect";
+}
+export interface ApprovalRow {
+  account_id: string;
+  client_key: string;
+  routine_id: string;
+  title: string;
+  detail: string;
+  before_state: string;
+  after_state: string;
+  status: "pending" | "approved" | "held";
+  decided_at: string | null;
+  decided_by: string | null;
+}
+export interface ChatMessageRow {
+  account_id: string;
+  thread: "corner" | "onboarding" | "human";
+  position: number;
+  lane: "ai" | "human";
+  sender: "user" | "unc" | "staff";
+  body: string;
+  meta: { link?: string; linkLabel?: string };
+}
+export interface ClientState {
+  onboarded: boolean;
+  obStep: number;
+  obCats: string[];
+  posture: Posture;
+  goalTexts: Record<string, string>;
+  baselineText: string;
+  targetNum: number;
+  obPace: string;
+  profile: Profile;
+  routineEdits: Record<string, string[]>;
+  narrative: NarrativeState;
+  scanKey: string | null;
+  wfState: WfState;
+  wfVer: number;
+}
+export interface StateMetaRow {
+  account_id: string;
+  schema_version: number;
+  client_state: ClientState;
+}
+
+export interface AccountRows {
+  account: AccountRow;
+  goals: GoalRow[];
+  resourceProfile: ResourceProfileRow;
+  teamMembers: TeamMemberRow[];
+  plan: PlanRow;
+  businessProfile: BusinessProfileRow;
+  routineStates: RoutineStateRow[];
+  connectors: ConnectorRow[];
+  approvals: ApprovalRow[];
+  chatMessages: ChatMessageRow[];
+  stateMeta: StateMetaRow;
+}
+
+/** What loadAccountState hands back: any table may be empty for a fresh account. */
+export type LoadedRows = {
+  account: AccountRow | null;
+  goals: GoalRow[];
+  resourceProfile: ResourceProfileRow | null;
+  teamMembers: TeamMemberRow[];
+  businessProfile: BusinessProfileRow | null;
+  routineStates: RoutineStateRow[];
+  connectors: ConnectorRow[];
+  approvals: Pick<ApprovalRow, "client_key" | "status">[];
+  chatMessages: ChatMessageRow[];
+  stateMeta: StateMetaRow | null;
+};
+
+// ---------- enum bridges ----------
+
+const REINVEST_TO_DB: Record<Reinvest, ResourceProfileRow["reinvestment"]> = { steady: "steady", balanced: "balanced", aggressive: "all_in" };
+const REINVEST_FROM_DB: Record<ResourceProfileRow["reinvestment"], Reinvest> = { steady: "steady", balanced: "balanced", all_in: "aggressive" };
+const POSTURE_TO_DB: Record<Posture, string> = { brand: "brand_led", sales: "sales_led", paid: "paid_led" };
+const POSTURE_FROM_DB: Record<string, Posture> = { brand_led: "brand", sales_led: "sales", paid_led: "paid" };
+const SCAN_TO_DB: Record<PlatformState["scan"]["status"], BusinessProfileRow["scan_status"]> = { idle: "pending", running: "running", done: "done", failed: "failed" };
+const SCAN_FROM_DB: Record<BusinessProfileRow["scan_status"], PlatformState["scan"]["status"]> = { pending: "idle", running: "running", done: "done", failed: "failed" };
+const CONN_TO_DB: Record<ConnStatus, ConnectorRow["status"]> = { ok: "connected", off: "disconnected", expired: "needs_reconnect" };
+const CONN_FROM_DB: Record<string, ConnStatus> = { connected: "ok", disconnected: "off", needs_reconnect: "expired", connecting: "off", error: "expired" };
+const SENDER_TO_DB: Record<Msg["from"], ChatMessageRow["sender"]> = { j: "unc", u: "user", h: "staff" };
+const SENDER_FROM_DB: Record<ChatMessageRow["sender"], Msg["from"]> = { unc: "j", user: "u", staff: "h" };
+
+/** Connector card name ↔ connectors.platform slug (mirrors the runtime Platform union). */
+export const CONNECTOR_PLATFORMS: Record<string, string> = {
+  Shopify: "shopify",
+  "Google Analytics 4": "ga4",
+  "Meta Ads": "meta_ads",
+  "Google Ads": "google_ads",
+  Klaviyo: "klaviyo",
+  Instagram: "instagram",
+  TikTok: "tiktok",
+  LinkedIn: "linkedin",
+  YouTube: "youtube",
+  "Google Search Console": "search_console",
+  HubSpot: "hubspot",
+  Gmail: "gmail",
+  Gorgias: "gorgias",
+  Xero: "xero",
+  QuickBooks: "quickbooks",
+  Slack: "slack",
+};
+const CONNECTOR_NAMES: Record<string, string> = Object.fromEntries(Object.entries(CONNECTOR_PLATFORMS).map(([n, p]) => [p, n]));
+
+const ROUTINE_ID_BY_NAME: Record<string, string> = Object.fromEntries(ALL_SYSTEMS.map((s) => [s.name, s.id]));
+const ROUTINE_NAME_BY_ID: Record<string, string> = Object.fromEntries(ALL_SYSTEMS.map((s) => [s.id, s.name]));
+
+/** The three demo approval cards the Phase-2 Home view renders (derive.ts AP_DATA order). */
+export const DEMO_APPROVAL_KEYS = ["demo-ap-0", "demo-ap-1", "demo-ap-2"] as const;
+const DEMO_APPROVALS: Omit<ApprovalRow, "account_id" | "client_key" | "status" | "decided_at" | "decided_by">[] = [
+  { routine_id: "D02-W01", title: "Shift NZ$40/day into Advantage+ retargeting", detail: "Prospecting-B ROAS fell to 1.4× over 7 days; retargeting holds 3.1×. Reversible, inside guardrail.", before_state: "NZ$60/day Prospecting-B", after_state: "NZ$20/day + NZ$40 retargeting" },
+  { routine_id: "D01-W01", title: "Publish founder post “Why we stopped discounting”", detail: "Drafted from 31 customer questions. Zero first-person claims added. Scheduled for 09:00 Tuesday.", before_state: "Staged draft", after_state: "Published to LinkedIn" },
+  { routine_id: "D05-W03", title: "Send winback to 412 lapsed customers", detail: "Zero-recipient test passed. 15% offer respects margin guardrail. Suppresses anyone emailed this week.", before_state: "0 recipients", after_state: "412 recipients, 1 send" },
+];
+
+const THREADS: { thread: ChatMessageRow["thread"]; key: "messages" | "obThread" | "humanThread"; lane: ChatMessageRow["lane"] }[] = [
+  { thread: "corner", key: "messages", lane: "ai" },
+  { thread: "onboarding", key: "obThread", lane: "ai" },
+  { thread: "human", key: "humanThread", lane: "human" },
+];
+
+const AREAS_SEP = ", ";
+const SOCIALS_SEP = "\n";
+
+/** Prose rendering of the structured narrative for plans.narrative (readers/agents); the
+    structured value round-trips through client_state. */
+export function narrativeProse(n: NarrativeState["value"]): string | null {
+  if (!n) return null;
+  return [n.title, n.mathLine, ...n.phaseNotes, n.footnote].filter(Boolean).join("\n\n");
+}
+
+/** Current play's phases with the founder's routine edits applied (derive.ts rKey semantics). */
+export function planPhases(posture: Posture, routineEdits: Record<string, string[]>): PlanPhaseJson[] {
+  const def = postureDefs[posture] ?? postureDefs.brand;
+  return def.phases.map((ph, i) => ({
+    n: ph.n,
+    name: ph.name,
+    status: ph.st,
+    routines: routineEdits[`${posture}.${i}`] ?? ph.routines,
+    from_you: ph.you,
+  }));
+}
+
+// ---------- state → rows ----------
+
+export function stateToRows(accountId: string, S: PlatformState, opts: { userId?: string; now?: string } = {}): AccountRows {
+  const now = opts.now ?? new Date().toISOString();
+  const goals: GoalRow[] = S.obCats.map((category, i) => ({
+    account_id: accountId,
+    category,
+    tier: i === 0 ? "governing" : "checkpoint",
+    title: i === 0 ? S.goalTitle : S.goalTexts[category] ?? "",
+    baseline: i === 0 ? S.baselineNum : null,
+    deadline: i === 0 ? S.deadline || null : null,
+  }));
+
+  const resourceProfile: ResourceProfileRow = {
+    account_id: accountId,
+    budget_monthly: S.budgetMo,
+    hours_weekly: S.hoursWk,
+    reinvestment: REINVEST_TO_DB[S.reinvest] ?? "balanced",
+    gross_margin_pct: S.marginPct,
+    website: S.website || null,
+    socials: S.socials ? S.socials.split(SOCIALS_SEP) : [],
+    skills: [...S.obStrengths],
+    known_platforms: [...S.obPlatforms],
+    postures: S.obPostureSet.map((p) => POSTURE_TO_DB[p]).filter(Boolean),
+    breadth: S.obBreadth,
+  };
+
+  const teamMembers: TeamMemberRow[] = S.team.map((m, position) => ({
+    account_id: accountId,
+    position,
+    name: m.name,
+    role: m.role,
+    approves: m.areas.length ? m.areas.join(AREAS_SEP) : null,
+  }));
+
+  const plan: PlanRow = {
+    account_id: accountId,
+    title: (postureDefs[S.posture] ?? postureDefs.brand).label,
+    phases: planPhases(S.posture, S.routineEdits),
+    narrative: narrativeProse(S.narrative.value),
+  };
+
+  const businessProfile: BusinessProfileRow = {
+    account_id: accountId,
+    scan_status: SCAN_TO_DB[S.scan.status] ?? "pending",
+    profile: (S.scan.profile as unknown as Record<string, unknown>) ?? {},
+    scanned_at: S.scan.status === "done" ? now : null,
+  };
+
+  const routineStates: RoutineStateRow[] = Object.entries(S.routineOn)
+    .filter(([name]) => ROUTINE_ID_BY_NAME[name])
+    .map(([name, enabled]) => ({ account_id: accountId, routine_id: ROUTINE_ID_BY_NAME[name], enabled }));
+
+  const connectors: ConnectorRow[] = Object.entries(S.connState)
+    .filter(([name, st]) => CONNECTOR_PLATFORMS[name] && CONN_TO_DB[st])
+    .map(([name, st]) => ({ account_id: accountId, platform: CONNECTOR_PLATFORMS[name], status: CONN_TO_DB[st] }));
+
+  const approvals: ApprovalRow[] = DEMO_APPROVALS.map((a, i) => {
+    const status = S.apStatus[i] ?? "pending";
+    return {
+      account_id: accountId,
+      client_key: DEMO_APPROVAL_KEYS[i],
+      ...a,
+      status,
+      decided_at: status === "pending" ? null : now,
+      decided_by: status === "pending" ? null : opts.userId ?? null,
+    };
+  });
+
+  const chatMessages: ChatMessageRow[] = THREADS.flatMap(({ thread, key, lane }) =>
+    S[key]
+      .filter((m) => !m.typing)
+      .map((m, position) => ({
+        account_id: accountId,
+        thread,
+        position,
+        lane,
+        sender: SENDER_TO_DB[m.from],
+        body: m.text,
+        meta: { ...(m.link ? { link: m.link } : {}), ...(m.linkLabel ? { linkLabel: m.linkLabel } : {}) },
+      })),
+  );
+
+  const stateMeta: StateMetaRow = {
+    account_id: accountId,
+    schema_version: CLIENT_STATE_SCHEMA_VERSION,
+    client_state: {
+      onboarded: S.onboarded,
+      obStep: S.obStep,
+      obCats: [...S.obCats],
+      posture: S.posture,
+      goalTexts: { ...S.goalTexts },
+      baselineText: S.baselineText,
+      targetNum: S.targetNum,
+      obPace: S.obPace,
+      profile: { ...S.profile },
+      routineEdits: Object.fromEntries(Object.entries(S.routineEdits).map(([k, v]) => [k, [...v]])),
+      narrative: { ...S.narrative },
+      scanKey: S.scan.key,
+      wfState: S.wfState,
+      wfVer: S.wfVer,
+    },
+  };
+
+  return {
+    account: { id: accountId, currency: S.currency },
+    goals,
+    resourceProfile,
+    teamMembers,
+    plan,
+    businessProfile,
+    routineStates,
+    connectors,
+    approvals,
+    chatMessages,
+    stateMeta,
+  };
+}
+
+// ---------- rows → state ----------
+
+/** Rebuild the persisted slice of PlatformState over `base` (transient UI fields keep base's
+    values). Tolerates a partially populated account: whatever is missing keeps base's value. */
+export function rowsToState(rows: LoadedRows, base: PlatformState = initialState): PlatformState {
+  const S: PlatformState = { ...base };
+  const cs = rows.stateMeta?.client_state;
+
+  if (rows.account) S.currency = rows.account.currency;
+
+  if (cs) {
+    S.onboarded = cs.onboarded;
+    S.obStep = cs.obStep;
+    if (cs.obCats?.length) S.obCats = [...cs.obCats];
+    S.posture = cs.posture;
+    S.goalTexts = { ...base.goalTexts, ...cs.goalTexts };
+    S.baselineText = cs.baselineText;
+    S.targetNum = cs.targetNum;
+    S.obPace = cs.obPace;
+    S.profile = { ...cs.profile };
+    S.routineEdits = { ...cs.routineEdits };
+    S.narrative = { ...cs.narrative };
+    S.wfState = cs.wfState;
+    S.wfVer = cs.wfVer;
+  }
+
+  if (rows.goals.length) {
+    const governing = rows.goals.find((g) => g.tier === "governing") ?? rows.goals[0];
+    const checkpoints = rows.goals.filter((g) => g !== governing);
+    // client_state keeps the founder's category order; goals rows are the relational view
+    if (!cs?.obCats?.length) S.obCats = [governing.category, ...checkpoints.map((g) => g.category)];
+    S.goalTitle = governing.title;
+    if (governing.deadline) S.deadline = governing.deadline;
+    if (governing.baseline !== null) S.baselineNum = Number(governing.baseline);
+    S.goalTexts = { ...S.goalTexts, ...Object.fromEntries(rows.goals.map((g) => [g.category, g.title])) };
+  }
+
+  const rp = rows.resourceProfile;
+  if (rp) {
+    S.budgetMo = Number(rp.budget_monthly);
+    S.hoursWk = Number(rp.hours_weekly);
+    S.reinvest = REINVEST_FROM_DB[rp.reinvestment] ?? base.reinvest;
+    if (rp.gross_margin_pct !== null) S.marginPct = Number(rp.gross_margin_pct);
+    S.website = rp.website ?? "";
+    S.socials = (rp.socials ?? []).join(SOCIALS_SEP);
+    S.obStrengths = [...(rp.skills ?? [])];
+    S.obPlatforms = [...(rp.known_platforms ?? [])];
+    const postures = (rp.postures ?? []).map((p) => POSTURE_FROM_DB[p]).filter((p): p is Posture => !!p);
+    if (postures.length) {
+      S.obPostureSet = postures;
+      if (!cs) S.posture = postures[0];
+    }
+    S.obBreadth = rp.breadth;
+  }
+
+  if (rows.teamMembers.length) {
+    S.team = [...rows.teamMembers]
+      .sort((a, b) => a.position - b.position)
+      .map<TeamMember>((m) => ({ name: m.name, role: m.role, areas: m.approves ? m.approves.split(AREAS_SEP) : [] }));
+  }
+
+  const bp = rows.businessProfile;
+  if (bp) {
+    const hasProfile = bp.profile && Object.keys(bp.profile).length > 0;
+    S.scan = {
+      status: SCAN_FROM_DB[bp.scan_status] ?? "idle",
+      key: cs?.scanKey ?? null,
+      profile: hasProfile ? (bp.profile as unknown as BusinessProfile) : null,
+    };
+  }
+
+  if (rows.routineStates.length) {
+    S.routineOn = { ...base.routineOn };
+    for (const r of rows.routineStates) {
+      const name = ROUTINE_NAME_BY_ID[r.routine_id];
+      if (name) S.routineOn[name] = !!r.enabled;
+    }
+  }
+
+  if (rows.connectors.length) {
+    S.connState = { ...base.connState };
+    for (const c of rows.connectors) {
+      const name = CONNECTOR_NAMES[c.platform];
+      const st = CONN_FROM_DB[c.status];
+      if (name && st) S.connState[name] = st;
+    }
+  }
+
+  if (rows.approvals.length) {
+    S.apStatus = DEMO_APPROVAL_KEYS.map<ApStatus>((key, i) => {
+      const row = rows.approvals.find((a) => a.client_key === key);
+      if (!row) return base.apStatus[i] ?? "pending";
+      return row.status === "approved" ? "approved" : row.status === "pending" ? "pending" : "held"; // expired → held
+    });
+  }
+
+  if (rows.chatMessages.length) {
+    for (const { thread, key } of THREADS) {
+      const msgs = rows.chatMessages
+        .filter((m) => m.thread === thread)
+        .sort((a, b) => a.position - b.position)
+        .map<Msg>((m) => ({
+          from: SENDER_FROM_DB[m.sender] ?? "j",
+          text: m.body,
+          ...(m.meta?.link ? { link: m.meta.link } : {}),
+          ...(m.meta?.linkLabel ? { linkLabel: m.meta.linkLabel } : {}),
+        }));
+      if (msgs.length || cs) S[key] = msgs;
+    }
+  }
+
+  return S;
+}
+
+/** The persisted projection of a state — two states with equal projections need no save. */
+export function persistedProjection(S: PlatformState): string {
+  return JSON.stringify(stateToRows("_", S, { now: "_" }));
+}
