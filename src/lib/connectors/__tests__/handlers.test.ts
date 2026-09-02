@@ -231,6 +231,24 @@ describe("GET …/callback", () => {
     assertNoLeak(d.logs, ["ya29.FIXTURE", "1//FIXTURE"]);
   });
 
+  it("HubSpot happy path: no PKCE, client id + secret in the form body, portal id from account-info becomes external_ref", async () => {
+    const { d, state, row } = await startFlow("hubspot");
+    expect(row.code_verifier).toBeNull();
+    d.routes.push((c) => (c.url === "https://api.hubapi.com/oauth/v1/token" ? json({ access_token: "hs-access-FIXTURE", refresh_token: "hs-refresh-FIXTURE", expires_in: 1800, token_type: "bearer" }) : undefined));
+    d.routes.push((c) => (c.url === "https://api.hubapi.com/account-info/v3/details" ? json({ portalId: 24681357, timeZone: "Pacific/Auckland" }) : undefined));
+    expect(await handleCallback(d, "hubspot", cb("hubspot", { code: "hs-code", state }))).toEqual({ redirect: "/app?connected=hubspot" });
+    const form = new URLSearchParams(d.calls[0].body!);
+    expect(form.get("grant_type")).toBe("authorization_code");
+    expect(form.get("client_id")).toBe(FAKE_ENV.HUBSPOT_CLIENT_ID);
+    expect(form.get("client_secret")).toBe(FAKE_ENV.HUBSPOT_CLIENT_SECRET);
+    expect(form.get("redirect_uri")).toBe(`${APP_URL}/api/connectors/hubspot/callback`);
+    expect(form.has("code_verifier")).toBe(false);
+    expect(d.calls[1].headers.authorization).toBe("Bearer hs-access-FIXTURE");
+    expect(db.rows("connectors")[0]).toMatchObject({ status: "connected", external_ref: "24681357" });
+    expect(db.rows("connector_secrets")).toHaveLength(1);
+    assertNoLeak([...d.logs, JSON.stringify(db.rows("connectors"))], ["hs-access-FIXTURE", "hs-refresh-FIXTURE"]);
+  });
+
   it("Meta happy path: GET exchange, long-lived swap, single ad account becomes external_ref", async () => {
     const { d, state } = await startFlow("meta_ads");
     d.routes.push((c) => {
