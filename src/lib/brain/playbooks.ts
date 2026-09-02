@@ -41,6 +41,9 @@ export type Embedder = (text: string) => Promise<number[] | null>;
 export interface RecallOptions {
   /** Defaults to the service-role client when configured; null = no database (returns []). */
   db?: DbClient | null;
+  /** In-memory cards to rank instead of the table (keyword mode; the eval script feeds it the
+      content/ files when no database is configured). Takes precedence over `db`. */
+  rows?: PlaybookRowLite[] | null;
   /** Defaults to the OpenAI embeddings call when OPENAI_API_KEY is set. Pass `async () => null` to force keyword. */
   embed?: Embedder;
   env?: Record<string, string | undefined>;
@@ -128,12 +131,17 @@ function defaultDb(): DbClient | null {
 }
 
 export async function recallPlaybooks(query: string, domains?: PlaybookDomain[] | null, limit = 6, opts: RecallOptions = {}): Promise<Playbook[]> {
+  const wanted = domains?.filter(isPlaybookDomain) ?? null;
+  const n = Math.max(1, Math.min(20, Math.round(limit)));
+  if (opts.rows) {
+    if (!query.trim()) return [];
+    const pool = wanted && wanted.length ? opts.rows.filter((r) => (wanted as string[]).includes(r.domain)) : opts.rows;
+    return keywordRank(query, pool, n);
+  }
   const db = opts.db === undefined ? defaultDb() : opts.db;
   if (!db || !query.trim()) return [];
   const env = opts.env ?? process.env;
   const embed: Embedder = opts.embed ?? ((t) => embedText(t, env, opts.fetchImpl));
-  const wanted = domains?.filter(isPlaybookDomain) ?? null;
-  const n = Math.max(1, Math.min(20, Math.round(limit)));
 
   const vec = await embed(query);
   if (vec) {
@@ -166,7 +174,11 @@ export interface RenderOptions {
   maxChars?: number;
   /** Per-card body cap. */
   perPlaybookChars?: number;
+  /** Replace the default header line (the chat prompt uses the compact "PLAYBOOK NOTES" form). */
+  header?: string;
 }
+
+export const PLAYBOOKS_HEADER = "JUNCTION PLAYBOOKS (how we work — methods to draw on, NOT a source of numbers; every figure you state still has to come from the ACCOUNT CONTEXT):";
 
 /** The text a system prompt appends. Empty string when there is nothing to add, so a caller can
     always concatenate it. The header tells the model these are METHODS — never a source of numbers. */
@@ -174,7 +186,7 @@ export function renderPlaybooksForPrompt(playbooks: Playbook[], opts: RenderOpti
   if (!playbooks.length) return "";
   const maxChars = opts.maxChars ?? 6000;
   const per = opts.perPlaybookChars ?? 1800;
-  const header = "JUNCTION PLAYBOOKS (how we work — methods to draw on, NOT a source of numbers; every figure you state still has to come from the ACCOUNT CONTEXT):";
+  const header = opts.header ?? PLAYBOOKS_HEADER;
   const parts: string[] = [];
   let used = header.length;
   for (const p of playbooks) {
