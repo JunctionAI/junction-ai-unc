@@ -1,24 +1,28 @@
-/* Meta Marketing API reader (read-only). Graph API {version}/act_{id}/…
-   with the token in `Authorization: Bearer` (never in the query string).
+/* Meta Marketing API reader (read-only). Graph API {version}/act_{id}/… with the token in
+   `Authorization: Bearer` (never in the query string).
 
    Resources:
-     insights   GET act_{id}/insights?level=…&fields=…&date_preset=…
-     ads        GET act_{id}/ads?fields=id,name,status,creative&filtering=…
-     campaigns  GET act_{id}/campaigns?fields=id,name,status,daily_budget
+     insights   GET act_{id}/insights?level=…&fields=…&time_range={since,until}&limit=…
+                (an exact window from `window`; date_preset only when there is no window)
+     ads        GET act_{id}/ads?fields=id,name,status,effective_status,creative&filtering=…
+     campaigns  GET act_{id}/campaigns?fields=id,name,status,effective_status,daily_budget,lifetime_budget
 
-   The catalog names convenience fields (roas, purchases, purchase_value,
-   daily_budget). Insights use purchase_roas / actions / action_values for
-   the first three; daily_budget lives on the ad set object, so it is dropped
-   from an insights request and noted in provenance. */
+   The catalog names convenience fields (roas, purchases, purchase_value, cpa, daily_budget).
+   Insights carry purchase_roas / actions / action_values for the first three (omni_purchase
+   preferred, purchase accepted); cpa is derived; daily_budget lives on the ad set / campaign
+   object, so it is dropped from an insights request and noted in provenance. Budgets come
+   back in minor units (cents) as strings → converted to currency units. Paging follows
+   paging.cursors.after for up to MAX_PAGES pages, re-requesting our own URL shape. */
 
 import type { ReadQuery } from "../../lib/runtime/types";
 import type { PlatformCredential } from "../credentials";
-import { fetchJson, num, round2, sum, windowDays } from "./http";
+import { dateRange, fetchJson, num, round2, sum, windowDays } from "./http";
 import { fail, ok, type Metrics, type ReaderOptions, type ReaderResult, type Row } from "./types";
 
-export const META_GRAPH_VERSION = "v21.0";
+export const META_GRAPH_VERSION = "v23.0";
 const BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 const PLATFORM = "meta_ads" as const;
+const MAX_PAGES = 5;
 
 const FIXTURE_ROWS: Record<string, Row[]> = {
   insights: [
@@ -40,7 +44,8 @@ const FIELD_ALIASES: Record<string, string | null> = {
   roas: "purchase_roas",
   purchases: "actions",
   purchase_value: "action_values",
-  daily_budget: null, // ad set property, not an insights field
+  cpa: "actions", // derived: spend / purchases
+  daily_budget: null, // ad set / campaign property, not an insights field
   thumbstop: null,
   ctr_trend: null,
   cpa_trend: null,
@@ -51,7 +56,10 @@ const FIELD_ALIASES: Record<string, string | null> = {
 };
 
 export function metaMetrics(resource: string, rows: Row[]): Metrics {
-  if (resource !== "insights") return {};
+  if (resource !== "insights") {
+    if (resource === "campaigns") return { daily_budget_total: sum(rows, "daily_budget"), count: rows.length };
+    return { count: rows.length };
+  }
   const spend = sum(rows, "spend");
   const purchases = sum(rows, "purchases");
   const value = sum(rows, "purchase_value");
@@ -63,12 +71,15 @@ export function metaMetrics(resource: string, rows: Row[]): Metrics {
     purchases,
     purchase_value: value,
     roas: spend ? round2(value / spend) : 0,
+    cpa: purchases ? round2(spend / purchases) : null,
+    impressions: sum(rows, "impressions"),
+    clicks: sum(rows, "clicks"),
     top_adset_id: top ? String(top.adset_id ?? top.campaign_id ?? "") : null,
     top_adset_name: top ? String(top.adset_name ?? top.campaign_name ?? "") : null,
     top_adset_roas: top ? round2(num(top.roas)) : null,
     top_adset_daily_budget: top ? num(top.daily_budget) : null,
-    worst_ad_id: worst ? String(worst.ad_id ?? worst.adset_id ?? "") : null,
-    worst_ad_name: worst ? String(worst.ad_name ?? worst.adset_name ?? "") : null,
+    worst_ad_id: worst ? String(worst.ad_id ?? worst.adset_id ?? worst.campaign_id ?? "") : null,
+    worst_ad_name: worst ? String(worst.ad_name ?? worst.adset_name ?? worst.campaign_name ?? "") : null,
     worst_frequency: worst ? round2(num(worst.frequency)) : null,
     worst_spend: worst ? num(worst.spend) : null,
     daily_budget_total: dailyBudgetTotal,
@@ -87,17 +98,20 @@ function datePreset(window: string | undefined): string {
   return "last_90d";
 }
 
-export function metaRequest(query: ReadQuery, adAccountId: string, accessToken: string): { url: string; init: RequestInit; note: string } | { error: string } {
+const INSIGHT_BASE_FIELDS = ["spend", "impressions", "clicks", "ctr", "frequency", "purchase_roas", "actions", "action_values"];
+const LEVELS = new Set(["account", "campaign", "adset", "ad"]);
+
+export function metaRequest(query: ReadQuery, adAccountId: string, accessToken: string, now: Date = new Date()): { url: string; init: RequestInit; note: string } | { error: string } {
   const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
   const filter = (query.filter ?? {}) as Record<string, unknown>;
   const act = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
   const params = new URLSearchParams();
-  params.set("limit", String(query.limit ?? 100));
+  params.set("limit", String(Math.min(Math.max(1, query.limit ?? 100), 500)));
   switch (query.resource) {
     case "insights": {
-      const level = typeof filter.level === "string" ? filter.level : "campaign";
+      const level = typeof filter.level === "string" && LEVELS.has(filter.level) ? filter.level : "campaign";
       const dropped: string[] = [];
-      const fields = new Set<string>(["spend"]);
+      const fields = new Set<string>(INSIGHT_BASE_FIELDS);
       for (const f of query.fields ?? []) {
         if (f in FIELD_ALIASES) {
           const mapped = FIELD_ALIASES[f];
@@ -105,16 +119,25 @@ export function metaRequest(query: ReadQuery, adAccountId: string, accessToken: 
           else dropped.push(f);
         } else fields.add(f);
       }
+      if (level === "campaign") fields.add("campaign_id").add("campaign_name");
       if (level === "adset") fields.add("adset_id").add("adset_name");
-      if (level === "ad") fields.add("ad_id").add("ad_name");
+      if (level === "ad") fields.add("ad_id").add("ad_name").add("adset_id");
       params.set("level", level);
       params.set("fields", [...fields].join(","));
-      params.set("date_preset", datePreset(query.window));
-      return { url: `${BASE}/${act}/insights?${params}`, init: { method: "GET", headers }, note: `GET ${act}/insights level=${level}${dropped.length ? `; dropped non-insights fields: ${dropped.join(", ")}` : ""}` };
+      let windowNote: string;
+      if (query.window) {
+        const r = dateRange(query.window, now);
+        params.set("time_range", JSON.stringify({ since: r.since, until: r.until }));
+        windowNote = `time_range ${r.since}..${r.until}`;
+      } else {
+        params.set("date_preset", datePreset(undefined));
+        windowNote = "date_preset last_7d";
+      }
+      return { url: `${BASE}/${act}/insights?${params}`, init: { method: "GET", headers }, note: `GET ${act}/insights level=${level} ${windowNote}${dropped.length ? `; dropped non-insights fields: ${dropped.join(", ")}` : ""}` };
     }
     case "ads":
     case "campaigns": {
-      params.set("fields", query.resource === "ads" ? "id,name,status,effective_status,creative" : "id,name,status,daily_budget");
+      params.set("fields", query.resource === "ads" ? "id,name,status,effective_status,adset_id,creative" : "id,name,status,effective_status,objective,daily_budget,lifetime_budget");
       if (typeof filter.status === "string") params.set("filtering", JSON.stringify([{ field: "effective_status", operator: "IN", value: [filter.status] }]));
       return { url: `${BASE}/${act}/${query.resource}?${params}`, init: { method: "GET", headers }, note: `GET ${act}/${query.resource}` };
     }
@@ -123,22 +146,64 @@ export function metaRequest(query: ReadQuery, adAccountId: string, accessToken: 
   }
 }
 
-function actionValue(list: unknown, type: string): number {
+/** Value of one action type from an actions / action_values list. omni_purchase (all
+    purchase events, deduplicated) wins over purchase when both are present. */
+export function actionValue(list: unknown, type: string): number {
   if (!Array.isArray(list)) return 0;
-  const hit = list.find((a) => a && typeof a === "object" && ((a as Row).action_type === type || (a as Row).action_type === `omni_${type}`));
+  const find = (t: string) => list.find((a) => a && typeof a === "object" && (a as Row).action_type === t);
+  const hit = find(`omni_${type}`) ?? find(type);
   return hit ? num((hit as Row).value) : 0;
+}
+
+/** purchase_roas is a list like actions; a single untyped entry (older responses) is accepted too. */
+export function roasValue(list: unknown): number | null {
+  if (!Array.isArray(list) || !list.length) return null;
+  const typed = actionValue(list, "purchase");
+  if (typed) return typed;
+  const first = list[0] as Row | undefined;
+  return first && first.action_type === undefined ? num(first.value) : 0;
 }
 
 /** Insights rows → the convenience fields the catalog addresses. */
 export function normaliseInsightRow(r: Row): Row {
+  const spend = num(r.spend);
+  const purchases = r.purchases !== undefined ? num(r.purchases) : actionValue(r.actions, "purchase");
+  const purchase_value = r.purchase_value !== undefined ? num(r.purchase_value) : actionValue(r.action_values, "purchase");
+  const roas = r.roas !== undefined ? num(r.roas) : (roasValue(r.purchase_roas) ?? (spend ? round2(purchase_value / spend) : 0));
   return {
     ...r,
-    spend: num(r.spend),
-    purchases: r.purchases !== undefined ? num(r.purchases) : actionValue(r.actions, "purchase"),
-    purchase_value: r.purchase_value !== undefined ? num(r.purchase_value) : actionValue(r.action_values, "purchase"),
-    roas: r.roas !== undefined ? num(r.roas) : Array.isArray(r.purchase_roas) ? num((r.purchase_roas[0] as Row | undefined)?.value) : 0,
+    spend,
+    impressions: num(r.impressions),
+    clicks: num(r.clicks),
+    ctr: num(r.ctr),
+    purchases,
+    purchase_value,
+    roas,
+    cpa: purchases ? round2(spend / purchases) : null,
     frequency: num(r.frequency),
   };
+}
+
+/** Budgets arrive as minor-unit strings ("10000" = 100.00). */
+export function normaliseBudgetRow(r: Row): Row {
+  const cents = (v: unknown) => (v === undefined || v === null || v === "" ? undefined : round2(num(v) / 100));
+  return { ad_id: r.id, ...r, ...(r.daily_budget !== undefined ? { daily_budget: cents(r.daily_budget) } : {}), ...(r.lifetime_budget !== undefined ? { lifetime_budget: cents(r.lifetime_budget) } : {}) };
+}
+
+/** Our own URL shape with the next cursor (Meta's paging.next carries the token in its query — never re-request it). */
+export function nextCursorUrl(url: string, json: unknown): string | null {
+  const after = (json as { paging?: { cursors?: { after?: unknown }; next?: unknown } })?.paging;
+  if (!after || typeof after.next !== "string") return null;
+  const cursor = typeof after.cursors?.after === "string" ? after.cursors.after : null;
+  if (!cursor) return null;
+  const u = new URL(url);
+  u.searchParams.set("after", cursor);
+  return u.toString();
+}
+
+export function missingInsightFields(rows: Row[]): string[] {
+  if (!rows.length) return [];
+  return ["spend", "actions", "action_values", "purchase_roas"].filter((f) => rows.every((r) => r[f] === undefined));
 }
 
 export async function read(query: ReadQuery, creds: PlatformCredential, opts: ReaderOptions = {}): Promise<ReaderResult> {
@@ -149,12 +214,22 @@ export async function read(query: ReadQuery, creds: PlatformCredential, opts: Re
     return ok(PLATFORM, rows, metaMetrics(query.resource, rows), now().toISOString(), "fixture", "fixture rows; no request made");
   }
   if (creds.kind !== "meta_ads") return fail(`meta_ads reader was given ${creds.kind} credentials`);
-  const shaped = metaRequest(query, creds.adAccountId, creds.accessToken);
+  const shaped = metaRequest(query, creds.adAccountId, creds.accessToken, now());
   if ("error" in shaped) return fail(shaped.error);
-  const res = await fetchJson(shaped.url, shaped.init, opts);
-  if (!res.ok) return fail(res.reason);
-  const data = (res.json as { data?: unknown })?.data;
-  if (!Array.isArray(data)) return fail(`meta_ads ${query.resource}: response had no data array`);
-  const rows = query.resource === "insights" ? (data as Row[]).map(normaliseInsightRow) : (data as Row[]).map((r) => ({ ad_id: r.id, ...r }));
-  return ok(PLATFORM, rows, metaMetrics(query.resource, rows), now().toISOString(), "live", shaped.note);
+  const raw: Row[] = [];
+  let url: string | null = shaped.url;
+  let pages = 0;
+  while (url && pages < MAX_PAGES) {
+    const res = await fetchJson(url, shaped.init, opts);
+    if (!res.ok) return pages === 0 ? fail(res.reason) : fail(`page ${pages + 1}: ${res.reason}`);
+    const data = (res.json as { data?: unknown })?.data;
+    if (!Array.isArray(data)) return fail(`meta_ads ${query.resource}: response had no data array`);
+    raw.push(...(data as Row[]));
+    pages++;
+    url = nextCursorUrl(url, res.json);
+  }
+  const rows = query.resource === "insights" ? raw.map(normaliseInsightRow) : raw.map(normaliseBudgetRow);
+  const missing = query.resource === "insights" ? missingInsightFields(rows) : [];
+  const note = `${shaped.note} (${pages} page${pages === 1 ? "" : "s"}${url ? ", more available — capped" : ""})${missing.length ? `; fields absent from every row (read as 0): ${missing.join(", ")}` : ""}${query.resource === "campaigns" ? "; budgets converted from minor units" : ""}`;
+  return ok(PLATFORM, rows, metaMetrics(query.resource, rows), now().toISOString(), "live", note);
 }

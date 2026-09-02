@@ -32,7 +32,8 @@ export function ga4Request(query: ReadQuery, propertyId: string, accessToken: st
     dateRanges: [{ startDate: `${windowDays(query.window)}daysAgo`, endDate: "today" }],
     metrics: metricNames.map((name) => ({ name })),
     dimensions: (query.groupBy ?? []).map((name) => ({ name })),
-    limit: query.limit ?? 100,
+    limit: Math.min(Math.max(1, query.limit ?? 1000), 10_000),
+    keepEmptyRows: false,
   };
   if (expressions.length === 1) body.dimensionFilter = expressions[0];
   else if (expressions.length > 1) body.dimensionFilter = { andGroup: { expressions } };
@@ -72,5 +73,10 @@ export async function read(query: ReadQuery, creds: PlatformCredential, opts: Re
   if (!res.ok) return fail(res.reason);
   const rows = flattenReport(res.json);
   if (!rows) return fail("ga4 report: unexpected response shape");
-  return ok(PLATFORM, rows, ga4Metrics(rows, shaped.metricNames), now().toISOString(), "live", "POST properties/{id}:runReport");
+  const r = res.json as { rowCount?: unknown; metricHeaders?: { name: string }[] };
+  const returned = (r.metricHeaders ?? []).map((h) => h.name);
+  const missing = shaped.metricNames.filter((m) => !returned.includes(m));
+  const rowCount = typeof r.rowCount === "number" ? r.rowCount : rows.length;
+  const note = `POST properties/{id}:runReport (${rows.length} of ${rowCount} rows${rowCount > rows.length ? " — capped" : ""})${missing.length ? `; metrics absent from the report (read as 0): ${missing.join(", ")}` : ""}`;
+  return ok(PLATFORM, rows, ga4Metrics(rows, shaped.metricNames), now().toISOString(), "live", note);
 }

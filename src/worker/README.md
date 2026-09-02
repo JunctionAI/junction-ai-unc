@@ -30,6 +30,7 @@ dry-run-only**:
 | `jobs.ts` | Pure in-loop schedule for the telemetry jobs (`kpi_snapshot` 01:30 daily, `measure` 02:00 daily, `benchmarks` Mon 03:00, `self_review` Mon 06:00 UTC): `dueJobs(now, markers)`, per-job "already ran" markers that ride on the heartbeat file; `dueBriefs` for the daily brief at 06:30 in each account's own timezone (docs/PROACTIVE.md). |
 | `telemetry.ts` | `runMeasure` / `runSelfReview` / `runBenchmarks` / `runKpiSnapshot` / `runDailyBrief` — what the jobs and the one-shot flags call (docs/IMPROVEMENT-LOOP.md, docs/PROACTIVE.md). |
 | `main.ts` | CLI entry (flags below). |
+| `probe.ts` | `--probe`: one read for one account through the real credentials, printed with redaction (`runProbe`, `formatProbe`). |
 | `health.ts` | Optional `GET /health` (200 while the heartbeat is fresh, 503 otherwise). |
 | `accounts.ts` | `AccountsSource` interface + `StaticAccountsSource` (one `demo` account) + `DbAccountsSource` (accounts with ≥ 1 enabled routine, from the DB). |
 | `credentials.ts` | `CredentialProvider` interface + `FixtureCredentialProvider`. The live one is `src/lib/connectors/tokens.ts` `ConnectorCredentialProvider`. |
@@ -74,6 +75,7 @@ Flags (all optional):
 | `--benchmarks` | off | Aggregate opted-in accounts' outcomes into anonymised p50/p75 (n ≥ 5 only) → `benchmarks`, then exit. |
 | `--kpi-snapshot` | off | Snapshot the fixed KPI set for every account with a connected platform → `kpi_snapshots` (docs/PROACTIVE.md), then exit. |
 | `--daily-brief` | off | Refresh taste → `account_profiles.decision_style`, then write today's brief per account → `daily_briefs` (idempotent per account-local day), then exit. |
+| `--probe <platform>` | — | One certified read for `--account` through the real credential provider + reader, printed (metrics, columns, two redacted sample rows, provenance or the "couldn't ask" reason), exit 1 on failure — the founder's 30-second check after a first connection. `--resource` / `--window` override the platform default (`probe.ts`). |
 
 The three flags are manual / catch-up runs. **The daemon runs the same jobs itself** at
 their UTC slots (`jobs.ts`; see "How a tick works" and `docs/IMPROVEMENT-LOOP.md`).
@@ -162,10 +164,10 @@ failure reasons carry host + path only):
 
 | Platform | Live endpoint shaped | Notes |
 |---|---|---|
-| Shopify | `GET https://{shop}/admin/api/2026-01/{orders,products,customers,checkouts,pages}.json` + `X-Shopify-Access-Token` | single page (≤250), `created_at_min` from `window` |
-| Klaviyo | `GET /api/flows?filter=equals(name,…)`, `/api/segments`, `/api/campaigns`, `POST /api/metric-aggregates` + `Authorization: Klaviyo-API-Key` + `revision` | `metrics` needs `filter.metricId`; the catalog names a flow instead, so a live metrics read is an honest "couldn't ask" until the connector resolves ids (Wave 2) |
-| GA4 | `POST analyticsdata.googleapis.com/v1beta/properties/{id}:runReport` + bearer | `fields` → metrics, `groupBy` → dimensions, `filter` → string-equals AND group |
-| Meta | `GET graph.facebook.com/v21.0/act_{id}/{insights,ads,campaigns}` + `Authorization: Bearer` | catalog aliases mapped (`roas`→`purchase_roas`, `purchases`→`actions`, …); `daily_budget` dropped from insights with a provenance note |
+| Shopify | `GET https://{shop}/admin/api/2026-07/{orders,products,customers,checkouts,pages}.json` + `X-Shopify-Access-Token` | Link-header (`page_info`) paging up to 8 × 250; `created_at_min` from `window`; `financial_status` / `fulfillment_status` from the filter; revenue = `current_total_price` of non-cancelled, non-refunded orders; missing fields named in provenance |
+| Klaviyo | `GET /api/flows`, `/api/segments` (+ `profile_count`), `/api/campaigns` (paged via `links.next`), `GET /api/metrics` → `POST /api/metric-aggregates` (count + sum_value, `by $attributed_channel`) or, with `filter.flowName`, `POST /api/flow-values-reports` (per-message recipients/opens/clicks/conversions/value) + `Authorization: Klaviyo-API-Key pk_…` or `Bearer` + `revision` | the "Placed Order" metric id is resolved from the account's metric list (Shopify integration preferred) unless `filter.metricId` is given |
+| GA4 | `POST analyticsdata.googleapis.com/v1beta/properties/{id}:runReport` + bearer | `fields` → metrics, `groupBy` → dimensions, `filter` → string-equals AND group; limit ≤ 10 000; `rowCount` + absent metrics in provenance |
+| Meta | `GET graph.facebook.com/v23.0/act_{id}/{insights,ads,campaigns}` + `Authorization: Bearer` | exact `time_range` from `window`; cursor paging (own URL, never Meta's `next`); catalog aliases mapped (`roas`→`purchase_roas`, `purchases`→`actions` with `omni_purchase` preferred, `cpa` derived); `daily_budget` dropped from insights with a provenance note; budgets converted from minor units |
 | Google Ads | **fixture only** | live reads need a developer token + OAuth refresh token + login-customer-id; a non-fixture credential gets `{ ok: false }` with that reason |
 | HubSpot | `POST api.hubapi.com/crm/v3/objects/{contacts,deals}/search` + `Authorization: Bearer`; `deals` also `POST …/emails/search` | catalog names → HubSpot properties (`title`→`jobtitle`, `stage: "open"`→`hs_is_closed=false`, `lastActivityOlderThanDays`→`notes_last_updated LT`, …); Unc-side filters (`scored`, `contacted`, `fitScore`, `winLossCaptured`) dropped + noted; `median_response_hours` = median hours from a thread's first `INCOMING_EMAIL` to the first outgoing `EMAIL` after it (null when no thread was answered — never 0); `contact_email` is association-only and left empty |
 
