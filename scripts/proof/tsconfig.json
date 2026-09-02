@@ -1,0 +1,18 @@
+{
+  "//": "Standalone build of the produce proof (no tsx in node_modules — same pattern as scripts/brain). `npx tsc -p scripts/proof/tsconfig.json` emits CommonJS to dist/proof; run with `node dist/proof/scripts/produce-proof.js` after sourcing a provider key. dist/ is git-ignored.",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/proof",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "incremental": false,
+    "sourceMap": false,
+    "plugins": []
+  },
+  "include": ["../produce-proof.ts"],
+  "exclude": ["../../node_modules"]
+}
