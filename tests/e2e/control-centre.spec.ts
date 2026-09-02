@@ -328,7 +328,8 @@ test.describe("Routines — Run now (dry run)", () => {
     const runNow = page.getByRole("button", { name: "Run now (dry run)" });
     await expect(runNow).toBeVisible();
     await expect(page.getByRole("button", { name: "Run dry-run validation" })).toHaveCount(0);
-    await expect(page.getByText(/Demo mode: runs live in memory and vanish when the server restarts/)).toBeVisible();
+    // The pill sits inline in the receipts strip; the explanatory note appears with the trail after a run.
+    await expect(page.getByText(/Demo mode: runs live in memory and vanish when the server restarts/)).toHaveCount(0);
 
     // POSTs /api/routines/run for this routine and renders id · kind · description rows
     const [req] = await Promise.all([page.waitForRequest((r) => r.url().endsWith("/api/routines/run") && r.method() === "POST"), runNow.click()]);
@@ -341,6 +342,7 @@ test.describe("Routines — Run now (dry run)", () => {
     await expect(rows.first().locator("span").first()).toHaveText(/^[0-9a-f]{8}$/);
     await expect(rows.first()).toContainText(/Read /);
     await expect(page.getByText(/^(Dry run complete|Nothing to do today)/)).toBeVisible();
+    await expect(page.getByText(/Demo mode: runs live in memory and vanish when the server restarts/)).toBeVisible();
     // dry run only: no mutation receipt, ever
     await expect(page.getByTestId("run-trail-row").filter({ hasText: /^\S+\s*mutation/ })).toHaveCount(0);
   });
