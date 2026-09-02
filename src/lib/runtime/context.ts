@@ -18,6 +18,8 @@ function view(ctx: RunContext): Record<string, unknown> {
     reads: ctx.reads,
     checks: ctx.checks,
     decision: ctx.decision,
+    inputs: ctx.inputs ?? {},
+    artifact: ctx.artifact,
     approval: ctx.approval,
     execution: ctx.execution,
     vars: ctx.vars,

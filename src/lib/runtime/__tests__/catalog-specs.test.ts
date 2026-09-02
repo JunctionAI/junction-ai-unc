@@ -34,8 +34,8 @@ describe("catalog specs", () => {
     expect(validateSpec(spec)).toEqual([]);
   });
 
-  it("node order is trigger → read → check → decide → gate → (execute) → receipt for every spec", () => {
-    const order = ["trigger", "read", "check", "decide", "gate", "execute", "receipt"];
+  it("node order is trigger → read → check → decide → produce → gate → (execute) → receipt for every spec", () => {
+    const order = ["trigger", "read", "check", "decide", "produce", "gate", "execute", "receipt"];
     for (const spec of CATALOG_SPECS) {
       const kinds = spec.nodes.map((n) => n.kind);
       expect(kinds[0]).toBe("trigger");
@@ -47,14 +47,24 @@ describe("catalog specs", () => {
     }
   });
 
-  it("wave 1 is exactly the launch-wave list and is draft-only", () => {
+  it("wave 1 is exactly the launch-wave list, is draft-only, and PRODUCES through its skill card", () => {
     const wave1Names = WAVE_1_IDS.map((id) => CATALOG_SPEC_BY_ID[id].name).sort();
     expect(wave1Names).toEqual([...LAUNCH_WAVE].sort());
     for (const id of WAVE_1_IDS) {
       const spec = CATALOG_SPEC_BY_ID[id];
       expect(spec.mutates, `${id} must not mutate`).toBe(false);
       expect(spec.nodes.some((n) => n.kind === "execute"), `${id} must have no execute node`).toBe(false);
+      const produce = spec.nodes.find((n) => n.kind === "produce");
+      expect(produce, `${id} produces`).toBeDefined();
+      expect(produce!.kind === "produce" && produce!.skill).toBe(id);
+      expect(spec.minimum, `${id} states its minimum`).toBeDefined();
+      expect(spec.minimum!.summary.length).toBeGreaterThan(10);
+      // no wave-1 chain ends on a "nothing worth drafting" decision any more
+      expect(spec.nodes.some((n) => n.kind === "decide" && n.options.some((o) => o.terminal)), `${id} has no terminal decide`).toBe(false);
     }
+    // required reads gate honestly: only the store read of the cart routine is non-optional
+    const required = WAVE_1_IDS.flatMap((id) => CATALOG_SPEC_BY_ID[id].nodes.filter((n) => n.kind === "read" && !n.optional).map((n) => `${id}:${n.kind === "read" ? n.source : ""}`));
+    expect(required).toEqual(["D05-W02:shopify"]);
   });
 
   it("mutates ⇔ has execute, and every execute sits behind a gate", () => {
@@ -110,6 +120,11 @@ describe("catalog specs", () => {
       expect(executor.calls).toHaveLength(0);
       const gate = res.receipts.find((r) => r.description.startsWith("Would ask"));
       expect(gate, `${spec.id} reached its gate`).toBeDefined();
+      if (spec.wave === 1) {
+        expect(res.artifact, `${spec.id} produced an artifact`).toBeDefined();
+        expect(res.receipts.some((r) => r.kind === "draft" && r.payload.artifactId === res.artifact!.id), `${spec.id} draft receipt links the artifact`).toBe(true);
+        expect((gate!.payload.approvalPreview as { artifactId?: string }).artifactId).toBe(res.artifact!.id);
+      }
       if (spec.mutates) expect(res.receipts.some((r) => r.description.startsWith("Would ")), `${spec.id} previewed its mutation`).toBe(true);
     }
   });

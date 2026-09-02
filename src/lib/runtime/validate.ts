@@ -41,9 +41,10 @@ export const PLATFORMS: readonly Platform[] = [
   "calendar",
 ];
 
-/** Canonical chain order. Reads and checks may repeat; the rest are single. */
-const RANK: Record<NodeKind, number> = { trigger: 0, read: 1, check: 2, decide: 3, gate: 4, execute: 5, receipt: 6 };
-const SINGLETON: NodeKind[] = ["trigger", "decide", "gate", "execute", "receipt"];
+/** Canonical chain order. Reads and checks may repeat; the rest are single. produce and n8n
+    share a rank (a chain may carry one of each, in either order). */
+const RANK: Record<NodeKind, number> = { trigger: 0, read: 1, check: 2, decide: 3, produce: 4, n8n: 4, gate: 5, execute: 6, receipt: 7 };
+const SINGLETON: NodeKind[] = ["trigger", "decide", "produce", "n8n", "gate", "execute", "receipt"];
 
 export function isValidCadence(cadence: string): boolean {
   return cadence === "manual" || EVENT_RE.test(cadence) || CRON_RE.test(cadence.trim());
@@ -95,7 +96,7 @@ export function validateSpec(spec: RoutineSpec): ValidationIssue[] {
     else if (ids.has(n.id)) push(path, `duplicate node id "${n.id}"`);
     ids.add(n.id);
     const rank = RANK[n.kind];
-    if (rank < lastRank) push(path, `${n.kind} cannot follow ${nodes[i - 1].kind} (order is trigger→read→check→decide→gate→execute→receipt)`);
+    if (rank < lastRank) push(path, `${n.kind} cannot follow ${nodes[i - 1].kind} (order is trigger→read→check→decide→produce|n8n→gate→execute→receipt)`);
     lastRank = Math.max(lastRank, rank);
     seen.set(n.kind, (seen.get(n.kind) ?? 0) + 1);
   });
@@ -146,6 +147,14 @@ export function validateSpec(spec: RoutineSpec): ValidationIssue[] {
         } else if (r.kind !== "first") push(`${path}.rule`, `unknown rule kind "${(r as { kind: string }).kind}"`);
         break;
       }
+      case "produce":
+        if (n.maxItems !== undefined && !(Number.isInteger(n.maxItems) && n.maxItems > 0)) push(path, "maxItems must be a positive integer");
+        break;
+      case "n8n":
+        if (n.timeoutMs !== undefined && !(n.timeoutMs > 0)) push(path, "timeoutMs must be > 0");
+        if (n.webhookUrl !== undefined && !/^https?:\/\//.test(n.webhookUrl)) push(path, "webhookUrl must be an http(s) URL");
+        if (n.webhookUrlEnv !== undefined && !/^[A-Z][A-Z0-9_]*$/.test(n.webhookUrlEnv)) push(path, "webhookUrlEnv must be an env variable name");
+        break;
       case "gate":
         if (!n.title) push(path, "title is required");
         if (!(n.expiryHours > 0)) push(path, "expiryHours must be > 0");

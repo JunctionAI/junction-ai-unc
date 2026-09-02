@@ -9,9 +9,16 @@
    Read descriptors name the real platform resource + window so a connector
    adapter can implement them literally. Where the catalog has no connector
    for a source (web, llm_search, calendar) the read is a research read and
-   the routine stays draft-only. */
+   the routine stays draft-only.
+
+   Wave-1 chains PRODUCE: trigger → optional reads → produce (the skill card in
+   ./skills) → gate → receipt. Their reads are `optional` — a founder with only
+   a site profile still gets a draft; the skill's `minimum` (copied onto the spec)
+   says what it truly needs, and a run that lacks it ends waiting_input with an
+   honest ask instead of "Nothing worth drafting today". */
 
 import { ALL_SYSTEMS } from "../platform/catalog";
+import { SKILL_BY_ID } from "./skills";
 import type {
   CheckNode,
   DecideNode,
@@ -22,6 +29,7 @@ import type {
   Node,
   Platform,
   Predicate,
+  ProduceNode,
   ReadNode,
   ReadQuery,
   ReceiptNode,
@@ -59,6 +67,12 @@ const read = (as: string, source: Platform, resource: string, query: Omit<ReadQu
   query: { resource, ...query },
   ...(freshnessMinutes ? { freshnessMinutes } : {}),
 });
+
+/** An optional read: unavailable → empty result + a receipt, the chain carries on. */
+const optRead = (as: string, source: Platform, resource: string, query: Omit<ReadQuery, "resource"> = {}): ReadNode => ({ ...read(as, source, resource, query), optional: true });
+
+/** The produce step: the routine's skill card (skills/<routine>.ts) makes the artifact. */
+const produce = (skill: string, maxItems?: number): ProduceNode => ({ kind: "produce", id: "produce", skill, ...(maxItems ? { maxItems } : {}) });
 
 const check = (id: string, predicate: Predicate, reason?: string, onFail: "skip" | "fail" = "skip"): CheckNode => ({ kind: "check", id, predicate, onFail, ...(reason ? { reason } : {}) });
 
@@ -177,7 +191,8 @@ function spec(id: RoutineId, wave: Wave, nodes: Node[]): RoutineSpec {
   const name = NAME_BY_ID.get(id);
   if (!name) throw new Error(`unknown catalog routine ${id}`);
   const contract = KPI_CONTRACTS[id];
-  return { id, version: 1, name, wave, mutates: nodes.some((n) => n.kind === "execute"), nodes, ...(contract ? { kpi: contract } : {}), hoursSavedPerRun: hoursSavedPerRun(id) };
+  const skill = SKILL_BY_ID[id];
+  return { id, version: 1, name, wave, mutates: nodes.some((n) => n.kind === "execute"), nodes, ...(contract ? { kpi: contract } : {}), hoursSavedPerRun: hoursSavedPerRun(id), ...(skill ? { minimum: skill.minimum } : {}) };
 }
 
 // ---------- D01 Content ----------
@@ -186,18 +201,16 @@ const D01: RoutineSpec[] = [
   // Founder content engine — wave 1, draft
   spec("D01-W01", 1, [
     trigger(CADENCE.DAILY_0700),
-    read("questions", "gorgias", "tickets", { window: "7d", fields: ["subject", "body", "tags"], limit: 200 }),
-    read("posts", "linkedin", "posts", { window: "28d", fields: ["text", "impressions", "reactions", "comments"] }),
-    read("products", "shopify", "products", { fields: ["title", "body_html", "tags"], limit: 50 }),
-    check("has_material", { any: [{ metric: "reads.questions.count", op: "gte", value: 3 }, { metric: "reads.products.count", op: "gte", value: 1 }] }, "Not enough customer material to draft from today."),
-    draftOrNothing("How many founder-voice posts are worth drafting from this week's questions?", "Draft 3 founder posts", "reads.questions.count", 3),
-    gate("3 founder posts drafted for your voice check", {
-      detail: "Drafted from {{reads.questions.count}} customer questions and your best-performing posts. Nothing publishes until you post it.",
+    optRead("questions", "gorgias", "tickets", { window: "7d", fields: ["subject", "body", "tags"], limit: 200 }),
+    optRead("posts", "linkedin", "posts", { window: "28d", fields: ["text", "impressions", "reactions", "comments"] }),
+    optRead("products", "shopify", "products", { fields: ["title", "body_html", "tags"], limit: 50 }),
+    produce("D01-W01", 3),
+    gate("{{artifact.title}} — for your voice check", {
+      detail: "Three posts in your voice, drafted from what I know about the business and what customers ask. Nothing publishes until you post it.",
       before: "No posts queued",
       after: "3 drafts in your queue, ready to copy or edit",
-      reasoning: "{{decision.reasoning}}",
     }),
-    receipt("Founder content engine: drafts handed over ({{decision.label}})."),
+    receipt("Founder content engine: {{artifact.title}} handed over."),
   ]),
   // Viral hook mining — wave 2, draft (research only)
   spec("D01-W02", 2, [
@@ -212,13 +225,12 @@ const D01: RoutineSpec[] = [
   // Customer-question mining — wave 1, draft
   spec("D01-W03", 1, [
     trigger(CADENCE.WEEKLY_MON),
-    read("tickets", "gorgias", "tickets", { window: "14d", fields: ["subject", "body"], limit: 500 }),
-    read("reviews", "shopify", "products", { fields: ["title", "reviews"], limit: 50 }),
-    read("comments", "instagram", "media", { window: "14d", fields: ["comments"], limit: 50 }),
-    check("has_questions", { metric: "reads.tickets.count", op: "gte", value: 5 }, "Fewer than 5 customer questions in the window."),
-    draftOrNothing("Which recurring questions deserve content?", "Draft a content idea list from the top questions", "reads.tickets.count", 5),
-    gate("Top customer questions turned into {{reads.tickets.count}} content ideas", { detail: "Ranked by how often customers ask. Each idea has a suggested format.", after: "Idea bank refreshed" }),
-    receipt("Customer-question mining: idea bank drafted."),
+    optRead("tickets", "gorgias", "tickets", { window: "14d", fields: ["subject", "body"], limit: 500 }),
+    optRead("reviews", "shopify", "products", { fields: ["title", "reviews"], limit: 50 }),
+    optRead("comments", "instagram", "media", { window: "14d", fields: ["comments"], limit: 50 }),
+    produce("D01-W03", 10),
+    gate("{{artifact.title}}", { detail: "Ranked by how often customers ask (or how central to buying, when the material is your site). Each idea has a suggested format.", after: "Idea bank refreshed" }),
+    receipt("Customer-question mining: {{artifact.title}} drafted."),
   ]),
   // UGC creator pipeline — wave 2, draft (outreach never sent by Unc)
   spec("D01-W04", 2, [
@@ -233,13 +245,12 @@ const D01: RoutineSpec[] = [
   // Social repurposing — wave 1, draft
   spec("D01-W05", 1, [
     trigger(CADENCE.DAILY_0700),
-    read("ig", "instagram", "media", { window: "7d", fields: ["caption", "media_type", "plays", "likes", "saves"], limit: 30 }),
-    read("li", "linkedin", "posts", { window: "7d", fields: ["text", "impressions", "reactions"] }),
-    read("yt", "youtube", "videos", { window: "28d", fields: ["title", "views", "transcript"], limit: 10 }),
-    check("has_winners", { any: [{ metric: "reads.ig.count", op: "gte", value: 1 }, { metric: "reads.yt.count", op: "gte", value: 1 }] }, "No new posts to repurpose."),
-    draftOrNothing("Which of this week's posts earned a second life?", "Repurpose the best post into 5 formats", "reads.ig.count", 1),
-    gate("Your best post this week, repurposed 5 ways", { detail: "Reel script, carousel, LinkedIn post, email blurb, X thread — all drafted.", after: "5 drafts ready to publish where you choose" }),
-    receipt("Social repurposing: five drafts handed over."),
+    optRead("ig", "instagram", "media", { window: "7d", fields: ["caption", "media_type", "plays", "likes", "saves"], limit: 30 }),
+    optRead("li", "linkedin", "posts", { window: "7d", fields: ["text", "impressions", "reactions"] }),
+    optRead("yt", "youtube", "videos", { window: "28d", fields: ["title", "views", "transcript"], limit: 10 }),
+    produce("D01-W05", 5),
+    gate("{{artifact.title}}", { detail: "Reel script, carousel, LinkedIn post, email blurb, X thread — all drafted from one source post.", after: "5 drafts ready to publish where you choose" }),
+    receipt("Social repurposing: {{artifact.title}} handed over."),
   ]),
   // Winning elements library — wave 2, draft
   spec("D01-W06", 2, [
@@ -424,23 +435,21 @@ const D03: RoutineSpec[] = [
   // Keyword opportunity scan — wave 1, draft
   spec("D03-W01", 1, [
     trigger(CADENCE.WEEKLY_MON),
-    read("gsc", "search_console", "search_analytics", { window: "28d", groupBy: ["query", "page"], fields: ["clicks", "impressions", "ctr", "position"], filter: { positionBetween: [8, 30] }, limit: 500 }),
-    read("pages", "shopify", "pages", { fields: ["handle", "title", "body_summary"], limit: 200 }),
-    check("has_queries", { metric: "reads.gsc.count", op: "gte", value: 10 }, "Fewer than 10 striking-distance queries this month."),
-    draftOrNothing("Which searches can existing authority win?", "Draft the keyword opportunity list", "reads.gsc.count", 10),
-    gate("{{reads.gsc.count}} striking-distance keywords found — opportunity list drafted", { detail: "Queries at position 8–30 where you already have a page. Each with a suggested move.", after: "Opportunity list in your queue" }),
-    receipt("Keyword opportunity scan: list drafted.", 28),
+    optRead("gsc", "search_console", "search_analytics", { window: "28d", groupBy: ["query", "page"], fields: ["clicks", "impressions", "ctr", "position"], filter: { positionBetween: [8, 30] }, limit: 500 }),
+    optRead("pages", "shopify", "pages", { fields: ["handle", "title", "body_summary"], limit: 200 }),
+    produce("D03-W01", 15),
+    gate("{{artifact.title}}", { detail: "Searches you can plausibly win with pages you already have — each with the page that should own it and the move. Hypotheses until Search Console confirms them.", after: "Opportunity list in your queue" }),
+    receipt("Keyword opportunity scan: {{artifact.title}} drafted.", 28),
   ]),
   // Content gap analysis — wave 1, draft
   spec("D03-W02", 1, [
     trigger(CADENCE.WEEKLY_MON),
-    read("gsc", "search_console", "search_analytics", { window: "90d", groupBy: ["query"], fields: ["impressions", "clicks", "position"], limit: 1000 }),
-    read("competitors", "web", "crawl", { filter: { domains: "{{vars.competitorDomains}}" }, fields: ["url", "title", "h1", "topic"], limit: 300 }),
-    read("own", "web", "crawl", { filter: { domains: "{{vars.website}}" }, fields: ["url", "title", "h1", "topic"], limit: 300 }),
-    check("has_gaps", { metric: "reads.competitors.count", op: "gte", value: 5 }, "Not enough competitor pages crawled to compare."),
-    draftOrNothing("What topics do competitors rank for that you have no page on?", "Draft the content gap brief list", "reads.competitors.count", 5),
-    gate("Content gaps found: {{reads.competitors.count}} competitor topics with no page on your site", { detail: "Ranked by search demand. One brief per gap.", after: "Gap briefs ready for the content engine" }),
-    receipt("Content gap analysis: briefs drafted.", 28),
+    optRead("gsc", "search_console", "search_analytics", { window: "90d", groupBy: ["query"], fields: ["impressions", "clicks", "position"], limit: 1000 }),
+    optRead("competitors", "web", "crawl", { filter: { domains: "{{vars.competitorDomains}}" }, fields: ["url", "title", "h1", "topic"], limit: 300 }),
+    optRead("own", "web", "crawl", { filter: { domains: "{{vars.website}}" }, fields: ["url", "title", "h1", "topic"], limit: 300 }),
+    produce("D03-W02", 10),
+    gate("{{artifact.title}}", { detail: "The pages a business in your category is expected to have, against what your site has. One brief per gap, ranked by buying proximity.", after: "Gap briefs ready for the content engine" }),
+    receipt("Content gap analysis: {{artifact.title}} drafted.", 28),
   ]),
   // AI search visibility — wave 2, draft (research read; no connector)
   spec("D03-W03", 2, [
@@ -497,33 +506,29 @@ const D04: RoutineSpec[] = [
   // Lead research & scoring — wave 1, draft
   spec("D04-W01", 1, [
     trigger(CADENCE.DAILY_0700),
-    read("leads", "hubspot", "contacts", { window: "1d", filter: { lifecycleStage: "lead", scored: false }, fields: ["id", "email", "company", "website", "title"], limit: 100 }),
-    read("research", "web", "scan", { filter: { domains: "{{reads.leads.domains}}" }, fields: ["domain", "employee_count", "industry", "tech_stack", "recent_news"], limit: 100 }),
-    check("new_leads", { metric: "reads.leads.count", op: "gte", value: 1 }, "No new leads to research."),
-    draftOrNothing("Which new leads fit the ICP?", "Score and rank the new leads", "reads.leads.count", 1),
-    gate("{{reads.leads.count}} new leads researched and scored against your ICP", { detail: "Fit score, why, and the one thing to say to each. Scores are suggestions until you accept.", after: "Scored leads ready for outreach drafts", expiryHours: 24 }),
-    receipt("Lead research & scoring: scores handed over.", 7),
+    optRead("leads", "hubspot", "contacts", { window: "1d", filter: { lifecycleStage: "lead", scored: false }, fields: ["id", "email", "company", "website", "title"], limit: 100 }),
+    produce("D04-W01", 8),
+    gate("{{artifact.title}}", { detail: "Your ICP, a scoring rubric and the research checklist — plus provisional scores when there are real leads to score. Scores are suggestions until you accept.", after: "Lead brief ready for outreach drafts", expiryHours: 24 }),
+    receipt("Lead research & scoring: {{artifact.title}} handed over.", 7),
   ]),
   // Supervised outbound drafts — wave 1, draft (never sends)
   spec("D04-W02", 1, [
     trigger(CADENCE.DAILY_0700),
-    read("leads", "hubspot", "contacts", { window: "7d", filter: { lifecycleStage: "lead", fitScore: { gte: 70 }, contacted: false }, fields: ["id", "email", "firstname", "company", "fit_reason"], limit: 20 }),
-    read("threads", "gmail", "threads", { window: "28d", filter: { label: "sent", to: "{{reads.leads.emails}}" }, fields: ["to", "subject", "snippet"], limit: 50 }),
-    check("uncontacted", { metric: "reads.leads.count", op: "gte", value: 1 }, "No right-fit leads waiting for outreach."),
-    draftOrNothing("Which leads get a first-touch draft today?", "Draft first-touch emails", "reads.leads.count", 1),
-    gate("{{reads.leads.count}} outreach emails drafted — you send", { detail: "One per right-fit lead, personalised from research. Saved as Gmail drafts, never sent by Unc.", after: "Drafts in your Gmail drafts folder", expiryHours: 24 }),
-    receipt("Supervised outbound: drafts handed over.", 7),
+    optRead("leads", "hubspot", "contacts", { window: "7d", filter: { lifecycleStage: "lead", fitScore: { gte: 70 }, contacted: false }, fields: ["id", "email", "firstname", "company", "fit_reason"], limit: 20 }),
+    optRead("threads", "gmail", "threads", { window: "28d", filter: { label: "sent", to: "{{reads.leads.emails}}" }, fields: ["to", "subject", "snippet"], limit: 50 }),
+    produce("D04-W02", 3),
+    gate("{{artifact.title}} — you send", { detail: "First-touch emails personalised from the lead brief. Copy them into your mail client; Unc never sends.", after: "Drafts ready to send", expiryHours: 24 }),
+    receipt("Supervised outbound: {{artifact.title}} handed over.", 7),
   ]),
   // Meeting brief builder — wave 1, draft
   spec("D04-W03", 1, [
     trigger(CADENCE.DAILY_0700),
-    read("meetings", "calendar", "events", { window: "1d", filter: { external: true }, fields: ["id", "title", "start", "attendees"], limit: 20 }),
-    read("contacts", "hubspot", "contacts", { filter: { emails: "{{reads.meetings.attendee_emails}}" }, fields: ["id", "company", "lifecycleStage", "deal_stage", "notes"], limit: 50 }),
-    read("threads", "gmail", "threads", { window: "90d", filter: { with: "{{reads.meetings.attendee_emails}}" }, fields: ["subject", "snippet", "date"], limit: 50 }),
-    check("has_meetings", { metric: "reads.meetings.count", op: "gte", value: 1 }, "No external meetings today."),
-    draftOrNothing("Which meetings need a brief?", "Build a brief per meeting", "reads.meetings.count", 1),
-    gate("{{reads.meetings.count}} meeting briefs ready for today", { detail: "Who they are, where the deal sits, last three threads, and the question to open with.", after: "Briefs in your queue", expiryHours: 12 }),
-    receipt("Meeting brief builder: briefs delivered.", 1),
+    optRead("meetings", "calendar", "events", { window: "1d", filter: { external: true }, fields: ["id", "title", "start", "attendees"], limit: 20 }),
+    optRead("contacts", "hubspot", "contacts", { filter: { emails: "{{reads.meetings.attendee_emails}}" }, fields: ["id", "company", "lifecycleStage", "deal_stage", "notes"], limit: 50 }),
+    optRead("threads", "gmail", "threads", { window: "90d", filter: { with: "{{reads.meetings.attendee_emails}}" }, fields: ["subject", "snippet", "date"], limit: 50 }),
+    produce("D04-W03", 5),
+    gate("{{artifact.title}}", { detail: "Who they are, where the deal sits, the last threads, and the question to open with.", after: "Briefs in your queue", expiryHours: 12 }),
+    receipt("Meeting brief builder: {{artifact.title}} delivered.", 1),
   ]),
   // Follow-up cadence — wave 2, draft (drafts, never sends)
   spec("D04-W04", 2, [
@@ -598,12 +603,11 @@ const D05: RoutineSpec[] = [
   spec("D05-W02", 1, [
     trigger(CADENCE.DAILY_0700),
     read("checkouts", "shopify", "checkouts", { window: "7d", filter: { abandoned: true }, fields: ["id", "email", "total_price", "line_items", "abandoned_at"], limit: 500 }),
-    read("flow", "klaviyo", "flows", { filter: { name: "Abandoned Cart" }, fields: ["id", "status", "messages"] }),
-    read("perf", "klaviyo", "metrics", { window: "28d", filter: { flowName: "Abandoned Cart" }, fields: ["sends", "clicks", "placed_orders", "revenue"] }),
-    check("carts_present", { metric: "reads.checkouts.count", op: "gte", value: 5 }, "Fewer than 5 abandoned carts this week."),
-    draftOrNothing("How should the recovery flow change to win these carts back?", "Draft the recovery flow improvements", "reads.checkouts.count", 5),
-    gate("{{reads.checkouts.count}} carts abandoned this week ({{account.currency}} {{reads.checkouts.total_value}}) — recovery drafts ready", { detail: "Message copy, timing and the offer rule, drafted for you to paste into Klaviyo.", after: "Recovery drafts in your queue" }),
-    receipt("Abandoned cart recovery: drafts handed over.", 14),
+    optRead("flow", "klaviyo", "flows", { filter: { name: "Abandoned Cart" }, fields: ["id", "status", "messages"] }),
+    optRead("perf", "klaviyo", "metrics", { window: "28d", filter: { flowName: "Abandoned Cart" }, fields: ["sends", "clicks", "placed_orders", "revenue"] }),
+    produce("D05-W02", 3),
+    gate("{{artifact.title}} — from {{reads.checkouts.count}} carts abandoned this week", { detail: "Three messages with subject, preview and body, drafted from what people leave in their carts — for you to paste into Klaviyo.", after: "Recovery drafts in your queue" }),
+    receipt("Abandoned cart recovery: {{artifact.title}} handed over.", 14),
   ]),
   // Segmentation refresh — wave 2, MUTATES (updates segment definitions)
   spec("D05-W03", 2, [
@@ -675,13 +679,12 @@ const D05: RoutineSpec[] = [
   // Campaign calendar prep — wave 1, draft
   spec("D05-W07", 1, [
     trigger(CADENCE.WEEKLY_MON),
-    read("orders", "shopify", "orders", { window: "365d", groupBy: ["week"], fields: ["count", "revenue"] }),
-    read("campaigns", "klaviyo", "campaigns", { window: "90d", fields: ["id", "subject", "send_time", "revenue", "unsubscribes"] }),
-    read("products", "shopify", "products", { filter: { launchingWithinDays: 60 }, fields: ["title", "launch_date"], limit: 20 }),
-    check("has_history", { metric: "reads.orders.count", op: "gte", value: 8 }, "Fewer than 8 weeks of order history — calendar would be guesswork."),
-    draftOrNothing("What should the next 6 weeks of campaigns look like?", "Draft the 6-week campaign calendar", "reads.orders.count", 8),
-    gate("Next 6 weeks of campaigns drafted", { detail: "Sequenced around your seasonal peaks, launches and send-fatigue limits. Each slot has a theme and a working subject.", after: "Calendar in your queue" }),
-    receipt("Campaign calendar prep: calendar handed over.", 42),
+    optRead("orders", "shopify", "orders", { window: "365d", groupBy: ["week"], fields: ["count", "revenue"] }),
+    optRead("campaigns", "klaviyo", "campaigns", { window: "90d", fields: ["id", "subject", "send_time", "revenue", "unsubscribes"] }),
+    optRead("products", "shopify", "products", { filter: { launchingWithinDays: 60 }, fields: ["title", "launch_date"], limit: 20 }),
+    produce("D05-W07", 6),
+    gate("{{artifact.title}}", { detail: "Sequenced from your goal, the plan and the anchors I know about (events, launches, seasonality when there is order history). Each week has a theme and a working subject.", after: "Calendar in your queue" }),
+    receipt("Campaign calendar prep: {{artifact.title}} handed over.", 42),
   ]),
 ];
 

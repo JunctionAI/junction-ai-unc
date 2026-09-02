@@ -1,10 +1,11 @@
 /* In-memory Store. Reference implementation + test double; the Supabase
    adapter implements the same interface (see interface.ts for the mapping). */
 
-import type { ApprovalRecord, ApprovalStatus, Receipt, RoutineId, TasteEvent } from "../types";
+import type { ApprovalRecord, ApprovalStatus, Artifact, N8nWorkflow, Receipt, RoutineId, TasteEvent } from "../types";
 import type {
   BenchmarkOptin,
   BenchmarkRecord,
+  ListArtifactsOptions,
   ListOutcomesOptions,
   ListReceiptsOptions,
   ListRunsOptions,
@@ -28,6 +29,8 @@ export class MemoryStore implements Store {
   private selfReviews = new Map<string, SelfReviewRecord>();
   private benchmarks = new Map<string, BenchmarkRecord>();
   private optins = new Map<string, boolean>();
+  private artifacts = new Map<string, Artifact>();
+  private n8nWorkflows = new Map<string, N8nWorkflow>();
 
   private static stateKey(accountId: string, routineId: RoutineId) {
     return `${accountId}:${routineId}`;
@@ -197,5 +200,45 @@ export class MemoryStore implements Store {
   /** Test helper — not part of the Store interface (the real row is written by the founder). */
   setBenchmarkOptin(accountId: string, optedIn: boolean) {
     this.optins.set(accountId, optedIn);
+  }
+
+  // ----- artifacts -----
+  async putArtifact(artifact: Artifact) {
+    this.artifacts.set(artifact.id, clone(artifact));
+    return clone(artifact);
+  }
+  async getArtifact(artifactId: string) {
+    const a = this.artifacts.get(artifactId);
+    return a ? clone(a) : null;
+  }
+  async updateArtifact(artifactId: string, patch: Partial<Pick<Artifact, "status" | "editedBody">>) {
+    const a = this.artifacts.get(artifactId);
+    if (!a) throw new Error(`artifact ${artifactId} not found`);
+    const next = { ...a, ...clone(patch) };
+    for (const k of Object.keys(patch) as (keyof typeof patch)[]) if (patch[k] === undefined) delete next[k];
+    this.artifacts.set(artifactId, next);
+    return clone(next);
+  }
+  async listArtifacts(accountId: string, opts: ListArtifactsOptions = {}) {
+    let out = [...this.artifacts.values()].filter((a) => a.accountId === accountId);
+    if (opts.runId) out = out.filter((a) => a.runId === opts.runId);
+    if (opts.routineId) out = out.filter((a) => a.routineId === opts.routineId);
+    if (opts.status) out = out.filter((a) => a.status === opts.status);
+    out = out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+    if (opts.limit) out = out.slice(0, opts.limit);
+    return clone(out);
+  }
+
+  // ----- n8n_workflows -----
+  async findN8nWorkflow(accountId: string, routineId: RoutineId) {
+    const rows = [...this.n8nWorkflows.values()].filter((w) => w.routineId === routineId && w.active);
+    const own = rows.find((w) => w.accountId === accountId);
+    const global = rows.find((w) => w.accountId === null);
+    const hit = own ?? global;
+    return hit ? clone(hit) : null;
+  }
+  async putN8nWorkflow(workflow: N8nWorkflow) {
+    this.n8nWorkflows.set(workflow.id, clone(workflow));
+    return clone(workflow);
   }
 }

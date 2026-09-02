@@ -87,12 +87,28 @@
 
    BenchmarkOptin      → benchmark_optins
      accountId/optedIn → account_id/opted_in
+
+   ── migration 0013 (artifacts — routines produce real work) ──
+   Artifact            → artifacts
+     id/accountId/runId/routineId → id/account_id/run_id/routine_id
+     kind/title/body   → kind/title/body
+     items/meta/evidence → items/meta/evidence (jsonb)
+     status            → status ('draft' | 'approved' | 'held' | 'edited' | 'used')
+     editedBody        → edited_body
+     createdAt         → created_at
+   N8nWorkflow         → n8n_workflows (read-only for the runtime; Tom registers rows)
+     id/accountId(null = global)/routineId/webhookUrl/active → id/account_id/routine_id/webhook_url/active
+   routine_runs.status gains 'waiting_input'; RunSnapshot gains needs / awaiting.
    ───────────────────────────────────────────────────────────────────────── */
 
 import type {
   ApprovalRecord,
   ApprovalStatus,
+  Artifact,
+  ArtifactStatus,
   KpiContract,
+  N8nWorkflow,
+  ProduceNeed,
   Receipt,
   ReceiptKind,
   RoutineId,
@@ -187,6 +203,17 @@ export interface RunSnapshot {
   spec: RoutineSpec;
   ctx: RunContext;
   nextNodeIndex: number;
+  /** waiting_input: what the producer asked for (resume-input re-runs the produce node). */
+  needs?: ProduceNeed[];
+  /** A run whose artifact an n8n workflow will deliver later (POST /api/routines/artifacts). */
+  awaiting?: "n8n";
+}
+
+export interface ListArtifactsOptions {
+  runId?: string;
+  routineId?: RoutineId;
+  status?: ArtifactStatus;
+  limit?: number;
 }
 
 export interface RunRecord {
@@ -278,4 +305,17 @@ export interface Store {
   getBenchmark(metricKey: string, segment: string): Promise<BenchmarkRecord | null>;
   listBenchmarks(segment?: string): Promise<BenchmarkRecord[]>;
   listBenchmarkOptins(): Promise<BenchmarkOptin[]>;
+
+  // ----- artifacts (migration 0013) -----
+  putArtifact(artifact: Artifact): Promise<Artifact>;
+  getArtifact(artifactId: string): Promise<Artifact | null>;
+  updateArtifact(artifactId: string, patch: Partial<Pick<Artifact, "status" | "editedBody">>): Promise<Artifact>;
+  /** Newest first. */
+  listArtifacts(accountId: string, opts?: ListArtifactsOptions): Promise<Artifact[]>;
+
+  // ----- n8n_workflows (read by the engine; written by Tom / the service role) -----
+  /** The active workflow for this routine: the account's own row first, then a global row
+      (account_id null); null when none is registered. */
+  findN8nWorkflow(accountId: string, routineId: RoutineId): Promise<N8nWorkflow | null>;
+  putN8nWorkflow(workflow: N8nWorkflow): Promise<N8nWorkflow>;
 }

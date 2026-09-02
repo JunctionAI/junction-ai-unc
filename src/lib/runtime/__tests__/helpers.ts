@@ -1,7 +1,7 @@
 import type { Adapters } from "../engine";
 import { DeterministicDecisionProvider, StaticReader, type Fixtures } from "../providers";
 import { MemoryStore } from "../store/memory";
-import type { AccountContext, ExecuteNode, ExecutionResult, Executor, Mutation, RoutineSpec, RunContext, RunInput } from "../types";
+import type { AccountContext, ArtifactDraft, ExecuteNode, ExecutionResult, Executor, Mutation, ProduceNode, ProduceResult, Producer, RoutineSpec, RunContext, RunInput } from "../types";
 
 export const T0 = "2026-09-02T07:00:00.000Z";
 
@@ -33,18 +33,42 @@ export class RecordingExecutor implements Executor {
   }
 }
 
-export function adapters(opts: { fixtures?: Fixtures; executor?: Executor; store?: MemoryStore; clk?: ReturnType<typeof clock> } = {}) {
+/** A Producer that answers with a canned artifact (or `needs`), recording every call. */
+export class FakeProducer implements Producer {
+  calls: { node: ProduceNode; ctx: RunContext }[] = [];
+  constructor(private readonly answer: ProduceResult | ((node: ProduceNode, ctx: RunContext) => ProduceResult) = { artifact: SAMPLE_ARTIFACT }) {}
+  async produce(node: ProduceNode, ctx: RunContext): Promise<ProduceResult> {
+    this.calls.push({ node, ctx });
+    return typeof this.answer === "function" ? this.answer(node, ctx) : this.answer;
+  }
+}
+
+export const SAMPLE_ARTIFACT: ArtifactDraft = {
+  kind: "post_set",
+  title: "3 founder posts: why we ship from Auckland",
+  body: "Three posts drafted from the site profile and 3 customer questions.",
+  items: [
+    { title: "Does it ship to AU?", body: "Yes — and here is what that costs us.", meta: { angle: "question", platform: "linkedin" } },
+    { title: "We don't discount the flagship", body: "A rule we run by.", meta: { angle: "belief", platform: "instagram" } },
+    { title: "What a Tuesday looks like", body: "Behind the scenes.", meta: { angle: "behind_the_scenes", platform: "x" } },
+  ],
+  evidence: [{ source: "site_profile", ref: "ships from Auckland" }],
+};
+
+export function adapters(opts: { fixtures?: Fixtures; executor?: Executor; store?: MemoryStore; clk?: ReturnType<typeof clock>; producer?: Producer | null } = {}) {
   const clk = opts.clk ?? clock();
   const store = opts.store ?? new MemoryStore();
   const executor = opts.executor ?? new RecordingExecutor();
+  const producer = opts.producer === undefined ? new FakeProducer() : opts.producer;
   const a: Adapters = {
     reader: new StaticReader(opts.fixtures ?? {}, clk.now),
     decider: new DeterministicDecisionProvider(),
     executor,
     store,
+    ...(producer ? { producer } : {}),
     now: clk.now,
   };
-  return { adapters: a, store, executor: executor as RecordingExecutor, clk };
+  return { adapters: a, store, executor: executor as RecordingExecutor, producer: producer as FakeProducer, clk };
 }
 
 /** A small mutation routine: read Meta spend, check spend > 0, decide to
