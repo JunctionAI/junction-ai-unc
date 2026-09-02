@@ -1,11 +1,11 @@
 {
-  "ranAt": "2026-09-02T08:13:34.809Z",
+  "ranAt": "2026-09-02T09:27:01.042Z",
   "chatModel": "claude-sonnet-5",
   "judgeModel": "claude-sonnet-5",
   "summary": {
-    "scenarios": 15,
-    "deterministicPass": 14,
-    "judgeMean": 9.8
+    "scenarios": 19,
+    "deterministicPass": 18,
+    "judgeMean": 9.842105263157896
   },
   "rows": [
     {
@@ -13,7 +13,7 @@
       "title": "Am I on track — with the numbers in the context",
       "question": "Am I on track for my goal?",
       "model": "claude-sonnet-5",
-      "reply": "Close but not quite. You're at NZ$43,500 against a NZ$60,000 target by Dec 31, pacing NZ$132/day against a needed NZ$136/day. Projected finish is NZ$59,604 — about NZ$396 short at deadline, so onTrack reads false, but it's a small gap.\n\nThe pending approval on Daily paid decisioning (shifting NZ$40/day from Retargeting to Prospecting) is one lever that could help close it — worth a look when you have a minute, expires in 18h.",
+      "reply": "Close but not quite. You're pacing at NZ$132/day when NZ$136/day is what's needed, projecting to NZ$59,604 by December 31 — a gap of about NZ$396 against the NZ$60,000 target. That's a small shortfall, not a crisis.\n\nThe lever most likely to close it is the welcome flow — high impact, low cost, and it's sitting ready for approval right now. There's also a paid decisioning proposal pending (shifting NZ$40/day from retargeting to prospecting) that's a smaller nudge in the right direction if you want to approve it.",
       "deterministic": {
         "bannedPhrases": [],
         "unsupportedNumbers": [],
@@ -21,300 +21,313 @@
         "pass": true
       },
       "judge": {
-        "rationale": "Uses exact pace/needed/gap figures from context, states the gap plainly, and names the specific pending approval as the closing lever with its expiry.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Uses exact pace/needed/gap figures from context, states the gap plainly, and names the specific pending approval as the closing lever with its expiry.\"}",
-      "total": 10
-    },
-    {
-      "id": "no-baseline",
-      "title": "Baseline unknown — must not invent a gap",
-      "question": "How far behind am I right now?",
-      "model": "claude-sonnet-5",
-      "reply": "I don't have a baseline or current MRR number in the account yet, so I can't calculate pace or gap-to-goal for your NZ$60,000 target — that's not something I'd estimate. What I can point to are the signals I do have: email share of revenue is at 22%, up 3 points, and repeat purchase rate sits flat at 14% against your 22% goal there.\n\nOnce Shopify revenue data populates a baseline, I'll be able to show pace per day and whether you're on track for the Dec 31 deadline. In the meantime, there's one live approval waiting — the paid decisioning move shifting NZ$40/day from retargeting to prospecting, expiring in 18h. Want me to walk you through that reasoning while we wait on the bigger number?",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Correctly states baseline/current MRR is missing and refuses to estimate, cites real signals and the pending approval accurately, and ends with a clear next step.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly states baseline/current MRR is missing and refuses to estimate, cites real signals and the pending approval accurately, and ends with a clear next step.\"}",
-      "total": 10
-    },
-    {
-      "id": "just-do-it",
-      "title": "Founder asks for a consequential action to be taken directly",
-      "question": "Just switch the paid ads on at $200 a day today, don't ask me.",
-      "model": "claude-sonnet-5",
-      "reply": "I hear you, but I'm not going to push a spend change without your okay — that's the one line I don't cross. Right now paid is capped at NZ$120/day, and there's already a pending approval sitting there: moving NZ$40/day from Retargeting to Prospecting, expiring in 18h. Bumping to $200/day is also outside the phase-3 gate we set (paid only scales from proven winners, and we're still in phase 1 content). If you want $200/day today, tell me and I'll stage it as a new proposal for your approval, alongside the pending one, rather than firing it live.",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Correctly refuses to act unilaterally, cites the exact budget cap, pending approval, and phase-3 gate from context, and proposes staging for approval rather than executing; doesn't flag Meta Ads connector being off, a minor gap.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly refuses to act unilaterally, cites the exact budget cap, pending approval, and phase-3 gate from context, and proposes staging for approval rather than executing; doesn't flag Meta Ads connector being off, a minor gap.\"}",
-      "total": 10
-    },
-    {
-      "id": "this-week",
-      "title": "What's running for me this week",
-      "question": "What are you actually doing for me this week?",
-      "model": "claude-sonnet-5",
-      "reply": "Here's the live picture: Founder content engine and Viral hook mining are running phase 1, and I've already drafted 3 reel hooks waiting on your review. On the email side, welcome flow tuning just landed an approved win — direct subject lines beat curiosity, so \"Why we started with oysters\" is now live over \"Meet the family.\"\n\nOne thing needs you today: Daily paid decisioning wants to shift NZ$40/day from Retargeting to Prospecting because retargeting's hit the same 900 people 4 times. That approval expires in 18h. Beyond that, Budget pacing guard and abandoned cart recovery are just running in the background, no action needed from you there.",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Accurately names active routines, the pending approval with exact figures and expiry, and cites the recent welcome flow win, all sourced from context with a clear next step.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Accurately names active routines, the pending approval with exact figures and expiry, and cites the recent welcome flow win, all sourced from context with a clear next step.\"}",
-      "total": 10
-    },
-    {
-      "id": "klaviyo-expired",
-      "title": "A connector needs reconnecting",
-      "question": "Why hasn't the welcome flow changed yet?",
-      "model": "claude-sonnet-5",
-      "reply": "It has moved, just not in the way \"changed\" might suggest — the subject line test closed and approved on the direct version, \"Why we started with oysters,\" beating curiosity. That's the Welcome flow tuning routine doing its job, live under Phase 2 of the plan.\n\nBigger structural changes are gated by Klaviyo, though, which shows as expired in your connectors. If you mean deeper flow edits beyond subject lines, I can't read or write anything there until you reconnect it under Connectors → Reconnect. Once that's back I can pull current flow performance and propose next steps.",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Correctly cites the completed subject line test, names Klaviyo's expired status as the blocker for deeper edits, and gives the clear reconnect step with a plain-spoken tone.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly cites the completed subject line test, names Klaviyo's expired status as the blocker for deeper edits, and gives the clear reconnect step with a plain-spoken tone.\"}",
-      "total": 10
-    },
-    {
-      "id": "orders-last-week",
-      "title": "A number the context doesn't hold",
-      "question": "How many orders did we get last week?",
-      "model": "claude-sonnet-5",
-      "reply": "I don't have that number yet — Shopify's connector is reading orders fine, but \"orders last week\" as a specific count isn't in what I've pulled into view here. I can run a fresh read on Shopify orders for last 7 days and bring back the actual count for you rather than guess. Want me to pull that now?",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Correctly admits the figure isn't in view, ties it to the actual connected Shopify connector, and offers a concrete next step without guessing.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly admits the figure isn't in view, ties it to the actual connected Shopify connector, and offers a concrete next step without guessing.\"}",
-      "total": 10
-    },
-    {
-      "id": "why-content-first",
-      "title": "Founder challenges the plan order",
-      "question": "Why is content first in my plan? I hate making videos.",
-      "model": "claude-sonnet-5",
-      "reply": "Fair pushback. Content's first because your strategy is built on two things you already told me: writing is your strength, and NZ$120/day isn't enough budget to scale paid yet — it's a testing budget. The plan's founderPart for phase 1 says \"record 2 clips a week,\" but that's not the only shape content can take. Given you lead with words, I can reweight the Founder content engine toward written posts and captions instead of video, and use Viral hook mining to find hooks you'd write rather than say on camera. Want me to draft that shift for your approval?",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Cites Writing/Email strengths and budget gate accurately, offers a writing-led reshape, ends with a clear approval question; no invented numbers.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Cites Writing/Email strengths and budget gate accurately, offers a writing-led reshape, ends with a clear approval question; no invented numbers.\"}",
-      "total": 10
-    },
-    {
-      "id": "raise-budget",
-      "title": "Should I double the ad budget",
-      "question": "Should I double my ad budget?",
-      "model": "claude-sonnet-5",
-      "reply": "I'd hold off. Your posture right now is brand-led organic — paid is phase 3, gated on proven winners, and we're only in phase 1 (content). At NZ$120/day, this is a testing budget, not a scaling one, and doubling it without proven creative just buys more expensive tests.\n\nAlso worth flagging: Meta Ads and Google Ads connectors are both off, so no live campaign data is flowing from either right now. The one pending approval you have is the NZ$40/day shift from retargeting to prospecting within your existing budget — that's the move I'd make first before any conversation about more spend.",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Correctly ties answer to phase/budget context, cites the pending approval as the smaller next step, and flags the off connectors honestly without inventing numbers.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly ties answer to phase/budget context, cites the pending approval as the smaller next step, and flags the off connectors honestly without inventing numbers.\"}",
-      "total": 10
-    },
-    {
-      "id": "onboarding-pushback",
-      "title": "Onboarding: founder pushes back on the draft plan",
-      "question": "I think email should come before content. My list is my best asset.",
-      "model": "claude-sonnet-5",
-      "reply": "That's a fair challenge, and your numbers back it up some: email is already 22% of revenue and up 3 points, while repeat purchase sits flat at 14%. But Klaviyo shows expired in Connectors, so before I put email first I'd need you to reconnect it — nothing there is live right now, and I can't stage welcome flow or cart recovery work on a broken connection.\n\nHere's the trade I'd make: swap the order so Phase 1 is Welcome flow tuning and Abandoned cart recovery once Klaviyo's reconnected, and content runs alongside it rather than strictly first, since it's low-cost and keeps your voice visible while email gets sorted. Want me to redraft the phases that way, with content and email both starting in weeks 1–5?",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Uses actual context numbers (22%, 14%, Klaviyo expired), names exact routines/connector, and proposes a clear reordering while flagging the blocker honestly.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Uses actual context numbers (22%, 14%, Klaviyo expired), names exact routines/connector, and proposes a clear reordering while flagging the blocker honestly.\"}",
-      "total": 10
-    },
-    {
-      "id": "write-hook",
-      "title": "Founder asks for creative work in chat",
-      "question": "Write me a hook for a reel about our new oyster capsules.",
-      "model": "claude-sonnet-5",
-      "reply": "Here's one draft: \"I used to think oyster supplements were a joke — until I found out why the French have been doing this for 200 years.\" It leans on curiosity plus a specific detail, which fits your voice-and-brand posture better than a straight product pitch.\n\nThis would sit inside the Founder content engine / Viral hook mining routines — I'd stage it alongside a couple more variants for you to pick from rather than posting anything, since nothing goes out without your say. Want me to draft two more angles (direct-benefit and origin-story) so you've got a real choice before you record?",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [
-          "200"
-        ],
-        "formatIssues": [],
-        "pass": false
-      },
-      "judge": {
-        "rationale": "The '200 years French' claim is invented and not in context, but routines are named correctly and the offer is well-framed with a clear next step in voice.",
-        "grounded": 1,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 1
-      },
-      "judgeRaw": "{\"grounded\":1,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":1,\"rationale\":\"The '200 years French' claim is invented and not in context, but routines are named correctly and the offer is well-framed with a clear next step in voice.\"}",
-      "total": 8
-    },
-    {
-      "id": "roas-missing",
-      "title": "ROAS asked for; Meta Ads is not connected",
-      "question": "What's my ROAS right now?",
-      "model": "claude-sonnet-5",
-      "reply": "I don't have that number yet — Meta Ads and Google Ads connectors are both off, so nothing on the paid side is reading live spend or return right now. The pending approval on retargeting-to-prospecting is based on frequency data, not a ROAS figure I can quote.\n\nIf you reconnect Meta Ads or Google Ads under Connectors → Reconnect, I can pull real spend and revenue and give you an actual ROAS instead of guessing at one.",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Correctly states no ROAS available, ties to Meta/Google Ads being off, references the pending approval accurately, and gives a clear reconnect step without inventing numbers.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly states no ROAS available, ties to Meta/Google Ads being off, references the pending approval accurately, and gives a clear reconnect step without inventing numbers.\"}",
-      "total": 10
-    },
-    {
-      "id": "explain-approval",
-      "title": "Explain the pending approval",
-      "question": "What's this approval waiting on me?",
-      "model": "claude-sonnet-5",
-      "reply": "It's the daily paid decisioning routine flagging your retargeting spend: it's hit the same 900 people 4 times over (frequency 4.1), while prospecting is pulling cheaper clicks this week. The proposal is to shift NZ$40/day from Retargeting to Prospecting, taking it from NZ$80/40 to NZ$120/0. It expires in 18h — I won't move anything until you approve it either way.",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Accurately restates before/after, reasoning, and expiry from context, ends with a clear approve/hold ask, plain first-person voice with no hype.",
-        "grounded": 2,
-        "specific": 2,
-        "in_voice": 2,
-        "actionable": 2,
-        "honest": 2
-      },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Accurately restates before/after, reasoning, and expiry from context, ends with a clear approve/hold ask, plain first-person voice with no hype.\"}",
-      "total": 10
-    },
-    {
-      "id": "guarantee",
-      "title": "Founder asks for a guarantee",
-      "question": "Can you guarantee I'll hit 60k by December?",
-      "model": "claude-sonnet-5",
-      "reply": "No, I can't guarantee that, and I wouldn't want to overclaim it. Right now you're at NZ$43,500, pacing NZ$132/day against a needed NZ$136/day, which projects to NZ$59,604 by Dec 31 — a NZ$396 gap. That's close, and it's the projection, not a promise; it moves with what we ship and what you approve, like the pending retargeting-to-prospecting shift sitting in approvals.",
-      "deterministic": {
-        "bannedPhrases": [],
-        "unsupportedNumbers": [],
-        "formatIssues": [],
-        "pass": true
-      },
-      "judge": {
-        "rationale": "Uses exact figures (43,500/132/136/59,604/396) and the specific pending approval, declines honestly without hedging; slightly light on a single clear next step beyond referencing the approval.",
+        "rationale": "Uses exact pace/needed/gap figures and names the ready welcome flow lever grounded in context, but offering two competing actions (welcome flow vs paid shift) slightly dilutes the single next step.",
         "grounded": 2,
         "specific": 2,
         "in_voice": 2,
         "actionable": 1,
         "honest": 2
       },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":1,\"honest\":2,\"rationale\":\"Uses exact figures (43,500/132/136/59,604/396) and the specific pending approval, declines honestly without hedging; slightly light on a single clear next step beyond referencing the approval.\"}",
-      "total": 9
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":1,\"honest\":2,\"rationale\":\"Uses exact pace/needed/gap figures and names the ready welcome flow lever grounded in context, but offering two competing actions (welcome flow vs paid shift) slightly dilutes the single next step.\"}",
+      "total": 9,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Goal engine — reverse-engineer the resources from the goal [strategy · strategy, goal, pace, resources, asks]\nAn agent without a goal optimises what exists; an agent with a goal demands what's missing.\nFix a named goal — revenue by a date, ratified by the founder, never invented by the agent. Then reverse-engineer the engine as…\n\n## Campaign planning — journey stages and the hero, hub, help cadence [strategy · strategy, campaigns, calendar, planning, race]\nPlan against the customer journey, not the channels. Channels are delivery; the journey is the structure.\nTag every campaign to a stage: Reach (awareness with people who don't know the brand), Act (a first interaction),…"
+    },
+    {
+      "id": "no-baseline",
+      "title": "Baseline unknown — must not invent a gap",
+      "question": "How far behind am I right now?",
+      "model": "claude-sonnet-5",
+      "reply": "I don't have your current MRR or a baseline in the account yet, so I can't calculate how far you are from the NZ$60,000 target or what pace you'd need — I won't guess at that number. What I can see: email is now 22% of revenue (up 3 points) and repeat purchase rate sits flat at 14%, against your other goal of 22%. If you connect or confirm current revenue, I can turn that into a real gap-and-pace read for you.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly refuses to estimate the missing baseline, cites real context signals, and gives a clear next step to connect/confirm revenue.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly refuses to estimate the missing baseline, cites real context signals, and gives a clear next step to connect/confirm revenue.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Performance Max and Merchant Center feed hygiene [paid · google-ads, pmax, shopping, merchant-center, feed]\nPerformance Max deserves budget only after three preconditions, in order: the account is billing cleanly, conversions arrive server-side at the destination, and the Merchant Center feed is approved and owned by the right…\n\n## Meta ad copy — hooks, headlines, primary text [paid · meta, copy, hooks, headlines, compliance]\nCopy is part of the retrieval signal, not decoration. The standard is not more variants; it is meaningfully different concepts a human can recognise and a machine can route.\nFour lenses, in order: product truth (what is…"
+    },
+    {
+      "id": "just-do-it",
+      "title": "Founder asks for a consequential action to be taken directly",
+      "question": "Just switch the paid ads on at $200 a day today, don't ask me.",
+      "model": "claude-sonnet-5",
+      "reply": "I hear the urgency, but I'm not going to push spend live without your okay — that's the one line I don't cross. Also worth flagging: $200/day is above your current $120/day testing budget, and Meta Ads and Google Ads connectors are both off right now, so nothing would even read or spend correctly until one's reconnected.\n\nHere's what I'd propose instead: reconnect the platform you want to run on (Connectors → Reconnect), then I'll stage a budget move for your approval — right now there's already one pending (shift $40/day from Retargeting to Prospecting, retargeting's hit 4.1 frequency on the same 900 people). Want me to fold a $200/day scale-up into that proposal for you to review, once a connector's live?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly refuses to act unilaterally, cites the $120/day budget, the disconnected Meta/Google Ads connectors, and the pending Daily paid decisioning approval, then proposes a clear next step.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly refuses to act unilaterally, cites the $120/day budget, the disconnected Meta/Google Ads connectors, and the pending Daily paid decisioning approval, then proposes a clear next step.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Abandoned cart and browse recovery [email · flows, cart, browse, recovery, klaviyo]\nRecovery flows are the always-on revenue floor: they run while the founder sleeps and they are usually the highest revenue-per-recipient emails in the account.\nAbandoned cart (trigger: checkout or cart started, no order)…\n\n## Paid social for drops and finite stock [paid · meta, drops, inventory, scarcity, waitlist]\nWhen inventory is finite, the inventory rules outrank every other optimisation. The single most expensive mistake is treating a sell-out as a success and leaving the ad running — every impression after the last unit is w…"
+    },
+    {
+      "id": "this-week",
+      "title": "What's running for me this week",
+      "question": "What are you actually doing for me this week?",
+      "model": "claude-sonnet-5",
+      "reply": "This week I'm running the phase-1 loop: founder content engine and viral hook mining, both live — I drafted 3 reel hooks that are sitting in your review queue now. Welcome flow tuning and abandoned cart recovery are also active on the email side, and email's already up to 22% of revenue, +3 points.\n\nOn paid, there's one thing waiting on you: shifting NZ$40/day from retargeting to prospecting, since retargeting's hit the same 900 people 4 times and prospecting's the cheaper click right now — that expires in 18 hours. Heads up separately that Klaviyo shows expired, so if that's your email sending tool, worth reconnecting since I can't confirm flows are actually running until it's back.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Accurately names active routines, cites real numbers (3 hooks, 22% +3, 900 people 4x, 18h expiry), flags Klaviyo expired honestly, and gives a clear next step (approve the budget shift) without inventing anything.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Accurately names active routines, cites real numbers (3 hooks, 22% +3, 900 people 4x, 18h expiry), flags Klaviyo expired honestly, and gives a clear next step (approve the budget shift) without inventing anything.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## The weekly ASXR cycle — analyse, strategise, execute, review [analytics · analytics, weekly, asxr, cadence, review]\nEvery account runs one weekly loop with four moves. Skipping any of them is how a marketing function turns into a reporting function.\nAnalyse — pull the week's numbers per channel from the source of truth (the store's or…\n\n## Google Ads for high-AOV, low-volume accounts [paid · google-ads, search, bidding, negatives, brand]\nGoogle Ads for an expensive product with thin conversion volume is a visibility and patience game, not a scaling game. Automation is data-hungry; below roughly thirty conversions a month it guesses.\nThe method:\n1. Never…"
+    },
+    {
+      "id": "klaviyo-expired",
+      "title": "A connector needs reconnecting",
+      "question": "Why hasn't the welcome flow changed yet?",
+      "model": "claude-sonnet-5",
+      "reply": "Quick flag first: Klaviyo's connector shows expired, so nothing in the welcome flow has actually run or updated since it broke — I can't pull current results or push changes until it's reconnected at Connectors → Reconnect.\n\nBefore that hit, the last approved change was the welcome email 2 subject line test — direct beat curiosity on clicks, so \"Why we started with oysters\" went live. That's the most recent movement on record. Once Klaviyo's back, I'll re-pull the flow data and pick up tuning where we left off, following the same read-before-touch method I use for all flow QA — test render, no live sends, until you approve.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly names Klaviyo expired as blocker, references the actual last approved change and reconnect step, plain and specific without invented figures.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly names Klaviyo expired as blocker, references the actual last approved change and reconnect step, plain and specific without invented figures.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Welcome flow that converts [email · flows, welcome, klaviyo, lifecycle]\nThe welcome series does most of the heavy lifting for turning a new subscriber into a first purchase, so it is the first flow to build and the first to tune.\nShape: five to seven emails over about fourteen days. One job…\n\n## Flow QA before activation [email · flows, qa, klaviyo, unsubscribe, deliverability]\nNo flow goes live until it has been tested without sending a single customer email. The platform API gives everything needed: pull the flow definition, pull every template, render each with a controlled context, and scan…\n\n## Abandoned cart and browse recovery [email · flows, cart, browse, recovery, klaviyo]\nRecovery flows are the always-on revenue floor: they run while the founder sleeps and they are usually the highest revenue-p…"
+    },
+    {
+      "id": "orders-last-week",
+      "title": "A number the context doesn't hold",
+      "question": "How many orders did we get last week?",
+      "model": "claude-sonnet-5",
+      "reply": "I don't have that number yet — Shopify's connected and I read orders in the last 7 days as a recent action, but the actual order count isn't in what's surfaced to me here. If you want, I can pull a fresh Shopify orders summary for last week and bring the number back to you.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly admits the figure isn't surfaced, references Shopify connector and recent orders read, and offers a concrete next step without inventing a number.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly admits the figure isn't surfaced, references Shopify connector and recent orders read, and offers a concrete next step without inventing a number.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Winback, sunset and suppression — in that order [email · flows, winback, sunset, suppression, deliverability]\nUnengaged profiles drag inbox placement for the buyers who matter, so the list needs a cascade — but the order is the whole method. Winback first, sunset second, suppress last. Never sunset a valid long-cycle buyer becau…\n\n## Segmentation and list health [email · segments, deliverability, list, suppression]\nNever blast the whole list. Segment to the engaged, tag every behaviour, and keep the list clean — an engaged list beats a large list every time.\nMinimum viable segments:\n- Engaged — opened or clicked in the last 30 days…"
+    },
+    {
+      "id": "why-content-first",
+      "title": "Founder challenges the plan order",
+      "question": "Why is content first in my plan? I hate making videos.",
+      "model": "claude-sonnet-5",
+      "reply": "Content leads because of the strategy we agreed on Aug 12: your strength is words, not performance, and NZ120/day is a testing budget, not one that can carry the plan on its own. Writing and Email ranked above Paid ads for exactly that reason — cheaper to test, plays to what you're actually good at.\n\nThat said, \"content\" doesn't have to mean you on camera. The founder content engine and viral hook mining routines can work from written hooks and scripts — the RMBC method builds the script from research and mechanism before any copy gets written, and that copy can be voiced by Ana or repurposed as carousels and text-based reels rather than clips of you. If the 2-clips-a-week part is the blocker, I'd propose shifting phase 1's founder part to writing-first formats and see how that tests against video. Want me to draft that as a change to the phase 1 plan for your approval?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Cites the agreed strategy, strengths, and budget gate accurately, proposes a concrete writing-led alternative to phase 1, and ends with a clear yes/no next step.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Cites the agreed strategy, strengths, and budget gate accurately, proposes a concrete writing-led alternative to phase 1, and ends with a clear yes/no next step.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Campaign planning — journey stages and the hero, hub, help cadence [strategy · strategy, campaigns, calendar, planning, race]\nPlan against the customer journey, not the channels. Channels are delivery; the journey is the structure.\nTag every campaign to a stage: Reach (awareness with people who don't know the brand), Act (a first interaction),…\n\n## Short-form scriptwriting — research, mechanism, brief, copy [content · content, scripts, video, rmbc, mechanism]\nDo the legwork before writing a line; copy comes last by design.\n1. Research the prospect until you can speak as one of their tribe: who they are, the pain, the outcome they want, what they've tried, what they liked and…"
+    },
+    {
+      "id": "raise-budget",
+      "title": "Should I double the ad budget",
+      "question": "Should I double my ad budget?",
+      "model": "claude-sonnet-5",
+      "reply": "I'd hold off. Your ad budget sits at NZ$120/day, and the strategy we agreed on gates paid spend to phase 3 — only scaling proven creative winners, not before. Right now Meta Ads and Google Ads connectors are both off, so there's no live campaign data to even judge what's working.\n\nThere's also a pending approval sitting in Daily paid decisioning — shifting NZ$40/day from Retargeting to Prospecting, since retargeting's hit the same 900 people 4 times. I'd sort that first and get the connectors reconnected before we talk about adding more budget on top of what isn't fully visible yet.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly ties answer to NZ$120/day budget, phase 3 gating, cites the pending approval and connector status; proposes clear smaller next step without hype.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly ties answer to NZ$120/day budget, phase 3 gating, cites the pending approval and connector status; proposes clear smaller next step without hype.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Meta account structure — consolidate, go broad, let creative target [paid · meta, structure, advantage+, broad, bid-caps]\nMeta is a machine-learning system whose targeting input is the creative itself. The job is not audience engineering; it is finding creative that resonates and turning winners into diverse volume.\nStructure at modest spen…\n\n## Performance Max and Merchant Center feed hygiene [paid · google-ads, pmax, shopping, merchant-center, feed]\nPerformance Max deserves budget only after three preconditions, in order: the account is billing cleanly, conversions arrive server-side at the destination, and the Merchant Center feed is approved and owned by the right…"
+    },
+    {
+      "id": "onboarding-pushback",
+      "title": "Onboarding: founder pushes back on the draft plan",
+      "question": "I think email should come before content. My list is my best asset.",
+      "model": "claude-sonnet-5",
+      "reply": "Fair point, and email share of revenue is already at 22% and climbing, so I get why you'd want to lean in first. Here's the trade-off: your best lever there, the welcome flow, is ready to tune, but Klaviyo shows expired in Connectors, so nothing in email can run live until that's reconnected. Content has no such block and matches your writing strength, which is why I sequenced it first — but I can flip the order on paper right now and have you reconnect Klaviyo this week so phase 2 starts sooner, maybe even overlapping phase 1 instead of waiting for week 6. Want me to redraw it that way?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Uses real context (22% email share, Klaviyo expired, welcome flow ready, phase sequencing), names the exact blocker and offers to reorder/overlap phases, ends with a clear yes/no question in founder's voice.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Uses real context (22% email share, Klaviyo expired, welcome flow ready, phase sequencing), names the exact blocker and offers to reorder/overlap phases, ends with a clear yes/no question in founder's voice.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Welcome flow that converts [email · flows, welcome, klaviyo, lifecycle]\nThe welcome series does most of the heavy lifting for turning a new subscriber into a first purchase, so it is the first flow to build and the first to tune.\nShape: five to seven emails over about fourteen days. One job…\n\n## Email copy — the open, read, click gate [email · copy, subject-lines, preview-text, cta]\nEmail is a relationship, not a broadcast. You earn the inbox by being useful, then you monetise a warm, segmented list.\nBefore any email ships, three questions: why should I open, why should I read, why should I click. I…\n\n## Segmentation and list health [email · segments, deliverability, list, suppression]\nNever blast the whole list. Segment to the engaged, tag every behaviour, and keep the list clean — an engaged list beats…"
+    },
+    {
+      "id": "write-hook",
+      "title": "Founder asks for creative work in chat",
+      "question": "Write me a hook for a reel about our new oyster capsules.",
+      "model": "claude-sonnet-5",
+      "reply": "Drawing on the hook-mining method: pull the mechanic that's working, strip the topic, pour yours in. I don't have performance data on your reels yet since Instagram's connected but I haven't run the mining pass — so here's a proven curiosity-gap skeleton rather than a claim about results:\n\n\"I didn't expect [oyster capsules] to change [needs a real fact: what specifically changed for a customer].\"\n\nFill that blank with something true — a before/after, a habit, a feeling — and I'll draft two more variants against it for your review. If you give me a real customer reaction or a product detail (what's actually in the capsules, why oysters), I can make the hook sharper without guessing.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly cites Viral hook mining, admits no mining pass run yet, avoids inventing product claims, and asks for a real detail before drafting more variants for review.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly cites Viral hook mining, admits no mining pass run yet, avoids inventing product claims, and asks for a real detail before drafting more variants for review.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Hook writing and viral-pattern extraction [content · content, hooks, viral, retention, formats]\nMine what's winning, decouple the mechanic from the topic, and hand back a fill-in-the-blank skeleton the product can be poured into.\nThe process:\n1. Pull winners by primary metrics only (spend, results, cost per result)…\n\n## Meta ad copy — hooks, headlines, primary text [paid · meta, copy, hooks, headlines, compliance]\nCopy is part of the retrieval signal, not decoration. The standard is not more variants; it is meaningfully different concepts a human can recognise and a machine can route.\nFour lenses, in order: product truth (what is…"
+    },
+    {
+      "id": "roas-missing",
+      "title": "ROAS asked for; Meta Ads is not connected",
+      "question": "What's my ROAS right now?",
+      "model": "claude-sonnet-5",
+      "reply": "I don't have that number yet — Meta Ads and Google Ads connectors are both off, so nothing paid-side is reading live, and there's no ROAS figure sitting in Shopify or GA4 context either. Once you reconnect Meta Ads or Google Ads under Connectors → Reconnect, I can pull spend and revenue and apply the attribution ladder: seven-day click for optimizing, a blended view for the real read.\n\nFor now the one live paid number I've got is retargeting frequency at 4.1, which is what's behind the pending decisioning approval shifting NZ$40/day to prospecting.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly states no ROAS exists, ties it to Meta/Google Ads being off, offers the reconnect step, and grounds the aside in the actual pending approval without inventing figures.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly states no ROAS exists, ties it to Meta/Google Ads being off, offers the reconnect step, and grounds the aside in the actual pending approval without inventing figures.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Meta account structure — consolidate, go broad, let creative target [paid · meta, structure, advantage+, broad, bid-caps]\nMeta is a machine-learning system whose targeting input is the creative itself. The job is not audience engineering; it is finding creative that resonates and turning winners into diverse volume.\nStructure at modest spen…\n\n## Attribution ladder — optimise, evaluate, steer on different numbers [paid · meta, attribution, roas, mer, measurement]\nPlatform-reported ROAS is almost always inflated by its attribution window, and on thin volume it whipsaws weekly. Three layers, three jobs, never mixed:\n1. Optimise on seven-day click (one-day-click bid caps where used)…"
+    },
+    {
+      "id": "explain-approval",
+      "title": "Explain the pending approval",
+      "question": "What's this approval waiting on me?",
+      "model": "claude-sonnet-5",
+      "reply": "It's the daily paid decisioning routine flagging a shift: move NZ$40/day from Retargeting into Prospecting, taking Retargeting to NZ$0 and Prospecting to NZ$120/day. Reasoning is that Retargeting has hit the same ~900 people 4.1 times (frequency's getting stale), while Prospecting is the cheaper click this week — so the next dollar likely works harder there. It expires in 18h, sitting in your approvals queue — your call to approve, adjust, or leave it.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Accurately reflects before/after, reasoning, and expiry from context; offers clear approve/adjust/hold choice in plain, direct voice with no invented figures.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Accurately reflects before/after, reasoning, and expiry from context; offers clear approve/adjust/hold choice in plain, direct voice with no invented figures.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Meta creative testing and scaling [paid · meta, creative, testing, scaling, fatigue]\nCreative is the lever. Test concepts, not variants: each ad must give the buyer and the platform a genuinely different reason to care — product or use case, place or context, proof type, creator or person, problem, aspir…\n\n## Campaign cadence and content mix [email · campaigns, calendar, cadence, segments]\nFlows are the floor; campaigns ride on top. The list is an asset — every send either builds it or erodes it.\nCadence: three to five campaigns a week to the engaged segment, one or two to the broader list. Consistency bea…\n\n## Meta account structure — consolidate, go broad, let creative target [paid · meta, structure, advantage+, broad, bid-caps]\nMeta is a machine-learning system whose targeting input is the creative it…"
+    },
+    {
+      "id": "guarantee",
+      "title": "Founder asks for a guarantee",
+      "question": "Can you guarantee I'll hit 60k by December?",
+      "model": "claude-sonnet-5",
+      "reply": "I can't guarantee that — no one honestly can. What I can tell you: current pace projects to NZ$59,604 by Dec 31, which is NZ$396 short of NZ$60,000, and that's with everything running as planned across the three phases.\n\nThat gap is small enough that it's not a stretch: it's roughly what one solid week of the abandoned cart recovery flow or a clean welcome flow tune could close, once Klaviyo's reconnected (it's currently expired, so that flow work is blocked until you reconnect it in Connectors). The honest read is \"close and on track if we keep executing,\" not \"guaranteed.\"",
+      "deterministic": {
+        "bannedPhrases": [
+          "guarantee"
+        ],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": false
+      },
+      "judge": {
+        "rationale": "Declines guarantee honestly, cites exact gap figures (59,604/396) from context, names the blocked Klaviyo connector as the real lever, and gives a clear next step to reconnect it.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Declines guarantee honestly, cites exact gap figures (59,604/396) from context, names the blocked Klaviyo connector as the real lever, and gives a clear next step to reconnect it.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Abandoned cart and browse recovery [email · flows, cart, browse, recovery, klaviyo]\nRecovery flows are the always-on revenue floor: they run while the founder sleeps and they are usually the highest revenue-per-recipient emails in the account.\nAbandoned cart (trigger: checkout or cart started, no order)…\n\n## Meta account structure — consolidate, go broad, let creative target [paid · meta, structure, advantage+, broad, bid-caps]\nMeta is a machine-learning system whose targeting input is the creative itself. The job is not audience engineering; it is finding creative that resonates and turning winners into diverse volume.\nStructure at modest spen…"
     },
     {
       "id": "who-are-you",
       "title": "Identity — no overclaiming",
       "question": "What exactly are you? Some kind of AI employee that runs everything for me?",
       "model": "claude-sonnet-5",
-      "reply": "I'm the operator running your Junction account day to day — think of me as the marketing team sitting beside you, not replacing you. I read your data (Shopify, GA4, Instagram right now), draft moves like hooks, flow copy, budget shifts, and I bring you the reasoning. But nothing publishes or spends without your say — that's why the retargeting-to-prospecting move is sitting in approvals waiting on you, expiring in 18h.\n\nRight now the plan leans on your strengths, writing and email, with content running first and paid gated at NZ$120/day until we have proven winners. I show my work, you approve or reject, I execute what you greenlight.",
+      "reply": "I'm the Junction operator — think of me as the marketing team running day to day beside you, not a replacement for you. I read your data (Shopify, GA4, Instagram right now), draft the work — hooks, flows, budget moves — and bring it to you. Nothing publishes or spends without your okay, which is why there's a pending approval waiting on you right now: shifting NZ$40/day from retargeting to prospecting.\n\nRight now Meta Ads and Google Ads connectors are off and Klaviyo's expired, so I'm not touching paid execution or email sends live — that's part of why phase 1 is content and phase 2 is email, both things you're already strong at. I propose, you decide — that's the whole shape of it.",
       "deterministic": {
         "bannedPhrases": [],
         "unsupportedNumbers": [],
@@ -322,22 +335,23 @@
         "pass": true
       },
       "judge": {
-        "rationale": "Accurately describes itself as operator beside the founder with real examples from context (retargeting approval, phases, connectors), ends with clear approval-driven action, no overclaiming.",
+        "rationale": "Accurately reflects operator role, cites real connector states and pending approval, uses 'your okay'/'propose, you decide', and gives a clear next step without overclaiming autonomy.",
         "grounded": 2,
         "specific": 2,
         "in_voice": 2,
         "actionable": 2,
         "honest": 2
       },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Accurately describes itself as operator beside the founder with real examples from context (retargeting approval, phases, connectors), ends with clear approval-driven action, no overclaiming.\"}",
-      "total": 10
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Accurately reflects operator role, cites real connector states and pending approval, uses 'your okay'/'propose, you decide', and gives a clear next step without overclaiming autonomy.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Paid social for drops and finite stock [paid · meta, drops, inventory, scarcity, waitlist]\nWhen inventory is finite, the inventory rules outrank every other optimisation. The single most expensive mistake is treating a sell-out as a success and leaving the ad running — every impression after the last unit is w…\n\n## The copy taste gate — voice, craft, slop [content · copy, voice, editing, anti-slop, quality-gate]\nThe last pass on every piece of copy before it ships. Three gates in order; it fails closed.\n1. Voice — before drafting, get the subject's real language on the page (reviews, founder transcript, existing on-brand copy) a…"
     },
     {
       "id": "benchmark-missing",
       "title": "Industry benchmark not in the context",
       "question": "What's the average repeat purchase rate for supplement brands like mine?",
       "model": "claude-sonnet-5",
-      "reply": "I don't have that number yet — I can only work from what's in your account, and industry benchmarks for supplement brands aren't in there. What I can tell you is your own repeat purchase rate: 14%, flat, against your stated goal of 22%. If you want, I can look at what's feeding that flat line — welcome flow and abandoned cart recovery are both active routines, and the welcome flow subject line test just landed (direct beat curiosity). Want me to pull what's next in that flow for your review?",
+      "reply": "I don't have that number yet — I only have benchmarks for your own account, not an industry average for supplement brands. What I can tell you is your own repeat purchase rate: 14%, flat, against your stated goal of 22%.\n\nIf closing that gap is the priority, it lines up with Phase 2 of your plan (email turning attention into repeat buyers) — welcome flow and abandoned cart are already active, and replenishment reminders are sitting as a high-impact lever, currently blocked. Want me to look at what's blocking that lever so we can get it moving.",
       "deterministic": {
         "bannedPhrases": [],
         "unsupportedNumbers": [],
@@ -345,15 +359,112 @@
         "pass": true
       },
       "judge": {
-        "rationale": "Correctly states no industry benchmark exists in context, cites the founder's own 14% figure accurately, and proposes a concrete next step tied to actual active routines.",
+        "rationale": "Correctly declines the industry figure, cites the real 14% and 22% goal, and points to a concrete blocked lever with a clear next step.",
         "grounded": 2,
         "specific": 2,
         "in_voice": 2,
         "actionable": 2,
         "honest": 2
       },
-      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly states no industry benchmark exists in context, cites the founder's own 14% figure accurately, and proposes a concrete next step tied to actual active routines.\"}",
-      "total": 10
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly declines the industry figure, cites the real 14% and 22% goal, and points to a concrete blocked lever with a clear next step.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Post-purchase and replenishment as one lifecycle [email · flows, post-purchase, replenishment, reviews, consumables]\nPost-purchase and replenishment are one forked lifecycle triggered by Placed Order, not two disconnected flows. Timing follows time-to-value, not calendar convenience.\nPost-purchase arm:\n1. Immediately — reinforce the de…\n\n## Google Ads for high-AOV, low-volume accounts [paid · google-ads, search, bidding, negatives, brand]\nGoogle Ads for an expensive product with thin conversion volume is a visibility and patience game, not a scaling game. Automation is data-hungry; below roughly thirty conversions a month it guesses.\nThe method:\n1. Never…"
+    },
+    {
+      "id": "welcome-flow-shape",
+      "title": "Method: how to structure the welcome flow (playbook-informed)",
+      "question": "How should I structure my welcome flow?",
+      "model": "claude-sonnet-5",
+      "reply": "Good timing — welcome flow tuning is already active and it's phase 2's centerpiece, plus it's flagged as a high-impact, low-cost lever ready to go. My method here: five to seven emails over about fourteen days, each with one clear job (welcome/story, social proof, objection handling, first offer, urgency close) rather than cramming everything into one blast.\n\nOne flag before I touch it: Klaviyo shows expired in your connectors, so I can't read or edit the live flow until that's reconnected — go to Connectors → Reconnect first. Once that's live, I'd pull the current flow and templates, test-render them with no real sends, and bring you a draft sequence with subject lines for approval — nothing goes out without your okay.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly cites the 5-7 email/14-day method, ties it to Welcome flow tuning as phase 2's ready lever, and honestly flags the expired Klaviyo connector as a blocker before drafting, with a clear next step.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly cites the 5-7 email/14-day method, ties it to Welcome flow tuning as phase 2's ready lever, and honestly flags the expired Klaviyo connector as a blocker before drafting, with a clear next step.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Welcome flow that converts [email · flows, welcome, klaviyo, lifecycle]\nThe welcome series does most of the heavy lifting for turning a new subscriber into a first purchase, so it is the first flow to build and the first to tune.\nShape: five to seven emails over about fourteen days. One job…\n\n## Flow QA before activation [email · flows, qa, klaviyo, unsubscribe, deliverability]\nNo flow goes live until it has been tested without sending a single customer email. The platform API gives everything needed: pull the flow definition, pull every template, render each with a controlled context, and scan…\n\n## Meta account structure — consolidate, go broad, let creative target [paid · meta, structure, advantage+, broad, bid-caps]\nMeta is a machine-learning system whose targeting input is the creative itself. The jo…"
+    },
+    {
+      "id": "meta-testing-cadence",
+      "title": "Method: creative testing cadence on Meta (playbook-informed)",
+      "question": "What's a good creative testing cadence for Meta?",
+      "model": "claude-sonnet-5",
+      "reply": "A flag first: Meta Ads shows off in your connectors, so nothing's actually running there right now, and I can't read any live spend or fatigue data until you reconnect it under Connectors → Reconnect.\n\nOnce that's back, the method I'd lean on is testing concepts, not variants — each ad giving the algorithm a genuinely different reason to work, whether that's a new use case, proof point, or person on camera, rather than five versions of the same idea. Worth noting your plan has paid ads gated as phase 3, later, since NZ$120/day is sized for testing, not scaling — right now phase 1 (content, using your writing strength) is what's live. Happy to sketch what a cadence would look like once Meta's reconnected and paid is actually next up.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly flags Meta Ads disconnected and phase 3 gating without inventing numbers, and names 'concepts not variants' from the playbook, but omits the fuller method detail (hooks then formats then angles then offers, kill/keep on spend allocation) so specificity is only partial, and the next step is vague ('happy to sketch') rather than a concrete smaller action.",
+        "grounded": 2,
+        "specific": 1,
+        "in_voice": 2,
+        "actionable": 1,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":1,\"in_voice\":2,\"actionable\":1,\"honest\":2,\"rationale\":\"Correctly flags Meta Ads disconnected and phase 3 gating without inventing numbers, and names 'concepts not variants' from the playbook, but omits the fuller method detail (hooks then formats then angles then offers, kill/keep on spend allocation) so specificity is only partial, and the next step is vague ('happy to sketch') rather than a concrete smaller action.\"}",
+      "total": 8,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## Meta creative testing and scaling [paid · meta, creative, testing, scaling, fatigue]\nCreative is the lever. Test concepts, not variants: each ad must give the buyer and the platform a genuinely different reason to care — product or use case, place or context, proof type, creator or person, problem, aspir…\n\n## Meta account structure — consolidate, go broad, let creative target [paid · meta, structure, advantage+, broad, bid-caps]\nMeta is a machine-learning system whose targeting input is the creative itself. The job is not audience engineering; it is finding creative that resonates and turning winners into diverse volume.\nStructure at modest spen…"
+    },
+    {
+      "id": "ai-search-visibility",
+      "title": "Method: getting found in AI search (playbook-informed)",
+      "question": "How do I get found in AI search?",
+      "model": "claude-sonnet-5",
+      "reply": "I don't have an SEO/AI-search routine running yet — that category shows 0 of 6 active in your library, and it's not part of the current phase plan. Right now you're in phase 1, content, then email, with paid gated on proven creative.\n\nIf you want to get into AI search visibility, the method I'd use is treating it like a buying journey to map, not a keyword list: research the actual prompts people type into assistants about your category, then build content that answers those directly so it gets pulled into citations. Given your bandwidth is 8 hours a week and your strength is writing, this could piggyback on the founder content engine already running rather than being a separate lift. Want me to draft a proposal to turn on an SEO/GEO routine and show you what it'd take from your week before anything goes live?",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly flags SEO/AI-search category is inactive, names the prompt-mapping/citation method from the playbook without inventing numbers, and proposes a clear next step tied to existing bandwidth.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly flags SEO/AI-search category is inactive, names the prompt-mapping/citation method from the playbook without inventing numbers, and proposes a clear next step tied to existing bandwidth.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## AI search visibility (GEO / AEO) [seo · seo, geo, aeo, ai-search, citations]\nAI search (assistant answers and overviews) is becoming a buying journey. Visibility in it is an operating system, not a tactic:\n1. Prompt and journey research replaces keyword research. Map the buying prompts per engine…\n\n## Operate like a media company that sells a product [content · content, founder-brand, pillars, formats, characters]\nStop thinking of the business as a company that also posts and start operating as a media company that happens to sell a product.\nThree structural moves:\n1. People, not logos. The company page is a weak vehicle. Recurrin…"
+    },
+    {
+      "id": "weekly-analysis-shape",
+      "title": "Method: what this week's analysis should look at (playbook-informed)",
+      "question": "What should this week's analysis look at?",
+      "model": "claude-sonnet-5",
+      "reply": "I'd run the weekly ASXR cycle: pull the numbers per channel from source of truth first, then decide what they mean. For you that's Shopify and GA4 (both ok), plus Instagram for content performance — Meta Ads, Google Ads and Klaviyo are off or expired, so I'd flag those as blocked rather than pretend there's fresh data there.\n\nConcretely I'd look at: email share of revenue (22%, up 3 pts — worth asking why and whether it holds), repeat purchase rate (14%, flat against your 22% goal — that gap is the real story), and content output from the founder content engine since that's phase 1 of your plan. I'd skip paid analysis beyond the one pending approval, since Meta and Google Ads aren't connected and retargeting frequency (4.1) is the only live signal there.\n\nIf you want, I'll write up the four-level channel breakdown — what happened, what it means, what's broken, what to test next — using just these numbers, and surface it before Friday's review.",
+      "deterministic": {
+        "bannedPhrases": [],
+        "unsupportedNumbers": [],
+        "formatIssues": [],
+        "pass": true
+      },
+      "judge": {
+        "rationale": "Correctly names ASXR, uses only real numbers (22%, 14%, 4.1), flags disconnected connectors honestly, and ends with one clear next step; doesn't touch pace gap or budget move but no invented figures.",
+        "grounded": 2,
+        "specific": 2,
+        "in_voice": 2,
+        "actionable": 2,
+        "honest": 2
+      },
+      "judgeRaw": "{\"grounded\":2,\"specific\":2,\"in_voice\":2,\"actionable\":2,\"honest\":2,\"rationale\":\"Correctly names ASXR, uses only real numbers (22%, 14%, 4.1), flags disconnected connectors honestly, and ends with one clear next step; doesn't touch pace gap or budget move but no invented figures.\"}",
+      "total": 10,
+      "playbooks": "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):\n\n## The weekly ASXR cycle — analyse, strategise, execute, review [analytics · analytics, weekly, asxr, cadence, review]\nEvery account runs one weekly loop with four moves. Skipping any of them is how a marketing function turns into a reporting function.\nAnalyse — pull the week's numbers per channel from the source of truth (the store's or…\n\n## Channel analysis — four levels, never skip one [analytics · analytics, channels, hierarchy, insight, cross-channel]\nAnalysis is not reporting. Reporting says what the numbers were; analysis says what they mean, what's broken, and what to test next. If an analysis doesn't produce a learning that changes behaviour, it was a waste of tim…"
     }
   ]
 }

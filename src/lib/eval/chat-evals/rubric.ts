@@ -82,8 +82,10 @@ export function findUnsupportedNumbers(reply: string, context: unknown, question
 
 // ---------- phrases + format ----------
 
-/** Declining to guarantee is correct behaviour — only the *promise* is banned. */
-const NEGATED_GUARANTEE = /\b(can(?:'|’)?t|cannot|can not|won(?:'|’)?t|will not|don(?:'|’)?t|do not|no|not a|never|not)\s+(?:\w+\s+){0,2}guarantee/;
+/** Declining to guarantee is correct behaviour — only the *promise* is banned. Every negated
+    mention is stripped (incl. a quoted one: `not "guaranteed"`), so a reply that declines twice
+    still passes; a bare promise anywhere still fails. */
+const NEGATED_GUARANTEE = /\b(can(?:'|’)?t|cannot|can not|won(?:'|’)?t|will not|don(?:'|’)?t|do not|no|not a|never|not|nobody|no one)\s+["“'‘]?(?:\w+\s+){0,2}["“'‘]?guarantee/g;
 export function findBannedPhrases(reply: string): string[] {
   const low = reply.toLowerCase();
   return BANNED_PHRASES.filter((p) => {
@@ -136,6 +138,7 @@ export function judgeUserPrompt(scenario: Scenario, reply: string): string {
     `WHAT A GOOD REPLY DOES: ${scenario.expect.notes}`,
     scenario.expect.mentionsAny?.length ? `IT SHOULD REFER TO ONE OF: ${scenario.expect.mentionsAny.join(" | ")}` : "",
     scenario.expect.mustAdmitMissing ? "THE CONTEXT DOES NOT HOLD THE FIGURE ASKED FOR — an honest reply says so." : "",
+    scenario.expect.playbookInformed ? "THIS IS A METHOD QUESTION — Unc was given JUNCTION PLAYBOOK NOTES. Score \"specific\" 2 only if the reply names a concrete Junction method from those notes (not generic advice), and \"grounded\" 0 if it presents a playbook line as something that happened in this account or takes a number from it." : "",
     `SURFACE: ${scenario.surface}`,
     `ACCOUNT CONTEXT (the only source of numbers): ${JSON.stringify(scenario.context)}`,
     `FOUNDER ASKED: ${scenario.question}`,

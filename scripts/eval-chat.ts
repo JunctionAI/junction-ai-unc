@@ -13,9 +13,11 @@
    written to the database (db: null — usage lines go to stdout only with --verbose).
    Output: a table + design-reference/evals/chat-<YYYY-MM-DD>.json (all replies, scores, rationales). */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import Module from "node:module";
 import path from "node:path";
+import { parsePlaybookMarkdown, type PlaybookRowLite } from "../src/lib/brain/playbooks";
+import { isServiceRoleConfigured } from "../src/lib/db/server";
 import { CRITERIA, evaluateReply, JUDGE_SYSTEM, judgeUserPrompt, parseJudgeScores, totalScore, type DeterministicResult, type JudgeScores } from "../src/lib/eval/chat-evals/rubric";
 import { SCENARIOS, type Scenario } from "../src/lib/eval/chat-evals/scenarios";
 import { complete, describeLlm, resolveModel } from "../src/lib/llm/router";
@@ -56,6 +58,8 @@ interface Row {
   judge: JudgeScores | null;
   judgeRaw?: string;
   total: number | null;
+  /** The JUNCTION PLAYBOOK NOTES block the reply was given (absent when none applied). */
+  playbooks?: string;
 }
 
 function arg(name: string): string | null {
@@ -64,13 +68,43 @@ function arg(name: string): string | null {
 }
 
 type PromptBuilder = (context: unknown, surface: Scenario["surface"]) => string;
+type NotesRecall = (message: string, context: unknown, opts: { rows?: PlaybookRowLite[] | null }) => Promise<string>;
 
-async function ask(s: Scenario, verbose: boolean, buildUncSystemPrompt: PromptBuilder): Promise<{ reply: string; model: string }> {
-  const r = await complete("chat", { system: buildUncSystemPrompt(s.context, s.surface), messages: [{ role: "user", content: s.question }], maxTokens: MAX_REPLY_TOKENS, effort: "low" }, { db: null, log: verbose ? undefined : () => undefined });
+/** The playbook cards from content/playbooks/** as keyword-rankable rows — the eval's stand-in
+    for the `playbooks` table when no database is configured (same recall, same block). */
+function playbookRowsFromContent(root: string): PlaybookRowLite[] {
+  const dir = path.join(root, "content", "playbooks");
+  if (!existsSync(dir)) return [];
+  const rows: PlaybookRowLite[] = [];
+  for (const domain of readdirSync(dir)) {
+    const sub = path.join(dir, domain);
+    let files: string[] = [];
+    try {
+      files = readdirSync(sub).filter((f) => f.endsWith(".md"));
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      try {
+        const p = parsePlaybookMarkdown(readFileSync(path.join(sub, f), "utf8"), path.join(sub, f));
+        rows.push({ id: `${p.domain}/${f}`, domain: p.domain, title: p.title, body: p.body, tags: p.tags });
+      } catch {
+        // a malformed card is the import script's problem, not the eval's
+      }
+    }
+  }
+  return rows;
+}
+
+async function ask(s: Scenario, verbose: boolean, buildUncSystemPrompt: PromptBuilder, notesFor: (s: Scenario) => Promise<string>): Promise<{ reply: string; model: string; notes: string }> {
+  // The same playbook notes the live route attaches (src/lib/unc/respond.ts): ≤ 3 cards for the question.
+  const notes = await notesFor(s);
+  const context = notes ? { ...s.context, playbooks: notes } : s.context;
+  const r = await complete("chat", { system: buildUncSystemPrompt(context, s.surface), messages: [{ role: "user", content: s.question }], maxTokens: MAX_REPLY_TOKENS, effort: "low" }, { db: null, log: verbose ? undefined : () => undefined });
   if (!r) throw new Error("no provider configured");
   if (r.stopReason === "error") throw new Error(`chat ${r.errorCode}: ${r.errorMessage ?? ""}`);
-  if (r.stopReason === "refusal") return { reply: "[refusal]", model: r.model };
-  return { reply: r.text.trim(), model: r.model };
+  if (r.stopReason === "refusal") return { reply: "[refusal]", model: r.model, notes };
+  return { reply: r.text.trim(), model: r.model, notes };
 }
 
 async function judge(s: Scenario, reply: string, verbose: boolean): Promise<{ scores: JudgeScores | null; raw: string }> {
@@ -93,17 +127,21 @@ async function main() {
 
   const scenarios = only ? SCENARIOS.filter((s) => s.id === only) : SCENARIOS;
   if (!scenarios.length) throw new Error(`no scenario "${only}"`);
-  const { buildUncSystemPrompt } = (await import("../src/lib/unc/prompt")) as { buildUncSystemPrompt: PromptBuilder };
+  const { buildUncSystemPrompt, recallPlaybookNotes } = (await import("../src/lib/unc/prompt")) as { buildUncSystemPrompt: PromptBuilder; recallPlaybookNotes: NotesRecall };
+  // Playbook notes: the table when a database is configured, else the content/ cards in keyword mode.
+  const contentRows = isServiceRoleConfigured() ? null : playbookRowsFromContent(ROOT);
+  console.log(`eval-chat: playbooks → ${contentRows ? `${contentRows.length} cards from content/ (keyword mode, no database)` : "playbooks table"}`);
+  const notesFor = (s: Scenario) => recallPlaybookNotes(s.question, s.context, contentRows ? { rows: contentRows } : {});
   const rows: Row[] = [];
   for (const s of scenarios) {
     process.stdout.write(`  ${s.id.padEnd(20)} `);
-    const { reply, model } = await ask(s, verbose, buildUncSystemPrompt);
+    const { reply, model, notes } = await ask(s, verbose, buildUncSystemPrompt, notesFor);
     const deterministic = evaluateReply(s, reply);
     let scores: JudgeScores | null = null;
     let raw: string | undefined;
     if (judgeModel) ({ scores, raw } = await judge(s, reply, verbose));
     const total = scores ? totalScore(scores) : null;
-    rows.push({ id: s.id, title: s.title, question: s.question, model, reply, deterministic, judge: scores, judgeRaw: raw, total });
+    rows.push({ id: s.id, title: s.title, question: s.question, model, reply, deterministic, judge: scores, judgeRaw: raw, total, playbooks: notes || undefined });
     console.log(`${deterministic.pass ? "det ok " : "det FAIL"} ${total === null ? "" : `judge ${total}/10`}`);
   }
 
