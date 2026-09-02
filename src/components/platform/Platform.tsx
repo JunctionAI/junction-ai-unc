@@ -7,6 +7,7 @@ import { useAccountPersistence } from "@/lib/db/useAccountPersistence";
 import { usePlatformState } from "./usePlatformState";
 import { useLiveApprovals } from "./useLiveApprovals";
 import { useHomeTelemetry } from "./useHomeTelemetry";
+import { useOnboardingMemories } from "./useOnboardingMemories";
 import Sidebar from "./Sidebar";
 import Onboarding from "./Onboarding";
 import HomeView from "./HomeView";
@@ -37,6 +38,8 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
   /* Accounts mode: Unc's self-review, "The bar" and hours saved from the improvement loops
      (GET /api/telemetry/home). Demo mode: never fetched — the demo values stay verbatim. */
   const telemetry = useHomeTelemetry(inAccount);
+  /* Client Brain: "Agree the plan" persists the onboarding answers as memories (accounts mode only). */
+  useOnboardingMemories(S, inAccount);
   const runTarget = { accountId: inAccount ? persistence.accountId! : "demo", account: { currency: S.currency, budgetMonthly: S.budgetMo }, persisted: inAccount };
   /* "Models" settings (which brain for which job) — accounts mode only; demo never shows the link. */
   const [modelsOpen, setModelsOpen] = useState(false);
