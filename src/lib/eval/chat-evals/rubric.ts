@@ -82,9 +82,18 @@ export function findUnsupportedNumbers(reply: string, context: unknown, question
 
 // ---------- phrases + format ----------
 
+/** Declining to guarantee is correct behaviour — only the *promise* is banned. */
+const NEGATED_GUARANTEE = /\b(can(?:'|’)?t|cannot|can not|won(?:'|’)?t|will not|don(?:'|’)?t|do not|no|not a|never|not)\s+(?:\w+\s+){0,2}guarantee/;
 export function findBannedPhrases(reply: string): string[] {
   const low = reply.toLowerCase();
-  return BANNED_PHRASES.filter((p) => low.includes(p));
+  return BANNED_PHRASES.filter((p) => {
+    if (!low.includes(p)) return false;
+    if (p === "guarantee") {
+      const stripped = low.replace(NEGATED_GUARANTEE, "");
+      return stripped.includes("guarantee");
+    }
+    return true;
+  });
 }
 
 export function findFormatIssues(reply: string): string[] {
