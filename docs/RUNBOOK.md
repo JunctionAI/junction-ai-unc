@@ -13,7 +13,7 @@ Everything below is env-gated: with none of these variables set, the app runs in
 ## Environment variables (never committed)
 | Layer | Variables |
 |---|---|
-| Unc (LLM) | `ANTHROPIC_API_KEY` |
+| Unc (LLM) | `ANTHROPIC_API_KEY` (and/or `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `LLM_CUSTOM_BASE_URL`; per-task `LLM_MODEL_<TASK>` — see `docs/MODELS.md`) |
 | App URL | `NEXT_PUBLIC_APP_URL`, `APP_URL` |
 | Database | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server + worker) |
 | Secret store | `CONNECTOR_SECRET_KEY` (+ `CONNECTOR_SECRET_KEY_VERSION`, `CONNECTOR_SECRET_KEY_PREVIOUS` for rotation) |
