@@ -1,0 +1,329 @@
+/* SupabaseStore — the Store contract on supabase/migrations/0001 + 0002.
+
+   Column mapping is exactly the table in interface.ts. The adapter is written against the
+   minimal DbClient slice (src/lib/db/types.ts) so it runs unchanged on the real client and
+   on the in-memory fake used by the tests (src/lib/db/__tests__/fakeSupabase.ts), which
+   is how the mapping is verified without a live project.
+
+   Semantics mirror MemoryStore:
+     - records come back with optional fields *omitted* (not null) so deep-equality holds;
+     - timestamps are normalised to ISO-8601 with milliseconds on read (Postgres would
+       otherwise hand back "+00:00" formatting);
+     - updateRun with an explicit `undefined` value writes NULL (snapshot cleared on finish);
+     - createRun on an existing id throws (primary-key violation);
+     - updateRun / updateApproval on an unknown id throw (0 rows for .single()).
+
+   sumSpend sums payload.spend.amount in JS over the mutation receipts in the window. Upgrade
+   path once volume warrants it: a `sum_spend(account_id, since, until)` SQL function using
+   (payload->'spend'->>'amount')::numeric over receipts_spend_idx, called via db.rpc. */
+
+import type { ApprovalRecord, ApprovalStatus, Receipt, RoutineId, SpendAmount, TasteEvent } from "../types";
+import type { ListReceiptsOptions, ListRunsOptions, RoutineStateRecord, RunRecord, RunSnapshot, Store } from "./interface";
+import { unwrap, type DbClient, type Row } from "@/lib/db/types";
+
+// ---------- helpers ----------
+
+const nul = <T>(v: T | undefined): T | null => (v === undefined ? null : v);
+
+/** Postgres returns timestamptz as "2026-09-02T07:00:00+00:00"; the runtime compares ISO strings. */
+const ts = (v: unknown): string => (typeof v === "string" ? new Date(v).toISOString() : String(v));
+const tsOpt = (v: unknown): string | undefined => (v === null || v === undefined ? undefined : ts(v));
+const opt = <T>(v: unknown): T | undefined => (v === null || v === undefined ? undefined : (v as T));
+
+/** Drop undefined keys so records deep-equal MemoryStore's JSON-cloned ones. */
+function compact<T extends object>(o: T): T {
+  for (const k of Object.keys(o) as (keyof T)[]) if (o[k] === undefined) delete o[k];
+  return o;
+}
+
+// ---------- row ↔ record ----------
+
+function stateToRow(r: RoutineStateRecord): Row {
+  return {
+    account_id: r.accountId,
+    routine_id: r.routineId,
+    enabled: r.enabled,
+    version: r.version,
+    draft_spec: r.draftSpec,
+    live_spec: r.liveSpec,
+    updated_at: r.updatedAt,
+  };
+}
+function rowToState(row: Row): RoutineStateRecord {
+  return {
+    accountId: row.account_id as string,
+    routineId: row.routine_id as RoutineId,
+    enabled: !!row.enabled,
+    version: Number(row.version),
+    draftSpec: (row.draft_spec as RoutineStateRecord["draftSpec"]) ?? null,
+    liveSpec: (row.live_spec as RoutineStateRecord["liveSpec"]) ?? null,
+    updatedAt: ts(row.updated_at),
+  };
+}
+
+function runToRow(r: RunRecord): Row {
+  return {
+    id: r.id,
+    account_id: r.accountId,
+    routine_id: r.routineId,
+    version: r.version,
+    mode: r.mode,
+    status: r.status,
+    started_at: r.startedAt,
+    finished_at: nul(r.finishedAt),
+    summary: nul(r.summary),
+    approval_id: nul(r.approvalId),
+    dedup_key: nul(r.dedupKey),
+    spec_hash: nul(r.specHash),
+    snapshot: nul(r.snapshot),
+  };
+}
+const RUN_PATCH_COLUMNS: Record<keyof Omit<RunRecord, "id" | "accountId">, string> = {
+  routineId: "routine_id",
+  version: "version",
+  mode: "mode",
+  status: "status",
+  startedAt: "started_at",
+  finishedAt: "finished_at",
+  summary: "summary",
+  approvalId: "approval_id",
+  dedupKey: "dedup_key",
+  specHash: "spec_hash",
+  snapshot: "snapshot",
+};
+function runPatchToRow(patch: Partial<Omit<RunRecord, "id" | "accountId">>): Row {
+  const row: Row = {};
+  for (const k of Object.keys(patch) as (keyof typeof patch)[]) {
+    const col = RUN_PATCH_COLUMNS[k];
+    if (col) row[col] = nul(patch[k]); // explicit undefined → NULL (clears)
+  }
+  return row;
+}
+function rowToRun(row: Row): RunRecord {
+  return compact({
+    id: row.id as string,
+    accountId: row.account_id as string,
+    routineId: row.routine_id as RoutineId,
+    version: Number(row.version),
+    mode: row.mode as RunRecord["mode"],
+    status: row.status as RunRecord["status"],
+    startedAt: ts(row.started_at),
+    finishedAt: tsOpt(row.finished_at),
+    summary: opt<string>(row.summary),
+    approvalId: opt<string>(row.approval_id),
+    dedupKey: opt<string>(row.dedup_key),
+    specHash: opt<string>(row.spec_hash),
+    snapshot: opt<RunSnapshot>(row.snapshot),
+  });
+}
+
+function approvalToRow(a: ApprovalRecord): Row {
+  return {
+    id: a.id,
+    account_id: a.accountId,
+    run_id: a.runId,
+    routine_id: a.routineId,
+    title: a.title,
+    detail: nul(a.detail),
+    before_state: nul(a.beforeState),
+    after_state: nul(a.afterState),
+    reasoning: nul(a.reasoning),
+    status: a.status,
+    expires_at: a.expiresAt,
+    decided_at: nul(a.decidedAt),
+    decided_by: nul(a.decidedBy),
+    created_at: a.createdAt,
+  };
+}
+function rowToApproval(row: Row): ApprovalRecord {
+  return compact({
+    id: row.id as string,
+    accountId: row.account_id as string,
+    runId: row.run_id as string,
+    routineId: row.routine_id as RoutineId,
+    title: row.title as string,
+    detail: opt<string>(row.detail),
+    beforeState: opt<string>(row.before_state),
+    afterState: opt<string>(row.after_state),
+    reasoning: opt<string>(row.reasoning),
+    status: row.status as ApprovalStatus,
+    expiresAt: ts(row.expires_at),
+    decidedAt: tsOpt(row.decided_at),
+    decidedBy: opt<string>(row.decided_by),
+    createdAt: ts(row.created_at),
+  });
+}
+
+function receiptToRow(r: Receipt): Row {
+  // spend folds into payload.spend → sumSpend reads (payload->'spend'->>'amount')
+  const payload: Row = { ...r.payload };
+  if (r.spend) payload.spend = r.spend;
+  return {
+    id: r.id,
+    account_id: r.accountId,
+    run_id: r.runId,
+    approval_id: nul(r.approvalId),
+    kind: r.kind,
+    platform: nul(r.platform),
+    description: r.description,
+    payload,
+    created_at: r.createdAt,
+  };
+}
+function rowToReceipt(row: Row): Receipt {
+  const { spend, ...payload } = (row.payload as Row | null) ?? {};
+  return compact({
+    id: row.id as string,
+    accountId: row.account_id as string,
+    runId: row.run_id as string,
+    approvalId: opt<string>(row.approval_id),
+    kind: row.kind as Receipt["kind"],
+    platform: opt<Receipt["platform"]>(row.platform),
+    description: row.description as string,
+    payload,
+    spend: spend && typeof spend === "object" ? (spend as SpendAmount) : undefined,
+    createdAt: ts(row.created_at),
+  });
+}
+
+function tasteToRow(e: TasteEvent): Row {
+  return {
+    id: e.id,
+    account_id: e.accountId,
+    approval_id: nul(e.approvalId),
+    routine_id: nul(e.routineId),
+    action: e.action,
+    context: e.context,
+    created_at: e.createdAt,
+  };
+}
+function rowToTaste(row: Row): TasteEvent {
+  return compact({
+    id: row.id as string,
+    accountId: row.account_id as string,
+    approvalId: opt<string>(row.approval_id),
+    routineId: opt<RoutineId>(row.routine_id),
+    action: row.action as TasteEvent["action"],
+    context: (row.context as Row) ?? {},
+    createdAt: ts(row.created_at),
+  });
+}
+
+// ---------- the adapter ----------
+
+export class SupabaseStore implements Store {
+  constructor(private readonly db: DbClient) {}
+
+  // ----- routine_states -----
+  async getRoutineState(accountId: string, routineId: RoutineId) {
+    const row = await unwrap<Row | null>(
+      "routine_states.select",
+      this.db.from("routine_states").select("*").eq("account_id", accountId).eq("routine_id", routineId).maybeSingle(),
+    );
+    return row ? rowToState(row) : null;
+  }
+  async putRoutineState(record: RoutineStateRecord) {
+    const row = await unwrap<Row>(
+      "routine_states.upsert",
+      this.db.from("routine_states").upsert(stateToRow(record), { onConflict: "account_id,routine_id" }).select().single(),
+    );
+    return rowToState(row);
+  }
+
+  // ----- routine_runs -----
+  async createRun(run: RunRecord) {
+    const row = await unwrap<Row>("routine_runs.insert", this.db.from("routine_runs").insert(runToRow(run)).select().single());
+    return rowToRun(row);
+  }
+  async getRun(runId: string) {
+    const row = await unwrap<Row | null>("routine_runs.select", this.db.from("routine_runs").select("*").eq("id", runId).maybeSingle());
+    return row ? rowToRun(row) : null;
+  }
+  async updateRun(runId: string, patch: Partial<Omit<RunRecord, "id" | "accountId">>) {
+    const row = await unwrap<Row>(
+      "routine_runs.update",
+      this.db.from("routine_runs").update(runPatchToRow(patch)).eq("id", runId).select().single(),
+    );
+    return rowToRun(row);
+  }
+  async listRuns(accountId: string, opts: ListRunsOptions = {}) {
+    let q = this.db.from("routine_runs").select("*").eq("account_id", accountId);
+    if (opts.routineId) q = q.eq("routine_id", opts.routineId);
+    if (opts.mode) q = q.eq("mode", opts.mode);
+    if (opts.status) q = q.eq("status", opts.status);
+    if (opts.version !== undefined) q = q.eq("version", opts.version);
+    if (opts.dedupKey) q = q.eq("dedup_key", opts.dedupKey);
+    if (opts.since) q = q.gte("started_at", opts.since);
+    q = q.order("started_at", { ascending: false });
+    if (opts.limit) q = q.limit(opts.limit);
+    const rows = await unwrap<Row[]>("routine_runs.select", q);
+    return rows.map(rowToRun);
+  }
+
+  // ----- approvals -----
+  async createApproval(approval: ApprovalRecord) {
+    const row = await unwrap<Row>("approvals.insert", this.db.from("approvals").insert(approvalToRow(approval)).select().single());
+    return rowToApproval(row);
+  }
+  async getApproval(approvalId: string) {
+    const row = await unwrap<Row | null>("approvals.select", this.db.from("approvals").select("*").eq("id", approvalId).maybeSingle());
+    return row ? rowToApproval(row) : null;
+  }
+  async updateApproval(approvalId: string, patch: Partial<Pick<ApprovalRecord, "status" | "decidedAt" | "decidedBy">>) {
+    const row: Row = {};
+    if ("status" in patch) row.status = nul(patch.status);
+    if ("decidedAt" in patch) row.decided_at = nul(patch.decidedAt);
+    if ("decidedBy" in patch) row.decided_by = nul(patch.decidedBy);
+    const out = await unwrap<Row>("approvals.update", this.db.from("approvals").update(row).eq("id", approvalId).select().single());
+    return rowToApproval(out);
+  }
+  async listApprovals(accountId: string, status?: ApprovalStatus) {
+    let q = this.db.from("approvals").select("*").eq("account_id", accountId);
+    if (status) q = q.eq("status", status);
+    q = q.order("created_at", { ascending: false });
+    const rows = await unwrap<Row[]>("approvals.select", q);
+    return rows.map(rowToApproval);
+  }
+
+  // ----- receipts (append-only) -----
+  async appendReceipt(receipt: Receipt) {
+    const row = await unwrap<Row>("receipts.insert", this.db.from("receipts").insert(receiptToRow(receipt)).select().single());
+    return rowToReceipt(row);
+  }
+  async listReceipts(accountId: string, opts: ListReceiptsOptions = {}) {
+    let q = this.db.from("receipts").select("*").eq("account_id", accountId);
+    if (opts.runId) q = q.eq("run_id", opts.runId);
+    if (opts.kind) q = q.eq("kind", opts.kind);
+    if (opts.since) q = q.gte("created_at", opts.since);
+    // oldest first within a run (chronological receipt trail); newest first otherwise
+    q = q.order("created_at", { ascending: !!opts.runId });
+    if (opts.limit) q = q.limit(opts.limit);
+    const rows = await unwrap<Row[]>("receipts.select", q);
+    return rows.map(rowToReceipt);
+  }
+  async sumSpend(accountId: string, since: string, until: string) {
+    const rows = await unwrap<Row[]>(
+      "receipts.select",
+      this.db
+        .from("receipts")
+        .select("payload")
+        .eq("account_id", accountId)
+        .eq("kind", "mutation")
+        .gte("created_at", since)
+        .lte("created_at", until),
+    );
+    let sum = 0;
+    for (const row of rows) {
+      const spend = (row.payload as Row | null)?.spend as { amount?: unknown } | undefined;
+      const amount = Number(spend?.amount);
+      if (Number.isFinite(amount)) sum += amount;
+    }
+    return sum;
+  }
+
+  // ----- taste_events (append-only) -----
+  async appendTasteEvent(event: TasteEvent) {
+    const row = await unwrap<Row>("taste_events.insert", this.db.from("taste_events").insert(tasteToRow(event)).select().single());
+    return rowToTaste(row);
+  }
+}
