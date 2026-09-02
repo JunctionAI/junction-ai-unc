@@ -1,0 +1,53 @@
+Junction
+GROWTH AGENT
+Home
+Strategy
+Routines
+35
+Connectors
+5 connected · 1 needs attention · 10 available →
+Demonstration data.
+No live connectors or outward actions.
+← All routines
+D01-W01 · Content
+Founder content engine
+Active
+Turns real customer questions into founder-voice posts, staged for one-tap approval.
+TRIGGER & CADENCE
+Daily at 07:00, after certified metrics refresh.
+WRITE MODE
+Approval gated — prepares the exact mutation and waits for a named approver.
+KPI
+Goal movement per run
+WORKFLOW
+— click a step to inspect and edit it
+v12 · active
+TRIGGER
+Schedule
+Daily at 07:00, after certified metrics refresh.
+READ
+Certified inputs
+Shopify · GA4 · Meta
+CHECK
+Validate & reconcile
+Freshness · coverage · authority
+DECIDE
+Skill decision
+Bounded by guardrails
+GATE
+Approval
+Named approver · Tom
+EXECUTE
+Execute + read back
+Idempotent · rollback ready
+RECEIPT
+Receipt + learning
+Reads · changes · learnings
+TRIGGER
+Schedule
+CADENCE
+DEDUP KEY
+Every run writes a receipt: what was read, prepared, changed and learned. Consequential actions wait for your approval until you graduate them.
+Set this up
+In your corner
+Ask me anything

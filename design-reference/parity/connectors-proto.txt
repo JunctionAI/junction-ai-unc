@@ -1,0 +1,80 @@
+Junction
+GROWTH AGENT
+Home
+Strategy
+Routines
+35
+Connectors
+5 connected · 1 needs attention · 10 available →
+Demonstration data.
+No live connectors or outward actions.
+Connectors
+5 connected · 1 needs attention · 10 available
+Exact, least-privilege connections to the systems that hold your source truth. Junction reads what each workflow needs — nothing more — and every credential lives in the secret store.
+Shopify
+COMMERCE
+orders · products · customers · unlocks 12 routines
+Connected
+Google Analytics 4
+ANALYTICS
+sessions · conversion · attribution · unlocks 10 routines
+Connected
+Meta Ads
+PAID
+campaigns · spend · creative · unlocks 4 routines
+Connected
+Google Ads
+PAID
+search & shopping campaigns · unlocks 4 routines
+Connect
+Klaviyo
+EMAIL & SMS
+lists · flows · campaigns · unlocks 5 routines
+Reconnect
+Instagram
+SOCIAL
+posts · reels · engagement · unlocks 4 routines
+Connected
+TikTok
+SOCIAL
+posts · views · trends · unlocks 3 routines
+Connect
+LinkedIn
+SOCIAL
+founder posts · engagement · unlocks 4 routines
+Connect
+YouTube
+SOCIAL
+videos · watch time · unlocks 2 routines
+Connect
+Google Search Console
+SEO
+queries · positions · indexing · unlocks 4 routines
+Connect
+HubSpot
+SALES
+contacts · deals · pipeline · unlocks 4 routines
+Connect
+Gmail
+SALES
+supervised outreach drafts · unlocks 3 routines
+Connect
+Gorgias
+SUPPORT
+tickets · customer questions · unlocks 2 routines
+Connect
+Xero
+ACCOUNTING
+real profit · margins · cash cover · unlocks 6 routines
+Connect
+QuickBooks
+ACCOUNTING
+real profit · margins · cash cover · unlocks 6 routines
+Connect
+Slack
+WORKSPACE
+decisions · approvals · alerts · unlocks 21 routines
+Connected
+Least privilege, always — I list every scope before you approve it. Each connection unlocks more of the library.
+In your corner
+Ask me anything

@@ -1,0 +1,123 @@
+Junction
+GROWTH AGENT
+Home
+Strategy
+Routines
+35
+Connectors
+5 connected · 1 needs attention · 10 available →
+Demonstration data.
+No live connectors or outward actions.
+by
+· 30 days left
+Behind by NZ$3,218
+You need NZ$8,350 more by the deadline. You’re a little behind — the plan below closes the gap. Your part is below.
+·
+Platforms connected
+5 of 16 — connect more →
+✓
+History imported
+✓
+Site & socials scanned
+·
+Numbers certified
+I've done the work below — review it, tweak it, and give me the okay. 4
+D02-W01
+Shift NZ$40/day into Advantage+ retargeting
+Prospecting-B ROAS fell to 1.4× over 7 days; retargeting holds 3.1×. Reversible, inside guardrail.
+NZ$60/day Prospecting-B → NZ$20/day + NZ$40 retargetingexpires in 18h
+Approve
+Hold
+Why?
+D01-W01
+Publish founder post “Why we stopped discounting”
+Drafted from 31 customer questions. Zero first-person claims added. Scheduled for 09:00 Tuesday.
+Staged draft → Published to LinkedInexpires in 2d
+Approve
+Hold
+Why?
+D05-W03
+Send winback to 412 lapsed customers
+Zero-recipient test passed. 15% offer respects margin guardrail. Suppresses anyone emailed this week.
+0 recipients → 412 recipients, 1 sendexpires in 3d
+Approve
+Hold
+Why?
+BLOCKED
+Klaviyo token expired — 2 minutes to fix
+Winback and welcome are paused until it refreshes. Everything else keeps running.
+Reconnect
+THE PLAN
+adjust →
+Weeks 1–2
+Content — your strength, running first
+Get the engine working. You: taste + okays.
+Now
+Week 3
+Add email & sms
+Turn momentum into revenue. You: a few okays a day.
+Next
+Week 4+
+SEO + Paid ads + Sales
+Switch on as the numbers earn it.
+Later
+Ad spend starts at NZ$120/day and only grows from wins: about 40% of new profit rolls back in, so the budget scales itself as the goal gets closer.
+THE BAR
+— what getting there actually takes, from businesses that did it
+Content output
+Below the bar
+5 posts / week
+What DTC brands at your target ship — you’re at 3. I’ll draft the extra two; you just okay them.
+Queue 2 more drafts / week
+Repeat purchase
+Below the bar
+22% of customers
+The category norm at NZ$40k MRR — you’re at 14%. Winback + welcome flows close most of this gap.
+Switch on the flows
+Response speed
+At the bar ✓
+< 4 h to leads
+Businesses that hit goals like yours reply same-morning. You’re already there.
+AUTOMATION LEVEL
+— 10 of 35 routines running · saving you ~25 h/week
+Builder
+Content
+2/8 · 6 to unlock
+Paid ads
+2/8 · 6 to unlock
+SEO
+2/6 · 4 to unlock
+Sales
+2/6 · 4 to unlock
+Email & SMS
+2/7 · 5 to unlock
+Pro move: put a teammate in charge of an area’s approvals (Strategy → team) and its decisions skip you entirely — that’s another ~10 h/week back.
+SETTING UP NEXT
+— proposed from the constraint · always dry-run first
+D05-W01
+Welcome flow tuning
+Your welcome flow converts 2.1%; tuned flows in your category do 6%+. Sequence drafted from your top customer questions.
+Turn on
+D05-W06
+Review request timing
+Reviews lift repeat purchase ~9% in your category. Trigger drafted: 12 days post-delivery, suppressed for open tickets.
+Needs Klaviyo reconnect
+D06-W02
+PDP conversion review
+The free CRO path. A/B test staged on your top 3 products — copy from real support language.
+Building · dry run tonight
+COMPLETED TODAY
+Weekly operating brief delivered — three priorities set against the repeat-purchase constraint
+Receipt R-4482
+4 founder posts drafted from customer questions, staged for approval
+Receipt R-4483
+18 leads researched and scored against ICP, 6 qualified for review
+Receipt R-4485
+RUNNING & NEXT
+Researching 24 new leads against ICP · running, 60%
+Winback flow blocked — Klaviyo token expired · reconnect to resume
+Tomorrow 07:00 — daily paid decisioning across 3 campaigns
+Friday — weekly learning review with 2 candidate rules
+Only you can clear these. Three taps and the machine keeps moving without you.
+In your corner
+Ask me anything

@@ -1,0 +1,163 @@
+[
+  {
+    "id": "landing",
+    "title": "Landing page",
+    "width": 1280,
+    "height": 3744,
+    "protoSize": {
+      "width": 1280,
+      "height": 3744
+    },
+    "portSize": {
+      "width": 1280,
+      "height": 3744
+    },
+    "totalPixels": 4792320,
+    "diffPixels": 45110,
+    "sizeOnlyPixels": 0,
+    "diffPct": 0.9412977430555556,
+    "overlapDiffPct": 0.9412977430555556,
+    "pass": true,
+    "note": "",
+    "textOnlyProto": [],
+    "textOnlyPort": []
+  },
+  {
+    "id": "onboarding-0",
+    "title": "Onboarding · step 0 (welcome)",
+    "width": 1280,
+    "height": 900,
+    "protoSize": {
+      "width": 1280,
+      "height": 900
+    },
+    "portSize": {
+      "width": 1280,
+      "height": 900
+    },
+    "totalPixels": 1152000,
+    "diffPixels": 1595,
+    "sizeOnlyPixels": 0,
+    "diffPct": 0.1384548611111111,
+    "overlapDiffPct": 0.1384548611111111,
+    "pass": true,
+    "note": "",
+    "textOnlyProto": [],
+    "textOnlyPort": []
+  },
+  {
+    "id": "home",
+    "title": "Control centre · Home (demo data)",
+    "width": 1280,
+    "height": 2474,
+    "protoSize": {
+      "width": 1280,
+      "height": 2474
+    },
+    "portSize": {
+      "width": 1280,
+      "height": 2474
+    },
+    "totalPixels": 3166720,
+    "diffPixels": 7667,
+    "sizeOnlyPixels": 0,
+    "diffPct": 0.24211171180274857,
+    "overlapDiffPct": 0.24211171180274857,
+    "pass": true,
+    "note": "",
+    "textOnlyProto": [],
+    "textOnlyPort": []
+  },
+  {
+    "id": "strategy",
+    "title": "Strategy",
+    "width": 1280,
+    "height": 1032,
+    "protoSize": {
+      "width": 1280,
+      "height": 1032
+    },
+    "portSize": {
+      "width": 1280,
+      "height": 1032
+    },
+    "totalPixels": 1320960,
+    "diffPixels": 1182,
+    "sizeOnlyPixels": 0,
+    "diffPct": 0.08948037790697674,
+    "overlapDiffPct": 0.08948037790697674,
+    "pass": true,
+    "note": "",
+    "textOnlyProto": [],
+    "textOnlyPort": []
+  },
+  {
+    "id": "routines",
+    "title": "Routines · role cards",
+    "width": 1280,
+    "height": 900,
+    "protoSize": {
+      "width": 1280,
+      "height": 900
+    },
+    "portSize": {
+      "width": 1280,
+      "height": 900
+    },
+    "totalPixels": 1152000,
+    "diffPixels": 879,
+    "sizeOnlyPixels": 0,
+    "diffPct": 0.07630208333333333,
+    "overlapDiffPct": 0.07630208333333333,
+    "pass": true,
+    "note": "",
+    "textOnlyProto": [],
+    "textOnlyPort": []
+  },
+  {
+    "id": "routine-detail",
+    "title": "Routine detail · Founder content engine (D01-W01)",
+    "width": 1280,
+    "height": 900,
+    "protoSize": {
+      "width": 1280,
+      "height": 900
+    },
+    "portSize": {
+      "width": 1280,
+      "height": 900
+    },
+    "totalPixels": 1152000,
+    "diffPixels": 1264,
+    "sizeOnlyPixels": 0,
+    "diffPct": 0.10972222222222223,
+    "overlapDiffPct": 0.10972222222222223,
+    "pass": true,
+    "note": "",
+    "textOnlyProto": [],
+    "textOnlyPort": []
+  },
+  {
+    "id": "connectors",
+    "title": "Connectors",
+    "width": 1280,
+    "height": 1035,
+    "protoSize": {
+      "width": 1280,
+      "height": 1035
+    },
+    "portSize": {
+      "width": 1280,
+      "height": 1035
+    },
+    "totalPixels": 1324800,
+    "diffPixels": 879,
+    "sizeOnlyPixels": 0,
+    "diffPct": 0.06634963768115941,
+    "overlapDiffPct": 0.06634963768115941,
+    "pass": true,
+    "note": "",
+    "textOnlyProto": [],
+    "textOnlyPort": []
+  }
+]
