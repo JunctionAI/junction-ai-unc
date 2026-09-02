@@ -2,6 +2,11 @@
    mapping.ts. Runs in the browser under RLS (the anon client with the founder's session)
    or on the server; takes the DbClient slice so the unit tests drive it with the fake.
 
+   Chat: the client owns the app's own turns (channel 'app', positions 0..n). Turns said on a
+   channel (Telegram, WhatsApp, Slack, SMS — src/lib/channels/thread.ts) live on the same
+   thread with their own channel and a far position band; the loader skips them so the
+   autosave never re-saves a channel row. The unified view is GET /api/channels/thread.
+
    Save strategy (Phase 2): every section is upserted on its natural key (0003 adds the
    position/thread/client_key keys so this is idempotent — no delete-and-reinsert), trailing
    rows of shrunken lists are deleted. The autosave hook only calls save when the persisted
@@ -46,10 +51,16 @@ export async function loadAccountRows(db: DbClient, accountId: string): Promise<
     unwrap<LoadedRows["businessProfile"]>("business_profiles.select", byAccount("business_profiles", "account_id, scan_status, profile, scanned_at").maybeSingle()),
     unwrap<LoadedRows["routineStates"]>("routine_states.select", byAccount("routine_states", "account_id, routine_id, enabled")),
     unwrap<LoadedRows["connectors"]>("connectors.select", byAccount("connectors", "account_id, platform, status")),
-    unwrap<LoadedRows["chatMessages"]>("chat_messages.select", byAccount("chat_messages", "account_id, thread, position, lane, sender, body, meta").order("position", { ascending: true })),
+    unwrap<LoadedRows["chatMessages"]>("chat_messages.select", byAccount("chat_messages", "account_id, thread, position, lane, sender, body, meta, channel").order("position", { ascending: true })),
     unwrap<LoadedRows["stateMeta"]>("account_state_meta.select", byAccount("account_state_meta", "account_id, schema_version, client_state").maybeSingle()),
   ]);
-  return { account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages, stateMeta };
+  // Only the app's own turns hydrate the client (rows before 0012 have no channel yet; the
+  // column default is 'app'). Channel turns are read through GET /api/channels/thread.
+  const appMessages = chatMessages.filter((m) => {
+    const c = (m as { channel?: unknown }).channel;
+    return c === null || c === undefined || c === "app";
+  });
+  return { account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages: appMessages, stateMeta };
 }
 
 /** { state, found }: found=false means nothing was ever saved for this account (seed it). */
