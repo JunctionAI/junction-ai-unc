@@ -36,16 +36,31 @@ would spend doing the same read + draft by hand, per category (Content 0.75 h, P
 SEO 0.5 h, Sales 0.5 h, Email & SMS 0.75 h) with heavier drafting routines overridden (e.g.
 Founder content engine 1.5 h, Campaign calendar prep 2 h). Demo mode keeps `2.5 h × routines on`.
 
-## Worker flags + suggested schedule
+## Schedule — the worker runs the jobs itself
 
-The flags are one-shots: run across every account the accounts source lists (DB: accounts with
-≥ 1 enabled routine; demo: `demo`), or a single account with `--account <id>`, then exit.
+The daemon (`src/worker/loop.ts`) ticks once a minute and runs the three jobs at their UTC
+slots through `src/worker/jobs.ts`, using the same cron matcher as the routines. No Fly
+scheduled machines, no cron sidecar (`deploy/worker/fly.toml`).
 
-| Flag | Suggested cron (UTC) | Notes |
-|---|---|---|
-| `--measure` | daily `0 2 * * *` (02:00 UTC) | Windows end at the start of the measuring day, so re-running the same day rewrites the same rows. |
-| `--self-review` | weekly `0 6 * * 1` (Mondays 06:00) | Idempotent per ISO week: accounts that already have this week's review are skipped. Account-local scheduling (Monday 06:00 in the founder's timezone) is a follow-up — today the worker runs UTC. |
-| `--benchmarks` | weekly `0 3 * * 1` (after Monday's measure) | Look-back 35 days (covers the 28-day contracts). Segments resolved from `connectors` + the governing revenue goal. |
+| Job | Cron (UTC) | Runs | Notes |
+|---|---|---|---|
+| `measure` | `0 2 * * *` (daily 02:00) | `runMeasure` | Windows end at the start of the measuring day, so re-running the same day rewrites the same rows. |
+| `benchmarks` | `0 3 * * 1` (Mondays 03:00, after the measure) | `runBenchmarks` | Look-back 35 days (covers the 28-day contracts). Segments resolved from `connectors` + the governing revenue goal. |
+| `self_review` | `0 6 * * 1` (Mondays 06:00) | `runSelfReview` | Idempotent per ISO week: accounts that already have this week's review are skipped. Account-local scheduling (Monday 06:00 in the founder's timezone) is a follow-up — today the worker runs UTC. |
+
+- **"Already ran" markers** — one per job, the slot it last served — sit on the heartbeat
+  file (`.unc-worker/heartbeat.json` → `jobs`) and are reloaded when the worker starts, so a
+  restart or redeploy inside the 6-hour look-back does not double-run. A fresh machine with no
+  heartbeat re-runs at most one slot per job; every job is idempotent, so that is a wasted
+  read, not a wrong number.
+- A job that throws is logged (`job.error`), marked served with `ok:false`, and waits for its
+  next slot — it does not retry every minute.
+- On a Monday the tick that finds several slots due runs them in order: measure → benchmarks →
+  self-review.
+- The same loop sweeps expired `oauth_states` once an hour when the DB is configured.
+
+The CLI flags remain for manual / catch-up runs and run across every account the accounts
+source lists (DB: accounts with ≥ 1 enabled routine; demo: `demo`), or one with `--account <id>`:
 
 ```
 node dist/worker/worker/main.js --measure
@@ -55,7 +70,7 @@ node dist/worker/worker/main.js --measure --account <accountId>
 ```
 
 Local: `npx tsc -p tsconfig.worker.json && node dist/worker/worker/main.js --measure --self-review --benchmarks`.
-On Fly (`deploy/worker/`), add these as scheduled machines / a cron sidecar alongside the daemon.
+On Fly: `fly ssh console -C "node dist/worker/worker/main.js --measure"`.
 
 ## Anonymisation rule (n ≥ 5)
 
@@ -85,4 +100,4 @@ On Fly (`deploy/worker/`), add these as scheduled machines / a cron sidecar alon
 | Home payload | `src/lib/telemetry/home.ts` → `GET /api/telemetry/home`; review routes `GET/POST /api/unc/self-review` |
 | Home mapping (client, pure) | `src/lib/platform/telemetry.ts`; hook `src/components/platform/useHomeTelemetry.ts`; render in `HomeView.tsx` |
 | Store | `src/lib/runtime/store/{interface,memory,supabase}.ts` (outcomes, reviews, benchmarks, opt-ins, taste-event listing) |
-| Worker | `src/worker/telemetry.ts` (jobs), `src/worker/cli.ts` (flags), `src/worker/main.ts` |
+| Worker | `src/worker/telemetry.ts` (jobs), `src/worker/jobs.ts` (in-loop schedule + markers), `src/worker/cli.ts` (flags), `src/worker/main.ts` |

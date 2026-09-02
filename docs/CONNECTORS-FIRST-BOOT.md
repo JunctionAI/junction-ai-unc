@@ -27,6 +27,7 @@ checklist. This file is only the wiring.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | server | One Google Cloud OAuth client, shared by GA4 and Google Ads |
 | `GOOGLE_ADS_DEVELOPER_TOKEN` | server | From the product MCC's API Center (prep pack §2b); needed for Ads *reads*, not for the OAuth screen |
 | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | server | Optional; the MCC id when reading through a manager account |
+| `HUBSPOT_CLIENT_ID` / `HUBSPOT_CLIENT_SECRET` | server | HubSpot developer-account app (public app) — the Sales routines' CRM reads |
 | `AIRBYTE_API_KEY` / `AIRBYTE_WORKSPACE_ID` | server | Airbyte Cloud API. Both absent → `NoopProvisioner` (every sync reads `error:sync_not_configured`). |
 | `AIRBYTE_DESTINATION_ID` | server | Recommended: a warehouse destination created once in the Airbyte UI and shared by all tenants (each tenant's rows go to schema `t_<accountId>` via the connection's namespace). |
 | `WAREHOUSE_PG_HOST` / `_PORT` / `_DATABASE` / `_USER` / `_PASSWORD` / `_SSL_MODE` | server | Only if `AIRBYTE_DESTINATION_ID` is unset: the provisioner creates a postgres destination per tenant from these. |
@@ -65,6 +66,7 @@ https://<APP_URL>/api/connectors/klaviyo/callback
 https://<APP_URL>/api/connectors/meta_ads/callback
 https://<APP_URL>/api/connectors/ga4/callback
 https://<APP_URL>/api/connectors/google_ads/callback
+https://<APP_URL>/api/connectors/hubspot/callback
 ```
 
 Locally: `http://localhost:3400/api/connectors/<platform>/callback` (Meta and Shopify require
@@ -89,7 +91,7 @@ before approving. All read-only. Phase-2 write scopes are deliberately absent �
   `POST https://<shop>/admin/oauth/access_token` → offline token (no expiry) sealed.
   `external_ref` = shop domain.
 - **Mandatory compliance webhooks** (`customers/data_request`, `customers/redact`,
-  `shop/redact`) are **not built yet** — required before app review, tracked in the pack.
+  `shop/redact`) — built, see §8; register the three URLs before app review.
 
 ### Klaviyo (`klaviyo`)
 - **From:** Klaviyo developer portal → OAuth app (pack §4). Client ID / secret on the app page;
@@ -107,7 +109,9 @@ before approving. All read-only. Phase-2 write scopes are deliberately absent �
 - **Flow:** code → `GET /v21.0/oauth/access_token` → swapped for a ~60-day long-lived token.
   Meta cannot be refreshed server-side: near expiry the card shows **Reconnect**
   (`error:token_expired`). `external_ref` = `act_<id>` when the user manages exactly one ad
-  account; otherwise null until a picker exists (not built).
+  account; otherwise null and the card asks **"Which one should I read?"** (the post-connect
+  picker: `GET /api/connectors/meta_ads/options` lists `/me/adaccounts`, `POST …/select`
+  stores the choice; status label reads *Choose account* until then).
 
 ### Google Analytics 4 (`ga4`) and Google Ads (`google_ads`)
 - **From:** one Google Cloud project → APIs & Services → Credentials → OAuth client (Web).
@@ -118,11 +122,33 @@ before approving. All read-only. Phase-2 write scopes are deliberately absent �
 - **Flow:** PKCE + `access_type=offline&prompt=consent` so a refresh token is always issued →
   `POST https://oauth2.googleapis.com/token`. Refreshed automatically.
 - **`external_ref` is null after connecting** — a login has many GA4 properties / Ads
-  customers. A property / customer picker is **not built**; until it exists
-  `ConnectorCredentialProvider` returns null for these (an honest "couldn't ask"). Ads reads
-  also need `GOOGLE_ADS_DEVELOPER_TOKEN` (pack §2b).
+  customers. The Connected card then shows the **post-connect picker** ("Which one should I
+  read?"): `GET /api/connectors/ga4/options` lists the login's properties through the Admin
+  API (`accountSummaries`, paged); `GET /api/connectors/google_ads/options` lists
+  `customers:listAccessibleCustomers` (needs `GOOGLE_ADS_DEVELOPER_TOKEN`, else the card says
+  "Not switched on yet"); `POST …/select { externalRef }` stores it (validated for shape:
+  numeric property id / 10-digit customer id) and receipts the choice. Until chosen the status
+  pill reads *Choose account* (cyan, not amber — it is a step, not a decision) and
+  `ConnectorCredentialProvider` returns null for the platform (an honest "couldn't ask").
+  Google Ads *reads* stay fixture-only in the worker (GAQL reader is Wave 2) — the customer id
+  is what the Airbyte source needs. The Ads API version the picker calls is one constant
+  (`GOOGLE_ADS_API_VERSION`, `src/lib/connectors/options.ts`) — bump it when the first live
+  list answers 404 (Google sunsets versions ~yearly).
 
-### Everything else (Instagram, TikTok, LinkedIn, YouTube, Search Console, HubSpot, Gmail, Gorgias, Xero, QuickBooks, Slack)
+### HubSpot (`hubspot`)
+- **From:** HubSpot developer account → Apps → public app. Client ID / secret on the app's
+  Auth tab; add the redirect URI there and select exactly the scopes below (HubSpot refuses
+  a consent screen whose scopes don't match the app's).
+- **Scopes:** `crm.objects.deals.read crm.objects.contacts.read crm.objects.owners.read`.
+  Read-only; the D04-W05/W06 mutations (`update_deal_properties` / `update_deal_stage`) would
+  need `crm.objects.deals.write` — Wave 2, not requested.
+- **Flow:** standard code grant (no PKCE) → `POST https://api.hubapi.com/oauth/v1/token`
+  (client id + secret in the body) → 30-minute access token + refresh token; refreshed
+  automatically. `external_ref` = portal id (`GET /account-info/v3/details`, best-effort).
+- **Reads (worker):** `src/worker/readers/hubspot.ts` — CRM v3 `contacts/search`,
+  `deals/search` + `emails/search` (the response-time KPI). See the worker README.
+
+### Everything else (Instagram, TikTok, LinkedIn, YouTube, Search Console, Gmail, Gorgias, Xero, QuickBooks, Slack)
 Catalogued in the registry with `flow: "none"` → the button answers "Not switched on yet".
 
 ## 4. Airbyte (per-tenant sync)
@@ -167,7 +193,7 @@ fails closed → card shows Reconnect.
 
 ## 7. Smoke checklist (first real connection)
 
-1. Env set (§0) and 0005 applied (§1). `npm run build` passes; `npx vitest run src/lib/connectors` green (57 tests, no network).
+1. Env set (§0) and 0005 applied (§1). `npm run build` passes; `npx vitest run src/lib/connectors` green (91 tests, no network).
 2. Sign in, open Connectors. A platform whose pair is **not** set → "Not switched on yet".
 3. Klaviyo → Connect → the Klaviyo consent screen lists exactly the 8 read scopes → approve →
    lands on `/app?connected=klaviyo`, card shows **Connected**, URL is cleaned.
@@ -182,6 +208,12 @@ fails closed → card shows Reconnect.
    source + connection appear in the workspace, first job runs into `t_<accountId>`;
    `getStatus` maps it to `ok`/`empty`; `last_sync_result` reflects it.
 8. Rotate the key (§6) → an existing connector still reads; its `key_version` bumps.
+9. GA4: connect → the card shows **Choose account** + "Which one should I read?" listing the
+   login's properties → pick one → receipt "Google Analytics 4: reading property … from now
+   on.", `external_ref` set, the pill flips to Connected.
+10. Disconnect (Klaviyo) → receipt says *access revoked on Klaviyo's side*; Klaviyo's
+    connected-apps page no longer lists Unc; `connector_secrets` row gone; with `AIRBYTE_*`
+    set the source + connection are gone from the workspace.
 
 ## 8. Shopify compliance webhooks (mandatory for app review)
 
@@ -199,17 +231,48 @@ Signature = `X-Shopify-Hmac-Sha256` over the **raw** body with `SHOPIFY_CLIENT_S
 (timing-safe). Bad signature → 401 before the body is parsed (this is what the reviewer's
 probe checks); unknown topic → 404; Shopify not configured → 503. A verified delivery writes
 one `receipts` row (kind `notification`, `run_id` null, ids + counts only — never emails) on
-every account holding that shop; `shop/redact` also flips the connector to `disconnected` and
-deletes its `connector_secrets` row. A shop we don't hold answers 200 `recorded:false`
-(nothing to retry).
+every account holding that shop; `shop/redact` also tears the shop's warehouse sync down
+(`SyncProvisioner.purgeTenant` — the Airbyte connection + source; the receipt says what
+happened), flips the connector to `disconnected` and deletes its `connector_secrets` row. No
+platform-side revoke there: the app is already uninstalled. A shop we don't hold answers 200
+`recorded:false` (nothing to retry).
 
 ## 9. Disconnect
 
-`POST /api/connectors/<platform>/disconnect` (session-bound, same gates as start): deletes the
-sealed token, sets the row `disconnected`, writes a receipt. The Connected card shows a
-"Disconnect" link in accounts mode only. The platform-side revoke (each platform's connected-
-apps page) stays with the founder — the receipt says so. The Airbyte connection is not torn
-down here; the next sync reads `error:token_refresh` / `no_secret` and the card shows Reconnect.
+`POST /api/connectors/<platform>/disconnect` (session-bound, same gates as start), in order:
+
+1. **Platform-side revoke** (`src/lib/connectors/revoke.ts`) while we still hold the token:
+   Google `POST oauth2/revoke` (refresh token → the whole grant), Shopify
+   `DELETE /admin/api/<ver>/api_permissions/current.json`, Klaviyo `POST /oauth/revoke`
+   (Basic client auth), Meta `DELETE /me/permissions`, HubSpot
+   `DELETE /oauth/v1/refresh-tokens/<refresh>` (HubSpot's own shape — the receipt names it
+   redacted). Best-effort: 10 s timeout, a 404 / Google's `invalid_token` 400 count as done.
+2. **Warehouse sync teardown** — `provisioner.purgeTenant(accountId, platform)`: Airbyte
+   `DELETE /connections/<id>` then `DELETE /sources/<id>` (the source holds the token), the
+   handles are cleared from `sync_ref`; the Noop says `sync_not_configured`.
+3. Delete the sealed token, set the row `disconnected`.
+4. Receipt: what was revoked and torn down. A revoke that failed gets a **second receipt**
+   naming the code ("Couldn't revoke Klaviyo's access on their side (http_500) — … revoke the
+   app from Klaviyo's connected-apps page too") so the founder knows. Nothing in 1–2 can
+   block 3.
+
+The Connected card shows a "Disconnect" link in accounts mode only.
+
+**What purgeTenant does not do:** drop the rows already synced into the warehouse schema
+`t_<accountId>` (Airbyte leaves destination data in place when a connection is deleted, and
+the app holds no warehouse Postgres client). That is an ops step on the warehouse:
+
+```sql
+-- one platform's streams for a tenant (Disconnect)
+do $$ declare r record; begin
+  for r in select tablename from pg_tables where schemaname = 't_<accountId>' and tablename like '<platform>\_%' escape '\'
+  loop execute format('drop table %I.%I', 't_<accountId>', r.tablename); end loop; end $$;
+-- the whole tenant (shop/redact for a single-connector account, or account deletion)
+drop schema "t_<accountId>" cascade;
+```
+
+The receipt's `sync_purge` payload says whether the Airbyte side is gone; `customers/redact`
+(one customer) is a `delete … where customer_id = …` on the same schema — also ops today.
 
 ## 10. Worker credentials
 
@@ -218,12 +281,29 @@ The worker and the API routes pick their adapters in `src/worker/wiring.ts`: wit
 (live tokens from `connector_secrets`, refreshed + re-sealed as needed) and accounts come from
 `DbAccountsSource` (every account with ≥ 1 enabled routine); otherwise fixtures + the static
 `demo` account. The worker's startup log line reports `credentials: connectors|fixture` and
-`accounts: db|static`.
+`accounts: db|static`. With the DB the loop also sweeps expired `oauth_states` rows once an
+hour (`sweepOauthStates`, heartbeat `lastSweepAt`) and runs the telemetry jobs at their UTC
+slots (`src/worker/jobs.ts`).
 
-## 11. Not built (known gaps)
+## 11. Built since the first draft, and what is still open
 
-- GA4 property / Google Ads customer picker (external_ref stays null).
-- Meta ad-account picker for multi-account users.
-- Platform-side token revoke on disconnect (Shopify/Klaviyo/Meta/Google revoke endpoints).
-- Warehouse tenant purge on `customers/redact` / `shop/redact` (the Airbyte side).
-- A cron for `sweepOauthStates()` (10-minute TTL rows accumulate harmlessly until then).
+Built (each with tests, no network):
+
+- GA4 property / Google Ads customer / Meta ad-account **pickers** (§3) — `…/options` + `…/select`.
+- **HubSpot** OAuth + reader (§3).
+- **Platform-side revoke** on Disconnect, and a **warehouse sync teardown** (`purgeTenant`)
+  on Disconnect + `shop/redact` (§9).
+- **`sweepOauthStates()`** runs hourly inside the worker loop (§10).
+
+Still open — none of it buildable without a founder / infra decision:
+
+- **Warehouse rows** in `t_<accountId>` after Disconnect / `shop/redact` / `customers/redact`:
+  the SQL in §9, run by ops until the warehouse gets a service role the app may hold.
+- **Live-only verifications:** the Airbyte source field names (§4), the Google Ads API
+  version constant (§3), HubSpot's `account-info` answer shape, and whether Airbyte's Klaviyo
+  source accepts an OAuth bearer in `api_key`.
+- **Platform apps + review:** every client id / secret in §0, Shopify's protected-customer-data
+  and `read_all_orders` requests, Meta Advanced Access, Google sensitive-scope verification —
+  the prep pack's *Tom personally* checklist.
+- Google Ads **live reads** in the worker (GAQL `searchStream`) — the picker gives the
+  customer id; the reader is Wave 2 with the rest of the live-mode work.
