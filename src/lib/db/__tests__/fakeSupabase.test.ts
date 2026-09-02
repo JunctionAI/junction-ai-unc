@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012/0013 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
@@ -11,6 +11,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "account_state_meta",
       "accounts",
       "approvals",
+      "artifacts",
       "benchmark_optins",
       "benchmarks",
       "beta_invites",
@@ -28,6 +29,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "kpi_snapshots",
       "llm_usage",
       "memories",
+      "n8n_workflows",
       "oauth_states",
       "outbound_messages",
       "plans",
@@ -62,7 +64,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.billing_events.primaryKey).toEqual(["id"]);
     expect(s.routine_states.primaryKey).toEqual(["account_id", "routine_id"]);
     expect(s.account_members.primaryKey).toEqual(["account_id", "user_id"]);
-    expect(s.routine_runs.enums.status).toEqual(new Set(["running", "waiting_approval", "done", "failed", "skipped"]));
+    expect(s.routine_runs.enums.status).toEqual(new Set(["running", "waiting_approval", "waiting_input", "done", "failed", "skipped"]));
     expect(s.chat_messages.enums.thread).toEqual(new Set(["corner", "onboarding", "human"]));
     expect(s.approvals.uniques).toContainEqual({ columns: ["account_id", "client_key"], partialNotNull: "client_key" });
     expect(s.connectors.uniques).toContainEqual({ columns: ["account_id", "platform"] });

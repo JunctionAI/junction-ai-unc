@@ -14,10 +14,12 @@
    the founder's next action (the first undone one that has an action), so the Home card shows
    amber on at most one row. */
 
+import { ensureAccountName } from "../db/accountState";
 import { unwrap, type DbClient } from "../db/types";
 import type { ChannelKey, Posture } from "../platform/plan";
 import type { Platform } from "../runtime/types";
-import { phaseOneChannel, phaseOnePlatforms, platformName, recommendedRoutine, requiredPlatform, routineBenefit, routineName } from "./channels";
+import { modelFromProfile, type BusinessModel, type PlatformEvidence } from "../unc/businessType";
+import { emailQuestionNeeded, phaseOneChannel, platformName, recommendedRoutine, requiredPlatform, routineBenefit, routineName, suggestPlatforms } from "./channels";
 
 export type SetupStepKey = "plan" | "connect" | "routine" | "review" | "brief";
 
@@ -52,6 +54,9 @@ export interface SetupPlatformView {
   platform: Platform;
   name: string;
   status: "connected" | "disconnected" | "needs_reconnect" | "connecting" | "error";
+  /** picked = the founder said they use it; spotted = evidenced on their site. */
+  source: "picked" | "spotted";
+  evidence?: string;
 }
 
 export interface SetupRoutineView {
@@ -71,9 +76,13 @@ export interface SetupProgress {
   nextAction: SetupNextAction | null;
   connectLater: boolean;
   dismissed: boolean;
-  /** Only the platforms phase 1 needs, with their real connector status. */
+  /** The founder's own platforms (picked in onboarding, or spotted on their site) with their real connector status — never a table's. */
   platforms: SetupPlatformView[];
-  /** The one recommended wave-1 routine (null only if the catalog has none for the channel). */
+  /** What kind of business this is (scan / founder), null fields when unknown. */
+  business: BusinessModel;
+  /** Phase 1 is Email and nothing says how email is sent: the step asks one question. */
+  emailQuestion: boolean;
+  /** The one recommended wave-1 routine (null only if nothing fits the business and channel). */
   recommended: { routineId: string; name: string; benefit: string; enabled: boolean; requiredPlatform: Platform | null; requiredConnected: boolean } | null;
   /** Enabled routines with their newest run. */
   routines: SetupRoutineView[];
@@ -93,7 +102,9 @@ export interface SetupRows {
   firstTasteEventAt: string | null;
   latestBrief: { day: string; created_at?: string | null } | null;
   clientState: { setupConnectLater?: unknown; setupCardDismissed?: unknown; setupFlow?: unknown } | null;
-  resourceProfile: { postures?: string[] | null; skills?: string[] | null; budget_monthly?: number | string | null } | null;
+  resourceProfile: { postures?: string[] | null; skills?: string[] | null; budget_monthly?: number | string | null; known_platforms?: string[] | null } | null;
+  /** business_profiles.profile (the scan + the founder's business-type pick); absent on rows read before it existed. */
+  businessProfile?: { profile?: unknown } | null;
 }
 
 const POSTURE_FROM_DB: Record<string, Posture> = { brand_led: "brand", sales_led: "sales", paid_led: "paid" };
@@ -119,12 +130,19 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
   const agreedAt = rows.plans.map((p) => p.agreed_at).filter((a): a is string => typeof a === "string" && !!a).sort()[0] ?? null;
 
   const connStatus = new Map(rows.connectors.map((c) => [c.platform, c.status]));
-  const platforms: SetupPlatformView[] = phaseOnePlatforms(channel).map((platform) => ({
-    platform,
-    name: platformName(platform),
-    status: (connStatus.get(platform) as SetupPlatformView["status"]) ?? "disconnected",
+  const knownPlatforms = rp?.known_platforms ?? [];
+  const profile = rows.businessProfile?.profile ?? null;
+  const business = modelFromProfile(profile);
+  const spotted = profile && typeof profile === "object" && Array.isArray((profile as { platformsSpotted?: unknown }).platformsSpotted) ? ((profile as { platformsSpotted: PlatformEvidence[] }).platformsSpotted ?? []) : [];
+  const platforms: SetupPlatformView[] = suggestPlatforms({ channel, knownPlatforms, spotted }).map((s) => ({
+    platform: s.platform,
+    name: s.name,
+    status: (connStatus.get(s.platform) as SetupPlatformView["status"]) ?? "disconnected",
+    source: s.source,
+    ...(s.evidence ? { evidence: s.evidence } : {}),
   }));
   const connectedAll = rows.connectors.filter((c) => c.status === "connected");
+  const emailQuestion = emailQuestionNeeded({ channel, knownPlatforms, spotted, connected: connectedAll.map((c) => c.platform) });
   const connectLater = rows.clientState?.setupConnectLater === true;
   const dismissed = rows.clientState?.setupCardDismissed === true;
 
@@ -134,7 +152,7 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
   const weekAgo = new Date(now.getTime() - 7 * DAY_MS).toISOString();
   const runsThisWeek = finishedRuns.filter((r) => r.started_at >= weekAgo).length;
 
-  const rec = recommendedRoutine(channel, enabledIds);
+  const rec = recommendedRoutine(channel, enabledIds, { model: business, knownPlatforms });
   const recRequired = rec ? requiredPlatform(rec) : null;
   const recommended = rec
     ? { routineId: rec.id, name: routineName(rec.id), benefit: routineBenefit(rec.id), enabled: enabledIds.includes(rec.id), requiredPlatform: recRequired, requiredConnected: !recRequired || connStatus.get(recRequired) === "connected" }
@@ -147,7 +165,10 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
   const running = rows.runs.filter((r) => r.status === "running").map((r) => ({ runId: r.id, routineId: r.routine_id, name: routineName(r.routine_id), startedAt: r.started_at }));
 
   // ----- the five steps -----
-  const anchorName = platforms[0]?.name ?? "Shopify";
+  /* The connect line names the founder's own first platform — never a default. With nothing
+     picked or spotted there is nothing to name: Unc asks for the tools instead. */
+  const anchorName = platforms[0]?.name ?? null;
+  const connectAsk = anchorName ? `Connect ${anchorName} and I'll read your last 90 days tonight.` : "Tell me which tools you use and I'll connect only what the plan reads.";
   const planDone = !!agreedAt;
   const connectDone = connectedAll.length >= 1;
   const routineDone = enabledIds.length >= 1 && !!firstRun;
@@ -169,8 +190,8 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
       status: connectDone
         ? `${connectedAll.length} connected — ${list(connectedAll.map((c) => platformName(c.platform)))}. I read them on the nightly run.`
         : connectLater
-          ? `You said later. Connect ${anchorName} and I'll read your last 90 days tonight.`
-          : `Connect ${anchorName} and I'll read your last 90 days tonight.`,
+          ? `You said later. ${connectAsk}`
+          : connectAsk,
     },
     {
       key: "routine",
@@ -200,7 +221,7 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
 
   const actions: Partial<Record<SetupStepKey, SetupNextAction>> = {
     plan: { step: "plan", label: "Agree the plan", anchor: "view:strategy" },
-    connect: { step: "connect", label: `Connect ${anchorName}`, anchor: rows.clientState?.setupFlow === "connect" ? "step:connect" : "view:connectors" },
+    connect: { step: "connect", label: anchorName ? `Connect ${anchorName}` : "Choose your tools", anchor: rows.clientState?.setupFlow === "connect" ? "step:connect" : "view:connectors" },
     routine:
       enabledIds.length >= 1
         ? { step: "routine", label: "Run it now", anchor: "view:systems" }
@@ -225,6 +246,8 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
     connectLater,
     dismissed,
     platforms,
+    business,
+    emailQuestion,
     recommended,
     routines,
     running,
@@ -236,7 +259,7 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
 
 export async function loadSetupRows(db: DbClient, accountId: string): Promise<SetupRows> {
   const by = (table: string, columns: string) => db.from(table).select(columns).eq("account_id", accountId);
-  const [plans, connectors, routineStates, runs, taste, briefs, meta, rp] = await Promise.all([
+  const [plans, connectors, routineStates, runs, taste, briefs, meta, rp, bp] = await Promise.all([
     unwrap<SetupRows["plans"]>("plans.select", by("plans", "agreed_at, created_at")),
     unwrap<SetupRows["connectors"]>("connectors.select", by("connectors", "platform, status")),
     unwrap<SetupRows["routineStates"]>("routine_states.select", by("routine_states", "routine_id, enabled")),
@@ -244,7 +267,8 @@ export async function loadSetupRows(db: DbClient, accountId: string): Promise<Se
     unwrap<{ created_at: string }[]>("taste_events.select", by("taste_events", "created_at").order("created_at", { ascending: true }).limit(1)),
     unwrap<{ day: string; created_at: string }[]>("daily_briefs.select", by("daily_briefs", "day, created_at").order("day", { ascending: false }).limit(1)),
     unwrap<{ client_state: SetupRows["clientState"] } | null>("account_state_meta.select", by("account_state_meta", "client_state").maybeSingle()),
-    unwrap<SetupRows["resourceProfile"]>("resource_profiles.select", by("resource_profiles", "postures, skills, budget_monthly").maybeSingle()),
+    unwrap<SetupRows["resourceProfile"]>("resource_profiles.select", by("resource_profiles", "postures, skills, budget_monthly, known_platforms").maybeSingle()),
+    unwrap<{ profile: unknown } | null>("business_profiles.select", by("business_profiles", "profile").maybeSingle()),
   ]);
   return {
     plans: plans ?? [],
@@ -255,6 +279,7 @@ export async function loadSetupRows(db: DbClient, accountId: string): Promise<Se
     latestBrief: briefs?.[0] ?? null,
     clientState: meta?.client_state ?? null,
     resourceProfile: rp ?? null,
+    businessProfile: bp ?? null,
   };
 }
 
@@ -266,19 +291,22 @@ export async function setupProgress(db: DbClient, accountId: string, now: Date =
 
 /** Set plans.agreed_at on the account's newest plan (idempotent: an agreed plan keeps its
     original timestamp). With no plan row yet — the autosave that writes it may still be in
-    flight — a minimal row is inserted; the autosave updates that same (newest) row after. */
-export async function agreePlan(db: DbClient, accountId: string, now: Date = new Date()): Promise<{ agreedAt: string; created: boolean }> {
+    flight — a minimal row is inserted; the autosave updates that same (newest) row after.
+    Agreeing is also when the account gets its name (accounts.name was '' for real accounts):
+    the scan's business name, else the website host, else the founder's goal text. */
+export async function agreePlan(db: DbClient, accountId: string, now: Date = new Date()): Promise<{ agreedAt: string; created: boolean; accountName: string | null }> {
   const rows = await unwrap<{ id: string; agreed_at: string | null; created_at: string }[]>(
     "plans.select",
     db.from("plans").select("id, agreed_at, created_at").eq("account_id", accountId).order("created_at", { ascending: false }),
   );
+  const accountName = await ensureAccountName(db, accountId).catch(() => null);
   const already = rows.map((r) => r.agreed_at).filter((a): a is string => !!a).sort()[0];
-  if (already) return { agreedAt: already, created: false };
+  if (already) return { agreedAt: already, created: false, accountName };
   const stamp = now.toISOString();
   if (rows.length) {
     await unwrap("plans.update", db.from("plans").update({ agreed_at: stamp }).eq("id", rows[0].id));
-    return { agreedAt: stamp, created: false };
+    return { agreedAt: stamp, created: false, accountName };
   }
   await unwrap("plans.insert", db.from("plans").insert({ account_id: accountId, title: "", phases: [], narrative: null, agreed_at: stamp }));
-  return { agreedAt: stamp, created: true };
+  return { agreedAt: stamp, created: true, accountName };
 }

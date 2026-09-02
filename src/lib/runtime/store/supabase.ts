@@ -17,10 +17,11 @@
    path once volume warrants it: a `sum_spend(account_id, since, until)` SQL function using
    (payload->'spend'->>'amount')::numeric over receipts_spend_idx, called via db.rpc. */
 
-import type { ApprovalRecord, ApprovalStatus, Receipt, RoutineId, SpendAmount, TasteEvent } from "../types";
+import type { ApprovalRecord, ApprovalStatus, Artifact, N8nWorkflow, Receipt, RoutineId, SpendAmount, TasteEvent } from "../types";
 import type {
   BenchmarkOptin,
   BenchmarkRecord,
+  ListArtifactsOptions,
   ListOutcomesOptions,
   ListReceiptsOptions,
   ListRunsOptions,
@@ -281,6 +282,46 @@ function rowToBenchmark(row: Row): BenchmarkRecord {
   return { metricKey: row.metric_key as string, segment: row.segment as string, p50: Number(row.p50), p75: Number(row.p75), n: Number(row.n), computedAt: ts(row.computed_at) };
 }
 
+// ---------- artifacts (migration 0013) ----------
+
+function artifactToRow(a: Artifact): Row {
+  return {
+    id: a.id,
+    account_id: a.accountId,
+    run_id: a.runId,
+    routine_id: a.routineId,
+    kind: a.kind,
+    title: a.title,
+    body: a.body,
+    items: a.items,
+    meta: a.meta,
+    evidence: a.evidence,
+    status: a.status,
+    edited_body: nul(a.editedBody),
+    created_at: a.createdAt,
+  };
+}
+function rowToArtifact(row: Row): Artifact {
+  return compact({
+    id: row.id as string,
+    accountId: row.account_id as string,
+    runId: row.run_id as string,
+    routineId: row.routine_id as RoutineId,
+    kind: row.kind as Artifact["kind"],
+    title: row.title as string,
+    body: row.body as string,
+    items: (row.items as Artifact["items"]) ?? [],
+    meta: (row.meta as Row) ?? {},
+    evidence: (row.evidence as Artifact["evidence"]) ?? [],
+    status: row.status as Artifact["status"],
+    editedBody: opt<string>(row.edited_body),
+    createdAt: ts(row.created_at),
+  });
+}
+function rowToWorkflow(row: Row): N8nWorkflow {
+  return { id: row.id as string, accountId: (row.account_id as string | null) ?? null, routineId: row.routine_id as RoutineId, webhookUrl: row.webhook_url as string, active: !!row.active };
+}
+
 // ---------- the adapter ----------
 
 export class SupabaseStore implements Store {
@@ -464,5 +505,46 @@ export class SupabaseStore implements Store {
   async listBenchmarkOptins(): Promise<BenchmarkOptin[]> {
     const rows = await unwrap<Row[]>("benchmark_optins.select", this.db.from("benchmark_optins").select("account_id, opted_in"));
     return rows.map((r) => ({ accountId: r.account_id as string, optedIn: !!r.opted_in }));
+  }
+
+  // ----- artifacts -----
+  async putArtifact(artifact: Artifact) {
+    const row = await unwrap<Row>("artifacts.insert", this.db.from("artifacts").insert(artifactToRow(artifact)).select().single());
+    return rowToArtifact(row);
+  }
+  async getArtifact(artifactId: string) {
+    const row = await unwrap<Row | null>("artifacts.select", this.db.from("artifacts").select("*").eq("id", artifactId).maybeSingle());
+    return row ? rowToArtifact(row) : null;
+  }
+  async updateArtifact(artifactId: string, patch: Partial<Pick<Artifact, "status" | "editedBody">>) {
+    const row: Row = {};
+    if ("status" in patch) row.status = nul(patch.status);
+    if ("editedBody" in patch) row.edited_body = nul(patch.editedBody);
+    const out = await unwrap<Row>("artifacts.update", this.db.from("artifacts").update(row).eq("id", artifactId).select().single());
+    return rowToArtifact(out);
+  }
+  async listArtifacts(accountId: string, opts: ListArtifactsOptions = {}) {
+    let q = this.db.from("artifacts").select("*").eq("account_id", accountId);
+    if (opts.runId) q = q.eq("run_id", opts.runId);
+    if (opts.routineId) q = q.eq("routine_id", opts.routineId);
+    if (opts.status) q = q.eq("status", opts.status);
+    q = q.order("created_at", { ascending: false });
+    if (opts.limit) q = q.limit(opts.limit);
+    const rows = await unwrap<Row[]>("artifacts.select", q);
+    return rows.map(rowToArtifact);
+  }
+
+  // ----- n8n_workflows -----
+  async findN8nWorkflow(accountId: string, routineId: RoutineId) {
+    const rows = await unwrap<Row[]>("n8n_workflows.select", this.db.from("n8n_workflows").select("*").eq("routine_id", routineId).eq("active", true));
+    const all = rows.map(rowToWorkflow);
+    return all.find((w) => w.accountId === accountId) ?? all.find((w) => w.accountId === null) ?? null;
+  }
+  async putN8nWorkflow(workflow: N8nWorkflow) {
+    const row = await unwrap<Row>(
+      "n8n_workflows.upsert",
+      this.db.from("n8n_workflows").upsert({ id: workflow.id, account_id: workflow.accountId, routine_id: workflow.routineId, webhook_url: workflow.webhookUrl, active: workflow.active }, { onConflict: "id" }).select().single(),
+    );
+    return rowToWorkflow(row);
   }
 }

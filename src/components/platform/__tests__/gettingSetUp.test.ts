@@ -11,7 +11,7 @@ import GettingSetUp, { type GettingSetUpProps } from "../GettingSetUp";
 
 const noop = () => {};
 const NOW = new Date("2026-09-02T09:00:00.000Z");
-const rows = (over: Partial<SetupRows> = {}): SetupRows => ({ plans: [], connectors: [], routineStates: [], runs: [], firstTasteEventAt: null, latestBrief: null, clientState: null, resourceProfile: { postures: ["brand_led"], skills: ["Writing"], budget_monthly: 3600 }, ...over });
+const rows = (over: Partial<SetupRows> = {}): SetupRows => ({ plans: [], connectors: [], routineStates: [], runs: [], firstTasteEventAt: null, latestBrief: null, clientState: null, resourceProfile: { postures: ["brand_led"], skills: ["Writing"], budget_monthly: 3600, known_platforms: ["Instagram", "Shopify"] }, ...over });
 const render = (props: Partial<GettingSetUpProps>) => renderToStaticMarkup(createElement(GettingSetUp, { progress: null, dismissed: false, onDismiss: noop, onAction: noop, ...props }));
 const count = (html: string, needle: string) => (html.match(new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length;
 

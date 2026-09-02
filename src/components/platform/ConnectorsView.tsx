@@ -7,6 +7,7 @@ import { clearConnectReturn, CONNECT_COPY, GOOGLE_UMBRELLA_NAME, peekConnectRetu
 import { isDbConfigured } from "@/lib/db/client";
 import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
 import type { PlatformVals } from "@/lib/platform/derive";
+import { knownPlatformSlugs, SUGGESTION_COPY } from "@/lib/setup/channels";
 import { isReading, useConnectorsState, type ConnectorsStateListing, type ConnectorStateView } from "./useConnectorsState";
 
 /* Connect / Reconnect: in demo mode (no Supabase configured) the button does exactly what the
@@ -66,6 +67,10 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   const googleCards = V.connectors.filter((c) => googleChildren.has(CONNECTOR_PLATFORMS[c.name] ?? ""));
   const googleAllOk = googleCards.length > 0 && googleCards.every((c) => c.ok);
   const googleAnyExpired = googleCards.some((c) => c.expired);
+
+  // Accounts mode: the founder's own platforms (known_platforms) and what the scan spotted carry a quiet chip — the rest are just the library.
+  const pickedSlugs = new Set(canDisconnect ? knownPlatformSlugs(V.obNarrativeRequest.resources.platforms) : []);
+  const spottedBy: Record<string, string> = canDisconnect ? Object.fromEntries((V.obScan.profile?.platformsSpotted ?? []).map((s) => [s.platform, s.evidence])) : {};
 
   // token path (owner): which card's form is open + its field values
   const [tokenFor, setTokenFor] = useState<string | null>(null);
@@ -300,9 +305,19 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
           return (
             <div key={cn.name} data-testid={`connector-${platform ?? cn.name}`} style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "16px 19px", display: "flex", alignItems: "center", gap: 16 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 14, fontWeight: 600 }}>{cn.name}</span>
                   <span style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)" }}>{cn.cat}</span>
+                  {platform && pickedSlugs.has(platform) && (
+                    <span data-testid="connector-picked" style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--cyan-text)", background: "var(--cyan-wash)", borderRadius: 999, padding: "2px 7px" }}>
+                      {SUGGESTION_COPY.picked}
+                    </span>
+                  )}
+                  {platform && !pickedSlugs.has(platform) && spottedBy[platform] && (
+                    <span data-testid="connector-spotted" title={spottedBy[platform]} style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--cyan-text)", background: "var(--cyan-wash)", borderRadius: 999, padding: "2px 7px" }}>
+                      {SUGGESTION_COPY.spotted}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
                   {cn.note} · unlocks {cn.unlocks} routines

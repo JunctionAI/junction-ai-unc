@@ -1,8 +1,12 @@
 /* Unc routines runtime — core types.
 
    A routine is a RoutineSpec: an ordered node chain
-     TRIGGER → READ* → CHECK* → DECIDE? → GATE? → EXECUTE? → RECEIPT
-   executed by engine.ts. Every node is data (JSON-serialisable) so specs can
+     TRIGGER → READ* → CHECK* → DECIDE? → PRODUCE? | N8N? → GATE? → EXECUTE? → RECEIPT
+   executed by engine.ts. PRODUCE is where a routine makes REAL WORK — an Artifact (a post
+   set, an email, a keyword list, a brief …) written by an injected Producer (the worker's
+   LlmProducer) or by a registered n8n workflow; the artifact is stored, linked from a draft
+   receipt and shown at the gate. A producer that lacks what it needs answers `needs`, and
+   the run ends `waiting_input` with an honest receipt — never a silent skip. Every node is data (JSON-serialisable) so specs can
    live in routine_states.draft_spec / live_spec and be edited in the canvas
    inspector. Nothing in here touches a database or a network: adapters are
    injected (see ConnectorReader / DecisionProvider / Executor / Store). */
@@ -37,7 +41,9 @@ export type Platform =
   | "calendar";
 
 export type RunMode = "dry_run" | "live";
-export type RunStatus = "running" | "waiting_approval" | "done" | "failed" | "skipped";
+/** waiting_input: the producer needs something from the founder (a connector, an answer); the
+    run holds a snapshot and resumes through resumeRunWithInput. */
+export type RunStatus = "running" | "waiting_approval" | "waiting_input" | "done" | "failed" | "skipped";
 export type ApprovalStatus = "pending" | "approved" | "held" | "expired";
 export type ReceiptKind = "read" | "draft" | "mutation" | "notification";
 export type TasteAction = "approved" | "held" | "why_opened" | "edited";
@@ -142,6 +148,11 @@ export interface ReadNode extends NodeBase {
   as: string;
   /** Reject reads older than this many minutes (certified-input freshness). */
   freshnessMinutes?: number;
+  /** An optional read that cannot be answered (nothing connected, no reader, an error) does
+      not fail the run: it lands as an empty result with provenance "unavailable" and a
+      notification receipt saying so, and the chain carries on with what it has. Wave-1
+      drafting routines use this so a founder with only a site profile still gets a draft. */
+  optional?: boolean;
 }
 
 export interface CheckNode extends NodeBase {
@@ -221,7 +232,99 @@ export interface ReceiptNode extends NodeBase {
   measurementWindowDays?: number;
 }
 
-export type Node = TriggerNode | ReadNode | CheckNode | DecideNode | GateNode | ExecuteNode | ReceiptNode;
+// ---------- artifacts (the real work a routine produces) ----------
+
+export type ArtifactKind =
+  | "post"
+  | "post_set"
+  | "email"
+  | "hook_list"
+  | "keyword_list"
+  | "content_gap"
+  | "lead_brief"
+  | "outreach_draft"
+  | "meeting_brief"
+  | "question_list"
+  | "calendar"
+  | "generic";
+
+export const ARTIFACT_KINDS: readonly ArtifactKind[] = ["post", "post_set", "email", "hook_list", "keyword_list", "content_gap", "lead_brief", "outreach_draft", "meeting_brief", "question_list", "calendar", "generic"] as const;
+
+export type ArtifactStatus = "draft" | "approved" | "held" | "edited" | "used";
+
+export interface ArtifactItem {
+  title: string;
+  /** Markdown. */
+  body: string;
+  meta?: Record<string, unknown>;
+}
+
+/** Where a line of the artifact came from — the founder can check every claim. */
+export interface ArtifactEvidence {
+  /** "site_profile" | "memory" | "read:<alias>" | "input:<key>" | "playbook" | "n8n" … */
+  source: string;
+  ref: string;
+}
+
+/** What a Producer / n8n workflow hands back: everything but the ids the engine assigns. */
+export interface ArtifactDraft {
+  kind: ArtifactKind;
+  title: string;
+  /** Markdown — headings, bold, lists; rendered without a dependency. */
+  body: string;
+  items?: ArtifactItem[];
+  meta?: Record<string, unknown>;
+  evidence?: ArtifactEvidence[];
+}
+
+/** A stored artifact (table `artifacts`, migration 0013). */
+export interface Artifact extends ArtifactDraft {
+  id: string;
+  accountId: string;
+  runId: string;
+  routineId: RoutineId;
+  items: ArtifactItem[];
+  meta: Record<string, unknown>;
+  evidence: ArtifactEvidence[];
+  status: ArtifactStatus;
+  /** The founder's edit of `body`; the original stays. */
+  editedBody?: string;
+  createdAt: string;
+}
+
+/** What a producer needs before it can draft — one line per missing thing. Either a platform
+    to connect or a named founder input (an answer key the resume-input API accepts). */
+export interface ProduceNeed {
+  platform?: Platform;
+  input?: string;
+  why: string;
+}
+
+export type ProduceResult = { artifact: ArtifactDraft } | { needs: ProduceNeed[]; note?: string };
+
+/** Generates the routine's artifact from the run context through the injected Producer
+    (skill = which skill card to run; defaults to the routine id). When an active n8n workflow is
+    registered for the routine (Store.findN8nWorkflow) the engine hands the step to the N8nBridge
+    instead. Dry-run and live both produce: producing is never outward. */
+export interface ProduceNode extends NodeBase {
+  kind: "produce";
+  skill?: string;
+  /** Cap on items in the artifact (the validator enforces it). */
+  maxItems?: number;
+}
+
+/** Explicit n8n step: POST the run context to a webhook and take the Artifact it returns
+    (synchronously, or later through POST /api/routines/artifacts). One of webhookUrl /
+    webhookUrlEnv is set; absent both, the account's registered workflow (n8n_workflows) is used. */
+export interface N8nNode extends NodeBase {
+  kind: "n8n";
+  webhookUrl?: string;
+  /** Name of the env variable holding the webhook URL. */
+  webhookUrlEnv?: string;
+  timeoutMs?: number;
+}
+
+export type Node = TriggerNode | ReadNode | CheckNode | DecideNode | ProduceNode | N8nNode | GateNode | ExecuteNode | ReceiptNode;
 export type NodeKind = Node["kind"];
 
 // ---------- KPI contract (outcome telemetry) ----------
@@ -268,6 +371,19 @@ export interface RoutineSpec {
   /** Conservative founder-hours one completed run saves (catalog constant; see
       HOURS_SAVED_PER_RUN in catalog-specs.ts). Feeds the Home automation strip in DB mode. */
   hoursSavedPerRun?: number;
+  /** What the routine honestly needs to produce (from its skill card) — so availability / the
+      UI can say "Needs: X" instead of gating on every read. Absent = the reads say it all. */
+  minimum?: SpecMinimum;
+}
+
+/** The skill's stated minimum, as data. `platforms` are needed connections; `inputs` are
+    founder answers the run can ask for (waiting_input); `summary` is the one honest line. */
+export interface SpecMinimum {
+  summary: string;
+  platforms: Platform[];
+  inputs: string[];
+  /** Platforms that help but are not required (their reads are optional). */
+  helpful: Platform[];
 }
 
 // ---------- run context + results ----------
@@ -289,6 +405,8 @@ export interface RunInput {
   triggeredBy?: "schedule" | "manual" | "event";
   /** Free-form variables available to templates at vars.<key>. */
   vars?: Record<string, unknown>;
+  /** Founder-provided answers (inputs.<key>) — what resume-input merges in. */
+  inputs?: Record<string, string>;
 }
 
 export interface RunContext {
@@ -304,6 +422,11 @@ export interface RunContext {
   reads: Record<string, ReadResult>;
   checks: Record<string, boolean>;
   decision?: Decision;
+  /** Founder answers (from the run input or a resume-input); addressed as inputs.<key>.
+      Optional so hand-built contexts elsewhere stay valid; the engine always sets it. */
+  inputs?: Record<string, string>;
+  /** The artifact the produce / n8n step stored (addressed as artifact.<field>). */
+  artifact?: Artifact;
   approval?: ApprovalRecord;
   execution?: ExecutionResult;
 }
@@ -365,6 +488,10 @@ export interface RunResult {
   summary: string;
   receipts: Receipt[];
   approval?: ApprovalRecord;
+  /** The artifact this run produced (also linked from its draft receipt). */
+  artifact?: Artifact;
+  /** status waiting_input: what the producer asked for. */
+  needs?: ProduceNeed[];
   error?: string;
 }
 
@@ -380,4 +507,28 @@ export interface DecisionProvider {
 
 export interface Executor {
   execute(node: ExecuteNode, mutation: Mutation, ctx: RunContext): Promise<ExecutionResult>;
+}
+
+/** Makes the artifact. Throws when it cannot work at all (no model configured, transport
+    failure) — the engine then fails the run closed with a receipt. Returns `needs` when the
+    account lacks what the skill's minimum asks for. */
+export interface Producer {
+  produce(node: ProduceNode, ctx: RunContext): Promise<ProduceResult>;
+}
+
+export type N8nCallResult = { kind: "artifact"; artifact: ArtifactDraft } | { kind: "needs"; needs: ProduceNeed[] } | { kind: "accepted" };
+
+/** The n8n bridge: POSTs the signed payload and interprets the reply. `workflow` is the
+    registered webhook (from the store) when the step came from a produce node. */
+export interface N8nBridge {
+  call(node: N8nNode | ProduceNode, ctx: RunContext, workflow: N8nWorkflow | null): Promise<N8nCallResult>;
+}
+
+/** A registered n8n workflow for a routine (table n8n_workflows). account_id null = global. */
+export interface N8nWorkflow {
+  id: string;
+  accountId: string | null;
+  routineId: RoutineId;
+  webhookUrl: string;
+  active: boolean;
 }

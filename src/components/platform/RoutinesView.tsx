@@ -13,7 +13,8 @@ export type RunTarget = Omit<RunNowProps, "routineId">;
 
    Accounts mode: every row comes from GET /api/routines/state — the real enabled state
    (routine_states), version, honest availability ("needs Klaviyo connected", "draft-only for
-   now"), the last run and the last draft, and a "Recommended first" chip on the agreed plan's
+   now") plus the "Better with Gorgias connected" hint for optional sources (a nudge, never a
+   block), the last run and the last draft, and a "Recommended first" chip on the agreed plan's
    phase-1 launch-wave routines. Switching one on persists routine_states.enabled
    (POST /api/routines/state) AND dry-runs it at once (POST /api/routines/run): the row shows
    "Running now…" then "Draft ready · view". The client-side switch is kept in step (derive's
@@ -28,6 +29,8 @@ export const ROUTINES_COPY = {
   loading: "Reading your routines…",
   failed: "Couldn’t reach the runtime just now",
   nothingYet: "Nothing has run yet",
+  /** Optional sources not yet connected — shown after the availability line; the switch stays live. */
+  betterWith: (names: string) => `Better with ${names} connected`,
 } as const;
 
 type RunOutcome = { status: string; summary: string; drafts: number; runId: string } | { error: string };
@@ -233,6 +236,12 @@ export default function RoutinesView({ V, run, initialLive = null }: { V: Platfo
                             </div>
                             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                               {r.name} · v{r.version} · {r.availabilityCopy}
+                              {r.betterWithCopy && (
+                                <>
+                                  {" · "}
+                                  <span data-testid="better-with" style={{ color: "var(--cyan-text)" }}>{r.betterWithCopy}</span>
+                                </>
+                              )}
                             </div>
                             {(sl.text || switchErr[r.routineId]) && (
                               <div data-testid="routine-status" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginTop: 5, fontWeight: 500, color: switchErr[r.routineId] ? "var(--amber-text)" : sl.tone === "cyan" ? "var(--cyan-text)" : sl.tone === "amber" ? "var(--amber-text)" : "var(--muted)" }}>

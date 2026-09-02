@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
 import { agreePlan, computeSetupProgress, setupProgress, type SetupRows } from "../progress";
-import { recommendedRoutine, requiredPlatform, phaseOneChannel, phaseOnePlatforms, waveOneRoutines } from "../channels";
+import { recommendedRoutine, requiredPlatform, phaseOneChannel, suggestPlatforms, waveOneRoutines } from "../channels";
 import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
 
 const ACCT = "00000000-0000-4000-8000-00000000acc1";
@@ -18,13 +18,17 @@ const empty = (over: Partial<SetupRows> = {}): SetupRows => ({
   firstTasteEventAt: null,
   latestBrief: null,
   clientState: null,
-  resourceProfile: { postures: ["brand_led"], skills: ["Writing"], budget_monthly: 3600 },
+  // the founder's own platforms (onboarding step 2) — the only source of connect cards
+  resourceProfile: { postures: ["brand_led"], skills: ["Writing"], budget_monthly: 3600, known_platforms: ["Instagram", "Shopify"] },
   ...over,
 });
 
 describe("computeSetupProgress — 0/5 → 5/5", () => {
-  it("0/5: a fresh account — plan first, the Content channel, Instagram + Shopify to connect, Founder content engine recommended", () => {
+  it("0/5: a fresh account — plan first, the Content channel, the founder's Instagram + Shopify to connect, Founder content engine recommended", () => {
     const p = computeSetupProgress(empty(), NOW);
+    expect(p.platforms.every((x) => x.source === "picked")).toBe(true);
+    expect(p.business).toEqual({ businessType: null, sells: null, storefront: null });
+    expect(p.emailQuestion).toBe(false);
     expect(p.done).toBe(0);
     expect(p.allDone).toBe(false);
     expect(p.channel).toBe("Content");
@@ -113,9 +117,10 @@ describe("computeSetupProgress — 0/5 → 5/5", () => {
   });
 
   it("running runs are listed; the channel follows the founder's posture/strengths/budget", () => {
-    const p = computeSetupProgress(empty({ runs: [{ id: "r9", routine_id: "D05-W02", status: "running", started_at: "2026-09-02T08:59:00.000Z" }], resourceProfile: { postures: ["sales_led"], skills: ["Cold calls"], budget_monthly: 900 } }), NOW);
+    const p = computeSetupProgress(empty({ runs: [{ id: "r9", routine_id: "D05-W02", status: "running", started_at: "2026-09-02T08:59:00.000Z" }], resourceProfile: { postures: ["sales_led"], skills: ["Cold calls"], budget_monthly: 900, known_platforms: ["Gmail", "HubSpot", "Instagram"] } }), NOW);
     expect(p.channel).toBe("Sales");
-    expect(p.platforms.map((x) => x.platform)).toEqual(["hubspot", "gmail"]);
+    // the founder's order, with what Sales reads ahead of what it doesn't
+    expect(p.platforms.map((x) => x.platform)).toEqual(["gmail", "hubspot", "instagram"]);
     expect(p.running).toEqual([{ runId: "r9", routineId: "D05-W02", name: "Abandoned cart recovery", startedAt: "2026-09-02T08:59:00.000Z" }]);
     expect(p.recommended?.routineId).toBe("D04-W01");
   });
@@ -141,9 +146,11 @@ describe("recommended routine per phase-1 channel", () => {
     expect(recommendedRoutine(channel, [])?.id).toBe(id);
     expect(waveOneRoutines(channel).every((s) => s.wave === 1 && !s.mutates)).toBe(true);
   });
-  it("Paid ads has no wave-1 routine (every paid routine mutates) → null, honestly", () => {
-    expect(recommendedRoutine("Paid ads", [])).toBeNull();
-    expect(phaseOnePlatforms("Paid ads")).toEqual(["meta_ads", "shopify"]);
+  it("Paid ads has no wave-1 routine (every paid routine mutates) → the first generic draft-only routine, never a paid one", () => {
+    expect(waveOneRoutines("Paid ads")).toEqual([]);
+    expect(recommendedRoutine("Paid ads", [])?.id).toBe("D01-W01");
+    // and no table hands Paid ads a platform: with nothing picked or spotted there is nothing to connect
+    expect(suggestPlatforms({ channel: "Paid ads", knownPlatforms: [] })).toEqual([]);
   });
   it("skips routines already on and wraps to the first when all are on", () => {
     expect(recommendedRoutine("Content", ["D01-W01"])?.id).toBe("D01-W03");
@@ -182,19 +189,77 @@ describe("setupProgress + agreePlan on the schema-checked fake", () => {
   it("agreePlan stamps the newest plan once (idempotent), or inserts a minimal row when none exists yet", async () => {
     const db = seeded();
     const first = await agreePlan(db, ACCT, NOW);
-    expect(first).toEqual({ agreedAt: NOW.toISOString(), created: true });
+    expect(first).toEqual({ agreedAt: NOW.toISOString(), created: true, accountName: "Example Co" });
     expect(db.rows("plans")).toHaveLength(1);
     const again = await agreePlan(db, ACCT, new Date("2026-09-03T00:00:00.000Z"));
-    expect(again).toEqual({ agreedAt: NOW.toISOString(), created: false });
+    expect(again).toEqual({ agreedAt: NOW.toISOString(), created: false, accountName: "Example Co" });
     expect(db.rows("plans")).toHaveLength(1);
 
     const db2 = seeded();
     db2.seed("plans", [{ account_id: ACCT, title: "Brand-led organic", phases: [], created_at: "2026-09-01T00:00:00.000Z" }]);
     const r = await agreePlan(db2, ACCT, NOW);
-    expect(r).toEqual({ agreedAt: NOW.toISOString(), created: false });
+    expect(r).toEqual({ agreedAt: NOW.toISOString(), created: false, accountName: "Example Co" });
     expect(db2.rows("plans")[0].agreed_at).toBe(NOW.toISOString());
     const p = await setupProgress(db2, ACCT, NOW);
     expect(p.steps[0].done).toBe(true);
+  });
+
+  it("agreeing names a blank account: the scan's business name, else the website host, else the goal text — and never renames a named one", async () => {
+    const blank = () => {
+      const db = new FakeSupabase();
+      db.now = () => NOW.toISOString();
+      db.seed("accounts", [{ id: ACCT, name: "" }]);
+      return db;
+    };
+    const a = blank();
+    a.seed("business_profiles", [{ account_id: ACCT, scan_status: "done", profile: { name: "Harbour Physio", businessType: "local" } }]);
+    a.seed("resource_profiles", [{ account_id: ACCT, budget_monthly: 0, hours_weekly: 4, website: "https://www.harbourphysio.co.nz/", breadth: "focused" }]);
+    expect((await agreePlan(a, ACCT, NOW)).accountName).toBe("Harbour Physio");
+    expect(a.rows("accounts")[0].name).toBe("Harbour Physio");
+
+    const b = blank();
+    b.seed("resource_profiles", [{ account_id: ACCT, budget_monthly: 0, hours_weekly: 4, website: "www.harbourphysio.co.nz", breadth: "focused" }]);
+    b.seed("goals", [{ account_id: ACCT, category: "leads", tier: "governing", title: "40 qualified leads/mo" }]);
+    expect((await agreePlan(b, ACCT, NOW)).accountName).toBe("harbourphysio.co.nz");
+
+    const c = blank();
+    c.seed("goals", [{ account_id: ACCT, category: "leads", tier: "governing", title: "40 qualified leads/mo" }]);
+    expect((await agreePlan(c, ACCT, NOW)).accountName).toBe("40 qualified leads/mo");
+
+    const d = blank();
+    expect((await agreePlan(d, ACCT, NOW)).accountName).toBeNull();
+    expect(d.rows("accounts")[0].name).toBe("");
+    expect(d.callsFor("accounts", "update")).toHaveLength(0);
+
+    const named = seeded();
+    named.seed("business_profiles", [{ account_id: ACCT, scan_status: "done", profile: { name: "Someone Else" } }]);
+    expect((await agreePlan(named, ACCT, NOW)).accountName).toBe("Example Co");
+  });
+
+  it("the platforms are the founder's, the recommendation fits the business: a services firm on an Email plan is never sent to Shopify or a cart", async () => {
+    const db = new FakeSupabase();
+    db.now = () => NOW.toISOString();
+    db.seed("accounts", [{ id: ACCT, name: "Studio North" }]);
+    db.seed("resource_profiles", [{ account_id: ACCT, budget_monthly: 0, hours_weekly: 6, skills: [], postures: ["paid_led"], breadth: "focused", known_platforms: ["LinkedIn", "Email / SMS"] }]);
+    db.seed("business_profiles", [{ account_id: ACCT, scan_status: "done", profile: { name: "Studio North", businessType: "services", sells: "services", storefront: "none", platformsSpotted: [{ platform: "hubspot", evidence: "HubSpot forms or tracking on the site" }] } }]);
+    const p = await setupProgress(db, ACCT, NOW);
+    expect(p.channel).toBe("Email & SMS");
+    expect(p.business).toEqual({ businessType: "services", sells: "services", storefront: "none" });
+    expect(p.platforms.map((x) => [x.platform, x.source])).toEqual([
+      ["linkedin", "picked"],
+      ["hubspot", "spotted"],
+    ]);
+    expect(p.platforms.find((x) => x.platform === "hubspot")?.evidence).toBe("HubSpot forms or tracking on the site");
+    expect(p.platforms.some((x) => x.platform === "shopify")).toBe(false);
+    expect(p.emailQuestion).toBe(true);
+    // nothing in Email fits a business with no store (and no email tool yet) → the generic first routine
+    expect(p.recommended?.routineId).toBe("D01-W01");
+    expect(p.steps[1].status).toBe("Connect LinkedIn and I'll read your last 90 days tonight.");
+    // the founder answers "none yet": the question is gone, Klaviyo-reading routines stay out
+    db.rows("resource_profiles")[0].known_platforms = ["LinkedIn", "Email / SMS", "No email tool yet"];
+    const q = await setupProgress(db, ACCT, NOW);
+    expect(q.emailQuestion).toBe(false);
+    expect(q.recommended?.routineId).toBe("D01-W01");
   });
 
   it("walks the whole spine on real rows: 5/5", async () => {

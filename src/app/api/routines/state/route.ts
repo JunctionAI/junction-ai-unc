@@ -1,6 +1,7 @@
 /* GET  /api/routines/state[?routineId=D0x-W0y] — the Routines view's real state.
    →  { routines: [{ routineId, name, category, wave, enabled, version, availability,
-                     availabilityCopy, canEnable, recommended, lastRun, lastDraft }],
+                     availabilityCopy, canEnable, betterWith, betterWithCopy, recommended,
+                     lastRun, lastDraft }],
         recommendedFirst: [ids], planChannel, connected: [platforms],
         lastRunReceipts?: [...] }            (with ?routineId= — the last run's receipt trail)
    or { fallback: true }   demo mode (no database) — the view keeps its demo rows

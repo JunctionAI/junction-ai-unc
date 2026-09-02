@@ -53,6 +53,8 @@ export const CLIENT_STATE_SCHEMA_VERSION = 1;
 export interface AccountRow {
   id: string;
   currency: string;
+  /** accounts.name — read for the sidebar header; written once at plan agreement (src/lib/db/accountState.ts ensureAccountName). */
+  name?: string;
 }
 export interface GoalRow {
   account_id: string;

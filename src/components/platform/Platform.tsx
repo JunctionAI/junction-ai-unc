@@ -10,7 +10,8 @@ import { useLiveApprovals } from "./useLiveApprovals";
 import { useHomeTelemetry } from "./useHomeTelemetry";
 import { useOnboardingMemories } from "./useOnboardingMemories";
 import { useSetupProgress } from "@/lib/setup/useSetupProgress";
-import { startConnect } from "@/lib/setup/connect";
+import { recordEmailAnswer, startConnect } from "@/lib/setup/connect";
+import { EMAIL_TOOL_LABEL } from "@/lib/setup/channels";
 import { turnOnRoutine } from "@/lib/setup/routine";
 import { phaseChannels } from "@/lib/setup/home";
 import type { SetupAnchor } from "@/lib/setup/progress";
@@ -69,17 +70,19 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
      agreed before the column was written. */
   const agreeFired = useRef(false);
   const setupRefresh = setup.refresh;
+  const setAccountName = persistence.setAccountName;
   useEffect(() => {
     if (!inAccount || !S.onboarded || !setupData || setupData.agreedAt || agreeFired.current) return;
     agreeFired.current = true;
     fetch("/api/setup/agree", { method: "POST" })
       .then((r) => r.json().catch(() => ({})))
-      .then((body: { agreedAt?: string }) => {
+      .then((body: { agreedAt?: string; accountName?: string | null }) => {
         if (typeof body.agreedAt === "string") setPlanAgreedAt(body.agreedAt);
+        if (typeof body.accountName === "string" && body.accountName) setAccountName(body.accountName);
         setupRefresh();
       })
       .catch(() => {});
-  }, [inAccount, S.onboarded, setupData, setPlanAgreedAt, setupRefresh]);
+  }, [inAccount, S.onboarded, setupData, setPlanAgreedAt, setupRefresh, setAccountName]);
   const showGuided = inAccount && S.onboarded && S.setupFlow !== "home";
   const phaseOne = phaseChannels(S)[0];
   const liveRefresh = live.refresh;
@@ -207,6 +210,12 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
             onTokenLink={() => {
               V.setSetupFlow("home");
               V.goConnectors();
+            }}
+            onEmailAnswer={(answer) => {
+              // known_platforms (autosaved) + a founder memory — one answer replaces any earlier one
+              V.addKnownPlatform(EMAIL_TOOL_LABEL[answer], Object.values(EMAIL_TOOL_LABEL));
+              void recordEmailAnswer(answer);
+              setupRefresh();
             }}
           />
         )}

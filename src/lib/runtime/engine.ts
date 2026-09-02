@@ -11,6 +11,22 @@
      status is re-read from the Store at execute time, so a forged context
      cannot unlock an execute.
 
+   resumeRunWithInput(runId, answers, adapters)
+     A run that ended waiting_input (the producer asked for something) takes
+     the founder's answers into ctx.inputs and re-runs its produce step.
+
+   completeExternalArtifact(runId, result, adapters)
+     A run handed to an n8n workflow (202 accepted) receives the artifact — or
+     a `needs` list — through POST /api/routines/artifacts and carries on.
+
+   The produce step (produce / n8n nodes) is where a routine makes real work:
+   the artifact is stored (Store.putArtifact), linked from a `draft` receipt,
+   and shown in the gate preview. Producing is never outward: dry_run and live
+   both produce. A producer that lacks what the skill needs answers `needs` and
+   the run ends waiting_input with a receipt "To draft this I need …" — never a
+   silent skip. Optional reads that cannot be answered land as "unavailable"
+   with a receipt and the chain carries on.
+
    Hard rules, enforced here regardless of who calls:
      • no execute without an approved, unexpired gate on THIS run
      • no execute unless mode === 'live'
@@ -34,12 +50,20 @@ import type { RunRecord, RunSnapshot, Store } from "./store/interface";
 import type {
   AccountContext,
   ApprovalRecord,
+  Artifact,
+  ArtifactDraft,
   ConnectorReader,
   DecisionProvider,
   ExecuteNode,
   Executor,
   GateNode,
+  N8nBridge,
+  N8nNode,
   Node,
+  ProduceNeed,
+  ProduceNode,
+  Producer,
+  ReadResult,
   Receipt,
   ReceiptKind,
   RoutineSpec,
@@ -58,6 +82,10 @@ export interface Adapters {
   decider: DecisionProvider;
   executor: Executor;
   store: Store;
+  /** Makes the artifact at a produce node. Absent → a produce node fails the run closed. */
+  producer?: Producer;
+  /** Hands a produce step to a registered n8n workflow, or runs an explicit n8n node. */
+  n8n?: N8nBridge;
   /** Injectable clock (tests, replays). */
   now?: () => Date;
   /** Injectable id generator. */
@@ -71,6 +99,17 @@ export interface RunOptions {
 export interface ResumeOptions {
   /** auth user id of the approver — lands in approvals.decided_by. */
   decidedBy?: string;
+}
+
+/** One honest line per need — the receipt copy and the UI's "Needs: X". */
+export function describeNeed(need: ProduceNeed): string {
+  if (need.platform) return `${need.platform} connected — ${need.why}`;
+  if (need.input) return `${need.input.replace(/_/g, " ")} — ${need.why}`;
+  return need.why;
+}
+
+export function describeNeeds(needs: ProduceNeed[]): string {
+  return needs.map(describeNeed).join("; ");
 }
 
 export function capsFor(account: AccountContext): SpendCaps {
@@ -126,12 +165,12 @@ class RunSession {
 
   // ----- lifecycle -----
 
-  private async finish(status: Exclude<RunStatus, "running" | "waiting_approval">, summary: string, error?: string): Promise<RunResult> {
+  private async finish(status: Exclude<RunStatus, "running" | "waiting_approval" | "waiting_input">, summary: string, error?: string): Promise<RunResult> {
     this.run = await this.store.updateRun(this.run.id, { status, summary, finishedAt: this.nowIso(), snapshot: undefined });
     return this.result(status, summary, error);
   }
 
-  private result(status: RunStatus, summary: string, error?: string): RunResult {
+  private result(status: RunStatus, summary: string, error?: string, needs?: ProduceNeed[]): RunResult {
     return {
       runId: this.ctx.runId,
       routineId: this.ctx.routineId,
@@ -141,6 +180,8 @@ class RunSession {
       summary,
       receipts: [...this.receipts],
       approval: this.ctx.approval,
+      artifact: this.ctx.artifact,
+      needs,
       error,
     };
   }
@@ -178,6 +219,10 @@ class RunSession {
         return this.check(node);
       case "decide":
         return this.decide(node);
+      case "produce":
+        return this.produce(node, index);
+      case "n8n":
+        return this.n8n(node, index);
       case "gate":
         return this.gate(node, index);
       case "execute":
@@ -205,7 +250,22 @@ class RunSession {
   }
 
   private async read(node: Extract<Node, { kind: "read" }>) {
-    const result = await this.adapters.reader.read(node.source, node.query, this.ctx);
+    let result: ReadResult;
+    try {
+      result = await this.adapters.reader.read(node.source, node.query, this.ctx);
+    } catch (err) {
+      if (!node.optional) throw err;
+      // An optional read that couldn't be asked: say so, land an empty result, carry on.
+      const reason = err instanceof Error ? err.message : String(err);
+      this.ctx.reads[node.as] = { rows: [], metrics: {}, fetchedAt: this.nowIso(), provenance: "unavailable" };
+      await this.receipt(
+        "notification",
+        `Couldn’t read ${node.source} ${node.query.resource} (${reason.replace(/^couldn't ask [^:]+: /, "")}) — drafting from what I have.`,
+        { as: node.as, query: node.query, rowCount: 0, provenance: "unavailable", reason, optional: true },
+        { platform: node.source },
+      );
+      return undefined;
+    }
     if (node.freshnessMinutes !== undefined) {
       const ageMin = (this.now().getTime() - new Date(result.fetchedAt).getTime()) / 60_000;
       if (ageMin > node.freshnessMinutes) {
@@ -257,6 +317,95 @@ class RunSession {
     return undefined;
   }
 
+  // ----- produce (the real work) -----
+
+  /** Store the artifact, link it from a draft receipt, land it in the context. */
+  private async storeArtifact(node: ProduceNode | N8nNode, draft: ArtifactDraft, via: "producer" | "n8n"): Promise<Artifact> {
+    const artifact: Artifact = {
+      id: this.idGen(),
+      accountId: this.ctx.account.accountId,
+      runId: this.ctx.runId,
+      routineId: this.ctx.routineId,
+      kind: draft.kind,
+      title: draft.title,
+      body: draft.body,
+      items: draft.items ?? [],
+      meta: { ...(draft.meta ?? {}), via, node: node.id, mode: this.ctx.mode },
+      evidence: draft.evidence ?? [],
+      status: "draft",
+      createdAt: this.nowIso(),
+    };
+    await this.store.putArtifact(artifact);
+    this.ctx.artifact = artifact;
+    const n = artifact.items.length;
+    await this.receipt("draft", `Drafted: ${artifact.title}${n ? ` (${n} ${n === 1 ? "item" : "items"})` : ""}.`, {
+      node: node.id,
+      artifactId: artifact.id,
+      artifactKind: artifact.kind,
+      title: artifact.title,
+      items: n,
+      evidence: artifact.evidence.length,
+      via,
+    });
+    return artifact;
+  }
+
+  /** The producer asked for something: receipt it honestly, hold a snapshot at THIS node so
+      resume-input re-runs it with the answers, end waiting_input. */
+  private async waitForInput(node: ProduceNode | N8nNode, index: number, needs: ProduceNeed[], note?: string): Promise<RunResult> {
+    const line = `To draft this I need: ${describeNeeds(needs)}.${note ? ` ${note}` : ""}`;
+    await this.receipt("notification", line, { node: node.id, needs, note: note ?? null });
+    const snapshot: RunSnapshot = { spec: this.spec, ctx: this.ctx, nextNodeIndex: index, needs };
+    this.run = await this.store.updateRun(this.run.id, { status: "waiting_input", summary: line, snapshot });
+    return this.result("waiting_input", line, undefined, needs);
+  }
+
+  private async produce(node: ProduceNode, index: number): Promise<RunResult | undefined> {
+    // A registered n8n workflow for this routine takes the step over (Tom's workflows as skills).
+    if (this.adapters.n8n) {
+      const workflow = await this.store.findN8nWorkflow(this.ctx.account.accountId, this.ctx.routineId);
+      if (workflow) return this.callN8n(node, index, workflow);
+    }
+    const producer = this.adapters.producer;
+    if (!producer) return this.fail(node.id, "no producer is configured — nothing was drafted", { node: node.id });
+    const out = await producer.produce(node, this.ctx);
+    if ("needs" in out) return this.waitForInput(node, index, out.needs, out.note);
+    await this.storeArtifact(node, out.artifact, "producer");
+    return undefined;
+  }
+
+  private async n8n(node: N8nNode, index: number): Promise<RunResult | undefined> {
+    const workflow = node.webhookUrl || node.webhookUrlEnv ? null : await this.store.findN8nWorkflow(this.ctx.account.accountId, this.ctx.routineId);
+    return this.callN8n(node, index, workflow);
+  }
+
+  private async callN8n(node: ProduceNode | N8nNode, index: number, workflow: Awaited<ReturnType<Store["findN8nWorkflow"]>>): Promise<RunResult | undefined> {
+    const bridge = this.adapters.n8n;
+    if (!bridge) return this.fail(node.id, "no n8n bridge is configured — nothing was drafted", { node: node.id });
+    const out = await bridge.call(node, this.ctx, workflow);
+    if (out.kind === "needs") return this.waitForInput(node, index, out.needs);
+    if (out.kind === "artifact") {
+      await this.storeArtifact(node, out.artifact, "n8n");
+      return undefined;
+    }
+    // 202 accepted: the workflow will POST the artifact back; hold the run (still running).
+    await this.receipt("notification", `Handed to the n8n workflow${workflow ? ` for ${workflow.routineId}` : ""} — waiting for its artifact.`, { node: node.id, workflowId: workflow?.id ?? null });
+    const snapshot: RunSnapshot = { spec: this.spec, ctx: this.ctx, nextNodeIndex: index + 1, awaiting: "n8n" };
+    this.run = await this.store.updateRun(this.run.id, { status: "running", summary: "Waiting for the n8n workflow's artifact.", snapshot });
+    return this.result("running", "Waiting for the n8n workflow's artifact.");
+  }
+
+  /** Called by completeExternalArtifact: the artifact arrived; store it and carry on. */
+  async deliverExternal(node: ProduceNode | N8nNode, draft: ArtifactDraft, nextNodeIndex: number): Promise<RunResult> {
+    await this.storeArtifact(node, draft, "n8n");
+    this.run = await this.store.updateRun(this.run.id, { snapshot: undefined });
+    return this.runFrom(nextNodeIndex);
+  }
+
+  async deliverExternalNeeds(node: ProduceNode | N8nNode, index: number, needs: ProduceNeed[]): Promise<RunResult> {
+    return this.waitForInput(node, index, needs);
+  }
+
   private approvalDraft(node: GateNode): Omit<ApprovalRecord, "id" | "status" | "createdAt" | "expiresAt"> {
     return {
       accountId: this.ctx.account.accountId,
@@ -272,10 +421,12 @@ class RunSession {
 
   private async gate(node: GateNode, index: number) {
     const draft = this.approvalDraft(node);
+    const art = this.ctx.artifact;
+    const artifactPreview = art ? { artifactId: art.id, artifactKind: art.kind, artifactTitle: art.title, artifactItems: art.items.length, artifactExcerpt: art.body.split("\n").filter((l) => l.trim()).slice(0, 3).join("\n").slice(0, 400) } : {};
     if (this.dry) {
       await this.receipt("draft", `Would ask ${node.approver ?? this.ctx.account.approver ?? "the founder"}: ${draft.title}`, {
         node: node.id,
-        approvalPreview: { ...draft, expiryHours: node.expiryHours },
+        approvalPreview: { ...draft, expiryHours: node.expiryHours, ...artifactPreview },
       });
       return undefined;
     }
@@ -283,7 +434,7 @@ class RunSession {
     const approval: ApprovalRecord = { ...draft, id: this.idGen(), status: "pending", createdAt, expiresAt: addHours(createdAt, node.expiryHours) };
     await this.store.createApproval(approval);
     this.ctx.approval = approval;
-    await this.receipt("notification", `Waiting for approval: ${approval.title}`, { node: node.id, approvalId: approval.id, expiresAt: approval.expiresAt }, { approvalId: approval.id });
+    await this.receipt("notification", `Waiting for approval: ${approval.title}`, { node: node.id, approvalId: approval.id, expiresAt: approval.expiresAt, ...artifactPreview }, { approvalId: approval.id });
     const snapshot: RunSnapshot = { spec: this.spec, ctx: this.ctx, nextNodeIndex: index + 1 };
     this.run = await this.store.updateRun(this.run.id, { status: "waiting_approval", approvalId: approval.id, snapshot });
     return this.result("waiting_approval", `Waiting for approval: ${approval.title}`);
@@ -371,6 +522,7 @@ class RunSession {
       measurementWindowDays: node.measurementWindowDays ?? null,
       reads: Object.keys(this.ctx.reads),
       decision: this.ctx.decision?.optionId ?? null,
+      artifactId: this.ctx.artifact?.id ?? null,
       approval: this.ctx.approval?.id ?? null,
       executed: this.ctx.execution?.ok ?? false,
     });
@@ -395,6 +547,7 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
     caps: capsFor(input.account),
     triggeredBy: input.triggeredBy ?? "schedule",
     vars: input.vars ?? {},
+    inputs: { ...(input.inputs ?? {}) },
     reads: {},
     checks: {},
   };
@@ -458,3 +611,49 @@ export async function resumeRun(runId: string, decision: "approved" | "held", ad
   return session.runFrom(nextNodeIndex);
 }
 
+/** Strings only, trimmed and capped — answers become prompt material, never code. */
+export function cleanAnswers(answers: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(answers ?? {})) {
+    const key = k.trim().slice(0, 64);
+    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(key)) continue;
+    const text = typeof v === "string" ? v.trim().slice(0, 4000) : typeof v === "number" || typeof v === "boolean" ? String(v) : "";
+    if (text) out[key] = text;
+  }
+  return out;
+}
+
+/** The founder answered what the producer asked for: merge the answers into ctx.inputs and
+    re-run the produce step (the snapshot points at it). */
+export async function resumeRunWithInput(runId: string, answers: Record<string, unknown>, adapters: Adapters): Promise<RunResult> {
+  const store = adapters.store;
+  const now = adapters.now ?? (() => new Date());
+  const run = await store.getRun(runId);
+  if (!run) throw new Error(`run ${runId} not found`);
+  if (run.status !== "waiting_input") throw new Error(`run ${runId} is ${run.status}, not waiting_input`);
+  if (!run.snapshot) throw new Error(`run ${runId} has no resumable snapshot`);
+  const clean = cleanAnswers(answers);
+  if (!Object.keys(clean).length) throw new Error("answers are empty");
+  const { spec, ctx, nextNodeIndex } = run.snapshot;
+  ctx.inputs = { ...(ctx.inputs ?? {}), ...clean };
+  const session = new RunSession(spec, ctx, run, adapters);
+  await session.receipt("notification", `You answered: ${Object.keys(clean).map((k) => k.replace(/_/g, " ")).join(", ")}. Drafting again with that.`, { answered: Object.keys(clean) });
+  await store.updateRun(run.id, { status: "running", summary: "Resumed with your answers.", snapshot: undefined, finishedAt: undefined });
+  void now;
+  return session.runFrom(nextNodeIndex);
+}
+
+/** An n8n workflow delivered the artifact (or its needs) for a run it had accepted. */
+export async function completeExternalArtifact(runId: string, result: { artifact: ArtifactDraft } | { needs: ProduceNeed[] }, adapters: Adapters): Promise<RunResult> {
+  const store = adapters.store;
+  const run = await store.getRun(runId);
+  if (!run) throw new Error(`run ${runId} not found`);
+  if (run.status !== "running" || run.snapshot?.awaiting !== "n8n") throw new Error(`run ${runId} is not waiting for an n8n artifact`);
+  const { spec, ctx, nextNodeIndex } = run.snapshot;
+  const index = nextNodeIndex - 1;
+  const node = spec.nodes[index];
+  if (!node || (node.kind !== "produce" && node.kind !== "n8n")) throw new Error(`run ${runId} snapshot does not point at a produce step`);
+  const session = new RunSession(spec, ctx, run, adapters);
+  if ("needs" in result) return session.deliverExternalNeeds(node, index, result.needs);
+  return session.deliverExternal(node, result.artifact, nextNodeIndex);
+}

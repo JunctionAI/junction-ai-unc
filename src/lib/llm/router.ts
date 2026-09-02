@@ -29,6 +29,7 @@ export const TASK_DEFAULTS: Record<LlmTask, { id: string } | { tier: ModelTier }
   business_scan: { tier: "fast" },
   self_review: { id: "claude-sonnet-5" },
   routine_decision: { tier: "fast" },
+  routine_produce: { tier: "balanced" }, // the artifacts routines produce — craft over speed
   memory_extract: { tier: "fast" },
   daily_brief: { tier: "balanced" },
   kpi_insight: { tier: "fast" },

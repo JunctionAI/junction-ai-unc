@@ -90,9 +90,11 @@ export function loadSchema(dir = MIGRATIONS_DIR): Schema {
       if (t.primaryKey.length) t.uniques.unshift({ columns: t.primaryKey });
     }
 
-    // alter table … add column
+    // alter table … add column | add constraint … check (col in (…))  (0013 widens routine_runs.status)
     const alterRe = /alter table (\w+)([\s\S]*?);/g;
     for (const m of sql.matchAll(alterRe)) {
+      const con = m[2].match(/add constraint \w+ check \((\w+) in \(([^)]+)\)\)/i);
+      if (con) table(m[1]).enums[con[1]] = new Set(con[2].split(",").map((v) => v.trim().replace(/^'|'$/g, "")));
       if (!/add column/i.test(m[2])) continue;
       const t = table(m[1]);
       for (const part of splitTopLevel(m[2])) {

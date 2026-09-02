@@ -4,12 +4,19 @@
                           recommended (the agreed plan's phase-1, wave-1 routines)
      once                 recommendedFirst[] · planChannel · connected platforms
 
-   Three store reads (states, newest runs, newest draft receipts) + two DB reads (connectors,
-   the latest plan) — never one query per routine. Store-agnostic (MemoryStore in tests). */
+   Only a routine's REQUIRED reads (and its skill minimum's platforms) gate availability; optional
+   reads surface as "Better with X connected" (betterWith) — a hint, never a block.
+
+   Three store reads (states, newest runs, newest draft receipts) + three DB reads (connectors,
+   the latest plan, the business profile) — never one query per routine. Store-agnostic
+   (MemoryStore in tests). The business type (business_profiles.profile — scan / founder) gates
+   availability: a store-only routine for a business with no store is "For stores — not your
+   model" — off, not recommended, still listed honestly. Unknown type ⇒ nothing is hidden. */
 
 import { unwrap, type DbClient } from "../db/types";
 import { ALL_SYSTEMS } from "../platform/catalog";
-import { availabilityCopy, canEnable, routineAvailability, type Availability } from "./availability";
+import { modelFromProfile, type BusinessModel } from "../unc/businessType";
+import { availabilityCopy, betterWith, betterWithCopy, canEnable, fitsBusiness, routineAvailability, type Availability } from "./availability";
 import { CATALOG_SPECS, CATALOG_SPEC_BY_ID } from "./catalog-specs";
 import type { Store } from "./store/interface";
 import type { Receipt, RunStatus } from "./types";
@@ -40,6 +47,10 @@ export interface RoutineStateView {
   availability: Availability;
   availabilityCopy: string;
   canEnable: boolean;
+  /** Helpful platforms (optional reads, the skill minimum's `helpful`) not yet connected — a nudge, never a block. */
+  betterWith: string[];
+  /** "Better with Gorgias, LinkedIn connected", or null. */
+  betterWithCopy: string | null;
   recommended: boolean;
   lastRun: RoutineLastRun | null;
   lastDraft: RoutineLastDraft | null;
@@ -52,6 +63,8 @@ export interface RoutinesStateListing {
   /** The plan's first channel (category name), or null without a plan. */
   planChannel: string | null;
   connected: string[];
+  /** What kind of business this is (null fields when unknown) — why some rows read "For stores — not your model". */
+  business: BusinessModel;
   /** Only with ?routineId=: the receipt trail of that routine's last run, oldest first. */
   lastRunReceipts?: { id: string; kind: string; platform: string | null; description: string; createdAt: string }[];
 }
@@ -93,13 +106,21 @@ export async function latestPlanPhases(db: DbClient | null, accountId: string): 
   return row?.phases ?? null;
 }
 
+/** The account's business model off business_profiles.profile (all null in demo / before a scan). */
+export async function businessModelFor(db: DbClient | null, accountId: string): Promise<BusinessModel> {
+  if (!db) return modelFromProfile(null);
+  const row = await unwrap<{ profile: unknown } | null>("business_profiles.select", db.from("business_profiles").select("profile").eq("account_id", accountId).maybeSingle());
+  return modelFromProfile(row?.profile ?? null);
+}
+
 export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId: string, opts: { routineId?: string } = {}): Promise<RoutinesStateListing> {
-  const [states, runs, drafts, connected, phases] = await Promise.all([
+  const [states, runs, drafts, connected, phases, business] = await Promise.all([
     deps.store.listRoutineStates(accountId),
     deps.store.listRuns(accountId, { limit: RUNS_WINDOW }),
     deps.store.listReceipts(accountId, { kind: "draft", limit: DRAFTS_WINDOW }),
     connectedPlatformsFor(deps.db, accountId),
     latestPlanPhases(deps.db, accountId),
+    businessModelFor(deps.db, accountId),
   ]);
   const stateById = new Map(states.map((s) => [s.routineId, s]));
   const lastRunById = new Map<string, RoutineLastRun>();
@@ -114,13 +135,15 @@ export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId
     if (!routineId || lastDraftById.has(routineId)) continue;
     lastDraftById.set(routineId, { receiptId: d.id, runId: d.runId, description: d.description, at: d.createdAt });
   }
-  const recommendedFirst = recommendedFirstFrom(phases);
+  // A store-only routine is never "recommended first" for a business with no store.
+  const recommendedFirst = recommendedFirstFrom(phases).filter((id) => fitsBusiness({ id }, business));
   const planChannel = recommendedFirst.length ? (catalog.get(recommendedFirst[0])?.cat ?? null) : phaseOneRoutineIds(phases).length ? (catalog.get(phaseOneRoutineIds(phases)[0])?.cat ?? null) : null;
 
   const routines: RoutineStateView[] = CATALOG_SPECS.map((spec) => {
     const def = catalog.get(spec.id);
     const st = stateById.get(spec.id);
-    const availability = routineAvailability(spec, connected);
+    const availability = routineAvailability(spec, connected, business);
+    const helpful = betterWith(spec, connected, business);
     return {
       routineId: spec.id,
       name: def?.name ?? spec.name,
@@ -131,13 +154,15 @@ export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId
       availability,
       availabilityCopy: availabilityCopy(availability),
       canEnable: canEnable(availability),
+      betterWith: helpful,
+      betterWithCopy: betterWithCopy(helpful),
       recommended: recommendedFirst.includes(spec.id),
       lastRun: lastRunById.get(spec.id) ?? null,
       lastDraft: lastDraftById.get(spec.id) ?? null,
     };
   });
 
-  const out: RoutinesStateListing = { routines, recommendedFirst, planChannel, connected };
+  const out: RoutinesStateListing = { routines, recommendedFirst, planChannel, connected, business };
   if (opts.routineId) {
     const last = lastRunById.get(opts.routineId);
     out.lastRunReceipts = last ? (await deps.store.listReceipts(accountId, { runId: last.id })).map(receiptLine) : [];

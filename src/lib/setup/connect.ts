@@ -34,6 +34,25 @@ export async function startConnect(platform: string, opts: { shop?: string; fetc
   }
 }
 
+/** The email question's answer becomes a founder-stated memory (POST /api/brain/memories) so
+    Unc never asks twice; the known_platforms write is the client's (derive addKnownPlatform →
+    autosave). Fire-and-forget by design: a failed memory write never blocks the step. */
+export const EMAIL_ANSWER_MEMORY: Record<"klaviyo" | "mailchimp" | "none", string> = {
+  klaviyo: "Email is sent with Klaviyo.",
+  mailchimp: "Email is sent with Mailchimp (no connector for it yet).",
+  none: "No email tool yet — nothing sends email today; email routines wait until there is one.",
+};
+
+export async function recordEmailAnswer(answer: "klaviyo" | "mailchimp" | "none", opts: { fetch?: typeof fetch } = {}): Promise<boolean> {
+  const f = opts.fetch ?? fetch;
+  try {
+    const res = await f("/api/brain/memories", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: EMAIL_ANSWER_MEMORY[answer], kind: "fact" }) });
+    return res.ok || res.status === 409; // 409 = already remembered, word for word
+  } catch {
+    return false;
+  }
+}
+
 /** Copy for the guided step, Unc's voice (the connectors module keeps its own for its view). */
 export const CONNECT_STEP_COPY = {
   notSwitchedOn: "Not switched on yet — I'll tell you the moment it is.",

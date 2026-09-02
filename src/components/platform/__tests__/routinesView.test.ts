@@ -53,13 +53,18 @@ describe("RoutinesView — accounts mode reads the database, demo mode is the pr
     const html = renderRoutines(emailState, acctRun, live);
     // the one the database says is on (v3, ran, drafted)
     expect(html).toContain('data-testid="routine-D05-W07" data-enabled="1"');
-    expect(html).toContain("v3 · needs Klaviyo connected");
+    // its reads are optional: never blocked on Klaviyo, only "Better with" it (a hint, not a block)
+    expect(html).toContain("v3 · drafts only — nothing goes out without you");
+    expect(html).toContain('data-testid="better-with"');
+    expect(html).toContain(ROUTINES_COPY.betterWith("Klaviyo"));
+    expect(html).not.toContain("v3 · needs Klaviyo connected");
+    // a wave-2 chain with plain (required) reads is still honestly blocked
+    expect(html).toContain("Winback campaign prep · v1 · needs Klaviyo connected");
     expect(html).toContain("Last run");
     expect(html).toContain(ROUTINES_COPY.draftReady);
-    // recommended-first (plan phase 1, wave 1) — off, chipped, honest about Klaviyo
+    // recommended-first (plan phase 1, wave 1) — off, chipped; Shopify (required) is in, Klaviyo only helps
     expect(html).toContain('data-testid="routine-D05-W02" data-enabled="0"');
     expect(html).toContain(ROUTINES_COPY.recommended);
-    expect(html).toContain("needs Klaviyo connected");
     // a mutating routine is off and says why
     expect(html).toContain("coming in wave 2");
     // derive's demo defaults never leak: the demo marks "Welcome flow tuning" Active, the DB does not
@@ -95,7 +100,8 @@ describe("RoutineDetail — accounts mode shows the real routine", () => {
     const liveHook = { active: true, loading: false, data: live, error: null, refresh: noop, patch: noop };
     const html = renderToStaticMarkup(createElement(RoutineDetail, { V: derive(selState, noop), run: acctRun, live: liveHook }));
     expect(html).toContain('data-testid="detail-state"');
-    expect(html).toContain("On · needs Klaviyo connected");
+    expect(html).toContain("On · drafts only — nothing goes out without you");
+    expect(html).toContain("Better with Klaviyo connected");
     expect(html).toContain("v3 · active");
     expect(html).toContain('data-testid="spec-node"');
     expect(html).toContain("Schedule");

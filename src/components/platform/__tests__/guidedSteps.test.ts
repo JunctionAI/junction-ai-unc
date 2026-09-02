@@ -10,6 +10,7 @@ import { initialState, type Patch, type PlatformState } from "@/lib/platform/sta
 import { persistedProjection, rowsToState, stateToRows } from "@/lib/db/mapping";
 import { startConnect } from "@/lib/setup/connect";
 import { turnOnLine, turnOnRoutine } from "@/lib/setup/routine";
+import type { BusinessProfile } from "@/lib/unc/scan";
 import ConnectDataStep from "../ConnectDataStep";
 import FirstRoutineStep from "../FirstRoutineStep";
 
@@ -79,35 +80,109 @@ describe("post-plan flow — state machine", () => {
 
 const continueTag = (html: string) => html.match(/<button[^>]*data-testid="connect-continue"[^>]*>/)?.[0] ?? "";
 
-describe("ConnectDataStep — rendered per state", () => {
+/** A scanned services firm: no store, LinkedIn + HubSpot on the site. The fixture the "no Shopify" guard runs on. */
+const SERVICES_PROFILE: BusinessProfile = {
+  name: "Studio North",
+  oneLiner: "A brand studio for founders.",
+  category: "Design agency",
+  products: [],
+  audience: "Founders",
+  voice: { tone: null, phrases: [] },
+  market: { region: "NZ", competitorsMentioned: [] },
+  signals: [],
+  confidence: "high",
+  sources: ["https://studionorth.example/"],
+  businessType: "services",
+  sells: "services",
+  storefront: "none",
+  businessTypeSource: "scan",
+  typeEvidence: ["a services section", "a book-a-call / quote call to action"],
+  platformsSpotted: [{ platform: "hubspot", evidence: "HubSpot forms or tracking on the site" }],
+};
+const scanned = (profile: BusinessProfile): PlatformState["scan"] => ({ status: "done", key: "k", profile });
+
+describe("ConnectDataStep — rendered per state (cards are the founder's own platforms, never a table's)", () => {
   const render = (S: PlatformState, channel: "Content" | "Email & SMS" | "SEO" | "Sales" | "Paid ads" = "Content") =>
     renderToStaticMarkup(createElement(ConnectDataStep, { V: derive(S, noop), channel, onConnect: async () => ({ kind: "fallback" as const, reason: "platform_not_configured" }), onContinue: noop, onLater: noop, onTokenLink: noop }));
 
-  it("Content: cards for Instagram and Shopify only, Continue disabled, the later ghost present, dots continue at step 7", () => {
-    const html = render({ ...initialState, onboarded: true, setupFlow: "connect" });
+  it("Content, the founder picked Instagram + Shopify: those two cards only, Continue disabled, the later ghost present, dots continue at step 7", () => {
+    const html = render({ ...initialState, onboarded: true, setupFlow: "connect", obPlatforms: ["Instagram", "Shopify"] });
     expect(html).toContain("Step 7 · Your data");
     expect(html).toContain("Connect your data");
-    expect(html).toContain('data-testid="connect-card-instagram" data-status="off"');
-    expect(html).toContain('data-testid="connect-card-shopify" data-status="off"');
+    expect(html).toContain('data-testid="connect-card-instagram" data-status="off" data-source="picked"');
+    expect(html).toContain('data-testid="connect-card-shopify" data-status="off" data-source="picked"');
+    expect(html).toContain("You said you use this");
     expect(html).not.toContain("connect-card-klaviyo");
     expect(continueTag(html)).toContain("disabled");
     expect(html).toContain("I&#x27;ll do this later");
     expect(html).toContain("Your plan starts with <strong>Content</strong>");
+    expect(html).toContain("the tools you told me you use");
   });
 
-  it("Email plan: Klaviyo + Shopify; a connected card reads Connected ✓ and Continue is live", () => {
-    const html = render({ ...initialState, connState: { Klaviyo: "ok" } }, "Email & SMS");
+  it("Email plan, Klaviyo picked and connected: the card reads Connected ✓ and Continue is live; no email question", () => {
+    const html = render({ ...initialState, obPlatforms: ["Klaviyo", "Shopify"], connState: { Klaviyo: "ok" } }, "Email & SMS");
     expect(html).toContain('data-testid="connect-card-klaviyo" data-status="ok"');
     expect(html).toContain("Connected ✓");
     expect(html).toContain("I&#x27;ll read your last 90 days tonight");
+    expect(html).not.toContain("email-question");
     expect(continueTag(html)).not.toContain("disabled");
   });
 
   it("a lapsed connector says Needs reconnect and offers Reconnect", () => {
-    const html = render({ ...initialState, connState: { Shopify: "expired" } }, "Email & SMS");
+    const html = render({ ...initialState, obPlatforms: ["Shopify"], connState: { Shopify: "expired" } }, "Email & SMS");
     expect(html).toContain('data-testid="connect-card-shopify" data-status="expired"');
     expect(html).toContain("Needs reconnect");
     expect(html).toContain(">Reconnect<");
+  });
+
+  it("a services firm (scanned: no store): NO Shopify card — LinkedIn they picked, HubSpot I spotted, nothing else", () => {
+    const html = render({ ...initialState, obPlatforms: ["LinkedIn"], scan: scanned(SERVICES_PROFILE) }, "Sales");
+    expect(html).toContain('data-testid="connect-card-linkedin" data-status="off" data-source="picked"');
+    expect(html).toContain('data-testid="connect-card-hubspot" data-status="off" data-source="spotted"');
+    expect(html).toContain("I spotted this on your site");
+    expect(html).toContain("HubSpot forms or tracking on the site.");
+    expect(html).not.toContain("connect-card-shopify");
+    expect(html).not.toContain("Shopify");
+    expect(html).not.toContain("connect-card-gmail"); // Sales reads Gmail, but the founder never said they use it
+    expect(html).toContain("the tools you told me about, plus what I spotted on your site");
+  });
+
+  it("the founder's order is kept, with what phase 1 reads ahead of what it doesn't", () => {
+    const html = render({ ...initialState, obPlatforms: ["TikTok", "Klaviyo", "Instagram"] }, "Content");
+    const order = [...html.matchAll(/data-testid="connect-card-([a-z_0-9]+)"/g)].map((m) => m[1]);
+    expect(order).toEqual(["instagram", "tiktok", "klaviyo"]);
+  });
+
+  it("nothing picked, nothing spotted: no card at all, Unc says so, Continue is open, the ghost points at Connectors", () => {
+    const html = render({ ...initialState, obPlatforms: [] }, "Content");
+    expect(html).not.toContain("connect-card-");
+    expect(html).toContain("there&#x27;s nothing to connect");
+    expect(continueTag(html)).not.toContain("disabled");
+    expect(html).toContain('data-testid="connect-add-tool"');
+    expect(html).not.toContain("connect-later");
+  });
+
+  it("Email plan and nothing says how email is sent: one honest question — Klaviyo / Mailchimp / none yet", () => {
+    const asked = render({ ...initialState, obPlatforms: ["LinkedIn"], scan: scanned(SERVICES_PROFILE) }, "Email & SMS");
+    expect(asked).toContain('data-testid="email-question"');
+    expect(asked).toContain("Which tool sends your email?");
+    expect(asked).toContain('data-testid="email-answer-klaviyo"');
+    expect(asked).toContain('data-testid="email-answer-mailchimp"');
+    expect(asked).toContain('data-testid="email-answer-none"');
+    expect(asked).not.toContain("connect-card-shopify");
+    // answered "none yet": the question is gone, the honest line is there, Continue is not blocked on a card
+    const none = render({ ...initialState, obPlatforms: ["LinkedIn", "No email tool yet"], scan: scanned(SERVICES_PROFILE) }, "Email & SMS");
+    expect(none).not.toContain("email-question");
+    expect(none).toContain('data-testid="email-answer-line"');
+    expect(none).toContain("No email tool yet — fine.");
+    // answered Klaviyo: the Klaviyo card appears as picked
+    const kl = render({ ...initialState, obPlatforms: ["LinkedIn", "Klaviyo"], scan: scanned(SERVICES_PROFILE) }, "Email & SMS");
+    expect(kl).not.toContain("email-question");
+    expect(kl).toContain('data-testid="connect-card-klaviyo" data-status="off" data-source="picked"');
+    // a Klaviyo script spotted on the site answers it too
+    const spotted = render({ ...initialState, obPlatforms: [], scan: scanned({ ...SERVICES_PROFILE, platformsSpotted: [{ platform: "klaviyo", evidence: "a Klaviyo signup script on the site" }] }) }, "Email & SMS");
+    expect(spotted).not.toContain("email-question");
+    expect(spotted).toContain('data-testid="connect-card-klaviyo" data-status="off" data-source="spotted"');
   });
 });
 
@@ -137,7 +212,7 @@ describe("FirstRoutineStep — rendered per state", () => {
     expect(html).toContain("Continue to Home");
   });
 
-  it("per channel: Email → Abandoned cart recovery (needs Shopify for its number), SEO → Keyword opportunity scan, Sales → Lead research & scoring", () => {
+  it("per channel (business type unknown — nothing hidden): Email → Abandoned cart recovery (needs Shopify for its number), SEO → Keyword opportunity scan, Sales → Lead research & scoring", () => {
     expect(render(initialState, "Email & SMS")).toContain('data-routine="D05-W02"');
     expect(render(initialState, "Email & SMS")).toContain("Needs Shopify connected for its number");
     expect(render({ ...initialState, connState: { Shopify: "ok" } }, "Email & SMS")).not.toContain("Needs Shopify connected");
@@ -145,10 +220,22 @@ describe("FirstRoutineStep — rendered per state", () => {
     expect(render(initialState, "Sales")).toContain('data-routine="D04-W01"');
   });
 
-  it("Paid ads has no draft-only routine: says so honestly, straight to Home", () => {
+  it("a services firm on an Email plan: never a cart — Founder content engine, with why, and the copy says clients", () => {
+    const html = render({ ...initialState, scan: scanned(SERVICES_PROFILE), obPlatforms: ["LinkedIn", "No email tool yet"] }, "Email & SMS");
+    expect(html).toContain('data-routine="D01-W01"');
+    expect(html).not.toContain("Abandoned cart");
+    expect(html).not.toContain("Shopify");
+    expect(html).toContain("nothing in email &amp; sms fits your business yet, so this one first");
+    expect(html).toContain("I prepare the work for clients");
+    // a creator: audience
+    const creator = render({ ...initialState, scan: scanned({ ...SERVICES_PROFILE, businessType: "creator", sells: "mixed" }) }, "Content");
+    expect(creator).toContain("I prepare the work for audience");
+  });
+
+  it("Paid ads has no draft-only routine: the first generic one, and Unc says why it comes from outside the channel", () => {
     const html = render(initialState, "Paid ads");
-    expect(html).toContain("Nothing to switch on yet");
-    expect(html).not.toContain("first-routine-card");
+    expect(html).toContain('data-routine="D01-W01"');
+    expect(html).toContain("every paid ads routine changes live spend");
     expect(html).toContain("Continue to Home");
   });
 });

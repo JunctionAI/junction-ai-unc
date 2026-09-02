@@ -5,10 +5,10 @@ import { runRoutine } from "../../lib/runtime/engine";
 import { StaticReader } from "../../lib/runtime/providers";
 import { getStore, setStoreForTests } from "../../lib/runtime/store";
 import { MemoryStore } from "../../lib/runtime/store/memory";
-import { budgetMoveSpec, clock, input, SPEND_FIXTURE } from "../../lib/runtime/__tests__/helpers";
+import { budgetMoveSpec, clock, FakeProducer, input, SPEND_FIXTURE } from "../../lib/runtime/__tests__/helpers";
 import { StaticAccountsSource } from "../accounts";
 import { NOT_IMPLEMENTED_REASON } from "../providers/executor";
-import { buildAdapters } from "../service";
+import { buildAdapters, setProducerForTests } from "../service";
 
 const post = (path: string, body: unknown) => new Request(`http://unc.test${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: typeof body === "string" ? body : JSON.stringify(body) });
 
@@ -16,17 +16,24 @@ let store: MemoryStore;
 beforeEach(() => {
   store = new MemoryStore();
   setStoreForTests(store);
+  setProducerForTests(new FakeProducer());
 });
-afterEach(() => setStoreForTests(undefined));
+afterEach(() => {
+  setStoreForTests(undefined);
+  setProducerForTests(undefined);
+});
 
 describe("POST /api/routines/run", () => {
   it("dry-runs the routine for the demo account and returns the receipt trail", async () => {
     const res = await runPost(post("/api/routines/run", { accountId: "demo", routineId: "D05-W02" }));
     expect(res.status).toBe(200);
     const { run } = await res.json();
-    expect(run).toMatchObject({ routineId: "D05-W02", mode: "dry_run", status: "done", approval: null });
-    expect(run.receipts.map((r: { kind: string }) => r.kind)).toEqual(["read", "read", "read", "notification", "draft", "draft", "draft"]);
+    expect(run).toMatchObject({ routineId: "D05-W02", mode: "dry_run", status: "done", approval: null, needs: null });
+    expect(run.receipts.map((r: { kind: string }) => r.kind)).toEqual(["read", "read", "read", "draft", "draft", "draft"]);
     expect(run.receipts.find((r: { description: string }) => r.description.startsWith("Would ask")).description).toContain("the founder");
+    // the produced artifact rides on the response and is stored
+    expect(run.artifact).toMatchObject({ kind: "post_set", title: "3 founder posts: why we ship from Auckland", items: 3, status: "draft" });
+    expect((await getStore().listArtifacts("demo")).map((a) => a.id)).toEqual([run.artifact.id]);
     expect(run.receipts.some((r: { kind: string }) => r.kind === "mutation")).toBe(false);
     // persisted in the process-wide store the API and the loop share
     expect((await getStore().listRuns("demo")).map((r) => r.id)).toEqual([run.runId]);

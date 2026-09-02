@@ -11,6 +11,9 @@ keeps Playwright's `tests/e2e/**` out of vitest).
 | `src/lib/unc/__tests__/narrative-guardrails.test.ts` | The code-enforced guardrails on Sonnet's plan prose: numbers only from input, one note per phase, footnote prefix, span-prefix stripping, channel naming. | crafted LLM-like outputs |
 | `src/lib/unc/__tests__/scan-guard.test.ts` | The SSRF guard as pure functions (`checkUrlSyntax`, `isPrivateAddress`) plus `isSafeUrl` with the DNS resolver module-mocked. No network. | 35 rejects, 7 accepts, 37 ranges, 7 DNS |
 | `src/lib/unc/__tests__/context.test.ts` | `buildUncContext` — list caps (10; `routines.active` 40), pure data only, a golden key list so the context cannot grow silently. | 13 |
+| `src/lib/platform/__tests__/planReasoning.test.ts` | The judgement under the plan (`plan.ts` §Reasoning, 2026-09-03) — per-phase why-this-order / evidence gate / risk / weekly, the pushback line when posture and evidence disagree, and the numbers contract (only the founder's inputs, counts ≤ 12, the NZ$50/day gate). | 20 |
+| `src/components/platform/__tests__/strategyReasoning.test.ts` | StrategyView renders the reasoning collapsed under every phase (demo + accounts), the pushback line in cyan (never amber), inputs from `resource_profiles` in accounts mode. | 6 |
+| `src/lib/eval/chat-evals/__tests__/chat-evals.test.ts` | The offline half of the chat evals: scenario shape, the deterministic rubric (banned phrases, **filler**, invented numbers, format, per-scenario sentence caps), judge plumbing for the seven criteria. | 13 |
 
 Every expected value is inline. Fixtures are meant to be read as documentation of what the
 brain does with a given founder — including the surprising cases (a sales-led founder whose
@@ -74,6 +77,22 @@ Non-bug observations locked as documentation:
 - The goal clock (today = 31 Aug) and the plan-week anchor (1 Sep) are two different demo clocks.
 - The paid gate is `round(budget/30) ≥ 50`, so NZ$1,485/mo passes (49.5 rounds up) and NZ$1,484 does not; it is a ×0.3 multiplier, never a hard exclusion.
 - "Zero days elapsed" cannot be exercised: `DEMO_TODAY`/`DEMO_START` are constants, so elapsed is 19 for every input. A test asserts that constancy so the day the clock becomes real, the missing fixtures are flagged.
+
+## Chat evals — judgement + concision (2026-09-03)
+
+After the founder's first real run ("messaging a bit over-explaining", "needs the skill of
+business-growth design embedded so it's not just agreeable") the rubric grew two criteria —
+`judgement` (a defensible position with a reason; clean pushback with an alternative, then the
+founder's call; says what would change its view) and `concise` (answer first, one idea per
+sentence, no filler) — and the deterministic half gained a filler-phrase check
+(`FILLER_PHRASES`, identical to the prompt's `NO_FILLER`) plus per-scenario sentence caps.
+Six scenarios lock the behaviour: `weak-idea-pushback`, `just-agree`, `plan-rationale-gate`,
+`rambling-focus` (≤ 3 sentences), `insufficient-data`, `too-simple` (≤ 4 sentences).
+
+Scores: `total` is /14 over all seven; `core` is /10 over the original five and is the
+like-for-like number against runs before 2026-09-03. Results in `design-reference/evals/`:
+`chat-2026-09-03-baseline.json` (old prompt, new rubric) and `chat-2026-09-03.json` (new
+prompt) — see docs/UNC-VOICE-AND-JUDGEMENT.md for the before/after.
 
 ## Not unit-tested here
 

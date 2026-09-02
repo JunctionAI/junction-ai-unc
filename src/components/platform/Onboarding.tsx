@@ -4,6 +4,8 @@ import React, { useEffect, useRef } from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
 import type { PlanNarrative } from "@/lib/unc/narrative";
 import type { BusinessProfile } from "@/lib/unc/scan";
+import { BUSINESS_TYPE_CHIPS, BUSINESS_TYPE_LABEL, DEFAULT_SELLS, type BusinessType } from "@/lib/unc/businessType";
+import PhaseWhy from "./PhaseWhy";
 import TypingDots from "./TypingDots";
 
 const stepLabel: React.CSSProperties = {
@@ -73,12 +75,41 @@ const numberField: React.CSSProperties = { width: 132, border: "1px solid var(--
 
 const scanKeyOf = (website: string, socials: string) => JSON.stringify({ website: website.trim(), socials: socials.trim() });
 
+/* ---- business type (docs/PRODUCT-EXPERIENCE.md "Business types") ----
+   The founder's own pick lives on the scan profile (business_profiles.profile) with
+   businessTypeSource "founder", so it survives every later scan (mergeFounderOverride in
+   src/lib/unc/scan.ts is the server's twin of `keepFounderPick` here). No profile yet → a
+   shell profile holds the pick; the scan fills the rest in when it lands. */
+
+export const BUSINESS_TYPE_QUESTION = "What kind of business is this?";
+export const BUSINESS_TYPE_HINT = "I only assume what you tell me — a services firm never gets store routines.";
+
+/** A profile with nothing read yet — the shell the founder's pick sits in before any scan. */
+export function shellProfile(): BusinessProfile {
+  return { name: null, oneLiner: null, category: null, products: [], audience: null, voice: { tone: null, phrases: [] }, market: { region: null, competitorsMentioned: [] }, signals: [], confidence: "low", sources: [], businessType: null, sells: null, storefront: null, businessTypeSource: null, typeEvidence: [], platformsSpotted: [] };
+}
+
+/** The founder picked a type: write it on the profile (a shell when there is none). */
+export function withFounderBusinessType(profile: BusinessProfile | null, type: BusinessType | null): BusinessProfile {
+  const base = profile ?? shellProfile();
+  if (type === null) return { ...base, businessType: null, sells: null, businessTypeSource: null };
+  return { ...base, businessType: type, sells: DEFAULT_SELLS[type], businessTypeSource: "founder" };
+}
+
+/** A fresh scan never overrides what the founder said. */
+export function keepFounderPick(fresh: BusinessProfile, previous: BusinessProfile | null): BusinessProfile {
+  if (!previous || previous.businessTypeSource !== "founder" || !previous.businessType) return fresh;
+  return { ...fresh, businessType: previous.businessType, sells: previous.sells ?? fresh.sells ?? null, businessTypeSource: "founder" };
+}
+
 /** Fires once per distinct {website, socials} when the founder leaves step 4 (steps 5/6). */
 function useOnboardingScan(V: PlatformVals) {
   const inflight = useRef<string | null>(null);
   const setScan = useRef(V.obSetScan);
+  const profileRef = useRef(V.obScan.profile);
   useEffect(() => {
     setScan.current = V.obSetScan;
+    profileRef.current = V.obScan.profile;
   });
   const armed = V.ob5 || V.ob6;
   const website = V.obWebsite.trim();
@@ -89,16 +120,19 @@ function useOnboardingScan(V: PlatformVals) {
     const key = scanKeyOf(website, socials);
     if (scanKey === key || inflight.current === key) return;
     inflight.current = key;
-    setScan.current({ status: "running", key, profile: null });
+    // the founder's business-type pick rides along while the scan runs and is kept when it lands
+    const before = profileRef.current;
+    const pick = before?.businessTypeSource === "founder" ? before : null;
+    setScan.current({ status: "running", key, profile: pick });
     fetch("/api/unc/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website, socials }) })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((data: { profile?: BusinessProfile; fallback?: boolean }) => {
         if (inflight.current !== key) return; // a newer input superseded this scan
-        if (!data.fallback && data.profile) setScan.current({ status: "done", key, profile: data.profile });
-        else setScan.current({ status: "failed", key, profile: null });
+        if (!data.fallback && data.profile) setScan.current({ status: "done", key, profile: keepFounderPick(data.profile, pick) });
+        else setScan.current({ status: "failed", key, profile: pick });
       })
       .catch(() => {
-        if (inflight.current === key) setScan.current({ status: "failed", key, profile: null });
+        if (inflight.current === key) setScan.current({ status: "failed", key, profile: pick });
       });
   }, [armed, website, socials, scanKey]);
 }
@@ -476,6 +510,30 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
               <input value={V.obSocials} onChange={V.onObSocials} placeholder="@instagram, @tiktok, linkedin…" style={textInput} />
             </div>
             <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>I’ll scan these to understand your business, voice and market — it makes the plan much sharper.</div>
+            <div style={{ ...cardLabel, marginTop: 20 }}>{BUSINESS_TYPE_QUESTION}</div>
+            <div data-testid="business-type-chips" data-source={V.obScan.profile?.businessTypeSource ?? ""} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              {BUSINESS_TYPE_CHIPS.map((bt) => {
+                const on = V.obScan.profile?.businessType === bt.key;
+                return (
+                  <button
+                    key={bt.key}
+                    data-testid={`business-type-${bt.key}`}
+                    data-on={on ? "1" : "0"}
+                    title={bt.hint}
+                    onClick={() => V.obSetScan({ ...V.obScan, profile: withFounderBusinessType(V.obScan.profile, on ? null : bt.key) })}
+                    className="hov-border-cyan"
+                    style={chipStyle({ border: on ? "oklch(0.78 0.13 220)" : "oklch(0.87 0.015 260)", bg: on ? "oklch(0.94 0.03 225)" : "white", color: on ? "oklch(0.35 0.08 240)" : "oklch(0.4 0.04 262)" })}
+                  >
+                    {bt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
+              {V.obScan.profile?.businessTypeSource === "scan" && V.obScan.profile.businessType
+                ? `From your site I read this as ${BUSINESS_TYPE_LABEL[V.obScan.profile.businessType].toLowerCase()} — tap another if I’ve got it wrong.`
+                : BUSINESS_TYPE_HINT}
+            </div>
           </>
         )}
 
@@ -575,7 +633,10 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
                   {planSteps.map((step, i) => (
                     <div key={i} style={{ display: "flex", gap: 9 }}>
                       <span style={{ color: "var(--cyan-link)", fontWeight: 700 }}>{i + 1}</span>
-                      {step}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {step}
+                        {V.obPhaseReasoning[i] && <PhaseWhy r={V.obPhaseReasoning[i]} testId="onboarding-phase-why" />}
+                      </div>
                     </div>
                   ))}
                 </div>

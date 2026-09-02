@@ -35,6 +35,14 @@ export class FixtureCredentialProvider implements CredentialProvider {
   }
 }
 
+/** Accounts mode without a secret store: nothing is ever "connected" — reads answer
+    "couldn't ask" honestly. Fixtures must never reach a real account. */
+export class NoCredentialsProvider implements CredentialProvider {
+  async get(): Promise<PlatformCredential | null> {
+    return null;
+  }
+}
+
 /** For logs/receipts: what a credential IS, never what it contains. */
 export function describeCredential(c: PlatformCredential | null): string {
   if (!c) return "none";

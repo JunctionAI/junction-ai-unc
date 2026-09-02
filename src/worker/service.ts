@@ -16,9 +16,9 @@
    └──────────────────────────────────────────────────────────────────────┘ */
 
 import { CATALOG_SPECS, CATALOG_SPEC_BY_ID } from "../lib/runtime/catalog-specs";
-import { resumeRun, runRoutine, type Adapters } from "../lib/runtime/engine";
+import { completeExternalArtifact, resumeRun, resumeRunWithInput, runRoutine, type Adapters } from "../lib/runtime/engine";
 import type { Store } from "../lib/runtime/store/interface";
-import type { AccountContext, RoutineSpec, RunMode, RunResult } from "../lib/runtime/types";
+import type { AccountContext, ArtifactDraft, N8nBridge, ProduceNeed, Producer, RoutineSpec, RunMode, RunResult } from "../lib/runtime/types";
 import { effectiveSpec, getOrInitState } from "../lib/runtime/versioning";
 import type { AccountsSource, WorkerAccount } from "./accounts";
 import type { DbClient } from "../lib/db/types";
@@ -27,8 +27,10 @@ import type { Logger } from "./log";
 import { WorkerConnectorReader } from "./providers/connectorReader";
 import { RefusingExecutor } from "./providers/executor";
 import { LlmDecisionProvider, StorePersonalisation, type LlmClient } from "./providers/llmDecision";
+import { HttpN8nBridge } from "./providers/n8n";
+import { createProducerClient, DbProducerContext, LlmProducer } from "./providers/producer";
 import type { ScheduleCandidate } from "./scheduler";
-import { defaultCredentialProvider } from "./wiring";
+import { defaultCredentialProvider, serviceDb } from "./wiring";
 
 /** Hard constant. See the box above — flipping it is founder-gated (Wave 2). */
 export const LIVE_MODE_ENABLED: boolean = false;
@@ -56,9 +58,15 @@ export interface ServiceDeps {
   /** null = no LLM (every llm-rule decide takes its fallback). Default null;
       the CLI passes createAnthropicLlmClient() which is env-gated. */
   llm?: LlmClient | null;
-  /** Service-role client: lets the decider read account_profiles (tone / decision style).
-      Absent → taste patterns still come from the Store; the profile block is empty. */
+  /** Service-role client: lets the decider read account_profiles (tone / decision style) and
+      the producer read the business profile, memories, goal and plan. undefined = the service
+      role when configured (wiring.ts serviceDb); null = none. */
   db?: DbClient | null;
+  /** The produce-step Producer. undefined = LlmProducer on the router (task routine_produce);
+      null = none (a produce node fails the run closed). Tests inject a fake. */
+  producer?: Producer | null;
+  /** The n8n bridge. undefined = HttpN8nBridge on process.env; null = none. */
+  n8n?: N8nBridge | null;
   now?: () => Date;
   log?: Logger;
   fetch?: typeof fetch;
@@ -68,13 +76,25 @@ export interface BuiltAdapters extends Adapters {
   executor: RefusingExecutor;
 }
 
+let producerOverride: Producer | null | undefined;
+/** Tests only: the Producer every buildAdapters() call gets (undefined = restore the default). */
+export function setProducerForTests(producer: Producer | null | undefined): void {
+  producerOverride = producer;
+}
+
 export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
   const now = deps.now ?? (() => new Date());
+  const db = deps.db === undefined ? serviceDb() : deps.db;
+  const chosen = producerOverride !== undefined ? producerOverride : deps.producer;
+  const producer = chosen === undefined ? new LlmProducer(createProducerClient(), { context: new DbProducerContext(db, deps.store, { now, log: deps.log }), log: deps.log, now }) : (chosen ?? undefined);
+  const n8n = deps.n8n === undefined ? new HttpN8nBridge({ env: process.env, fetch: deps.fetch, now, log: deps.log }) : (deps.n8n ?? undefined);
   return {
     reader: new WorkerConnectorReader({ credentials: deps.credentials ?? defaultCredentialProvider(process.env, deps.log ? (line) => deps.log?.info("credentials", { line }) : undefined), now, log: deps.log, fetch: deps.fetch }),
-    decider: new LlmDecisionProvider(deps.llm ?? null, { log: deps.log, personalisation: new StorePersonalisation(deps.store, deps.db ?? null, { now }) }),
+    decider: new LlmDecisionProvider(deps.llm ?? null, { log: deps.log, personalisation: new StorePersonalisation(deps.store, db, { now }) }),
     executor: new RefusingExecutor(),
     store: deps.store,
+    ...(producer ? { producer } : {}),
+    ...(n8n ? { n8n } : {}),
     now,
   };
 }
@@ -142,6 +162,33 @@ export async function resumeApproval(deps: ServiceDeps, input: ResumeInput, adap
   deps.log?.info("resume.start", { runId: input.runId, decision: input.decision });
   const result = await resumeRun(input.runId, input.decision, adapters, { decidedBy: input.decidedBy });
   deps.log?.info("resume.finish", { runId: result.runId, routineId: result.routineId, status: result.status, summary: result.summary });
+  return result;
+}
+
+// ---------- resume with the founder's answers ----------
+
+export interface ResumeInputInput {
+  runId: string;
+  answers: Record<string, unknown>;
+}
+
+/** A run that ended waiting_input takes the answers and re-runs its produce step. */
+export async function resumeWithInput(deps: ServiceDeps, input: ResumeInputInput, adapters: Adapters = buildAdapters(deps)): Promise<RunResult> {
+  deps.log?.info("resume_input.start", { runId: input.runId, answered: Object.keys(input.answers ?? {}) });
+  const result = await resumeRunWithInput(input.runId, input.answers, adapters);
+  deps.log?.info("resume_input.finish", { runId: result.runId, routineId: result.routineId, status: result.status, summary: result.summary });
+  return result;
+}
+
+// ---------- external (n8n) artifact delivery ----------
+
+export type ExternalArtifactInput = { runId: string; artifact: ArtifactDraft } | { runId: string; needs: ProduceNeed[] };
+
+/** POST /api/routines/artifacts: a workflow the engine handed a run to delivers the artifact. */
+export async function completeExternal(deps: ServiceDeps, input: ExternalArtifactInput, adapters: Adapters = buildAdapters(deps)): Promise<RunResult> {
+  deps.log?.info("external_artifact.start", { runId: input.runId, kind: "artifact" in input ? input.artifact.kind : "needs" });
+  const result = await completeExternalArtifact(input.runId, "artifact" in input ? { artifact: input.artifact } : { needs: input.needs }, adapters);
+  deps.log?.info("external_artifact.finish", { runId: result.runId, routineId: result.routineId, status: result.status });
   return result;
 }
 
