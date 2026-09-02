@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
@@ -16,6 +16,8 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "beta_invites",
       "billing_events",
       "business_profiles",
+      "channel_links",
+      "channel_secrets",
       "chat_messages",
       "connector_secrets",
       "connectors",
@@ -27,6 +29,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "llm_usage",
       "memories",
       "oauth_states",
+      "outbound_messages",
       "plans",
       "playbooks",
       "receipts",
@@ -77,6 +80,14 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect([...s.memories.columns]).toEqual(expect.arrayContaining(["embedding", "happens_at", "valid_from", "valid_to", "superseded_by", "source_ref", "tags"]));
     expect(s.account_profiles.primaryKey).toEqual(["account_id"]);
     expect([...s.account_profiles.columns]).toEqual(expect.arrayContaining(["tone", "decision_style", "cadence", "channels", "founder_notes"]));
+    // 0012 channels: the one thread carries its channel; links / ledger / secrets are keyed and enum-checked
+    expect([...s.chat_messages.columns]).toEqual(expect.arrayContaining(["channel", "external_msg_id", "delivery"]));
+    expect([...s.chat_messages.enums.channel]).toEqual(["app", "telegram", "whatsapp", "slack", "sms", "email"]);
+    expect(s.chat_messages.uniques).toContainEqual({ columns: ["channel", "external_msg_id"], partialNotNull: "external_msg_id" });
+    expect(s.channel_links.uniques).toContainEqual({ columns: ["channel", "external_id"] });
+    expect(s.channel_links.uniques).toContainEqual({ columns: ["link_code"], partialNotNull: "link_code" });
+    expect([...s.outbound_messages.enums.status]).toEqual(["sent", "failed", "queued"]);
+    expect(s.channel_secrets.uniques).toContainEqual({ columns: ["channel", "scope_id"] });
     expect(s.kpi_snapshots.uniques).toContainEqual({ columns: ["account_id", "metric_key", "window_end"] });
     expect(s.daily_briefs.uniques).toContainEqual({ columns: ["account_id", "day"] });
     expect(s.intake_keys.uniques).toContainEqual({ columns: ["key_hash"] });
