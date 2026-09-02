@@ -217,7 +217,7 @@ describe("resume (the API's path)", () => {
     expect(res.summary).toContain("Held");
     expect((await store.getApproval(paused.approval!.id))!).toMatchObject({ status: "held", decidedBy: "user-tom" });
     expect(adapters.executor.refused).toHaveLength(0);
-    expect(store.listTasteEvents("acct-1")).toMatchObject([{ action: "held" }]);
+    expect(await store.listTasteEvents("acct-1")).toMatchObject([{ action: "held" }]);
   });
 
   it("approved reaches execute and the refusing executor fails it closed with a not_implemented receipt", async () => {

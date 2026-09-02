@@ -133,6 +133,6 @@ describe("POST /api/approvals/<id>", () => {
     expect(body.approval.status).toBe("approved");
     expect(body.run.status).toBe("failed");
     expect(body.receipts.some((r: { kind: string }) => r.kind === "mutation")).toBe(false);
-    expect(store.listTasteEvents("demo").map((t) => t.action)).toEqual(["approved"]);
+    expect((await store.listTasteEvents("demo")).map((t) => t.action)).toEqual(["approved"]);
   });
 });

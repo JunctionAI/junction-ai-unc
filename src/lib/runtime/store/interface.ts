@@ -62,11 +62,37 @@
      action            → action ('approved' | 'held' | 'why_opened' | 'edited')
      context           → context (jsonb)
      createdAt         → created_at
+
+   ── migration 0006 (telemetry) ──
+   OutcomeRecord       → routine_outcomes
+     id/accountId/routineId/runId → id/account_id/routine_id/run_id
+     kpiKey/kpiTarget/kpiOp/kpiActual → kpi_key/kpi_target/kpi_op/kpi_actual
+     provenance        → provenance
+     windowStart/windowEnd/measuredAt → window_start/window_end/measured_at
+     (upsert on account_id,routine_id,kpi_key,window_end)
+
+   SelfReviewRecord    → self_reviews
+     id/accountId      → id/account_id
+     weekStart         → week_start (date, 'YYYY-MM-DD')
+     body              → body
+     changes           → changes (jsonb)
+     evidence          → evidence (jsonb)
+     createdAt         → created_at
+     (upsert on account_id,week_start)
+
+   BenchmarkRecord     → benchmarks
+     metricKey/segment → metric_key/segment   (primary key)
+     p50/p75/n         → p50/p75/n
+     computedAt        → computed_at
+
+   BenchmarkOptin      → benchmark_optins
+     accountId/optedIn → account_id/opted_in
    ───────────────────────────────────────────────────────────────────────── */
 
 import type {
   ApprovalRecord,
   ApprovalStatus,
+  KpiContract,
   Receipt,
   ReceiptKind,
   RoutineId,
@@ -76,6 +102,75 @@ import type {
   RunStatus,
   TasteEvent,
 } from "../types";
+
+// ---------- telemetry records (migration 0006) ----------
+
+export interface OutcomeRecord {
+  id: string;
+  accountId: string;
+  routineId: RoutineId;
+  /** Newest completed run inside the window. */
+  runId?: string;
+  kpiKey: string;
+  kpiTarget: number;
+  kpiOp: KpiContract["op"];
+  /** null = couldn't measure; `provenance` says why. */
+  kpiActual: number | null;
+  /** ok | empty | fixture | runs | error:<reason> */
+  provenance: string;
+  windowStart: string;
+  windowEnd: string;
+  measuredAt: string;
+}
+
+export type SelfReviewChangeAction = "enable" | "disable" | "reprioritise" | "adjust_cadence";
+
+export interface SelfReviewChange {
+  action: SelfReviewChangeAction;
+  routineId: RoutineId;
+  /** adjust_cadence only: "manual" or a 5-field cron. */
+  cadence?: string;
+  why: string;
+}
+
+export interface SelfReviewRecord {
+  id: string;
+  accountId: string;
+  /** Monday (UTC) of the reviewed week, YYYY-MM-DD. */
+  weekStart: string;
+  body: string;
+  changes: SelfReviewChange[];
+  evidence: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface BenchmarkRecord {
+  metricKey: string;
+  segment: string;
+  p50: number;
+  p75: number;
+  /** Accounts that contributed — never below 5 (anonymisation floor). */
+  n: number;
+  computedAt: string;
+}
+
+export interface BenchmarkOptin {
+  accountId: string;
+  optedIn: boolean;
+}
+
+export interface ListOutcomesOptions {
+  routineId?: RoutineId;
+  kpiKey?: string;
+  /** ISO timestamp; only outcomes whose window ended at/after it. */
+  since?: string;
+  limit?: number;
+}
+
+export interface ListTasteEventsOptions {
+  since?: string;
+  limit?: number;
+}
 
 export interface RoutineStateRecord {
   accountId: string;
@@ -159,4 +254,26 @@ export interface Store {
 
   // ----- taste_events (append-only) -----
   appendTasteEvent(event: TasteEvent): Promise<TasteEvent>;
+  /** Newest first. */
+  listTasteEvents(accountId: string, opts?: ListTasteEventsOptions): Promise<TasteEvent[]>;
+
+  // ----- routine_outcomes (migration 0006; service-role writes) -----
+  /** Idempotent per (account, routine, kpi, window_end). */
+  upsertOutcome(outcome: OutcomeRecord): Promise<OutcomeRecord>;
+  /** Newest window first. */
+  listOutcomes(accountId: string, opts?: ListOutcomesOptions): Promise<OutcomeRecord[]>;
+  /** Every account's outcomes with window_end ≥ since — the benchmark input (worker only;
+      the service role is the only reader that can see across accounts). */
+  listOutcomesAcrossAccounts(since: string): Promise<OutcomeRecord[]>;
+
+  // ----- self_reviews -----
+  /** Idempotent per (account, week_start). */
+  putSelfReview(review: SelfReviewRecord): Promise<SelfReviewRecord>;
+  getLatestSelfReview(accountId: string): Promise<SelfReviewRecord | null>;
+
+  // ----- benchmarks (anonymised; n ≥ 5) -----
+  putBenchmarks(rows: BenchmarkRecord[]): Promise<BenchmarkRecord[]>;
+  getBenchmark(metricKey: string, segment: string): Promise<BenchmarkRecord | null>;
+  listBenchmarks(segment?: string): Promise<BenchmarkRecord[]>;
+  listBenchmarkOptins(): Promise<BenchmarkOptin[]>;
 }

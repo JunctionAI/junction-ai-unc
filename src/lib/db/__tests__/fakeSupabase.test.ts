@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004/0005 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005/0006 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
       "account_state_meta",
       "accounts",
       "approvals",
+      "benchmark_optins",
+      "benchmarks",
       "billing_events",
       "business_profiles",
       "chat_messages",
@@ -19,12 +21,23 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "plans",
       "receipts",
       "resource_profiles",
+      "routine_outcomes",
       "routine_runs",
       "routine_states",
+      "self_reviews",
       "subscriptions",
       "taste_events",
       "team_members",
     ]);
+    // 0006 telemetry
+    expect(s.routine_outcomes.uniques).toContainEqual({ columns: ["account_id", "routine_id", "kpi_key", "window_end"] });
+    expect(s.routine_outcomes.enums.kpi_op).toEqual(new Set(["gte", "lte"]));
+    expect([...s.routine_outcomes.columns]).toEqual(expect.arrayContaining(["kpi_target", "kpi_actual", "provenance", "window_start", "window_end", "measured_at", "run_id"]));
+    expect(s.self_reviews.uniques).toContainEqual({ columns: ["account_id", "week_start"] });
+    expect([...s.self_reviews.columns]).toEqual(expect.arrayContaining(["body", "changes", "evidence"]));
+    expect(s.benchmarks.primaryKey).toEqual(["metric_key", "segment"]);
+    expect([...s.benchmarks.columns]).toEqual(expect.arrayContaining(["p50", "p75", "n", "computed_at"]));
+    expect(s.benchmark_optins.primaryKey).toEqual(["account_id"]);
     expect([...s.routine_runs.columns]).toEqual(expect.arrayContaining(["approval_id", "dedup_key", "spec_hash", "snapshot"])); // 0002
     expect([...s.chat_messages.columns]).toEqual(expect.arrayContaining(["thread", "position", "meta"])); // 0003
     expect(s.team_members.columns.has("position")).toBe(true);

@@ -2,7 +2,19 @@
    adapter implements the same interface (see interface.ts for the mapping). */
 
 import type { ApprovalRecord, ApprovalStatus, Receipt, RoutineId, TasteEvent } from "../types";
-import type { ListReceiptsOptions, ListRunsOptions, RoutineStateRecord, RunRecord, Store } from "./interface";
+import type {
+  BenchmarkOptin,
+  BenchmarkRecord,
+  ListOutcomesOptions,
+  ListReceiptsOptions,
+  ListRunsOptions,
+  ListTasteEventsOptions,
+  OutcomeRecord,
+  RoutineStateRecord,
+  RunRecord,
+  SelfReviewRecord,
+  Store,
+} from "./interface";
 
 const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
 
@@ -12,6 +24,10 @@ export class MemoryStore implements Store {
   private approvals = new Map<string, ApprovalRecord>();
   private receipts: Receipt[] = [];
   private tasteEvents: TasteEvent[] = [];
+  private outcomes = new Map<string, OutcomeRecord>();
+  private selfReviews = new Map<string, SelfReviewRecord>();
+  private benchmarks = new Map<string, BenchmarkRecord>();
+  private optins = new Map<string, boolean>();
 
   private static stateKey(accountId: string, routineId: RoutineId) {
     return `${accountId}:${routineId}`;
@@ -111,8 +127,72 @@ export class MemoryStore implements Store {
     return clone(event);
   }
 
-  /** Test helper — not part of the Store interface. */
-  listTasteEvents(accountId: string) {
-    return clone(this.tasteEvents.filter((e) => e.accountId === accountId));
+  async listTasteEvents(accountId: string, opts: ListTasteEventsOptions = {}) {
+    let out = this.tasteEvents.filter((e) => e.accountId === accountId);
+    if (opts.since) out = out.filter((e) => e.createdAt >= opts.since!);
+    out = [...out].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+    if (opts.limit) out = out.slice(0, opts.limit);
+    return clone(out);
+  }
+
+  // ----- routine_outcomes -----
+  private static outcomeKey(o: Pick<OutcomeRecord, "accountId" | "routineId" | "kpiKey" | "windowEnd">) {
+    return `${o.accountId}:${o.routineId}:${o.kpiKey}:${o.windowEnd}`;
+  }
+  async upsertOutcome(outcome: OutcomeRecord) {
+    const key = MemoryStore.outcomeKey(outcome);
+    const existing = this.outcomes.get(key);
+    const next = clone({ ...outcome, id: existing?.id ?? outcome.id });
+    this.outcomes.set(key, next);
+    return clone(next);
+  }
+  async listOutcomes(accountId: string, opts: ListOutcomesOptions = {}) {
+    let out = [...this.outcomes.values()].filter((o) => o.accountId === accountId);
+    if (opts.routineId) out = out.filter((o) => o.routineId === opts.routineId);
+    if (opts.kpiKey) out = out.filter((o) => o.kpiKey === opts.kpiKey);
+    if (opts.since) out = out.filter((o) => o.windowEnd >= opts.since!);
+    out = out.sort((a, b) => (a.windowEnd < b.windowEnd ? 1 : a.windowEnd > b.windowEnd ? -1 : a.routineId < b.routineId ? -1 : 1));
+    if (opts.limit) out = out.slice(0, opts.limit);
+    return clone(out);
+  }
+  async listOutcomesAcrossAccounts(since: string) {
+    return clone([...this.outcomes.values()].filter((o) => o.windowEnd >= since).sort((a, b) => (a.windowEnd < b.windowEnd ? 1 : a.windowEnd > b.windowEnd ? -1 : 0)));
+  }
+
+  // ----- self_reviews -----
+  async putSelfReview(review: SelfReviewRecord) {
+    const key = `${review.accountId}:${review.weekStart}`;
+    const existing = this.selfReviews.get(key);
+    const next = clone({ ...review, id: existing?.id ?? review.id });
+    this.selfReviews.set(key, next);
+    return clone(next);
+  }
+  async getLatestSelfReview(accountId: string) {
+    const mine = [...this.selfReviews.values()].filter((r) => r.accountId === accountId).sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
+    return mine.length ? clone(mine[0]) : null;
+  }
+
+  // ----- benchmarks -----
+  async putBenchmarks(rows: BenchmarkRecord[]) {
+    for (const r of rows) {
+      if (r.n < 5) throw new Error(`benchmark ${r.metricKey}/${r.segment} has n=${r.n} < 5 (anonymisation floor)`);
+      this.benchmarks.set(`${r.metricKey}:${r.segment}`, clone(r));
+    }
+    return clone(rows);
+  }
+  async getBenchmark(metricKey: string, segment: string) {
+    const b = this.benchmarks.get(`${metricKey}:${segment}`);
+    return b ? clone(b) : null;
+  }
+  async listBenchmarks(segment?: string) {
+    return clone([...this.benchmarks.values()].filter((b) => (segment ? b.segment === segment : true)).sort((a, b) => (a.metricKey < b.metricKey ? -1 : a.metricKey > b.metricKey ? 1 : a.segment < b.segment ? -1 : 1)));
+  }
+  async listBenchmarkOptins(): Promise<BenchmarkOptin[]> {
+    return [...this.optins.entries()].map(([accountId, optedIn]) => ({ accountId, optedIn }));
+  }
+
+  /** Test helper — not part of the Store interface (the real row is written by the founder). */
+  setBenchmarkOptin(accountId: string, optedIn: boolean) {
+    this.optins.set(accountId, optedIn);
   }
 }

@@ -100,7 +100,7 @@ for (const kind of ["memory", "supabase"] as const) {
         expect(h.db.rows("taste_events").map((t) => t.action)).toEqual(["held"]);
         expect(h.db.rows("taste_events")[0].approval_id).toBe(paused.approval!.id);
       } else {
-        expect((h.store as MemoryStore).listTasteEvents(ACCT).map((t) => t.action)).toEqual(["held"]);
+        expect((await (h.store as MemoryStore).listTasteEvents(ACCT)).map((t) => t.action)).toEqual(["held"]);
       }
     });
 

@@ -80,7 +80,7 @@ describe("gate pause + resume", () => {
     expect(mutation.platform).toBe("meta_ads");
     expect(mutation.payload.externalRef).toBe("ext-1");
 
-    expect(store.listTasteEvents("acct-1")).toMatchObject([{ action: "approved", approvalId: approval.id, routineId: "D02-W01" }]);
+    expect(await store.listTasteEvents("acct-1")).toMatchObject([{ action: "approved", approvalId: approval.id, routineId: "D02-W01" }]);
     expect((await store.getRun(paused.runId))!.snapshot).toBeUndefined();
   });
 
@@ -93,7 +93,7 @@ describe("gate pause + resume", () => {
     expect(res.summary).toContain("Held");
     expect(executor.calls).toHaveLength(0);
     expect((await store.getApproval(paused.approval!.id))!.status).toBe("held");
-    expect(store.listTasteEvents("acct-1")).toMatchObject([{ action: "held" }]);
+    expect(await store.listTasteEvents("acct-1")).toMatchObject([{ action: "held" }]);
     expect((await store.listReceipts("acct-1", { runId: paused.runId })).some((r) => r.kind === "mutation")).toBe(false);
     await expect(resumeRun(paused.runId, "approved", a)).rejects.toThrow(/not waiting_approval/);
   });

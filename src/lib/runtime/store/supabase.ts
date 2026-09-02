@@ -18,7 +18,20 @@
    (payload->'spend'->>'amount')::numeric over receipts_spend_idx, called via db.rpc. */
 
 import type { ApprovalRecord, ApprovalStatus, Receipt, RoutineId, SpendAmount, TasteEvent } from "../types";
-import type { ListReceiptsOptions, ListRunsOptions, RoutineStateRecord, RunRecord, RunSnapshot, Store } from "./interface";
+import type {
+  BenchmarkOptin,
+  BenchmarkRecord,
+  ListOutcomesOptions,
+  ListReceiptsOptions,
+  ListRunsOptions,
+  ListTasteEventsOptions,
+  OutcomeRecord,
+  RoutineStateRecord,
+  RunRecord,
+  RunSnapshot,
+  SelfReviewRecord,
+  Store,
+} from "./interface";
 import { unwrap, type DbClient, type Row } from "@/lib/db/types";
 
 // ---------- helpers ----------
@@ -209,6 +222,65 @@ function rowToTaste(row: Row): TasteEvent {
   });
 }
 
+// ---------- telemetry rows (migration 0006) ----------
+
+const numOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+
+function outcomeToRow(o: OutcomeRecord): Row {
+  return {
+    id: o.id,
+    account_id: o.accountId,
+    routine_id: o.routineId,
+    run_id: nul(o.runId),
+    kpi_key: o.kpiKey,
+    kpi_target: o.kpiTarget,
+    kpi_op: o.kpiOp,
+    kpi_actual: o.kpiActual,
+    provenance: o.provenance,
+    window_start: o.windowStart,
+    window_end: o.windowEnd,
+    measured_at: o.measuredAt,
+  };
+}
+function rowToOutcome(row: Row): OutcomeRecord {
+  return compact({
+    id: row.id as string,
+    accountId: row.account_id as string,
+    routineId: row.routine_id as RoutineId,
+    runId: opt<string>(row.run_id),
+    kpiKey: row.kpi_key as string,
+    kpiTarget: Number(row.kpi_target),
+    kpiOp: (row.kpi_op as OutcomeRecord["kpiOp"]) ?? "gte",
+    kpiActual: numOrNull(row.kpi_actual),
+    provenance: (row.provenance as string) ?? "ok",
+    windowStart: ts(row.window_start),
+    windowEnd: ts(row.window_end),
+    measuredAt: ts(row.measured_at),
+  });
+}
+
+function reviewToRow(r: SelfReviewRecord): Row {
+  return { id: r.id, account_id: r.accountId, week_start: r.weekStart, body: r.body, changes: r.changes, evidence: r.evidence, created_at: r.createdAt };
+}
+function rowToReview(row: Row): SelfReviewRecord {
+  return {
+    id: row.id as string,
+    accountId: row.account_id as string,
+    weekStart: String(row.week_start).slice(0, 10),
+    body: row.body as string,
+    changes: (row.changes as SelfReviewRecord["changes"]) ?? [],
+    evidence: (row.evidence as Row) ?? {},
+    createdAt: ts(row.created_at),
+  };
+}
+
+function benchmarkToRow(b: BenchmarkRecord): Row {
+  return { metric_key: b.metricKey, segment: b.segment, p50: b.p50, p75: b.p75, n: b.n, computed_at: b.computedAt };
+}
+function rowToBenchmark(row: Row): BenchmarkRecord {
+  return { metricKey: row.metric_key as string, segment: row.segment as string, p50: Number(row.p50), p75: Number(row.p75), n: Number(row.n), computedAt: ts(row.computed_at) };
+}
+
 // ---------- the adapter ----------
 
 export class SupabaseStore implements Store {
@@ -325,5 +397,68 @@ export class SupabaseStore implements Store {
   async appendTasteEvent(event: TasteEvent) {
     const row = await unwrap<Row>("taste_events.insert", this.db.from("taste_events").insert(tasteToRow(event)).select().single());
     return rowToTaste(row);
+  }
+  async listTasteEvents(accountId: string, opts: ListTasteEventsOptions = {}) {
+    let q = this.db.from("taste_events").select("*").eq("account_id", accountId);
+    if (opts.since) q = q.gte("created_at", opts.since);
+    q = q.order("created_at", { ascending: false });
+    if (opts.limit) q = q.limit(opts.limit);
+    const rows = await unwrap<Row[]>("taste_events.select", q);
+    return rows.map(rowToTaste);
+  }
+
+  // ----- routine_outcomes (service-role writes) -----
+  async upsertOutcome(outcome: OutcomeRecord) {
+    const row = await unwrap<Row>(
+      "routine_outcomes.upsert",
+      this.db.from("routine_outcomes").upsert(outcomeToRow(outcome), { onConflict: "account_id,routine_id,kpi_key,window_end" }).select().single(),
+    );
+    return rowToOutcome(row);
+  }
+  async listOutcomes(accountId: string, opts: ListOutcomesOptions = {}) {
+    let q = this.db.from("routine_outcomes").select("*").eq("account_id", accountId);
+    if (opts.routineId) q = q.eq("routine_id", opts.routineId);
+    if (opts.kpiKey) q = q.eq("kpi_key", opts.kpiKey);
+    if (opts.since) q = q.gte("window_end", opts.since);
+    q = q.order("window_end", { ascending: false });
+    if (opts.limit) q = q.limit(opts.limit);
+    const rows = await unwrap<Row[]>("routine_outcomes.select", q);
+    return rows.map(rowToOutcome);
+  }
+  async listOutcomesAcrossAccounts(since: string) {
+    const rows = await unwrap<Row[]>("routine_outcomes.select", this.db.from("routine_outcomes").select("*").gte("window_end", since).order("window_end", { ascending: false }));
+    return rows.map(rowToOutcome);
+  }
+
+  // ----- self_reviews -----
+  async putSelfReview(review: SelfReviewRecord) {
+    const row = await unwrap<Row>("self_reviews.upsert", this.db.from("self_reviews").upsert(reviewToRow(review), { onConflict: "account_id,week_start" }).select().single());
+    return rowToReview(row);
+  }
+  async getLatestSelfReview(accountId: string) {
+    const rows = await unwrap<Row[]>("self_reviews.select", this.db.from("self_reviews").select("*").eq("account_id", accountId).order("week_start", { ascending: false }).limit(1));
+    return rows.length ? rowToReview(rows[0]) : null;
+  }
+
+  // ----- benchmarks -----
+  async putBenchmarks(rows: BenchmarkRecord[]) {
+    if (!rows.length) return [];
+    for (const r of rows) if (r.n < 5) throw new Error(`benchmark ${r.metricKey}/${r.segment} has n=${r.n} < 5 (anonymisation floor)`);
+    const out = await unwrap<Row[]>("benchmarks.upsert", this.db.from("benchmarks").upsert(rows.map(benchmarkToRow), { onConflict: "metric_key,segment" }).select());
+    return out.map(rowToBenchmark);
+  }
+  async getBenchmark(metricKey: string, segment: string) {
+    const row = await unwrap<Row | null>("benchmarks.select", this.db.from("benchmarks").select("*").eq("metric_key", metricKey).eq("segment", segment).maybeSingle());
+    return row ? rowToBenchmark(row) : null;
+  }
+  async listBenchmarks(segment?: string) {
+    let q = this.db.from("benchmarks").select("*");
+    if (segment) q = q.eq("segment", segment);
+    const rows = await unwrap<Row[]>("benchmarks.select", q.order("metric_key", { ascending: true }));
+    return rows.map(rowToBenchmark);
+  }
+  async listBenchmarkOptins(): Promise<BenchmarkOptin[]> {
+    const rows = await unwrap<Row[]>("benchmark_optins.select", this.db.from("benchmark_optins").select("account_id, opted_in"));
+    return rows.map((r) => ({ accountId: r.account_id as string, optedIn: !!r.opted_in }));
   }
 }
