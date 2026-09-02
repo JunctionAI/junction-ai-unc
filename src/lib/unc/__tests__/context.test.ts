@@ -106,6 +106,7 @@ const GOLDEN_KEYS = [
   "signals[].note",
   "signals[].value",
   "strategy",
+  "strategy.agreedAt",
   "strategy.channelRanking",
   "strategy.channelRanking[].channel",
   "strategy.channelRanking[].why",

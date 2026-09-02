@@ -20,10 +20,15 @@ export interface CliArgs {
   /** Proactive layer one-shots (docs/PROACTIVE.md). */
   kpiSnapshot: boolean;
   dailyBrief: boolean;
+  /** `--probe <platform>`: one certified read for --account, printed, then exit (src/worker/probe.ts). */
+  probe: string | null;
+  /** Optional overrides for --probe. */
+  resource: string | null;
+  window: string | null;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { intervalSec: 60, heartbeatPath: ".unc-worker/heartbeat.json", healthPort: null, once: false, enable: [], run: [], accountId: "demo", accountGiven: false, measure: false, selfReview: false, benchmarks: false, kpiSnapshot: false, dailyBrief: false };
+  const args: CliArgs = { intervalSec: 60, heartbeatPath: ".unc-worker/heartbeat.json", healthPort: null, once: false, enable: [], run: [], accountId: "demo", accountGiven: false, measure: false, selfReview: false, benchmarks: false, kpiSnapshot: false, dailyBrief: false, probe: null, resource: null, window: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -64,6 +69,16 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case "--daily-brief":
         args.dailyBrief = true;
+        break;
+      case "--probe":
+        args.probe = (next() ?? "").trim() || null;
+        if (!args.probe) throw new Error("--probe needs a platform (shopify | klaviyo | meta_ads | ga4 | google_ads | hubspot)");
+        break;
+      case "--resource":
+        args.resource = (next() ?? "").trim() || null;
+        break;
+      case "--window":
+        args.window = (next() ?? "").trim() || null;
         break;
       default:
         throw new Error(`unknown argument ${a}`);

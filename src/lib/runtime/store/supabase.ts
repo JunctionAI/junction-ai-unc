@@ -301,6 +301,10 @@ export class SupabaseStore implements Store {
     );
     return rowToState(row);
   }
+  async listRoutineStates(accountId: string) {
+    const rows = await unwrap<Row[]>("routine_states.select", this.db.from("routine_states").select("*").eq("account_id", accountId));
+    return rows.map(rowToState);
+  }
 
   // ----- routine_runs -----
   async createRun(run: RunRecord) {

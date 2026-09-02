@@ -108,7 +108,7 @@ async function tokenForRow(row: ConnectorRow, deps: TokenDeps): Promise<AccessTo
 
   if (rewrite) await putSecret(deps.db, row.id, seal(JSON.stringify(bundle), deps.keyring, row.id), now.toISOString());
 
-  return { accessToken: bundle.accessToken, platform: entry.id, externalRef: row.external_ref, expiresAt: bundle.expiresAt ?? null, ...(bundle.refreshToken ? { refreshToken: bundle.refreshToken } : {}) };
+  return { accessToken: bundle.accessToken, platform: entry.id as Platform, externalRef: row.external_ref, expiresAt: bundle.expiresAt ?? null, ...(bundle.refreshToken ? { refreshToken: bundle.refreshToken } : {}) };
 }
 
 // ---------- worker-shaped credential provider ----------

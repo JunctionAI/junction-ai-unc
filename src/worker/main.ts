@@ -16,6 +16,7 @@ import { SELF_REVIEW_EFFORT, SELF_REVIEW_MAX_TOKENS } from "../lib/telemetry/sel
 import { BRIEF_EFFORT, BRIEF_MAX_TOKENS } from "../lib/brain/brief";
 import { triggerRun, WORKER_RUN_MODE } from "./service";
 import { parseArgs } from "./cli";
+import { formatProbe, runProbe } from "./probe";
 import { runBenchmarks, runDailyBrief, runKpiSnapshot, runMeasure, runSelfReview } from "./telemetry";
 import { getStore } from "../lib/runtime/store";
 import { setEnabled } from "../lib/runtime/versioning";
@@ -24,6 +25,14 @@ import { defaultAccountsSource, defaultCredentialProvider, describeWiring, servi
 export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   const args = parseArgs(argv);
   const log = createLogger(undefined, { worker: "unc", mode: WORKER_RUN_MODE });
+
+  // --probe <platform>: one read, printed, exit — the founder's 30-second connection check.
+  if (args.probe) {
+    const report = await runProbe({ credentials: defaultCredentialProvider(process.env, (line) => log.info("credentials", { line })) }, { platform: args.probe, accountId: args.accountId, resource: args.resource, window: args.window });
+    process.stdout.write(formatProbe(report) + "\n");
+    if (!report.ok) process.exitCode = 1;
+    return;
+  }
   const store = getStore();
   const accounts = defaultAccountsSource();
   const llm = createLlmClient();

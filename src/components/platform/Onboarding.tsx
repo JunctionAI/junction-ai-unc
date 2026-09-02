@@ -53,6 +53,20 @@ const textInput: React.CSSProperties = {
   color: "var(--ink)",
 };
 
+/* Accounts mode (docs/PRODUCT-EXPERIENCE.md "Real only"): the number fields start EMPTY — these are
+   placeholders in Unc's voice, never values. Demo mode keeps the prototype's filled dataset. */
+export const OB_PLACEHOLDERS = {
+  target: "e.g. 40,000",
+  baseline: "where it is today",
+  budget: "e.g. 3,600",
+  hours: "e.g. 6",
+} as const;
+export const OB_BUDGET_UNSET_NOTE = "A monthly number — 0 is a fine answer if you’re growing organically.";
+/* The plan generator's gate: no plan on empty inputs — Unc asks first. */
+export const PLAN_GATE_TITLE = "Before I draft your plan, I need a couple of things from you.";
+export const PLAN_GATE_LINE = "I don’t guess numbers — the plan is only as honest as what goes into it. Fill these in and I’ll draft it right here.";
+const numberField: React.CSSProperties = { width: 132, border: "1px solid var(--input-border)", borderRadius: 8, padding: "6px 10px", fontSize: 15, fontWeight: 600, outline: "none", background: "white", color: "var(--ink)", textAlign: "right" };
+
 /* ---- Phase 3 wiring: background site scan + Unc-written plan narrative ----
    Both are fire-and-forget: the deterministic copy is always on screen first and stays
    as the instant fallback; nothing here ever blocks "Agree the plan →". */
@@ -101,8 +115,9 @@ function useOnboardingNarrative(V: PlatformVals) {
   const baseKey = JSON.stringify({ ...req, profile: null });
   const scanRunning = V.obScan.status === "running";
   const current = V.obNarrative;
+  const planReady = V.obPlanReady;
   useEffect(() => {
-    if (!V.ob6 || scanRunning) return; // wait for the scan so the prose can use it (deterministic copy shows meanwhile)
+    if (!V.ob6 || scanRunning || !planReady) return; // wait for the scan so the prose can use it (deterministic copy shows meanwhile); never on empty inputs
     if (current.key === key || inflight.current === key) return;
     inflight.current = key;
     setNarrative.current({ ...current, status: "running", key, baseKey });
@@ -117,7 +132,7 @@ function useOnboardingNarrative(V: PlatformVals) {
         if (inflight.current === key) setNarrative.current({ status: "failed", key, baseKey, value: null });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `req` is fully captured by `key`
-  }, [V.ob6, key, baseKey, scanRunning, current.key]);
+  }, [V.ob6, key, baseKey, scanRunning, current.key, planReady]);
 }
 
 export default function Onboarding({ V }: { V: PlatformVals }) {
@@ -212,8 +227,9 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
                 <span style={microLabel}>{V.obMetricLabel}</span>
                 <input
                   type="number"
-                  value={V.obTargetNum}
+                  value={V.accountMode && !V.obTargetSet ? "" : V.obTargetNum}
                   onChange={V.onObTargetNum}
+                  placeholder={V.accountMode ? OB_PLACEHOLDERS.target : undefined}
                   style={{ display: "block", width: "100%", marginTop: 6, ...textInput, fontSize: 16, fontWeight: 600 }}
                 />
               </label>
@@ -223,6 +239,7 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
                   type="number"
                   value={V.obBaselineNum ?? ""}
                   onChange={V.onObBaselineNum}
+                  placeholder={V.accountMode ? OB_PLACEHOLDERS.baseline : undefined}
                   style={{ display: "block", width: "100%", marginTop: 6, ...textInput, fontSize: 16, fontWeight: 600, color: "var(--muted)" }}
                 />
               </label>
@@ -280,7 +297,11 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
               <div style={{ border: "1px solid var(--card-border-2)", borderRadius: 13, padding: "16px 18px", background: "white" }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
                   <span style={cardLabel}>Budget for growth</span>
-                  <span style={{ fontSize: 17, fontWeight: 600, color: "var(--ink)" }}>{V.obBudgetLabel}</span>
+                  {V.accountMode ? (
+                    <input type="number" min={0} step={50} inputMode="numeric" aria-label="Budget for growth per month" value={V.obBudgetSet ? V.obBudgetMo : ""} onChange={V.onObBudgetNum} placeholder={OB_PLACEHOLDERS.budget} style={numberField} />
+                  ) : (
+                    <span style={{ fontSize: 17, fontWeight: 600, color: "var(--ink)" }}>{V.obBudgetLabel}</span>
+                  )}
                 </div>
                 <input
                   type="range"
@@ -295,12 +316,16 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
                   <span>{V.obBudgetMin}</span>
                   <span>{V.obBudgetMax}</span>
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.5 }}>≈ {V.obBudgetDay}/day — becomes the hard spend guardrail</div>
+                <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.5 }}>{V.accountMode && !V.obBudgetSet ? OB_BUDGET_UNSET_NOTE : <>≈ {V.obBudgetDay}/day — becomes the hard spend guardrail</>}</div>
               </div>
               <div style={{ border: "1px solid var(--card-border-2)", borderRadius: 13, padding: "16px 18px", background: "white" }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
                   <span style={cardLabel}>Your hours into growth per week</span>
-                  <span style={{ fontSize: 17, fontWeight: 600, color: "var(--ink)" }}>{V.obHoursLabel}</span>
+                  {V.accountMode ? (
+                    <input type="number" min={0} max={100} step={1} inputMode="numeric" aria-label="Your hours into growth per week" value={V.obHoursSet ? V.obHoursWk : ""} onChange={V.onObHoursNum} placeholder={OB_PLACEHOLDERS.hours} style={numberField} />
+                  ) : (
+                    <span style={{ fontSize: 17, fontWeight: 600, color: "var(--ink)" }}>{V.obHoursLabel}</span>
+                  )}
                 </div>
                 <input
                   type="range"
@@ -503,7 +528,31 @@ export default function Onboarding({ V }: { V: PlatformVals }) {
           </>
         )}
 
-        {V.ob6 && (
+        {V.ob6 && V.accountMode && !V.obPlanReady && (
+          <>
+            <div style={stepLabel}>Step 6 · Agree the plan</div>
+            <h2 style={stepH2}>Unc’s plan for you</h2>
+            <div data-testid="plan-gate" style={{ marginTop: 18, display: "flex", gap: 14 }}>
+              <img src="/brand/mascot-small.png" alt="Unc" style={{ width: 44, height: 47, objectFit: "contain", flex: "none", marginTop: 4 }} />
+              <div style={{ flex: 1, minWidth: 0, background: "white", border: "1px solid var(--card-border-2)", borderRadius: "4px 18px 18px 18px", padding: "20px 24px", boxShadow: "0 6px 24px oklch(0.27 0.055 262 / 0.08)" }}>
+                <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em" }}>{PLAN_GATE_TITLE}</div>
+                <div style={{ fontSize: 13.5, lineHeight: 1.65, color: "oklch(0.4 0.04 262)", marginTop: 8 }}>{PLAN_GATE_LINE}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 14 }}>
+                  {V.obMissing.map((m) => (
+                    <button key={m.label} data-testid="plan-gate-item" onClick={() => V.obGoToStep(m.step)} className="hov-underline" style={{ display: "flex", gap: 9, alignItems: "baseline", border: "none", background: "transparent", padding: 0, fontSize: 13, color: "oklch(0.35 0.05 262)", cursor: "pointer", textAlign: "left" }}>
+                      <span style={{ color: "var(--cyan-link)", fontWeight: 700 }}>·</span>
+                      <span>
+                        {m.label} <span style={{ color: "var(--cyan-link)", fontWeight: 600 }}>→ step {m.step}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {V.ob6 && (!V.accountMode || V.obPlanReady) && (
           <>
             <div style={stepLabel}>Step 6 · Agree the plan</div>
             <h2 style={stepH2}>Unc’s plan for you</h2>

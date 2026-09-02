@@ -1,0 +1,115 @@
+/* Routines state (GET/POST /api/routines/state): availability from the spec vs the connected
+   platforms, the listing (enabled, version, last run, last draft, recommended-first from the
+   plan) on MemoryStore + the schema-checked fake, and switching a routine on. */
+
+import { describe, expect, it } from "vitest";
+import { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
+import { availabilityCopy, canEnable, readPlatforms, routineAvailability } from "../availability";
+import { CATALOG_SPEC_BY_ID, CATALOG_SPECS, WAVE_1_IDS } from "../catalog-specs";
+import { recommendedFirstFrom, routinesStateForAccount, setRoutineEnabled } from "../routinesState";
+import { MemoryStore } from "../store/memory";
+import { runRoutine } from "../engine";
+import { adapters, input } from "./helpers";
+
+const ACCT = "00000000-0000-4000-8000-00000000acc1";
+
+describe("availability", () => {
+  it("names the read platforms that have a card, in chain order, once each", () => {
+    expect(readPlatforms(CATALOG_SPEC_BY_ID["D05-W02"])).toEqual(["shopify", "klaviyo"]);
+    expect(readPlatforms(CATALOG_SPEC_BY_ID["D01-W01"])).toEqual(["gorgias", "linkedin", "shopify"]);
+    // research sources (web, llm_search, calendar) never gate a routine: D03-W03 reads llm_search + shopify
+    expect(readPlatforms(CATALOG_SPEC_BY_ID["D03-W03"])).toEqual(["shopify"]);
+  });
+
+  it("wave_2 for anything that mutates, needs_connector for a missing card platform, ready / draft_only otherwise", () => {
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads", "shopify"])).toBe("wave_2");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], [])).toBe("needs_connector:shopify");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify"])).toBe("needs_connector:klaviyo");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify", "klaviyo"])).toBe("ready");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D03-W03"], [])).toBe("needs_connector:shopify");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D03-W03"], ["shopify"])).toBe("draft_only");
+    expect(availabilityCopy("needs_connector:klaviyo")).toBe("needs Klaviyo connected");
+    expect(availabilityCopy("draft_only")).toBe("draft-only for now");
+    expect(availabilityCopy("ready")).toBe("drafts only — nothing goes out without you");
+    expect(canEnable("wave_2")).toBe(false);
+    expect(canEnable("needs_connector:shopify")).toBe(false);
+    expect(canEnable("ready")).toBe(true);
+    // every wave-1 routine with all its cards connected is ready; no wave-1 routine is wave_2
+    const all = [...new Set(CATALOG_SPECS.flatMap(readPlatforms))];
+    for (const id of WAVE_1_IDS) expect(routineAvailability(CATALOG_SPEC_BY_ID[id], all)).toBe("ready");
+  });
+
+  it("recommended-first = the plan's phase-1 routines that are launch-wave, in plan order", () => {
+    const phases = [{ n: "1", name: "Organic brand engine", status: "ACTIVE", routines: ["Founder content engine", "Social repurposing", "Customer-question mining", "Ghost routine"], from_you: "" }, { n: "2", routines: ["Winback campaign prep"] }];
+    expect(recommendedFirstFrom(phases)).toEqual(["D01-W01", "D01-W05", "D01-W03"]);
+    expect(recommendedFirstFrom(null)).toEqual([]);
+    expect(recommendedFirstFrom([{ routines: ["Daily paid decisioning"] }])).toEqual([]); // wave 2 — never "first"
+  });
+});
+
+describe("routinesStateForAccount", () => {
+  function seeded() {
+    const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT, name: "Example", currency: "NZD" }]);
+    db.seed("connectors", [
+      { account_id: ACCT, platform: "shopify", status: "connected" },
+      { account_id: ACCT, platform: "klaviyo", status: "connected" },
+      { account_id: ACCT, platform: "meta_ads", status: "needs_reconnect" },
+    ]);
+    db.seed("plans", [
+      { account_id: ACCT, title: "Brand-led organic", phases: [{ n: "1", routines: ["Abandoned cart recovery", "Founder content engine"] }], created_at: "2026-09-01T00:00:00.000Z" },
+      { account_id: ACCT, title: "Old plan", phases: [{ n: "1", routines: ["Lead research & scoring"] }], created_at: "2026-08-01T00:00:00.000Z" },
+    ]);
+    return db;
+  }
+
+  it("every catalog routine, real enabled/version, honest availability, the plan's recommendations, no store call per routine", async () => {
+    const db = seeded();
+    const store = new MemoryStore();
+    const listing = await routinesStateForAccount({ store, db }, ACCT);
+    expect(listing.routines).toHaveLength(CATALOG_SPECS.length);
+    expect(listing.connected).toEqual(["shopify", "klaviyo"]);
+    expect(listing.recommendedFirst).toEqual(["D05-W02", "D01-W01"]);
+    expect(listing.planChannel).toBe("Email & SMS");
+    const ac = listing.routines.find((r) => r.routineId === "D05-W02")!;
+    expect(ac).toMatchObject({ name: "Abandoned cart recovery", category: "Email & SMS", wave: 1, enabled: false, version: 1, availability: "ready", canEnable: true, recommended: true, lastRun: null, lastDraft: null });
+    expect(listing.routines.find((r) => r.routineId === "D02-W01")).toMatchObject({ availability: "wave_2", canEnable: false, recommended: false });
+    expect(listing.routines.find((r) => r.routineId === "D01-W01")).toMatchObject({ availability: "needs_connector:gorgias", availabilityCopy: "needs Gorgias connected", recommended: true });
+    // demo/no DB: nothing connected, no plan
+    const demo = await routinesStateForAccount({ store, db: null }, "demo");
+    expect(demo.connected).toEqual([]);
+    expect(demo.recommendedFirst).toEqual([]);
+    expect(demo.planChannel).toBeNull();
+  });
+
+  it("carries the last run and the last draft per routine, and the trail for one", async () => {
+    const db = seeded();
+    const { adapters: a, store, clk } = adapters();
+    const spec = CATALOG_SPEC_BY_ID["D05-W02"];
+    const first = await runRoutine(spec, input({ account: { accountId: ACCT, currency: "NZD", budgetMonthly: 3000 }, triggeredBy: "manual" }), a, { mode: "dry_run" });
+    clk.advanceHours(1);
+    const second = await runRoutine(spec, input({ account: { accountId: ACCT, currency: "NZD", budgetMonthly: 3000 }, triggeredBy: "manual" }), a, { mode: "dry_run" });
+    const listing = await routinesStateForAccount({ store, db }, ACCT, { routineId: "D05-W02" });
+    const ac = listing.routines.find((r) => r.routineId === "D05-W02")!;
+    expect(ac.lastRun).toMatchObject({ id: second.runId, status: second.status, summary: second.summary });
+    expect(ac.lastRun!.id).not.toBe(first.runId);
+    if (second.receipts.some((r) => r.kind === "draft")) {
+      expect(ac.lastDraft).toMatchObject({ runId: second.runId });
+      expect(ac.lastDraft!.description).toBe(second.receipts.filter((r) => r.kind === "draft").at(-1)!.description);
+    }
+    expect(listing.lastRunReceipts!.map((r) => r.id)).toEqual(second.receipts.map((r) => r.id));
+    expect(listing.routines.find((r) => r.routineId === "D01-W01")!.lastRun).toBeNull();
+  });
+
+  it("setRoutineEnabled persists the switch and answers the fresh view", async () => {
+    const db = seeded();
+    const store = new MemoryStore();
+    const on = await setRoutineEnabled({ store, db, now: () => new Date("2026-09-02T09:00:00.000Z") }, ACCT, "D05-W02", true);
+    expect(on).toMatchObject({ routineId: "D05-W02", enabled: true, version: 1 });
+    expect(await store.getRoutineState(ACCT, "D05-W02")).toMatchObject({ enabled: true, version: 1, updatedAt: "2026-09-02T09:00:00.000Z" });
+    expect((await store.listRoutineStates(ACCT)).map((s) => s.routineId)).toEqual(["D05-W02"]);
+    const off = await setRoutineEnabled({ store, db }, ACCT, "D05-W02", false);
+    expect(off.enabled).toBe(false);
+    await expect(setRoutineEnabled({ store, db }, ACCT, "D99-W99", true)).rejects.toThrow(/not in the catalog/);
+  });
+});

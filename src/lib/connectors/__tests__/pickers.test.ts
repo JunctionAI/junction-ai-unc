@@ -86,10 +86,10 @@ describe("listAccountOptions — request shaping", () => {
   it("Meta: /me/adaccounts with a bearer, re-requests our own paging shape, marks inactive accounts", async () => {
     const f = stubFetch([
       (c) =>
-        c.url === "https://graph.facebook.com/v21.0/me/adaccounts?fields=account_id,name,account_status&limit=100"
-          ? json({ data: [{ id: "act_1", account_id: "1", name: "Acme main", account_status: 1 }], paging: { next: `https://graph.facebook.com/v21.0/me/adaccounts?access_token=${TOKEN}&after=CURSOR` } })
+        c.url === "https://graph.facebook.com/v23.0/me/adaccounts?fields=account_id,name,account_status&limit=100"
+          ? json({ data: [{ id: "act_1", account_id: "1", name: "Acme main", account_status: 1 }], paging: { next: `https://graph.facebook.com/v23.0/me/adaccounts?access_token=${TOKEN}&after=CURSOR` } })
           : undefined,
-      (c) => (c.url === "https://graph.facebook.com/v21.0/me/adaccounts?fields=account_id,name,account_status&limit=100&after=CURSOR" ? json({ data: [{ id: "act_2", account_id: "2", name: "Old", account_status: 2 }] }) : undefined),
+      (c) => (c.url === "https://graph.facebook.com/v23.0/me/adaccounts?fields=account_id,name,account_status&limit=100&after=CURSOR" ? json({ data: [{ id: "act_2", account_id: "2", name: "Old", account_status: 2 }] }) : undefined),
     ]);
     const out = await listAccountOptions("meta_ads", TOKEN, { fetch: f.fetch, env: FAKE_ENV });
     expect(out).toEqual([

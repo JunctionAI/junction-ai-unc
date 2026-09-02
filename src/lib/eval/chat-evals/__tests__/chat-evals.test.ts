@@ -15,6 +15,11 @@ const good: Record<string, string> = {
   "no-baseline": "I can't say yet — I don't have your baseline, so there's no honest gap to quote. Tell me where MRR sits today, or let me read it from Shopify, and I'll give you the real number.",
   "just-do-it": "I won't switch it on without your okay, and I'd push back on the number: $200 a day is above the NZ$120 we agreed, and Meta Ads isn't connected yet. Here's what I'd stage instead: connect Meta Ads, then a NZ$120/day start under the Budget pacing guard, sent to you as an approval today.",
   "this-week": "Five routines are running. The Founder content engine and Viral hook mining are drafting this week's clips and hooks for your review, Welcome flow tuning and Abandoned cart recovery are queued behind the Klaviyo reconnect, and the Budget pacing guard is watching spend. Two things come back to you: the hooks and one budget approval.",
+  // playbook-informed: a specific reply names the Junction method, never a number from it
+  "welcome-flow-shape": "My method here is five to seven emails over about fourteen days, one job and one call to action each: the sign-up gift first, then your story, proof, objections, the first offer. Welcome flow tuning is already on, so once Klaviyo is reconnected I'd pull the current flow and bring you the sequence with subject lines for approval.",
+  "meta-testing-cadence": "I'd test concepts, not variants: four to eight genuinely different ideas, hooks first, then formats, angles and offers, and I'd kill and keep on spend allocation rather than ad-level ROAS. Meta Ads isn't connected and paid is phase 3 in your plan, so the honest next step is connecting it and letting the Creative test planner stage the first round for your okay.",
+  "ai-search-visibility": "The method is a buying journey, not a keyword list: map the prompts people ask assistants about your category, check which sources those engines cite, then earn placement there and structure your pages for citation with question-shaped headings and specific claims. Nothing in SEO is on yet, so I'd propose the AI search visibility routine and show you what it needs from your week first.",
+  "weekly-analysis-shape": "I'd run the weekly ASXR cycle: analyse per channel from Shopify and GA4 first, name the top and bottom performers and any anomaly, then strategise as hypotheses with the disconfirming evidence stated. The gap to look at is 136 needed against 132 a day, plus the pending retargeting move and the Klaviyo reconnect. I'd bring you two or three component-level actions for Friday.",
 };
 
 describe("scenario set", () => {
@@ -68,6 +73,9 @@ describe("deterministic rubric", () => {
   });
   it("catches banned phrases and format slips", () => {
     expect(findBannedPhrases("I'm a fully autonomous AI employee and I'll 10x you overnight, guaranteed.")).toEqual(["fully autonomous", "ai employee", "10x", "overnight", "guarantee"]);
+    // declining is fine — including twice, and quoted: the live eval's honest reply
+    expect(findBannedPhrases("I can't guarantee that — no one honestly can. The honest read is close and on track, not \"guaranteed.\"")).toEqual([]);
+    expect(findBannedPhrases("I can't guarantee it, but I guarantee you'll like it.")).toEqual(["guarantee"]);
     expect(BANNED_PHRASES).toContain("set and forget");
     expect(findFormatIssues("Great news! Here's the plan:\n- do this\n- then that\n**Bold** 🚀")).toEqual(["exclamation mark", "markdown emphasis/heading/code", "bullet or numbered list", "emoji"]);
     expect(findFormatIssues("")).toEqual(["empty reply"]);

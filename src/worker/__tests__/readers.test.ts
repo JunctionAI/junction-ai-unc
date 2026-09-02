@@ -57,7 +57,7 @@ describe("shopify reader", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.count).toBe(2);
-    expect(res.metrics).toEqual({ revenue: 25.5, aov: 12.75 });
+    expect(res.metrics).toMatchObject({ revenue: 25.5, aov: 12.75, order_count: 2, excluded_count: 0 });
     expect(res.provenance).toMatchObject({ platform: "shopify", source: "live", fetchedAt: NOW.toISOString() });
 
     const [{ url, init }] = calls;
@@ -67,7 +67,9 @@ describe("shopify reader", () => {
     expect(u.searchParams.get("status")).toBe("any");
     expect(u.searchParams.get("limit")).toBe("250"); // clamped
     expect(u.searchParams.get("created_at_min")).toBe("2026-08-26T07:00:00.000Z");
-    expect(u.searchParams.get("fields")).toBe("id,total_price,landing_site");
+    // orders always carry the fields the revenue exclusions need
+    expect(u.searchParams.get("fields")).toBe("id,created_at,total_price,current_total_price,financial_status,cancelled_at,landing_site");
+    expect(u.searchParams.has("financial_status")).toBe(false);
     expect((init.headers as Record<string, string>)["X-Shopify-Access-Token"]).toBe(FAKE_TOKEN);
     expect(url).not.toContain(FAKE_TOKEN);
   });
@@ -120,7 +122,7 @@ describe("klaviyo reader", () => {
     expect(res.ok && res.rows).toEqual([{ id: "f1", name: "Welcome Series", status: "live" }]);
     expect(res.ok && res.metrics).toMatchObject({ id: "f1", status: "live" });
     const [{ url, init }] = calls;
-    expect(url).toBe('https://a.klaviyo.com/api/flows?filter=equals%28name%2C%22Welcome+Series%22%29');
+    expect(url).toBe("https://a.klaviyo.com/api/flows?filter=equals%28name%2C%22Welcome+Series%22%29&fields%5Bflow%5D=name%2Cstatus%2Ctrigger_type%2Ccreated%2Cupdated");
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBe(`Klaviyo-API-Key ${FAKE_KEY}`);
     expect(headers.revision).toBe(klaviyo.KLAVIYO_REVISION);
@@ -135,11 +137,14 @@ describe("klaviyo reader", () => {
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body as string);
     expect(body.data.attributes.metric_id).toBe("M1");
-    expect(body.data.attributes.filter).toEqual(["greater-or-equal(datetime,2026-08-05T07:00:00.000Z)"]);
+    expect(body.data.attributes.filter).toEqual(["greater-or-equal(datetime,2026-08-05T07:00:00.000Z)", "less-than(datetime,2026-09-02T07:00:00.000Z)"]);
+    expect(body.data.attributes.by).toEqual(["$flow"]);
+    expect(body.data.attributes.measurements).toEqual(["count", "sum_value"]);
 
+    // no metric id and no "Placed Order" on the account's metric list → honest "couldn't ask"
     const noId = await klaviyo.read({ resource: "metrics", filter: { flowName: "Welcome Series" } }, creds, { now });
     expect(noId.ok).toBe(false);
-    expect(!noId.ok && noId.reason).toMatch(/metricId/);
+    expect(!noId.ok && noId.reason).toMatch(/no metric named "Placed Order"/);
   });
 
   it("computes the weakest message by CTOR from fixture metrics", async () => {
@@ -215,7 +220,9 @@ describe("meta reader", () => {
     const u = new URL(url);
     expect(u.pathname).toBe(`/${meta.META_GRAPH_VERSION}/act_123/insights`);
     expect(u.searchParams.get("level")).toBe("adset");
-    expect(u.searchParams.get("date_preset")).toBe("last_7d");
+    // an exact window, not a preset: 7 days ending today (UTC)
+    expect(JSON.parse(u.searchParams.get("time_range")!)).toEqual({ since: "2026-08-27", until: "2026-09-02" });
+    expect(u.searchParams.has("date_preset")).toBe(false);
     expect(u.searchParams.get("fields")!.split(",")).toEqual(expect.arrayContaining(["spend", "actions", "action_values", "purchase_roas", "adset_id", "adset_name"]));
     expect(u.searchParams.has("access_token")).toBe(false);
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${FAKE_META}`);
@@ -225,6 +232,7 @@ describe("meta reader", () => {
     const { calls } = stubFetch({ data: [{ id: "ad1", name: "Hook", status: "PAUSED" }] });
     const res = await meta.read({ resource: "ads", filter: { status: "PAUSED" } }, creds, { now });
     expect(res.ok && res.rows).toEqual([{ ad_id: "ad1", id: "ad1", name: "Hook", status: "PAUSED" }]);
+    expect(res.ok && res.metrics).toEqual({ count: 1 });
     const u = new URL(calls[0].url);
     expect(u.pathname).toBe(`/${meta.META_GRAPH_VERSION}/act_123/ads`);
     expect(JSON.parse(u.searchParams.get("filtering")!)).toEqual([{ field: "effective_status", operator: "IN", value: ["PAUSED"] }]);

@@ -4,7 +4,8 @@
    POSTs /api/routines/run for this routine (the same service + adapters the always-on loop
    uses; dry run only, the executor refuses every mutation) and renders the receipt trail
    inline: id · kind · description. Works in demo mode (MemoryStore — runs vanish when the
-   server restarts) and in accounts mode (persisted; the route binds the run to the session). */
+   server restarts) and in accounts mode (persisted; the route binds the run to the session).
+   `onDone` lets the detail view refresh its real state once a run has landed. */
 
 import { useState } from "react";
 import { receiptHandle } from "@/lib/platform/approvals";
@@ -16,6 +17,8 @@ export interface RunNowProps {
   account: { currency: string; budgetMonthly: number };
   /** false = demo/MemoryStore: say so, in one line. */
   persisted: boolean;
+  /** Accounts mode: called after a run finishes (any status) so the caller can re-read state. */
+  onDone?: () => void;
 }
 
 type RunResponse = {
@@ -23,7 +26,7 @@ type RunResponse = {
   error?: string;
 };
 
-export default function RunNowPanel({ routineId, accountId, account, persisted }: RunNowProps) {
+export default function RunNowPanel({ routineId, accountId, account, persisted, onDone }: RunNowProps) {
   const [busy, setBusy] = useState(false);
   const [run, setRun] = useState<RunResponse["run"] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +49,7 @@ export default function RunNowPanel({ routineId, accountId, account, persisted }
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      onDone?.();
     }
   }
 

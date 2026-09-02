@@ -37,7 +37,7 @@ describe("revokeToken", () => {
 
   it("Meta: DELETE /me/permissions with a bearer", async () => {
     const f = stubFetch([okRoute()]);
-    expect(await revokeToken(f.fetch, CONNECTOR_BY_ID.meta_ads, { bundle: bundle({ refreshToken: undefined }), externalRef: "act_1" })).toEqual({ ok: true, endpoint: "graph.facebook.com/v21.0/me/permissions" });
+    expect(await revokeToken(f.fetch, CONNECTOR_BY_ID.meta_ads, { bundle: bundle({ refreshToken: undefined }), externalRef: "act_1" })).toEqual({ ok: true, endpoint: "graph.facebook.com/v23.0/me/permissions" });
     expect(f.calls[0]).toMatchObject({ method: "DELETE" });
     expect(f.calls[0].headers.authorization).toBe("Bearer ACCESS-FIXTURE");
     expect(f.calls[0].url).not.toContain("ACCESS-FIXTURE");
@@ -63,7 +63,7 @@ describe("revokeToken", () => {
 
   it("no endpoint for catalogued-only platforms; HTTP / network / timeout are codes; 404 = already gone", async () => {
     expect(await revokeToken(stubFetch().fetch, CONNECTOR_BY_ID.slack, { bundle: bundle(), externalRef: null })).toEqual({ ok: false, code: "no_revoke_endpoint", endpoint: null });
-    expect(await revokeToken(stubFetch([okRoute(401)]).fetch, CONNECTOR_BY_ID.meta_ads, { bundle: bundle(), externalRef: null })).toEqual({ ok: false, code: "http_401", endpoint: "graph.facebook.com/v21.0/me/permissions" });
+    expect(await revokeToken(stubFetch([okRoute(401)]).fetch, CONNECTOR_BY_ID.meta_ads, { bundle: bundle(), externalRef: null })).toEqual({ ok: false, code: "http_401", endpoint: "graph.facebook.com/v23.0/me/permissions" });
     expect(await revokeToken(stubFetch([okRoute(404)]).fetch, CONNECTOR_BY_ID.meta_ads, { bundle: bundle(), externalRef: null })).toMatchObject({ ok: true });
     const boom = stubFetch([
       () => {

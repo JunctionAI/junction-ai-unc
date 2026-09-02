@@ -23,11 +23,12 @@ import { open, seal, type Keyring } from "./crypto";
 import { bundleFromResponse, callbackUri, codeChallenge, exchangeCode, exchangeMetaLongLived, newCodeVerifier, newState, STATE_TTL_MS, verifyShopifyHmac, type FetchLike, type TokenBundle } from "./oauth";
 import { hasPicker, listAccountOptions, normaliseExternalRef, OptionsError, type AccountOption } from "./options";
 import type { PurgeResult, SyncProvisioner } from "./provisioning";
-import { connectorEntry, normaliseShopDomain, platformCredentials, type ConnectorEntry } from "./registry";
+import { connectorEntry, GOOGLE_CHILDREN, isGoogleUmbrella, META_GRAPH_VERSION, normaliseShopDomain, platformCredentials, type ConnectorEntry } from "./registry";
 import { revokeToken, type RevokeResult } from "./revoke";
 import { insertSystemReceipt } from "@/lib/db/receipts";
 import { accountForUser, consumeOauthState, deleteSecret, getConnector, getSecret, insertOauthState, isMember, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
 import { getAccessTokenFor } from "./tokens";
+import type { Platform } from "@/lib/runtime/types";
 
 export interface ConnectorConfig {
   /** Public base URL the callbacks are registered under (APP_URL), no trailing slash. */
@@ -50,6 +51,24 @@ export interface HandlerDeps {
   log?: (line: string) => void;
   /** Per-tenant sync (Airbyte or the Noop); disconnect tears the tenant's sync down through it. */
   provisioner?: SyncProvisioner;
+  /** Fires once a connection becomes readable (callback with a usable token, a picker choice,
+      a pasted key) — the routes schedule the first certified read from it (firstRead.ts).
+      Must not throw; must not block. */
+  onConnected?: (info: { accountId: string; platform: Platform; connectorId: string }) => void;
+}
+
+/** True when the connector row can be read right away (a picker platform still needs its
+    external_ref chosen first — the credential provider answers "nothing connected" until then). */
+export function readableOnConnect(platform: string, externalRef: string | null): boolean {
+  return !hasPicker(platform) || !!externalRef;
+}
+
+function fireConnected(deps: HandlerDeps, info: { accountId: string; platform: Platform; connectorId: string }) {
+  try {
+    deps.onConnected?.(info);
+  } catch {
+    /* the connection stands; the nightly snapshot reads it */
+  }
 }
 
 export type FallbackReason = "unknown_platform" | "platform_not_configured" | "secret_store_not_configured" | "accounts_not_configured" | "developer_token_not_configured";
@@ -93,7 +112,8 @@ export async function handleStart(deps: HandlerDeps, platform: string, body: unk
     expires_at: new Date(now.getTime() + STATE_TTL_MS).toISOString(),
   });
   // Mark the row as in flight so a stale card reads "connecting" rather than "connected".
-  await upsertConnector(deps.db, accountId, entry.id, { status: "connecting" });
+  // The Google umbrella has no row of its own: its children keep whatever state they have.
+  if (!isGoogleUmbrella(entry.id)) await upsertConnector(deps.db, accountId, entry.id, { status: "connecting" });
 
   const url = entry.authorizeUrl({
     clientId: creds.clientId,
@@ -137,7 +157,7 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
   const fail = async (reason: string) => {
     deps.log?.(`connectors.callback platform=${entry.id} account=${accountId} reason=${reason}`);
     try {
-      await upsertConnector(db, accountId, entry.id, { status: "error", last_sync_result: "error:oauth" });
+      if (!isGoogleUmbrella(entry.id)) await upsertConnector(db, accountId, entry.id, { status: "error", last_sync_result: "error:oauth" });
     } catch {
       /* the redirect is still the right answer */
     }
@@ -175,11 +195,24 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
       }
     }
     const bundle = bundleFromResponse(tokens, now);
+    if (isGoogleUmbrella(entry.id)) {
+      // One consent, three rows: each child gets the same bundle sealed under its own id; a
+      // property / customer chosen earlier (external_ref) is kept, so a re-connect is quiet.
+      for (const child of GOOGLE_CHILDREN) {
+        const childId = await upsertConnector(db, accountId, child, { status: "connected", last_sync_at: null, last_sync_result: null });
+        await putSecret(db, childId, seal(JSON.stringify(bundle), keyring, childId), now.toISOString());
+        const row = await getConnector(db, accountId, child);
+        if (readableOnConnect(child, row?.external_ref ?? null)) fireConnected(deps, { accountId, platform: child, connectorId: childId });
+      }
+      deps.log?.(`connectors.callback platform=google account=${accountId} result=connected children=${GOOGLE_CHILDREN.join(",")}`);
+      return okRedirect(entry.id);
+    }
     const externalRef = shop ?? (await identifyExternalRef(deps.fetch, entry, bundle));
 
-    const connectorId = await upsertConnector(db, accountId, entry.id, { status: "connected", external_ref: externalRef });
+    const connectorId = await upsertConnector(db, accountId, entry.id, { status: "connected", external_ref: externalRef, last_sync_at: null, last_sync_result: null });
     await putSecret(db, connectorId, seal(JSON.stringify(bundle), keyring, connectorId), now.toISOString());
     deps.log?.(`connectors.callback platform=${entry.id} account=${accountId} result=connected`);
+    if (readableOnConnect(entry.id, externalRef)) fireConnected(deps, { accountId, platform: entry.id as Platform, connectorId });
     return okRedirect(entry.id);
   } catch (e) {
     const code = e instanceof Error && "code" in e ? String((e as { code: unknown }).code) : "unexpected";
@@ -262,7 +295,7 @@ async function revokeSealed(deps: HandlerDeps, entry: ConnectorEntry, row: Conne
 async function purgeSync(deps: HandlerDeps, accountId: string, platform: ConnectorEntry["id"]): Promise<PurgeResult> {
   if (!deps.provisioner) return { purged: false, deleted: [], reason: "sync_not_configured" };
   try {
-    return await deps.provisioner.purgeTenant(accountId, platform);
+    return await deps.provisioner.purgeTenant(accountId, platform as Platform);
   } catch (e) {
     return { purged: false, deleted: [], reason: e instanceof Error && "code" in e ? `airbyte_${String((e as { code: unknown }).code)}` : "purge_failed" };
   }
@@ -316,13 +349,13 @@ export async function handleOptions(deps: HandlerDeps, platform: string, opts: {
   if (!deps.config.keyring) return { status: 200, body: { fallback: true, reason: "secret_store_not_configured" } };
   if (entry.id === "google_ads" && !(deps.config.env.GOOGLE_ADS_DEVELOPER_TOKEN || "").trim()) return { status: 200, body: { fallback: true, reason: "developer_token_not_configured" } };
 
-  const token = await getAccessTokenFor(accountId, entry.id, { db, keyring: deps.config.keyring, env: deps.config.env, fetch: deps.fetch, now: deps.now, log: deps.log });
+  const token = await getAccessTokenFor(accountId, entry.id as Platform, { db, keyring: deps.config.keyring, env: deps.config.env, fetch: deps.fetch, now: deps.now, log: deps.log });
   if (!token) {
     deps.log?.(`connectors.options platform=${entry.id} account=${accountId} result=needs_reconnect`);
     return { status: 409, body: { error: "needs reconnect" } };
   }
   try {
-    const options = await listAccountOptions(entry.id, token.accessToken, { fetch: deps.fetch, env: deps.config.env });
+    const options = await listAccountOptions(entry.id as Platform, token.accessToken, { fetch: deps.fetch, env: deps.config.env });
     deps.log?.(`connectors.options platform=${entry.id} account=${accountId} options=${options.length}`);
     return { status: 200, body: { platform: entry.id, externalRef: row.external_ref, options, listed: true } };
   } catch (e) {
@@ -354,6 +387,8 @@ export async function handleSelect(deps: HandlerDeps, platform: string, body: un
     now,
   });
   deps.log?.(`connectors.select platform=${entry.id} account=${accountId}`);
+  // The token was usable before; the choice is what makes the row readable — read it now.
+  fireConnected(deps, { accountId, platform: entry.id as Platform, connectorId: row.id });
   return { status: 200, body: { ok: true, externalRef } };
 }
 
@@ -381,7 +416,7 @@ const IDENTIFY_TIMEOUT_MS = 5_000;
 export async function identifyExternalRef(fetchFn: FetchLike, entry: ConnectorEntry, bundle: TokenBundle): Promise<string | null> {
   try {
     if (entry.id === "meta_ads") {
-      const res = await fetchFn(`https://graph.facebook.com/v21.0/me/adaccounts?fields=account_id&limit=25`, { headers: { authorization: `Bearer ${bundle.accessToken}` }, signal: AbortSignal.timeout(IDENTIFY_TIMEOUT_MS) });
+      const res = await fetchFn(`https://graph.facebook.com/${META_GRAPH_VERSION}/me/adaccounts?fields=account_id&limit=25`, { headers: { authorization: `Bearer ${bundle.accessToken}` }, signal: AbortSignal.timeout(IDENTIFY_TIMEOUT_MS) });
       if (!res.ok) return null;
       const j = (await res.json()) as { data?: { account_id?: string }[] };
       const ids = (j.data ?? []).map((d) => d.account_id).filter((x): x is string => typeof x === "string");

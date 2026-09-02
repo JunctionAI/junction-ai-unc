@@ -24,9 +24,11 @@
    Keys are read there from process.env, never by us, never logged. Tests
    inject a fake LlmClient — no live calls. */
 
+import { recallPlaybooks, renderPlaybooksForPrompt, type Playbook, type PlaybookDomain } from "../../lib/brain/playbooks";
 import { applySpendCeiling, readAccountProfile, renderProfileForDecision, renderTasteForDecision, suggestedSpendCeiling, tastePatterns } from "../../lib/brain/taste";
 import type { DbClient } from "../../lib/db/types";
 import { createTextClient, describeLlm, type CompleteContext } from "../../lib/llm/router";
+import { ALL_SYSTEMS, type CategoryName } from "../../lib/platform/catalog";
 import { renderParams, renderTemplate, resolveSpend } from "../../lib/runtime/context";
 import { DeterministicDecisionProvider } from "../../lib/runtime/providers";
 import type { Store } from "../../lib/runtime/store/interface";
@@ -36,6 +38,44 @@ import type { Logger } from "../log";
 export const LLM_MAX_TOKENS = 4000; // adaptive thinking counts against max_tokens; effort pinned low below
 export const LLM_EFFORT = "low" as const;
 export const MAX_REASONING_CHARS = 600;
+
+/* Playbooks in the DECIDE prompt (docs/PRODUCT-EXPERIENCE.md "Playbooks in the answers"): ≤ 2 of
+   Junction's method cards for the routine's domain, recalled by routine name + question. They
+   inform the choice, never the numbers — the SYSTEM prompt says so. Env-gated through
+   recallPlaybooks: no database → no cards; no embeddings → keyword recall. */
+export const PLAYBOOKS_PER_DECISION = 2;
+export const PLAYBOOK_BLOCK_MAX_CHARS = 700;
+export const PLAYBOOK_BLOCK_HEADER = "JUNCTION PLAYBOOK NOTES (Junction's methods for this kind of decision — use when relevant, never a source of numbers):";
+
+const CATEGORY_DOMAIN: Record<CategoryName, PlaybookDomain> = { Content: "content", "Paid ads": "paid", SEO: "seo", Sales: "sales", "Email & SMS": "email" };
+const ROUTINE_BY_ID = new Map(ALL_SYSTEMS.map((s) => [s.id, s]));
+
+/** The playbook domain a routine belongs to (its catalog category), or null for an unknown id. */
+export function routineDomain(routineId: string): PlaybookDomain | null {
+  const r = ROUTINE_BY_ID.get(routineId);
+  return r ? (CATEGORY_DOMAIN[r.cat] ?? null) : null;
+}
+
+/** The recall query for a decide node: routine name + the question (+ the rule's guidance). */
+export function playbookQuery(routineId: string, node: Pick<DecideNode, "question" | "rule">): string {
+  const name = ROUTINE_BY_ID.get(routineId)?.name ?? routineId;
+  const guidance = node.rule.kind === "llm" && node.rule.prompt ? ` ${node.rule.prompt}` : "";
+  return `${name}: ${node.question}${guidance}`.slice(0, 500);
+}
+
+export interface PlaybookSource {
+  /** ≤ `limit` cards for the query within `domains` (null = any). Must not throw for "nothing". */
+  recall(query: string, domains: PlaybookDomain[] | null, limit: number): Promise<Playbook[]>;
+}
+
+/** The env-gated default: src/lib/brain/playbooks.ts recallPlaybooks (service-role db when configured, else []). */
+export const defaultPlaybookSource: PlaybookSource = {
+  recall: (query, domains, limit) => recallPlaybooks(query, domains, limit),
+};
+
+export function renderPlaybookBlock(cards: Playbook[]): string {
+  return renderPlaybooksForPrompt(cards.slice(0, PLAYBOOKS_PER_DECISION), { header: PLAYBOOK_BLOCK_HEADER, maxChars: PLAYBOOK_BLOCK_MAX_CHARS, perPlaybookChars: 280 });
+}
 
 export interface LlmPrompt {
   system: string;
@@ -58,6 +98,8 @@ Voice rules (non-negotiable): first person, present tense; numbers over adjectiv
 Product guardrails (absolute): you propose, the founder approves — nothing publishes, sends or spends without their explicit okay. No invented numbers: the ONLY numbers you may use are the ones in the CONTEXT below. If a number you need is not there, say so in the reasoning rather than estimating.
 
 Personalisation: when a FOUNDER block is present it tells you how this founder likes to work and what they have approved or held before. Propose within their comfort — or explain in the reasoning why this time is different. When a taste line shaped your choice, say so in the reasoning in their terms (e.g. "kept under your usual NZ$50/day").
+
+Playbooks: when a JUNCTION PLAYBOOK NOTES block is present, it holds Junction's methods for this kind of decision — not facts about the founder's business. Let them inform the choice and name the method in the reasoning when it did; never take a number from them and never present a playbook line as something that happened in this account.
 
 Task: a routine has reached a decision node. Choose exactly one of the OFFERED OPTIONS by id.
 
@@ -94,7 +136,7 @@ export function renderFounderBlock(p: Personalisation | null | undefined): strin
   return lines.length ? `FOUNDER (how they like to work; what they have approved or held):\n${lines.map((l) => `- ${l}`).join("\n")}` : "";
 }
 
-export function buildDecisionPrompt(node: DecideNode, ctx: RunContext, personal?: Personalisation | null): LlmPrompt {
+export function buildDecisionPrompt(node: DecideNode, ctx: RunContext, personal?: Personalisation | null, playbookBlock = ""): LlmPrompt {
   const rule = node.rule.kind === "llm" ? node.rule : null;
   const options = node.options.map((o) => ({
     id: o.id,
@@ -108,6 +150,7 @@ export function buildDecisionPrompt(node: DecideNode, ctx: RunContext, personal?
     rule?.prompt ? `GUIDANCE: ${renderTemplate(rule.prompt, ctx)}` : "",
     `OFFERED OPTIONS (choose one id): ${JSON.stringify(options)}`,
     renderFounderBlock(personal),
+    playbookBlock.trim(),
     `CONTEXT (your only source of numbers): ${JSON.stringify(compactContext(ctx))}`,
     `Reply with the JSON object only.`,
   ]
@@ -194,10 +237,17 @@ export interface LlmDecisionProviderOptions {
   log?: Logger;
   /** Taste + profile for the FOUNDER block and the spend ceiling. Absent = impersonal. */
   personalisation?: PersonalisationSource | null;
+  /** Junction's playbooks for the PLAYBOOK NOTES block. undefined = the env-gated default
+      (recallPlaybooks); null = never. */
+  playbooks?: PlaybookSource | null;
+  /** Playbook cache TTL per (routine, node) — a tick has several runs of the same routine. */
+  playbookTtlMs?: number;
+  now?: () => Date;
 }
 
 export class LlmDecisionProvider implements DecisionProvider {
   private readonly deterministic = new DeterministicDecisionProvider();
+  private readonly playbookCache = new Map<string, { at: number; block: string }>();
 
   /** `client` null = no key configured → every llm rule takes its fallback. */
   constructor(
@@ -216,6 +266,28 @@ export class LlmDecisionProvider implements DecisionProvider {
     }
   }
 
+  /** The rendered PLAYBOOK NOTES block for this routine's node ("" when none / disabled / failed). */
+  private async playbooksFor(node: DecideNode, ctx: RunContext): Promise<string> {
+    const src = this.opts.playbooks === undefined ? defaultPlaybookSource : this.opts.playbooks;
+    if (!src) return "";
+    const key = `${ctx.routineId}:${node.id}`;
+    const t = (this.opts.now ?? (() => new Date()))().getTime();
+    const hit = this.playbookCache.get(key);
+    if (hit && t - hit.at < (this.opts.playbookTtlMs ?? 10 * 60_000)) return hit.block;
+    let block = "";
+    try {
+      const domain = routineDomain(ctx.routineId);
+      const cards = await src.recall(playbookQuery(ctx.routineId, node), domain ? [domain] : null, PLAYBOOKS_PER_DECISION);
+      block = renderPlaybookBlock(cards);
+    } catch (err) {
+      // A missing table, a network blip: the decision proceeds without notes.
+      this.opts.log?.warn("decision.playbooks_failed", { runId: ctx.runId, routineId: ctx.routineId, node: node.id, error: err instanceof Error ? err.name : "unknown" });
+      block = "";
+    }
+    this.playbookCache.set(key, { at: t, block });
+    return block;
+  }
+
   /** Every decision — llm or deterministic — passes the taste-derived spend ceiling on its way
       to the gate. The ceiling can only lower a proposal. */
   async decide(node: DecideNode, ctx: RunContext): Promise<Decision> {
@@ -232,9 +304,10 @@ export class LlmDecisionProvider implements DecisionProvider {
 
     if (!this.client) return fallbackWith("No LLM decision provider configured");
 
+    const playbookBlock = await this.playbooksFor(node, ctx);
     let text: string;
     try {
-      text = await this.client.complete({ ...buildDecisionPrompt(node, ctx, personal), accountId: ctx.account.accountId });
+      text = await this.client.complete({ ...buildDecisionPrompt(node, ctx, personal, playbookBlock), accountId: ctx.account.accountId });
     } catch (err) {
       // Log the failure class only — never the error body (it could echo request details).
       this.opts.log?.warn("decision.llm_failed", { runId: ctx.runId, routineId: ctx.routineId, node: node.id, error: err instanceof Error ? err.name : "unknown" });

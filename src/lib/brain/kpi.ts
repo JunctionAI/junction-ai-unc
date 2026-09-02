@@ -44,8 +44,8 @@ export interface KpiMetricDef {
 }
 
 /** The fixed set. Only metrics whose platform is connected are asked; the rest are absent
-    (not zero). Klaviyo's `metrics` resource needs a metric id (Wave 2), so email revenue
-    comes from `campaigns`, which the reader aggregates. */
+    (not zero). Email revenue is Klaviyo-attributed Placed Order value (metric-aggregates by
+    $attributed_channel; the reader resolves the metric id from the account's metric list). */
 export const KPI_METRICS: KpiMetricDef[] = [
   { key: "revenue_28d", label: "Revenue (28d)", platform: "shopify", read: { resource: "orders", window: "28d" }, metric: "revenue", windowDays: 28, money: true, unit: "" },
   { key: "revenue_7d", label: "Revenue (7d)", platform: "shopify", read: { resource: "orders", window: "7d" }, metric: "revenue", windowDays: 7, money: true, unit: "" },
@@ -53,7 +53,7 @@ export const KPI_METRICS: KpiMetricDef[] = [
   { key: "aov_28d", label: "Average order (28d)", platform: "shopify", read: { resource: "orders", window: "28d" }, metric: "aov", windowDays: 28, money: true, unit: "" },
   { key: "sessions_7d", label: "Sessions (7d)", platform: "ga4", read: { resource: "report", window: "7d", fields: ["sessions"] }, metric: "sessions", windowDays: 7, money: false, unit: "sessions" },
   { key: "roas_7d", label: "ROAS (7d)", platform: "meta_ads", read: { resource: "insights", window: "7d" }, metric: "roas", windowDays: 7, money: false, unit: "×" },
-  { key: "email_revenue_28d", label: "Email revenue (28d)", platform: "klaviyo", read: { resource: "campaigns", window: "28d" }, metric: "revenue", windowDays: 28, money: true, unit: "" },
+  { key: "email_revenue_28d", label: "Email revenue (28d)", platform: "klaviyo", read: { resource: "metrics", window: "28d", filter: { metric: "Placed Order", attributed: true } }, metric: "revenue", windowDays: 28, money: true, unit: "" },
   { key: "repeat_rate_90d", label: "Repeat rate (90d)", platform: "shopify", read: { resource: "customers", window: "90d" }, metric: "repeat_count", per: "count", scale: 100, windowDays: 90, money: false, unit: "%" },
 ];
 

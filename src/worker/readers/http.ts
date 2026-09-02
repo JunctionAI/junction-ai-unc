@@ -5,7 +5,8 @@
 import type { ReaderOptions } from "./types";
 import { DEFAULT_TIMEOUT_MS } from "./types";
 
-export type JsonResult = { ok: true; json: unknown; status: number } | { ok: false; reason: string; status?: number };
+/** `link` is the response's Link header (Shopify cursor paging), when the runtime exposes headers. */
+export type JsonResult = { ok: true; json: unknown; status: number; link?: string | null } | { ok: false; reason: string; status?: number };
 
 /** GET/POST JSON with a hard timeout. Never throws for expected failures. */
 export async function fetchJson(url: string, init: RequestInit, opts: ReaderOptions = {}): Promise<JsonResult> {
@@ -19,7 +20,8 @@ export async function fetchJson(url: string, init: RequestInit, opts: ReaderOpti
     const res = await doFetch(url, { ...init, signal: controller.signal });
     if (!res.ok) return { ok: false, reason: `HTTP ${res.status} from ${where}`, status: res.status };
     try {
-      return { ok: true, json: await res.json(), status: res.status };
+      const link = typeof res.headers?.get === "function" ? res.headers.get("link") : null;
+      return { ok: true, json: await res.json(), status: res.status, link };
     } catch {
       return { ok: false, reason: `non-JSON body from ${where}`, status: res.status };
     }
@@ -81,4 +83,25 @@ export function sum(rows: Record<string, unknown>[], key: string): number {
 export function clampLimit(limit: number | undefined, max: number, fallback: number): number {
   if (!limit || limit < 1) return fallback;
   return Math.min(Math.floor(limit), max);
+}
+
+/** The rel="next" URL out of an RFC 8288 Link header, or null. */
+export function nextLink(link: string | null | undefined): string | null {
+  if (!link) return null;
+  for (const part of link.split(",")) {
+    const m = /<([^>]+)>\s*;\s*rel="?next"?/i.exec(part.trim());
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/** YYYY-MM-DD in UTC. */
+export function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** [since, until] calendar dates (UTC) covering the last `days` days ending today. */
+export function dateRange(window: string | undefined, now: Date, fallbackDays = 7): { since: string; until: string; days: number } {
+  const days = windowDays(window, fallbackDays);
+  return { since: isoDate(new Date(now.getTime() - (days - 1) * 86_400_000)), until: isoDate(now), days };
 }

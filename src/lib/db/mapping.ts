@@ -28,7 +28,7 @@
    obMoneyOpen, obTeamOpen, obDraft, buddyText, typing placeholders. */
 
 import { ALL_SYSTEMS } from "../platform/catalog";
-import { postureDefs } from "../platform/derive";
+import { postureDefs } from "../platform/postures";
 import type { Posture } from "../platform/plan";
 import {
   initialState,
@@ -36,9 +36,11 @@ import {
   type ConnStatus,
   type Msg,
   type NarrativeState,
+  type ObAnswered,
   type PlatformState,
   type Profile,
   type Reinvest,
+  type SetupFlow,
   type TeamMember,
   type WfState,
 } from "../platform/state";
@@ -133,6 +135,12 @@ export interface ClientState {
   scanKey: string | null;
   wfState: WfState;
   wfVer: number;
+  /** Guided first run (2026-09-02, additive; absent on rows saved before it → defaults). */
+  setupFlow?: SetupFlow;
+  setupConnectLater?: boolean;
+  setupCardDismissed?: boolean;
+  /** Which onboarding numbers were typed (2026-09-02, additive). Absent on older rows → treated as answered: those founders agreed a plan already. */
+  obAnswered?: ObAnswered;
 }
 export interface StateMetaRow {
   account_id: string;
@@ -321,6 +329,10 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
       scanKey: S.scan.key,
       wfState: S.wfState,
       wfVer: S.wfVer,
+      setupFlow: S.setupFlow,
+      setupConnectLater: S.setupConnectLater,
+      setupCardDismissed: S.setupCardDismissed,
+      obAnswered: { ...S.obAnswered },
     },
   };
 
@@ -362,6 +374,12 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
     S.narrative = { ...cs.narrative };
     S.wfState = cs.wfState;
     S.wfVer = cs.wfVer;
+    // rows saved before the guided first run existed carry none of these: "home" (never trap an existing account)
+    S.setupFlow = cs.setupFlow === "connect" || cs.setupFlow === "routine" || cs.setupFlow === "channel" ? cs.setupFlow : "home";
+    S.setupConnectLater = cs.setupConnectLater === true;
+    S.setupCardDismissed = cs.setupCardDismissed === true;
+    // rows saved before the flags existed: the founder typed (or agreed) those numbers — never re-ask
+    S.obAnswered = cs.obAnswered ? { target: !!cs.obAnswered.target, budget: !!cs.obAnswered.budget, hours: !!cs.obAnswered.hours } : { target: true, budget: true, hours: true };
   }
 
   if (rows.goals.length) {

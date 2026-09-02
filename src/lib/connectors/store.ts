@@ -53,6 +53,38 @@ export async function isMember(db: DbClient, userId: string, accountId: string):
   return rows.length > 0;
 }
 
+/** The user's role on the account, or null when they are not a member. */
+export async function memberRole(db: DbClient, userId: string, accountId: string): Promise<"owner" | "member" | null> {
+  const rows = await unwrap<{ role: string }[]>("account_members.select", db.from("account_members").select("role").eq("user_id", userId).eq("account_id", accountId));
+  if (!rows.length) return null;
+  return rows[0].role === "owner" ? "owner" : "member";
+}
+
+export async function listConnectors(db: DbClient, accountId: string): Promise<ConnectorRow[]> {
+  return unwrap<ConnectorRow[]>("connectors.select", db.from("connectors").select(CONNECTOR_COLS).eq("account_id", accountId));
+}
+
+/** connectors.last_read_metrics (migration 0011) — read separately and best-effort so a
+    database that has not applied 0011 yet still lists its connectors. */
+export async function readLastReadMetrics(db: DbClient, accountId: string): Promise<Record<string, number | null>> {
+  try {
+    const rows = await unwrap<{ id: string; last_read_metrics: number | null }[]>("connectors.select", db.from("connectors").select("id, last_read_metrics").eq("account_id", accountId));
+    return Object.fromEntries(rows.map((r) => [r.id, r.last_read_metrics === null || r.last_read_metrics === undefined ? null : Number(r.last_read_metrics)]));
+  } catch {
+    return {};
+  }
+}
+
+/** Best-effort write of connectors.last_read_metrics (0011): never fails the caller. */
+export async function writeLastReadMetrics(db: DbClient, connectorId: string, count: number): Promise<boolean> {
+  try {
+    await unwrap("connectors.update", db.from("connectors").update({ last_read_metrics: count }).eq("id", connectorId));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function getConnector(db: DbClient, accountId: string, platform: string): Promise<ConnectorRow | null> {
   return unwrap<ConnectorRow | null>("connectors.select", db.from("connectors").select(CONNECTOR_COLS).eq("account_id", accountId).eq("platform", platform).maybeSingle());
 }

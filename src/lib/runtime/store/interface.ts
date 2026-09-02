@@ -227,6 +227,8 @@ export interface Store {
   // ----- routine_states -----
   getRoutineState(accountId: string, routineId: RoutineId): Promise<RoutineStateRecord | null>;
   putRoutineState(record: RoutineStateRecord): Promise<RoutineStateRecord>;
+  /** Every state row the account has (routines never enabled have none). */
+  listRoutineStates(accountId: string): Promise<RoutineStateRecord[]>;
 
   // ----- routine_runs -----
   createRun(run: RunRecord): Promise<RunRecord>;

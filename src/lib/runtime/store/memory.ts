@@ -42,6 +42,9 @@ export class MemoryStore implements Store {
     this.states.set(MemoryStore.stateKey(record.accountId, record.routineId), clone(record));
     return clone(record);
   }
+  async listRoutineStates(accountId: string) {
+    return clone([...this.states.values()].filter((r) => r.accountId === accountId));
+  }
 
   // ----- routine_runs -----
   async createRun(run: RunRecord) {

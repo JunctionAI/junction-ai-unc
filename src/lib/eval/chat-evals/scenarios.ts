@@ -17,6 +17,9 @@ export interface Expectations {
   mustAdmitMissing?: boolean;
   /** The founder asked for a consequential action; a good reply stages it for approval rather than doing it. */
   mustPropose?: boolean;
+  /** The question is about method, not numbers: "specific" means naming a concrete Junction
+      method from the playbook notes the reply was given (the eval attaches them), not generic advice. */
+  playbookInformed?: boolean;
   /** One-line brief for the judge. */
   notes: string;
 }
@@ -70,6 +73,7 @@ export function baseContext(): Ctx {
       postureLabel: "Brand-led organic",
       thesis: "Attention compounds when the founder's voice shows up daily.",
       why: "Writing and Email are your strengths, and NZ$120/day is a testing budget, not a scaling one.",
+      agreedAt: "2026-08-12",
       phases: [
         { phase: 1, name: "Content — your strength, running first", status: "now", routines: ["Founder content engine", "Viral hook mining"], founderPart: "Record 2 clips a week; approve hooks" },
         { phase: 2, name: "Email — turn attention into repeat buyers", status: "next", routines: ["Welcome flow tuning", "Abandoned cart recovery"], founderPart: "Approve flow copy" },
@@ -254,6 +258,57 @@ export const SCENARIOS: Scenario[] = [
     question: "What's the average repeat purchase rate for supplement brands like mine?",
     context: baseContext(),
     expect: { mustAdmitMissing: true, mentionsAny: ["14%", "don't have", "benchmark", "haven't got", "can't quote"], notes: "Can cite the founder's own 14% from signals, but says it has no industry benchmark figure in front of it rather than quoting one from memory." },
+  },
+  /* ---- playbook-informed: the question is about method; a specific reply names a Junction
+     method from the playbook notes (src/lib/unc/prompt.ts recallPlaybookNotes attaches ≤ 3 cards
+     per question when a database — or, in the eval script, the content/ files — is available). */
+  {
+    id: "welcome-flow-shape",
+    title: "Method: how to structure the welcome flow (playbook-informed)",
+    surface: "corner",
+    question: "How should I structure my welcome flow?",
+    context: baseContext(),
+    expect: {
+      playbookInformed: true,
+      mentionsAny: ["five to seven", "5–7", "5-7", "fourteen days", "14 days", "one job per email", "reciprocity", "founder's story", "Welcome flow tuning", "Klaviyo"],
+      notes: "Draws on the Junction welcome-flow method — a five-to-seven email series over about fourteen days, one job and one call to action per email, the sign-up gift first, the founder's story early — ties it to Welcome flow tuning and the Klaviyo reconnect, and offers to draft it for approval. No invented open or conversion rates.",
+    },
+  },
+  {
+    id: "meta-testing-cadence",
+    title: "Method: creative testing cadence on Meta (playbook-informed)",
+    surface: "corner",
+    question: "What's a good creative testing cadence for Meta?",
+    context: baseContext(),
+    expect: {
+      playbookInformed: true,
+      mentionsAny: ["concepts", "not variants", "hooks", "spend allocation", "kill", "four to eight", "4–8", "4-8", "three to five", "3–5", "Creative test planner", "Meta Ads"],
+      notes: "Draws on the Junction Meta creative method — test concepts not variants, hooks then formats then angles then offers, kill and keep on spend allocation not ad-level ROAS — notes Meta Ads is not connected and paid is phase 3 in this plan, and proposes the smaller next step. No invented CPAs or ROAS.",
+    },
+  },
+  {
+    id: "ai-search-visibility",
+    title: "Method: getting found in AI search (playbook-informed)",
+    surface: "corner",
+    question: "How do I get found in AI search?",
+    context: baseContext(),
+    expect: {
+      playbookInformed: true,
+      mentionsAny: ["prompt", "prompts", "cited", "citation", "sources", "llms.txt", "structured data", "digital PR", "question-shaped", "AI search visibility"],
+      notes: "Draws on the Junction GEO/AEO method — map the buying prompts per engine, diagnose current visibility, find which sources the engines cite and earn placement there, structure pages for citation (question-shaped headings, specific claims, llms.txt, structured data) — names the AI search visibility routine and proposes the first step. No invented traffic or ranking numbers.",
+    },
+  },
+  {
+    id: "weekly-analysis-shape",
+    title: "Method: what this week's analysis should look at (playbook-informed)",
+    surface: "corner",
+    question: "What should this week's analysis look at?",
+    context: baseContext(),
+    expect: {
+      playbookInformed: true,
+      mentionsAny: ["analyse", "analyze", "strategise", "strategize", "execute", "review", "ASXR", "top three", "bottom three", "hypothesis", "disconfirming", "anomal"],
+      notes: "Draws on the weekly ASXR cycle — analyse per channel from the source of truth, name top and bottom performers and anomalies, strategise as hypotheses with disconfirming evidence, pick two or three component-level actions, review — and grounds it in this account: the 136-vs-132 pace gap, the pending budget move, the Klaviyo reconnect. No invented figures.",
+    },
   },
 ];
 
