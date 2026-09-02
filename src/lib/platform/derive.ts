@@ -7,8 +7,12 @@
 import { ALL_SYSTEMS, CATEGORIES, CAT_TAGLINES, CONNECTOR_DEFS, type RoutineDef } from "./catalog";
 import { goalMath } from "./goal";
 import { scoreChannels, span, weekSplit, POSTURE_WEIGHTS, type Posture } from "./plan";
-import type { NarrativeState, PlatformState, ScanState, Setter } from "./state";
+import { postureDefs } from "./postures";
+export { postureDefs };
+import type { ConnStatus, NarrativeState, PlatformState, ScanState, Setter } from "./state";
 import { DEFAULT_FOOTNOTE, type NarrativeRequest } from "../unc/narrative";
+import type { AccountFacts } from "../unc/accountFacts";
+import { paidInPlan, realPlanTimeline, realProposals } from "../setup/home";
 
 type Ev = { target: { value: string } };
 type KEv = { key: string };
@@ -24,57 +28,6 @@ const stateStyle = (st: string): [string, string] =>
     : st === "Available"
       ? ["oklch(0.52 0.03 260)", "oklch(0.945 0.008 260)"]
       : ["oklch(0.5 0.12 75)", "oklch(0.93 0.05 80)"];
-
-interface PostureDef {
-  label: string;
-  tag: string;
-  thesis: string;
-  fit: string;
-  why: string;
-  phases: { n: string; name: string; st: string; routines: string[]; you: string }[];
-}
-
-export const postureDefs: Record<Posture, PostureDef> = {
-  brand: {
-    label: "Brand-led organic",
-    tag: "CURRENT PLAY",
-    thesis: "Compound trust through your voice, convert it with retention, amplify with paid only once repeat holds.",
-    fit: "Fits: low budget · strong voice · brand-first belief",
-    why: "Chosen with you on 12 Aug. Your budget caps paid, your writing is the asset, and you believe brand compounds before sales. Someone sales-led would get a different plan — this one is shaped to where you add the most value, and it persists until we supersede it together.",
-    phases: [
-      { n: "1", name: "Organic brand engine", st: "ACTIVE", routines: ["Founder content engine", "Social repurposing", "Customer-question mining"], you: "~2 h/wk — your voice and taste, the part only you can do." },
-      { n: "2", name: "Retention & lifecycle", st: "NOW", routines: ["Winback campaign prep", "Welcome flow tuning", "Review request timing"], you: "~20 min/day clearing approvals." },
-      { n: "3", name: "Paid amplification", st: "GATED · repeat ≥ 18%", routines: ["Daily paid decisioning", "Organic-to-paid promotion"], you: "Weekly budget sign-off." },
-      { n: "4", name: "Scale the organization", st: "GATED · NZ$40k MRR", routines: ["Specialist agents", "First human hire"], you: "Hire and graduation decisions." },
-    ],
-  },
-  sales: {
-    label: "Sales-led outbound",
-    tag: "ALTERNATIVE",
-    thesis: "Fill your calendar with qualified conversations and clear everything around the close.",
-    fit: "Fits: strong closer · calls, DMs, demos · deal-driven",
-    why: "If your edge is conversations — cold calls, LinkedIn DMs, demos — the machine should hunt, qualify and brief so every hour you spend is spent closing. Retention and content become support acts for pipeline.",
-    phases: [
-      { n: "1", name: "Pipeline engine", st: "WOULD ACTIVATE", routines: ["Lead research & scoring", "Supervised outbound drafts"], you: "~1 h/day — conversations and closing, your strength." },
-      { n: "2", name: "Follow-up & pipeline", st: "NEXT", routines: ["Follow-up cadence", "Pipeline hygiene"], you: "Approve sends; take the meetings." },
-      { n: "3", name: "Referral & expansion", st: "GATED · 20 closed deals", routines: ["Review request timing", "Winback campaign prep"], you: "The asks only a founder can make." },
-      { n: "4", name: "Scale the organization", st: "GATED · NZ$40k MRR", routines: ["Sales agents", "First SDR hire"], you: "Hire and graduation decisions." },
-    ],
-  },
-  paid: {
-    label: "Paid-led scale",
-    tag: "ALTERNATIVE",
-    thesis: "Deploy capital into creative testing and buy learning faster than organic can compound.",
-    fit: "Fits: capital to deploy · media experience · speed-first",
-    why: "With capital and ad experience, paid buys learning fastest — the machine guards efficiency, kills losers overnight and scales winners inside hard guardrails while CRO keeps the funnel honest.",
-    phases: [
-      { n: "1", name: "Creative testing engine", st: "WOULD ACTIVATE", routines: ["Creative test planner", "Organic-to-paid promotion"], you: "Creative taste calls, weekly." },
-      { n: "2", name: "Spend scaling", st: "GATED · ROAS ≥ 2.5×", routines: ["Daily paid decisioning", "Budget pacing guard"], you: "Budget sign-off as caps rise." },
-      { n: "3", name: "Funnel & flows", st: "NEXT", routines: ["Welcome flow tuning", "Abandoned cart recovery"], you: "Approve test variants." },
-      { n: "4", name: "Scale the organization", st: "GATED · NZ$40k MRR", routines: ["Specialist agents", "Media buyer hire"], you: "Hire and graduation decisions." },
-    ],
-  },
-};
 
 const postureLeans: Record<Posture, { skills: string[]; plats: string[] }> = {
   brand: { skills: ["Writing", "Video", "Community"], plats: ["Instagram", "TikTok", "LinkedIn"] },
@@ -138,9 +91,70 @@ export const CANNED_OB_REPLY =
     endpoint falls back, the canned replies above are used — the chat is never dead. */
 export type UncSend = (args: { surface: "corner" | "onboarding"; text: string; canned: string }) => void;
 
-export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSend?: UncSend) {
-  const gm = goalMath({ goalTitle: S.goalTitle, baselineNum: S.baselineNum, deadline: S.deadline, currency: S.currency, currentMRR });
+/** Which world the view model describes (docs/PRODUCT-EXPERIENCE.md "Real only").
+    "demo"    — the prototype's sandbox: every value below is the prototype's, byte for byte.
+    "account" — a signed-in founder: connector state defaults to disconnected (never the
+                catalog's `st`), routine state to off (never the catalog's "Active"), and every
+                Home strip / proposal / gamification / canned reply is either the account's own
+                rows (S is the DB projection; `facts` fills gaps) or empty for the copy floor.
+                The clock is real and the plan's weeks count from plans.agreed_at. */
+export type DeriveMode = "demo" | "account";
+
+export interface DeriveOptions {
+  mode?: DeriveMode;
+  /** The account's rows (src/lib/unc/accountFacts.ts) when in hand — receipts, approvals, connectors, routine states. */
+  facts?: AccountFacts | null;
+  /** The clock for accounts mode (tests pin it). */
+  now?: Date;
+}
+
+const DEMO_DEADLINE_FALLBACK_WEEKS = 12;
+
+/** "2 connected · Klaviyo needs attention" / "Nothing connected yet" — the same shape src/lib/unc/accountFacts.ts
+    connectorSummary() produces, computed here from the effective card states so derive stays server-safe. */
+function realConnSummary(cards: { name: string; ok: boolean; expired: boolean }[]): string {
+  const ok = cards.filter((c) => c.ok);
+  const attention = cards.filter((c) => c.expired);
+  if (!ok.length && !attention.length) return "Nothing connected yet";
+  const parts: string[] = [];
+  if (ok.length) parts.push(`${ok.length} connected`);
+  if (attention.length === 1) parts.push(`${attention[0].name} needs attention`);
+  else if (attention.length > 1) parts.push(`${attention.length} need attention`);
+  return parts.join(" · ");
+}
+
+const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSend?: UncSend, opts: DeriveOptions = {}) {
+  const account = opts.mode === "account";
+  const facts = account ? (opts.facts ?? null) : null;
+  const now = opts.now ?? new Date();
+  /* Accounts mode: an empty deadline is "not set" (the plan asks for it); the maths below still
+     needs a finite date, so it borrows a 12-week horizon that nothing renders until it is real. */
+  const deadlineForMath = S.deadline || isoDate(new Date(now.getTime() + DEMO_DEADLINE_FALLBACK_WEEKS * 6048e5));
+  const gm = goalMath({
+    goalTitle: S.goalTitle,
+    baselineNum: S.baselineNum,
+    deadline: deadlineForMath,
+    currency: S.currency,
+    currentMRR,
+    ...(account ? { today: now, start: S.planAgreedAt ? new Date(S.planAgreedAt) : now, targetFallback: S.targetNum } : {}),
+  });
   const { cur, curSym, target, pace, daysLeftN, needed, proj, gap, onTrack, fmt } = gm;
+
+  /* ---- real state readers (accounts mode) — S is the DB projection; `facts` fills what S never touched ---- */
+  const factConn = (name: string): ConnStatus | undefined => {
+    const f = facts?.connectors.find((c) => c.name === name);
+    if (!f) return undefined;
+    return f.status === "connected" ? "ok" : f.status === "needs_reconnect" || f.status === "error" ? "expired" : "off";
+  };
+  const factOn = (name: string): boolean | undefined => facts?.routineStates.find((r) => r.name === name)?.enabled;
+  /** Connector card state: accounts → the row or disconnected; demo → the prototype's catalog default. */
+  const connOf = (name: string, demoDefault: ConnStatus): ConnStatus => (account ? (S.connState[name] ?? factConn(name) ?? "off") : S.connState[name] || demoDefault);
+  /** Routine on-state: accounts → routine_states or off; demo → the catalog's "Active" default. */
+  const isOn = (n: string): boolean => (account ? (S.routineOn[n] ?? factOn(n) ?? false) : (S.routineOn[n] ?? ALL_SYSTEMS.find((x) => x.name === n)?.state === "Active"));
+  const klaviyoState = connOf("Klaviyo", "expired");
+  const realPending = facts ? facts.approvals.length : 0;
 
   const nav = (v: PlatformState["view"]) => () => set({ view: v });
   const openSys = (s: RoutineDef | undefined) => {
@@ -150,7 +164,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
 
   const apData = AP_DATA;
   const whyTexts = AP_WHY_TEXTS;
-  const approvals = apData.map((a, i) => ({
+  const demoApprovals = () => apData.map((a, i) => ({
     ...a,
     pending: S.apStatus[i] === "pending",
     approved: S.apStatus[i] === "approved",
@@ -162,6 +176,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     approve: () => set((s) => ({ apStatus: s.apStatus.map((x, j) => (j === i ? "approved" : x)) })),
     hold: () => set((s) => ({ apStatus: s.apStatus.map((x, j) => (j === i ? "held" : x)) })),
   }));
+  /* Accounts: the "needs you" list is the runtime's (useLiveApprovals) — the three demo cards have no render path. */
+  const approvals: ReturnType<typeof demoApprovals> = account ? [] : demoApprovals();
 
   const cats = ["All", ...CATEGORIES.map((c) => c.name)];
   const catChips = cats.map((name) => {
@@ -175,9 +191,11 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
       border: on ? navy : "oklch(0.89 0.012 260)",
     };
   });
+  /** Accounts: a routine's pill is its real on/off — never the catalog's cycled STATES. */
+  const stateLabel = (s: RoutineDef): string => (account ? (isOn(s.name) ? "On" : "Off") : s.state);
   const visibleSystems = ALL_SYSTEMS.filter((s) => S.selCat === "All" || s.cat === S.selCat).map((s) => {
-    const [c, b] = stateStyle(s.state);
-    return { ...s, stateColor: c, stateBg: b, open: () => openSys(s) };
+    const [c, b] = stateStyle(account ? (isOn(s.name) ? "Active" : "Available") : s.state);
+    return { ...s, state: stateLabel(s), stateColor: c, stateBg: b, open: () => openSys(s) };
   });
 
   const sel = S.sel;
@@ -190,7 +208,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
         { n: 5, title: "Execute, read back, receipt", detail: "Only the approved scope runs. Junction independently verifies the result and writes the full receipt.", line: false },
       ]
     : [];
-  const selState: [string, string] = sel ? stateStyle(sel.state) : ["", ""];
+  const selState: [string, string] = sel ? stateStyle(account ? (isOn(sel.name) ? "Active" : "Available") : sel.state) : ["", ""];
 
   const send = () => {
     const t = S.draft.trim();
@@ -303,7 +321,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
   const nowPhase = phases.find((p) => p.st === "NOW") || phases[0];
   const nextBestSugg = nowPhase.suggestions[0];
 
-  const effConn = (d: (typeof CONNECTOR_DEFS)[number]) => S.connState[d.name] || d.st;
+  const effConn = (d: (typeof CONNECTOR_DEFS)[number]) => connOf(d.name, d.st);
   const connectors = CONNECTOR_DEFS.map((d) => {
     const st = effConn(d);
     return {
@@ -315,9 +333,14 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
       disconnect: () => set((s) => ({ connState: { ...s.connState, [d.name]: "off" } })),
     };
   });
-  const connSummary = `${connectors.filter((c) => c.ok).length} connected · ${connectors.filter((c) => c.expired).length} needs attention · ${connectors.filter((c) => c.off).length} available`;
+  const connSummary = account
+    ? realConnSummary(connectors)
+    : `${connectors.filter((c) => c.ok).length} connected · ${connectors.filter((c) => c.expired).length} needs attention · ${connectors.filter((c) => c.off).length} available`;
 
-  const wfDefs = sel
+  type WfDef = { tag: string; name: string; desc: string; color: string; params: [string, string][] };
+  /* Accounts: the detail view draws the spec's own node chain and the real version (RoutineDetail); the prototype's
+     canvas, inspector and four-step wizard are demo furniture with no render path. */
+  const wfDefs: WfDef[] = sel && !account
     ? [
         { tag: "TRIGGER", name: "Schedule", desc: sel.cadence, color: "oklch(0.5 0.12 75)", params: [["Cadence", sel.cadence], ["Dedup key", "tenant + goal + date"]] as [string, string][] },
         { tag: "READ", name: "Certified inputs", desc: "Shopify · GA4 · Meta", color: "oklch(0.55 0.11 235)", params: [["Sources", "Shopify, GA4, Meta Ads"], ["Freshness limit", "60 min"]] as [string, string][] },
@@ -342,7 +365,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     return { k, v: S.nodeVals[key] ?? dv, set: (e: Ev) => set((s) => ({ nodeVals: { ...s.nodeVals, [key]: e.target.value }, wfState: "draft" })) };
   });
 
-  const setupDefs = [
+  type SetupDef = { title: string; items: [string, string][]; note: string; cta: string };
+  const setupDefs: SetupDef[] = account ? [] : [
     { title: "Connect the sources this system reads", items: [["Shopify", "ok"], ["GA4", "ok"], ["Klaviyo — reconnect", "warn"]] as [string, string][], note: "Least-privilege scopes only. Junction lists every scope before you approve the connection.", cta: "Sources look right" },
     { title: "Confirm your definitions", items: [["Currency · NZD", "ok"], ["Timezone · Pacific/Auckland", "ok"], ["Attribution · last non-direct", "ok"], ["Revenue · net of refunds", "ok"]] as [string, string][], note: "These certify every number the system reads and reports.", cta: "Definitions confirmed" },
     { title: "What Junction needs from you", items: [["Owner · Tom", "ok"], ["3 examples in your voice", "warn"], ["Guardrail · ≤ 2 emails/wk", "ok"], ["Approval · every consequential action", "ok"]] as [string, string][], note: "Your taste and first-person claims stay yours — Junction drafts, you approve.", cta: "Provided — keep going" },
@@ -373,22 +397,28 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
 
   /* ---- home plan / setup / gamification / bar (flattened from the prototype's IIFE) ---- */
   const homeChans = scoreChannels(S.posture, S.obStrengths || [], S.budgetMo);
-  const { weeksLeft, w1, w2end } = weekSplit(S.deadline);
+  const { weeksLeft, w1, w2end } = weekSplit(deadlineForMath);
   const homeRest = homeChans.slice(2).map((c) => c.k).join(" + ");
   const gapLeft = Math.max(0, target - cur);
   const reinvestPct = ({ steady: "25%", balanced: "40%", aggressive: "60%" } as const)[S.reinvest];
   const dayBudget = Math.round(S.budgetMo / 30);
   // Faithful to the prototype: `chans.slice(0,2).some(c => c.k === 'Paid ads') || true` — always true.
-  const hasPaid = homeChans.slice(0, 2).some((c) => c.k === "Paid ads") || true;
+  // Accounts: only when paid media really is in the first two phases of the founder's plan.
+  const hasPaid = account ? paidInPlan(S) : homeChans.slice(0, 2).some((c) => c.k === "Paid ads") || true;
 
   const homePlain = onTrack
     ? `You need ${fmt(gapLeft)} more by the deadline. Right now you’re on pace. Keep clearing your part below.`
     : `You need ${fmt(gapLeft)} more by the deadline. You’re a little behind — the plan below closes the gap. Your part is below.`;
-  const homePlan = [
-    { weeks: span(1, w1), title: `${homeChans[0].k} — your strength, running first`, focus: "Get the engine working. You: taste + okays.", on: true, st: "Now" },
-    { weeks: span(w1 + 1, w2end), title: `Add ${homeChans[1].k.toLowerCase()}`, focus: "Turn momentum into revenue. You: a few okays a day.", on: false, st: "Next" },
-    { weeks: `${span(w2end + 1, weeksLeft)}+`, title: homeRest, focus: "Switch on as the numbers earn it.", on: false, st: "Later" },
-  ].map((p) => ({
+  type HomePlanDef = { weeks: string; title: string; focus: string; on: boolean; st: string };
+  /* Accounts: the three phases with weeks counted from plans.agreed_at (src/lib/setup/home.ts) — never the demo week anchor. */
+  const homePlanDefs: HomePlanDef[] = account
+    ? realPlanTimeline({ posture: S.posture, obStrengths: S.obStrengths, budgetMo: S.budgetMo, deadline: S.deadline, planAgreedAt: S.planAgreedAt }, now).map((p) => ({ weeks: p.weeks, title: p.title, focus: p.focus, on: p.on, st: p.st }))
+    : [
+        { weeks: span(1, w1), title: `${homeChans[0].k} — your strength, running first`, focus: "Get the engine working. You: taste + okays.", on: true, st: "Now" },
+        { weeks: span(w1 + 1, w2end), title: `Add ${homeChans[1].k.toLowerCase()}`, focus: "Turn momentum into revenue. You: a few okays a day.", on: false, st: "Next" },
+        { weeks: `${span(w2end + 1, weeksLeft)}+`, title: homeRest, focus: "Switch on as the numbers earn it.", on: false, st: "Later" },
+      ];
+  const homePlan = homePlanDefs.map((p) => ({
     ...p,
     border: p.on ? "oklch(0.78 0.13 220 / 0.6)" : "oklch(0.91 0.01 260)",
     weekColor: p.on ? "oklch(0.45 0.1 240)" : "oklch(0.6 0.02 260)",
@@ -396,14 +426,20 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     stBg: p.on ? "oklch(0.94 0.03 225)" : "oklch(0.945 0.008 260)",
   }));
 
-  const okN = CONNECTOR_DEFS.filter((d) => (S.connState[d.name] || d.st) === "ok").length;
-  const allOk = CONNECTOR_DEFS.every((d) => (S.connState[d.name] || d.st) === "ok");
-  const homeSetup = [
-    { title: "Platforms connected", done: allOk, action: `${okN} of ${CONNECTOR_DEFS.length} — connect more`, note: undefined as string | undefined, go: () => set({ view: "connectors" }) },
-    { title: "History imported", done: true, action: undefined as string | undefined, note: "orders, spend, sends — in one warehouse", go: undefined as (() => void) | undefined },
-    { title: "Site & socials scanned", done: true, action: undefined as string | undefined, note: "your voice, offers and market — read", go: undefined as (() => void) | undefined },
-    { title: "Numbers certified", done: false, action: undefined as string | undefined, note: "cross-checked against your sources nightly", go: undefined as (() => void) | undefined },
-  ].map((x) => ({
+  const okN = CONNECTOR_DEFS.filter((d) => effConn(d) === "ok").length;
+  const allOk = CONNECTOR_DEFS.every((d) => effConn(d) === "ok");
+  type HomeSetupDef = { title: string; done: boolean; action: string | undefined; note: string | undefined; go: (() => void) | undefined };
+  /* Accounts: the "Getting set up" card (GettingSetUp.tsx, real spine states) replaces this strip — its hardcoded
+     "History imported / Site & socials scanned / Numbers certified" flags have no render path. */
+  const homeSetupDefs: HomeSetupDef[] = account
+    ? []
+    : [
+        { title: "Platforms connected", done: allOk, action: `${okN} of ${CONNECTOR_DEFS.length} — connect more`, note: undefined, go: () => set({ view: "connectors" }) },
+        { title: "History imported", done: true, action: undefined, note: "orders, spend, sends — in one warehouse", go: undefined },
+        { title: "Site & socials scanned", done: true, action: undefined, note: "your voice, offers and market — read", go: undefined },
+        { title: "Numbers certified", done: false, action: undefined, note: "cross-checked against your sources nightly", go: undefined },
+      ];
+  const homeSetup = homeSetupDefs.map((x) => ({
     ...x,
     mark: x.done ? "✓" : "·",
     hasAction: !!x.action,
@@ -413,12 +449,12 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     mFg: x.done ? "oklch(0.22 0.05 262)" : "oklch(0.45 0.1 240)",
   }));
 
-  const isOn = (n: string) => S.routineOn[n] ?? ALL_SYSTEMS.find((x) => x.name === n)?.state === "Active";
   const onCount = ALL_SYSTEMS.filter((s2) => isOn(s2.name)).length;
   const gamTotalN = ALL_SYSTEMS.length;
-  const hrs = Math.round(onCount * 2.5);
+  /* Accounts: hours saved come from real runs (telemetry — hoursSavedLabel), never 2.5 h × routines; the rank ladder is demo copy. */
+  const hrs = account ? 0 : Math.round(onCount * 2.5);
   const pct = Math.round((onCount / gamTotalN) * 100);
-  const rank = onCount >= 18 ? "Fully OP" : onCount >= 12 ? "Operator" : onCount >= 6 ? "Builder" : "Getting started";
+  const rank = account ? `${pct}%` : onCount >= 18 ? "Fully OP" : onCount >= 12 ? "Operator" : onCount >= 6 ? "Builder" : "Getting started";
   const withTeam = S.team.filter((p) => (p.areas || []).length && p.name && p.name !== "You").length;
   const gamCats = CATEGORIES.map((c) => {
     const on = c.systems.filter(isOn).length;
@@ -434,13 +470,18 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
   const gamHireLine =
     withTeam > 0
       ? `Your team covers ${withTeam} approval area${withTeam === 1 ? "" : "s"} — decisions there skip you entirely. Hand off the rest and the machine barely needs you.`
-      : `Pro move: put a teammate in charge of an area’s approvals (Strategy → team) and its decisions skip you entirely — that’s another ~${Math.max(2, Math.round(hrs * 0.4))} h/week back.`;
+      : account
+        ? "Put a teammate in charge of an area’s approvals (Strategy → team) and its decisions skip you entirely."
+        : `Pro move: put a teammate in charge of an area’s approvals (Strategy → team) and its decisions skip you entirely — that’s another ~${Math.max(2, Math.round(hrs * 0.4))} h/week back.`;
 
-  const homeBar = [
+  type HomeBarDef = { what: string; bar: string; proof: string; behind: boolean; fixLabel: string | undefined; fix: (() => void) | undefined };
+  /* Accounts: the bar is barCards(telemetry) — published benchmarks or "Industry reference — not yet from Junction accounts" / "Not measured yet". */
+  const homeBarDefs: HomeBarDef[] = account ? [] : [
     { what: "Content output", bar: "5 posts / week", proof: "What DTC brands at your target ship — you’re at 3. I’ll draft the extra two; you just okay them.", behind: true, fixLabel: "Queue 2 more drafts / week", fix: () => set({ view: "systems", selCat: "Content", sel: null }) },
     { what: "Repeat purchase", bar: "22% of customers", proof: "The category norm at NZ$40k MRR — you’re at 14%. Winback + welcome flows close most of this gap.", behind: true, fixLabel: "Switch on the flows", fix: () => set({ view: "systems", selCat: "Email & SMS", sel: null }) },
-    { what: "Response speed", bar: "< 4 h to leads", proof: "Businesses that hit goals like yours reply same-morning. You’re already there.", behind: false, fixLabel: undefined as string | undefined, fix: undefined as (() => void) | undefined },
-  ].map((x) => ({ ...x, status: x.behind ? "Below the bar" : "At the bar ✓", okColor: x.behind ? "oklch(0.5 0.12 75)" : "oklch(0.55 0.15 150)" }));
+    { what: "Response speed", bar: "< 4 h to leads", proof: "Businesses that hit goals like yours reply same-morning. You’re already there.", behind: false, fixLabel: undefined, fix: undefined },
+  ];
+  const homeBar = homeBarDefs.map((x) => ({ ...x, status: x.behind ? "Below the bar" : "At the bar ✓", okColor: x.behind ? "oklch(0.5 0.12 75)" : "oklch(0.55 0.15 150)" }));
 
   const homeAdsLine = `Ad spend starts at ${curSym}${dayBudget}/day and only grows from wins: about ${reinvestPct} of new profit rolls back in, so the budget scales itself as the goal gets closer.`;
 
@@ -453,7 +494,17 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
   const obPlanStep2 = `${span(w1 + 1, w2end)}: we add ${obSecond.k.toLowerCase()} — ${obSecond.why}. Focus: converting the momentum into revenue.`;
   const obPlanStep3 = `${span(w2end + 1, weeksLeft)} and beyond: ${obRest} switch on as their numbers earn it. Focus: scaling what’s proven, straight through your goal.`;
   const obSummaryTitle = `${S.obPostureSet.map((k) => postureDefs[k].label).join(" + ")}, ${S.obBreadth === "broad" ? "run broad across channels" : "focused where you’re strongest"}`;
-  const obDeadlineLabel = new Date(S.deadline + "T00:00:00").toLocaleDateString("en-NZ", { day: "numeric", month: "short" });
+  const obDeadlineLabel = S.deadline ? new Date(S.deadline + "T00:00:00").toLocaleDateString("en-NZ", { day: "numeric", month: "short" }) : "";
+  /* Accounts: no plan on empty inputs — Unc asks for what is missing before he drafts anything (step 6). Demo is always ready. */
+  const obMissing: { step: number; label: string }[] = account
+    ? [
+        ...(S.obAnswered.target && S.targetNum > 0 && S.goalTitle.trim() ? [] : [{ step: 1, label: "your goal number" }]),
+        ...(S.deadline ? [] : [{ step: 1, label: "a deadline" }]),
+        ...(S.obAnswered.budget ? [] : [{ step: 3, label: "your growth budget (0 is a fine answer)" }]),
+        ...(S.obAnswered.hours ? [] : [{ step: 3, label: "your hours a week" }]),
+      ]
+    : [];
+  const obPlanReady = obMissing.length === 0;
   const obGap = Math.max(0, S.targetNum - (S.baselineNum ?? 0));
   const obPlanShort = `Your goal needs ${fmt(obGap)} of new ground by ${obDeadlineLabel}. With ${curSym}${Math.round(S.budgetMo / 30)}/day and ${S.hoursWk} h/wk of you, here’s the shortest path I can see:`;
   /* Everything Unc may write the step-6 prose from — the deterministic plan is fixed, the narrative only wraps it. */
@@ -483,17 +534,24 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     return `Doing the maths on your goal and hours: I’d aim for about ${posts} posts a week across ${plats} platform${plats > 1 ? "s" : ""} — I draft from real customer questions, you give it your voice. Later I’d expect us to add email and reviews behind the content.`;
   })();
 
+  /* Accounts: a decision waits when the runtime says so; Klaviyo only counts when its row really needs a reconnect. */
+  const klaviyoDown = account ? klaviyoState === "expired" : klaviyoState !== "ok";
   const simpleRead = (() => {
     const idx = phases.indexOf(nowPhase) + 1;
     const play = S.obPostureSet.map((k) => postureDefs[k].label).join(" + ").toLowerCase();
-    const needsN = S.apStatus.filter((x) => x === "pending").length + ((S.connState["Klaviyo"] || "expired") !== "ok" ? 1 : 0);
+    const needsN = account ? realPending + (klaviyoDown ? 1 : 0) : S.apStatus.filter((x) => x === "pending").length + (klaviyoDown ? 1 : 0);
+    if (account) {
+      const onN = onCount;
+      const waiting = needsN === 0 ? "nothing is waiting on you" : `${needsN === 1 ? "one thing" : `${needsN} things`} waiting on you`;
+      return onN === 0 ? `Nothing running yet — turn on your first routine and I’ll have a draft within the hour. Right now ${waiting}.` : `${onN} of ${ALL_SYSTEMS.length} routines on; ${waiting}.`;
+    }
     const needs = needsN === 0 ? "nothing is waiting on you right now" : `it needs ${needsN === 1 ? "one thing" : `${needsN} things`} only you can do, waiting below`;
     return onTrack
       ? `On pace for ${fmt(target)} — ${nowPhase.name.toLowerCase()} is carrying it. This week ${needs}. Running ${routineCount} of ${ALL_SYSTEMS.length} core routines — room to expand when you’re ready.`
       : `You’re in ${nowPhase.name.toLowerCase()} — phase ${idx} of your ${play} plan. At today’s pace you land ${fmt(gap)} short of ${fmt(target)}. The plan closes that, but this week ${needs}. Running ${routineCount} of ${ALL_SYSTEMS.length} core routines; expand or revisit the strategy any time.`;
   })();
 
-  const needsCount = S.apStatus.filter((x) => x === "pending").length + ((S.connState["Klaviyo"] || "expired") !== "ok" ? 1 : 0);
+  const needsCount = account ? realPending + (klaviyoDown ? 1 : 0) : S.apStatus.filter((x) => x === "pending").length + (klaviyoDown ? 1 : 0);
 
   const obSendImpl = () => {
     const t = S.obDraft.trim();
@@ -525,14 +583,15 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     inspTag: inspNode.tag,
     inspName: inspNode.name,
     inspColor: inspNode.color,
-    wfVersion: S.wfState === "clean" ? `v${S.wfVer} · active` : S.wfState === "draft" ? `v${S.wfVer + 1} · draft` : `v${S.wfVer + 1} · validated`,
+    wfVersion: account ? "" : S.wfState === "clean" ? `v${S.wfVer} · active` : S.wfState === "draft" ? `v${S.wfVer + 1} · draft` : `v${S.wfVer + 1} · validated`,
     wfVerColor: S.wfState === "draft" ? "oklch(0.45 0.11 70)" : "oklch(0.45 0.1 240)",
     wfVerBg: S.wfState === "draft" ? "oklch(0.93 0.05 80)" : "oklch(0.94 0.03 225)",
     wfDraft: S.wfState !== "clean",
     wfCanValidate: S.wfState === "draft",
     wfValidated: S.wfState === "validated",
-    wfDraftMsg:
-      S.wfState === "validated"
+    wfDraftMsg: account
+      ? ""
+      : S.wfState === "validated"
         ? "Validation passed on demonstration data — promote when you’re ready. The previous version stays available for rollback."
         : `Edits create version v${S.wfVer + 1} (draft). Junction validates it against this system’s acceptance tests before it can run in production.`,
     wfValidate: () => set({ wfState: "validated" }),
@@ -541,7 +600,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     setupOn: S.setupOpen,
     setupDone: S.setupDone,
     setupSteps,
-    setupProgress: `step ${Math.min(S.setupStep + 1, 4)} of 4 · dry-run before anything goes live`,
+    setupProgress: account ? "" : `step ${Math.min(S.setupStep + 1, 4)} of 4 · dry-run before anything goes live`,
     openSetup: () => set({ setupOpen: true, setupStep: 0 }),
     isOnboarding: !S.onboarded,
     notOnboarding: S.onboarded,
@@ -572,7 +631,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
           set((s) => {
             const cats2 = on ? s.obCats.filter((x) => x !== k) : [...s.obCats, k];
             if (!cats2.length) return {};
-            return { obCats: cats2, goalTitle: s.goalTexts[cats2[0]] };
+            return { obCats: cats2, goalTitle: s.goalTexts[cats2[0]] ?? "" };
           }),
       };
     }),
@@ -583,13 +642,39 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     obIsMoney: S.obCats[0] === "revenue" || S.obCats[0] === "profit",
     obTargetNum: S.targetNum,
     onObTargetNum: (e: Ev) => {
-      const v = +e.target.value || 0;
-      set((s) => ({
-        targetNum: v,
-        goalTexts: { ...s.goalTexts, [s.obCats[0]]: s.obCats[0] === "revenue" ? `${currencySym(s.currency)}${v.toLocaleString()} MRR` : `${v}` },
-        goalTitle: s.obCats[0] === "revenue" ? `${currencySym(s.currency)}${v.toLocaleString()} MRR` : s.goalTitle,
-      }));
+      const raw = e.target.value.trim();
+      const v = +raw || 0;
+      set((s) => {
+        if (!account) {
+          return {
+            targetNum: v,
+            goalTexts: { ...s.goalTexts, [s.obCats[0]]: s.obCats[0] === "revenue" ? `${currencySym(s.currency)}${v.toLocaleString()} MRR` : `${v}` },
+            goalTitle: s.obCats[0] === "revenue" ? `${currencySym(s.currency)}${v.toLocaleString()} MRR` : s.goalTitle,
+          };
+        }
+        /* Accounts: the goal line is written from the number for every category (the demo's example titles never seed it). */
+        const cat = s.obCats[0];
+        const title =
+          raw === ""
+            ? ""
+            : cat === "revenue"
+              ? `${currencySym(s.currency)}${v.toLocaleString()} MRR`
+              : cat === "profit"
+                ? `${v}% blended margin`
+                : cat === "brand"
+                  ? `${v.toLocaleString()} engaged followers`
+                  : cat === "leads"
+                    ? `${v} qualified leads/mo`
+                    : cat === "retention"
+                      ? `${v}% repeat purchase rate`
+                      : `${v} days to launch`;
+        return { targetNum: v, obAnswered: { ...s.obAnswered, target: raw !== "" }, goalTexts: { ...s.goalTexts, [cat]: title }, goalTitle: title };
+      });
     },
+    /** Accounts: the inputs render empty until the founder types (placeholders only — never a pre-filled number). */
+    obTargetSet: S.obAnswered.target,
+    obBudgetSet: S.obAnswered.budget,
+    obHoursSet: S.obAnswered.hours,
     obBaselineNum: S.baselineNum,
     onObBaselineNum: (e: Ev) => {
       // an empty field is "not set" (null), never 0 — a real 0 is typed as 0
@@ -637,7 +722,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
         settlePlan: true,
       })),
     obConns: CONNECTOR_DEFS.slice(0, 10).map((d) => {
-      const on = (S.connState[d.name] || d.st) === "ok";
+      const on = effConn(d) === "ok";
       return {
         label: on ? `✓ ${d.name}` : d.name,
         border: on ? "oklch(0.78 0.13 220)" : "oklch(0.87 0.015 260)",
@@ -646,7 +731,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
         toggle: () => set((s) => ({ connState: { ...s.connState, [d.name]: on ? "off" : ("ok" as const) } })),
       };
     }),
-    obConnCount: CONNECTOR_DEFS.filter((d) => (S.connState[d.name] || d.st) === "ok").length,
+    obConnCount: CONNECTOR_DEFS.filter((d) => effConn(d) === "ok").length,
     obStrengthChips: ["Writing", "Video", "Design", "Sales conversations", "Cold calls", "DMs & outreach", "Email", "Paid media", "SEO", "Community", "Product"].map((t) => {
       const on = S.obStrengths.includes(t);
       return {
@@ -657,7 +742,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
         toggle: () =>
           set((s) => ({
             obStrengths: on ? s.obStrengths.filter((x) => x !== t) : [...s.obStrengths, t],
-            profile: { ...s.profile, strength: (on ? s.obStrengths.filter((x) => x !== t) : [...s.obStrengths, t]).join(" & ") || "Writing & product" },
+            profile: { ...s.profile, strength: (on ? s.obStrengths.filter((x) => x !== t) : [...s.obStrengths, t]).join(" & ") || (account ? "" : "Writing & product") },
           })),
       };
     }),
@@ -680,18 +765,30 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     broBg: S.obBreadth === "broad" ? "oklch(0.94 0.03 225)" : "white",
     broColor: S.obBreadth === "broad" ? "oklch(0.35 0.08 240)" : "oklch(0.4 0.04 262)",
     obBudgetMo: S.budgetMo,
-    obBudgetLabel: `${curSym}${S.budgetMo.toLocaleString("en-NZ")}/mo`,
+    obBudgetLabel: account && !S.obAnswered.budget ? "Not set yet" : `${curSym}${S.budgetMo.toLocaleString("en-NZ")}/mo`,
     obBudgetDay: `${curSym}${Math.round(S.budgetMo / 30)}`,
     obBudgetMin: `${curSym}0`,
     obBudgetMax: `${curSym}20k/mo`,
     onObBudget: (e: Ev) => {
       const v = +e.target.value;
-      set((s) => ({ budgetMo: v, profile: { ...s.profile, budget: `≤ ${curSym}${Math.round(v / 30)}/day` } }));
+      set((s) => ({ budgetMo: v, obAnswered: { ...s.obAnswered, budget: true }, profile: { ...s.profile, budget: `≤ ${curSym}${Math.round(v / 30)}/day` } }));
+    },
+    /** Accounts: the typed-number path. An empty field is "not set" (never 0 — a real 0 is typed as 0). */
+    onObBudgetNum: (e: Ev) => {
+      const raw = e.target.value.trim();
+      const v = raw === "" ? 0 : Math.max(0, +raw || 0);
+      set((s) => ({ budgetMo: v, obAnswered: { ...s.obAnswered, budget: raw !== "" }, profile: { ...s.profile, budget: raw === "" ? "" : `≤ ${curSym}${Math.round(v / 30)}/day` } }));
+    },
+    onObHoursNum: (e: Ev) => {
+      const raw = e.target.value.trim();
+      const v = raw === "" ? 0 : Math.max(0, +raw || 0);
+      set((s) => ({ hoursWk: v, obAnswered: { ...s.obAnswered, hours: raw !== "" }, profile: { ...s.profile, time: raw === "" ? "" : `${v} h/wk` } }));
     },
     obHoursWk: S.hoursWk,
-    obHoursLabel: `${S.hoursWk} h/wk`,
-    obHoursNote:
-      S.hoursWk < 4
+    obHoursLabel: account && !S.obAnswered.hours ? "Not set yet" : `${S.hoursWk} h/wk`,
+    obHoursNote: account && !S.obAnswered.hours
+      ? "Roughly is fine — I shape the plan around whatever you can give it."
+      : S.hoursWk < 4
         ? "Approvals only — I draft everything, you decide."
         : S.hoursWk <= 10
           ? "Time spent on taste and approvals."
@@ -700,7 +797,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
             : "A full-time growth push — I’ll run like a whole department around you.",
     onObHours: (e: Ev) => {
       const v = +e.target.value;
-      set((s) => ({ hoursWk: v, profile: { ...s.profile, time: `${v} h/wk` } }));
+      set((s) => ({ hoursWk: v, obAnswered: { ...s.obAnswered, hours: true }, profile: { ...s.profile, time: `${v} h/wk` } }));
     },
     homePlain,
     homePlan,
@@ -719,7 +816,11 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     onObWebsite: (e: Ev) => set({ website: e.target.value }),
     obSocials: S.socials,
     onObSocials: (e: Ev) => set({ socials: e.target.value }),
-    obPlanShort,
+    obPlanShort: account && !obPlanReady ? "" : obPlanShort,
+    /* Accounts: the plan generator's gate — what Unc still needs before he drafts (step 6 asks; nothing is generated on empty inputs). */
+    obPlanReady,
+    obMissing,
+    obGoToStep: (step: number) => set({ obStep: Math.max(0, Math.min(6, step)) }),
     obPlanStep1,
     obPlanStep2,
     obPlanStep3,
@@ -777,8 +878,10 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     obAddPerson: () => set((s) => ({ team: [...s.team, { name: "", role: "Marketing", areas: [] }] })),
     obVolume,
     obSummaryTitle,
-    obSummaryBody: `You want ${S.goalTitle || "to grow"}. With your budget, your ${S.profile.time}, and what you’re good at (${S.obStrengths.slice(0, 3).join(", ").toLowerCase() || "writing"}), that’s the way I’d grow you. I do the day-to-day work; you okay the things that matter.`,
-    obStrengthSummary: S.obStrengths.slice(0, 3).join(" · ") || "Writing · Product",
+    obSummaryBody: account
+      ? `You want ${S.goalTitle || "to grow"}. With your budget, your ${S.hoursWk} h/wk${S.obStrengths.length ? `, and what you’re good at (${S.obStrengths.slice(0, 3).join(", ").toLowerCase()})` : ""}, that’s the way I’d grow you. I do the day-to-day work; you okay the things that matter.`
+      : `You want ${S.goalTitle || "to grow"}. With your budget, your ${S.profile.time}, and what you’re good at (${S.obStrengths.slice(0, 3).join(", ").toLowerCase() || "writing"}), that’s the way I’d grow you. I do the day-to-day work; you okay the things that matter.`,
+    obStrengthSummary: S.obStrengths.slice(0, 3).join(" · ") || (account ? "" : "Writing · Product"),
     obPaceChips: ["Sprint · 2 weeks", "Steady · 4 weeks", "Gentle · 8 weeks"].map((t) => {
       const on = S.obPace === t;
       return {
@@ -800,6 +903,11 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     isToday: S.onboarded && S.view === "today",
     isSystems: S.view === "systems",
     isConnectors: S.view === "connectors",
+    /** Channels (accounts mode only — Sidebar hides the entry in demo): where Unc reaches the founder. docs/CHANNELS.md */
+    isChannels: S.view === "channels",
+    goChannels: nav("channels"),
+    channelsBg: S.view === "channels" ? activeBg : "transparent",
+    channelsDot: S.view === "channels" ? cyan : dim,
     goToday: nav("today"),
     goSystems: nav("systems"),
     goConnectors: nav("connectors"),
@@ -867,16 +975,18 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     readThread: S.readThread.map((m) => ({ text: m.text, fromUser: m.from === "u", fromJ: m.from === "j" })),
     readDraft: S.readDraft,
     onReadDraft: (e: Ev) => set({ readDraft: e.target.value }),
-    readChips: ([
+    /* Accounts: no canned replies — the chips are demo furniture (the live Unc chat answers instead). */
+    readChips: (account ? [] : ([
       ["Challenge this read", "Fair. The organic-first call rests on two numbers: CVR 3.1% and NZ$54/day headroom. If you think paid can beat 2.5× now, I’ll stage a NZ$20/day probe behind an approval and we’ll let the data argue."],
       ["Budget changed", "Tell me the new number and I’ll re-rank the paths tonight — more headroom pulls paid forward; less makes retention and CRO carry more."],
       ["I have more time this week", "Then I’ll queue the two moves that need your voice — welcome-flow copy and one founder post — and hold the rest. That’s the highest-leverage use of your hours."],
-    ] as [string, string][]).map(([t, reply]) => ({
+    ] as [string, string][])).map(([t, reply]) => ({
       t,
       send: () => set((s) => ({ readThread: [...s.readThread, { from: "u", text: t }, { from: "j", text: reply }] })),
     })),
-    klaviyoDown: (S.connState["Klaviyo"] || "expired") !== "ok",
-    klaviyoOk: (S.connState["Klaviyo"] || "expired") === "ok",
+    klaviyoDown,
+    /* Accounts: the "Reconnected Klaviyo" bubble is demo furniture (a real reconnect lands as a connector read line). */
+    klaviyoOk: account ? false : klaviyoState === "ok",
     fixKlaviyo: () => set((s) => ({ connState: { ...s.connState, Klaviyo: "ok" } })),
     readSend: readSendImpl,
     onReadKey: (e: KEv) => {
@@ -884,10 +994,14 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     },
     goalTitle: S.goalTitle,
     onGoalTitle: (e: Ev) => set({ goalTitle: e.target.value }),
+    curSym,
     deadline: S.deadline,
     onDeadline: (e: Ev) => set({ deadline: e.target.value || S.deadline }),
     daysLeft: daysLeftN,
-    daysLeftLabel: `${daysLeftN} day${daysLeftN === 1 ? "" : "s"}`,
+    daysLeftLabel: account && !S.deadline ? "no deadline yet" : `${daysLeftN} day${daysLeftN === 1 ? "" : "s"}`,
+    /** Accounts: the goal line / deadline are empty until the founder sets them — Home says so instead of demo maths. */
+    goalMissing: account && !S.goalTitle.trim(),
+    deadlineMissing: account && !S.deadline,
     needsCount,
     allClear: needsCount === 0,
     nowFmt: fmt(cur),
@@ -898,27 +1012,46 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     statusLabel: onTrack ? "On track" : `Behind by ${fmt(gap)}`,
     statusColor: onTrack ? "oklch(0.45 0.1 240)" : "oklch(0.5 0.12 75)",
     statusBg: onTrack ? "oklch(0.94 0.03 225)" : "oklch(0.93 0.05 80)",
-    strategicRead: `At ${fmt(pace)}/day you land at ${fmt(proj)}${onTrack ? " — clear of the goal. Hold the line and bank the learning." : ` — ${fmt(gap)} short.`} I weighed 14 moves against your NZ$54/day budget headroom. Your site already converts ahead of industry and reels are compounding, so traffic isn’t the constraint — repeat purchase is (14% vs a 22% norm). Retention closes the gap organically, for free. Paid could buy it faster, but it burns headroom retention gives us for nothing — it’s queued for when repeat crosses 18%.`,
-    signals: SIGNAL_DEFS,
-    levers: LEVER_DEFS,
-    focus: ["D05-W03", "D05-W01", "D05-W04"].map((id) => {
+    /* Accounts: the read is the daily brief (TodayBrief) + KPI deltas — the demo's NZ$54/day / 14% / 22% story has no render path. */
+    strategicRead: account
+      ? ""
+      : `At ${fmt(pace)}/day you land at ${fmt(proj)}${onTrack ? " — clear of the goal. Hold the line and bank the learning." : ` — ${fmt(gap)} short.`} I weighed 14 moves against your NZ$54/day budget headroom. Your site already converts ahead of industry and reels are compounding, so traffic isn’t the constraint — repeat purchase is (14% vs a 22% norm). Retention closes the gap organically, for free. Paid could buy it faster, but it burns headroom retention gives us for nothing — it’s queued for when repeat crosses 18%.`,
+    signals: account ? [] : SIGNAL_DEFS,
+    levers: account ? [] : LEVER_DEFS,
+    focus: (account ? [] : ["D05-W03", "D05-W01", "D05-W04"]).map((id) => {
       const s = ALL_SYSTEMS.find((x) => x.id === id)!;
       return { name: s.name, open: () => openSys(s) };
     }),
     showBuddy: S.onboarded,
     buddyText: S.buddyText,
     hasBuddyText: !!S.buddyText && !S.chatOpen,
-    proposals: [
-      { id: "D05-W01", name: "Welcome flow tuning", why: "Your welcome flow converts 2.1%; tuned flows in your category do 6%+. Sequence drafted from your top customer questions." },
-      { id: "D05-W06", name: "Review request timing", why: "Reviews lift repeat purchase ~9% in your category. Trigger drafted: 12 days post-delivery, suppressed for open tickets." },
-      { id: "D06-W02", name: "PDP conversion review", why: "The free CRO path. A/B test staged on your top 3 products — copy from real support language." },
-    ].map((p, i) => ({
-      ...p,
-      ready: S.propStatus[i] === "ready",
-      blocked: S.propStatus[i] === "blocked",
-      building: S.propStatus[i] === "building",
-      turnOn: () => set((s) => ({ propStatus: s.propStatus.map((x, j) => (j === i ? "building" : x)) })),
-    })),
+    /* Accounts: "Setting up next" = the plan's phase-1 wave-1 routines not yet on, with honest availability (src/lib/setup/home.ts). */
+    proposals: account
+      ? realProposals({ routineOn: S.routineOn, connState: S.connState, posture: S.posture, obStrengths: S.obStrengths, budgetMo: S.budgetMo }).map((p) => ({
+          id: p.id as string,
+          name: p.name,
+          why: p.why,
+          ready: p.ready,
+          blocked: p.blocked,
+          blockedLabel: p.blockedLabel,
+          building: false,
+          turnOn: () => {
+            const s2 = ALL_SYSTEMS.find((x) => x.id === p.id);
+            if (s2) set((s) => ({ routineOn: { ...s.routineOn, [s2.name]: true } }));
+          },
+        }))
+      : [
+          { id: "D05-W01", name: "Welcome flow tuning", why: "Your welcome flow converts 2.1%; tuned flows in your category do 6%+. Sequence drafted from your top customer questions." },
+          { id: "D05-W06", name: "Review request timing", why: "Reviews lift repeat purchase ~9% in your category. Trigger drafted: 12 days post-delivery, suppressed for open tickets." },
+          { id: "D06-W02", name: "PDP conversion review", why: "The free CRO path. A/B test staged on your top 3 products — copy from real support language." },
+        ].map((p, i) => ({
+          ...p,
+          ready: S.propStatus[i] === "ready",
+          blocked: S.propStatus[i] === "blocked",
+          blockedLabel: undefined as string | undefined,
+          building: S.propStatus[i] === "building",
+          turnOn: () => set((s) => ({ propStatus: s.propStatus.map((x, j) => (j === i ? "building" : x)) })),
+        })),
     goalPct: gm.goalPct,
     /** Accounts mode: the goal row's baseline is NULL, so pace/progress above are demo maths — Home says so instead (BASELINE_NOT_SET_COPY). */
     baselineMissing: S.baselineNum === null,
@@ -927,8 +1060,9 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     openRoutineById: (id: string) => openSys(ALL_SYSTEMS.find((x) => x.id === id)),
     /** Jump to a routines category (DB-mode "The bar" fix buttons; the demo cards carry their own closures). */
     openCategory: (cat: string) => set({ view: "systems", selCat: cat, sel: null }),
-    pendingCount: S.apStatus.filter((x) => x === "pending").length,
-    completed: COMPLETED_DEFS,
+    pendingCount: account ? realPending : S.apStatus.filter((x) => x === "pending").length,
+    /* Accounts: live receipts (facts.receipts / useLiveApprovals) — the demo's R-448x rows have no render path. */
+    completed: account ? (facts?.receipts ?? []).map((r) => ({ text: r.text, receipt: `${r.kind} · receipt ${r.id.slice(0, 8)}` })) : COMPLETED_DEFS,
     catChips,
     visibleSystems,
     noSel: !sel,
@@ -936,7 +1070,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     catAll: S.selCat === "All",
     catOne: S.selCat !== "All",
     catCards: CATEGORIES.map((c) => {
-      const onN = c.systems.filter((n) => S.routineOn[n] ?? ALL_SYSTEMS.find((x) => x.name === n)?.state === "Active").length;
+      const onN = c.systems.filter((n) => isOn(n)).length;
       return {
         name: c.name,
         tagline: CAT_TAGLINES[c.name] || "",
@@ -948,11 +1082,12 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     selCatName: S.selCat,
     selCatTag: CAT_TAGLINES[S.selCat] || "",
     channelRows: (S.selCat === "All" ? [] : ALL_SYSTEMS.filter((s2) => s2.cat === S.selCat)).map((s2) => {
-      const on = S.routineOn[s2.name] ?? s2.state === "Active";
+      const on = isOn(s2.name);
       return {
         benefit: s2.benefit,
         name: s2.name,
-        saves: 2 + (s2.id.charCodeAt(5) % 3),
+        /* Accounts: hours saved are measured from real runs (telemetry), never the id-hash "saves ~N h/wk". */
+        saves: account ? 0 : 2 + (s2.id.charCodeAt(5) % 3),
         togBg: on ? "oklch(0.72 0.17 150)" : "oklch(0.88 0.015 260)",
         knobLeft: on ? "19.5px" : "2.5px",
         toggle: () => set((st) => ({ routineOn: { ...st.routineOn, [s2.name]: !on } })),
@@ -966,7 +1101,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     selCadence: sel?.cadence,
     selMode: sel?.mode,
     selKpi: sel?.kpi,
-    selState: sel?.state,
+    selState: sel ? stateLabel(sel) : undefined,
     selStateColor: selState[0],
     selStateBg: selState[1],
     selSteps,
@@ -999,17 +1134,19 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
       if (s2) set((s) => ({ routineOn: { ...s.routineOn, [s2.name]: true } }));
     },
     /** Real connector state only (never the demo `|| "expired"` default): Klaviyo really needs a reconnect. */
-    klaviyoNeedsReconnect: S.connState["Klaviyo"] === "expired",
+    klaviyoNeedsReconnect: account ? klaviyoState === "expired" : S.connState["Klaviyo"] === "expired",
+    /** Which world this view model describes — see DeriveOptions. */
+    accountMode: account,
     /** Open the guided Connect-your-data step's platform in the Connectors view. */
     goConnectorsView: nav("connectors"),
     /** Routine ids that are really on (routine_states.enabled projection) — never the catalog's demo "Active" defaults. */
-    enabledRoutineIds: ALL_SYSTEMS.filter((x) => S.routineOn[x.name] === true).map((x) => x.id),
+    enabledRoutineIds: ALL_SYSTEMS.filter((x) => (account ? isOn(x.name) : S.routineOn[x.name] === true)).map((x) => x.id),
     routineOnById: (id: string) => {
       const s2 = ALL_SYSTEMS.find((x) => x.id === id);
-      return !!s2 && S.routineOn[s2.name] === true;
+      return !!s2 && (account ? isOn(s2.name) : S.routineOn[s2.name] === true);
     },
     /** Real connector state by card name ("off" when no row exists — never the demo defaults). */
-    connStateByName: (name: string) => S.connState[name] ?? "off",
+    connStateByName: (name: string): ConnStatus => (account ? connOf(name, "off") : (S.connState[name] ?? "off")),
     /** The founder's own answers, for the real Home / guided steps (never demo constants). */
     accountCtx: { currency: S.currency, budgetMonthly: S.budgetMo },
     /** The persisted rows the real Home view model (src/lib/setup/home.ts) reads. */

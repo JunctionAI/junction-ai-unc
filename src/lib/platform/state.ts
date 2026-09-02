@@ -7,7 +7,7 @@ import type { Posture } from "./plan";
 import type { BusinessProfile } from "@/lib/unc/scan";
 import type { PlanNarrative } from "@/lib/unc/narrative";
 
-export type View = "today" | "systems" | "connectors" | "strategy";
+export type View = "today" | "systems" | "connectors" | "strategy" | "channels";
 export type ApStatus = "pending" | "approved" | "held";
 export type PropStatus = "ready" | "blocked" | "building";
 export type WfState = "clean" | "draft" | "validated";
@@ -64,6 +64,16 @@ export interface NarrativeState {
     Persisted in account_state_meta.client_state so a refresh lands on the same step. */
 export type SetupFlow = "connect" | "routine" | "channel" | "home";
 
+/** Which onboarding numbers the founder has actually typed. Demo mode is fully "answered" (the
+    prototype's dataset); a real account starts with every flag false so the inputs render empty
+    (placeholders only) and the plan generator asks before it drafts anything. A typed 0 is a
+    real answer — that is why these are flags and not a magic number. Persisted in client_state. */
+export interface ObAnswered {
+  target: boolean;
+  budget: boolean;
+  hours: boolean;
+}
+
 export interface PlatformState {
   view: View;
   selCat: string;
@@ -100,6 +110,8 @@ export interface PlatformState {
   team: TeamMember[];
   budgetMo: number;
   hoursWk: number;
+  /** See ObAnswered — never read a real account's budget/hours/target without checking these. */
+  obAnswered: ObAnswered;
   baselineText: string;
   currency: string;
   targetNum: number;
@@ -178,6 +190,7 @@ export const initialState: PlatformState = {
   team: [{ name: "You", role: "Founder", areas: ["Content", "Paid ads", "SEO", "Sales", "Email & SMS"] }],
   budgetMo: 3600,
   hoursWk: 6,
+  obAnswered: { target: true, budget: true, hours: true },
   baselineText: "NZ$28,400 MRR today",
   currency: "NZD",
   targetNum: 40000,
@@ -216,3 +229,58 @@ export const initialState: PlatformState = {
   settlePlan: false,
   firstRunPending: false,
 };
+
+/* ---- accounts mode: the empty start (docs/PRODUCT-EXPERIENCE.md "Real only") ----
+   A real account never inherits the prototype's founder: no goal, no baseline, no budget, no
+   hours, no strengths, no seeded chat. The inputs show placeholders; the plan generator asks
+   for what is missing. Everything that is product furniture (the catalog, the categories, the
+   pace chips) stays. `initialState` above is the demo sandbox and is untouched. */
+
+export const ACCOUNT_EMPTY_PROFILE: Profile = { budget: "", time: "", strength: "", belief: "", team: "Just me" };
+
+/** The state a brand-new account is seeded from (and the base a partially populated one hydrates over). */
+export function accountInitialState(currency: string = "USD"): PlatformState {
+  return {
+    ...initialState,
+    goalTitle: "",
+    deadline: "",
+    goalTexts: {},
+    targetNum: 0,
+    baselineNum: null,
+    baselineText: "",
+    budgetMo: 0,
+    hoursWk: 0,
+    obAnswered: { target: false, budget: false, hours: false },
+    currency,
+    obStrengths: [],
+    obPlatforms: [],
+    profile: { ...ACCOUNT_EMPTY_PROFILE },
+    messages: [],
+    humanThread: [],
+    connState: {},
+    routineOn: {},
+    apStatus: [],
+    apWhy: [],
+    propStatus: [],
+  };
+}
+
+/** Default account currency from where the founder is: the unc_country cookie (pinned by the
+    proxy / ?country=) first, else the browser language's region. Only the currencies the
+    onboarding offers; anything else lands on USD. Pure — the caller reads cookie / navigator. */
+export function currencyForLocale(input: { country?: string | null; language?: string | null }): string {
+  const byCountry: Record<string, string> = { NZ: "NZD", AU: "AUD", GB: "GBP", US: "USD" };
+  const euro = new Set(["AT", "BE", "CY", "DE", "EE", "ES", "FI", "FR", "GR", "HR", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PT", "SI", "SK"]);
+  const pick = (code: string | null | undefined): string | null => {
+    if (!code) return null;
+    const up = code.trim().toUpperCase();
+    if (byCountry[up]) return byCountry[up];
+    if (euro.has(up)) return "EUR";
+    return null;
+  };
+  const fromCookie = pick(input.country);
+  if (fromCookie) return fromCookie;
+  const lang = (input.language ?? "").trim();
+  const region = lang.includes("-") ? lang.split("-").pop() : null;
+  return pick(region) ?? "USD";
+}

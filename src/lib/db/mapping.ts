@@ -28,7 +28,7 @@
    obMoneyOpen, obTeamOpen, obDraft, buddyText, typing placeholders. */
 
 import { ALL_SYSTEMS } from "../platform/catalog";
-import { postureDefs } from "../platform/derive";
+import { postureDefs } from "../platform/postures";
 import type { Posture } from "../platform/plan";
 import {
   initialState,
@@ -36,6 +36,7 @@ import {
   type ConnStatus,
   type Msg,
   type NarrativeState,
+  type ObAnswered,
   type PlatformState,
   type Profile,
   type Reinvest,
@@ -138,6 +139,8 @@ export interface ClientState {
   setupFlow?: SetupFlow;
   setupConnectLater?: boolean;
   setupCardDismissed?: boolean;
+  /** Which onboarding numbers were typed (2026-09-02, additive). Absent on older rows → treated as answered: those founders agreed a plan already. */
+  obAnswered?: ObAnswered;
 }
 export interface StateMetaRow {
   account_id: string;
@@ -329,6 +332,7 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
       setupFlow: S.setupFlow,
       setupConnectLater: S.setupConnectLater,
       setupCardDismissed: S.setupCardDismissed,
+      obAnswered: { ...S.obAnswered },
     },
   };
 
@@ -374,6 +378,8 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
     S.setupFlow = cs.setupFlow === "connect" || cs.setupFlow === "routine" || cs.setupFlow === "channel" ? cs.setupFlow : "home";
     S.setupConnectLater = cs.setupConnectLater === true;
     S.setupCardDismissed = cs.setupCardDismissed === true;
+    // rows saved before the flags existed: the founder typed (or agreed) those numbers — never re-ask
+    S.obAnswered = cs.obAnswered ? { target: !!cs.obAnswered.target, budget: !!cs.obAnswered.budget, hours: !!cs.obAnswered.hours } : { target: true, budget: true, hours: true };
   }
 
   if (rows.goals.length) {

@@ -30,6 +30,7 @@ export const HOME_COPY = {
   noReceipts: "No receipts yet — the first run writes one, and it lands here.",
   nothingScheduled: "Nothing scheduled yet — turn on your first routine and it runs on its cadence.",
   setupDone: "Set up ✓ — running on your plan.",
+  goalNotSet: "Tell me the goal — a number and a date — and I’ll work the pace out from there.",
   allProposalsOn: "Every phase-1 routine is on. I’ll propose the next one when the numbers earn it.",
 } as const;
 
@@ -67,7 +68,8 @@ export function realPlanTimeline(S: Pick<PlatformState, "posture" | "obStrengths
   const rest = chans.slice(2).join(" + ");
   const titles = [`${chans[0]} — your strength, running first`, `Add ${chans[1].toLowerCase()}`, rest];
   const focus = ["Get the engine working. You: taste + okays.", "Turn momentum into revenue. You: a few okays a day.", "Switch on as the numbers earn it."];
-  if (!S.planAgreedAt) {
+  // No agreed_at (or no deadline yet, accounts mode): the phases are real but carry no week numbers.
+  if (!S.planAgreedAt || !S.deadline) {
     return titles.map((title, i) => ({ n: i + 1, weeks: `Phase ${i + 1}`, title, focus: focus[i], st: i === 0 ? "Now" : i === 1 ? "Next" : "Later", on: i === 0 }));
   }
   const { weeksLeft, w1, w2end } = weekSplitFrom(S.planAgreedAt, S.deadline);

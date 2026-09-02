@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialState } from "@/lib/platform/state";
+import { accountInitialState, initialState } from "@/lib/platform/state";
 import { postureDefs } from "@/lib/platform/derive";
 import { CLIENT_STATE_SCHEMA_VERSION, narrativeProse, persistedProjection, planPhases, rowsToState, stateToRows, type LoadedRows } from "../mapping";
 import { expectedAfterRoundTrip, PERSISTED_KEYS, pick, richState } from "./fixtures";
@@ -184,7 +184,19 @@ describe("column mapping (0001 + 0003)", () => {
       setupFlow: "routine",
       setupConnectLater: true,
       setupCardDismissed: true,
+      obAnswered: { target: true, budget: true, hours: true },
     });
+  });
+
+  it("obAnswered: rows saved before the flags hydrate as answered (those founders agreed a plan on typed numbers); a fresh account's flags round-trip", () => {
+    const meta = { ...rows.stateMeta, client_state: { ...rows.stateMeta.client_state } };
+    delete meta.client_state.obAnswered;
+    const legacy = rowsToState({ ...EMPTY, stateMeta: meta }, accountInitialState("NZD"));
+    expect(legacy.obAnswered).toEqual({ target: true, budget: true, hours: true });
+    const fresh = stateToRows("00000000-0000-4000-8000-000000000001", accountInitialState("AUD"));
+    expect(fresh.stateMeta.client_state.obAnswered).toEqual({ target: false, budget: false, hours: false });
+    expect(fresh.account.currency).toBe("AUD");
+    expect(rowsToState(EMPTY, accountInitialState("AUD")).obAnswered).toEqual({ target: false, budget: false, hours: false });
   });
 
   it("guided-first-run fields: rows saved before them hydrate to their defaults (never trap an existing account)", () => {

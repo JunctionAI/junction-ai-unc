@@ -5,12 +5,16 @@
 
    Sequence on mount (configured):
      1. getUser()            no user → demo mode (the proxy normally redirects /app first)
-     2. ensureAccount()      existing account → hydrate state from rows
-                             none / never saved → create + seed from the current client state
+     2. ensureAccount()      existing account → hydrate state from rows (over the empty account seed,
+                             so a partially populated account keeps honest blanks, never demo numbers)
+                             none / never saved → create + seed from the EMPTY account state
+                             (accountInitialState — never the prototype's founder), currency from
+                             the unc_country cookie / browser language
      3. autosave             every change after that persists, debounced 800 ms */
 
-import { useEffect, useRef, useState } from "react";
-import type { PlatformState, Setter } from "@/lib/platform/state";
+import { useEffect, useState } from "react";
+import { COUNTRY_COOKIE, cookieValue } from "@/lib/locale/resolve";
+import { accountInitialState, currencyForLocale, type PlatformState, type Setter } from "@/lib/platform/state";
 import { ensureAccount, saveAccountState } from "./accountState";
 import { asDb, getBrowserSupabase, isDbConfigured } from "./client";
 import { persistedProjection } from "./mapping";
@@ -26,6 +30,14 @@ export interface Persistence {
   error: string | null;
 }
 
+/** The state a real account is created from / hydrated over: no goal, baseline, budget, hours or seeded chat
+    (docs/PRODUCT-EXPERIENCE.md "Real only"); currency from where the founder is. */
+export function accountSeed(): PlatformState {
+  const cookie = typeof document !== "undefined" ? cookieValue(document.cookie, COUNTRY_COOKIE) : null;
+  const language = typeof navigator !== "undefined" ? navigator.language : null;
+  return accountInitialState(currencyForLocale({ country: cookie, language }));
+}
+
 export function useAccountPersistence(S: PlatformState, set: Setter): Persistence {
   const configured = isDbConfigured();
   const [mode, setMode] = useState<PersistenceMode>(configured ? "connecting" : "demo");
@@ -33,10 +45,6 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const seedRef = useRef(S);
-  useEffect(() => {
-    seedRef.current = S;
-  }, [S]);
 
   useEffect(() => {
     if (!configured) return;
@@ -50,12 +58,13 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
           return;
         }
         const db = asDb(supabase);
-        const res = await ensureAccount(db, seedRef.current, { userId: data.user.id });
+        const res = await ensureAccount(db, accountSeed(), { userId: data.user.id });
         if (cancelled) return;
         setUserId(data.user.id);
         setUserEmail(data.user.email ?? null);
         setAccountId(res.accountId);
-        if (!res.created) set(() => res.state);
+        // created → the empty seed; existing → the rows hydrated over that seed. Either way, never the demo state.
+        set(() => res.state);
         setMode("account");
       } catch (e) {
         if (cancelled) return;

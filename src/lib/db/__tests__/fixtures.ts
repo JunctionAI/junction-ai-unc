@@ -14,6 +14,7 @@ export const PERSISTED_KEYS = [
   "targetNum",
   "budgetMo",
   "hoursWk",
+  "obAnswered",
   "reinvest",
   "marginPct",
   "website",

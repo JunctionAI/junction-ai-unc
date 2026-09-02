@@ -31,6 +31,12 @@ export interface GoalMathInput {
   deadline: string; // yyyy-mm-dd
   currency: string;
   currentMRR?: number;
+  /** Accounts mode: the real clock (demo mode runs on the prototype's fixed DEMO_TODAY). */
+  today?: Date;
+  /** Accounts mode: when the goal was set (plans.agreed_at) — pace is measured from here. Defaults to `today`. */
+  start?: Date;
+  /** Target when the goal line carries no number. Demo falls back to the prototype's 40,000; accounts pass their typed target (0 = not set). */
+  targetFallback?: number;
 }
 
 export interface GoalMath {
@@ -65,9 +71,9 @@ export function goalMath(input: GoalMathInput): GoalMath {
   const baseline = input.baselineNum || DEMO_DEFAULT_BASELINE;
   const cur = input.currentMRR ?? (baseline !== DEMO_DEFAULT_BASELINE ? baseline : DEMO_DEFAULT_CURRENT);
   const curSym = currencySymbol(input.currency);
-  const target = Math.max(parseGoalTarget(input.goalTitle) || 40000, cur + 1);
-  const today = new Date(DEMO_TODAY);
-  const start = new Date(DEMO_START);
+  const target = Math.max(parseGoalTarget(input.goalTitle) || input.targetFallback || 40000, cur + 1);
+  const today = input.today ?? new Date(DEMO_TODAY);
+  const start = input.start ?? (input.today ? input.today : new Date(DEMO_START));
   const dl = new Date(input.deadline + "T00:00:00");
   const elapsed = Math.max(1, Math.round((today.getTime() - start.getTime()) / 864e5));
   const pace = (cur - baseline) / elapsed;
