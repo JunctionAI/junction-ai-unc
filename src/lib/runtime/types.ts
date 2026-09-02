@@ -1,0 +1,350 @@
+/* Unc routines runtime — core types.
+
+   A routine is a RoutineSpec: an ordered node chain
+     TRIGGER → READ* → CHECK* → DECIDE? → GATE? → EXECUTE? → RECEIPT
+   executed by engine.ts. Every node is data (JSON-serialisable) so specs can
+   live in routine_states.draft_spec / live_spec and be edited in the canvas
+   inspector. Nothing in here touches a database or a network: adapters are
+   injected (see ConnectorReader / DecisionProvider / Executor / Store). */
+
+// ---------- identifiers ----------
+
+/** Catalog id, e.g. "D01-W01" (category D01..D05, routine W01..W08). */
+export type RoutineId = string;
+
+/** Connector platforms. Mirrors connectors.platform in the schema; the last
+    few (web, llm_search, calendar) are read-only research sources with no
+    connector card yet. */
+export type Platform =
+  | "shopify"
+  | "ga4"
+  | "meta_ads"
+  | "google_ads"
+  | "klaviyo"
+  | "instagram"
+  | "tiktok"
+  | "linkedin"
+  | "youtube"
+  | "search_console"
+  | "hubspot"
+  | "gmail"
+  | "gorgias"
+  | "xero"
+  | "quickbooks"
+  | "slack"
+  | "web"
+  | "llm_search"
+  | "calendar";
+
+export type RunMode = "dry_run" | "live";
+export type RunStatus = "running" | "waiting_approval" | "done" | "failed" | "skipped";
+export type ApprovalStatus = "pending" | "approved" | "held" | "expired";
+export type ReceiptKind = "read" | "draft" | "mutation" | "notification";
+export type TasteAction = "approved" | "held" | "why_opened" | "edited";
+export type Wave = 1 | 2;
+
+// ---------- predicates (data, not code) ----------
+
+export type CompareOp = "gt" | "gte" | "lt" | "lte" | "eq" | "neq" | "exists" | "between";
+
+/** A literal, or a reference to another context path (e.g. { ref: "caps.perDay" }). */
+export type PredicateValue = number | string | boolean | [number, number] | { ref: string };
+
+/** A single metric comparison. `metric` is a dotted path into the run
+    context, e.g. "reads.orders.count", "reads.insights.spend",
+    "decision.spend.amount". `window` is informational — it names the period
+    the metric was read over ("7d", "24h") so the receipt can say so. */
+export interface MetricPredicate {
+  metric: string;
+  op: CompareOp;
+  value?: PredicateValue;
+  window?: string;
+}
+export interface AllPredicate {
+  all: Predicate[];
+}
+export interface AnyPredicate {
+  any: Predicate[];
+}
+export type Predicate = MetricPredicate | AllPredicate | AnyPredicate;
+
+// ---------- read descriptors ----------
+
+/** A platform query expressed as data. `resource` is the platform's noun
+    (shopify: orders | products | customers | checkouts; ga4: report;
+    meta_ads: insights | campaigns | ads; klaviyo: flows | campaigns |
+    segments | metrics; search_console: search_analytics; …). */
+export interface ReadQuery {
+  resource: string;
+  fields?: string[];
+  /** Lookback window: "24h", "7d", "28d", "90d". */
+  window?: string;
+  filter?: Record<string, unknown>;
+  groupBy?: string[];
+  limit?: number;
+}
+
+/** What a ConnectorReader returns. `metrics` are pre-aggregated numbers the
+    checks and templates can address directly; `rows` are the raw records. */
+export interface ReadResult {
+  rows: Record<string, unknown>[];
+  metrics: Record<string, number | string | boolean | null>;
+  fetchedAt: string;
+  /** Optional provenance: "ok" | "empty" | "error:<code>" — mirrors
+      connectors.last_sync_result so "couldn't ask" ≠ "nothing happened". */
+  provenance?: string;
+}
+
+// ---------- spend ----------
+
+export interface SpendCaps {
+  currency: string;
+  perDay: number;
+  perMonth: number;
+}
+
+/** Spend a decision commits. Either a fixed amount or a metric-derived one
+    (e.g. 20% of current daily budget, capped). Resolved to SpendAmount by the
+    DecisionProvider. */
+export type SpendDescriptor =
+  | { amount: number; period?: "day" | "month" | "once" }
+  | { amountMetric: string; multiplier?: number; max?: number; period?: "day" | "month" | "once" };
+
+export interface SpendAmount {
+  amount: number;
+  currency: string;
+  period: "day" | "month" | "once";
+}
+
+// ---------- nodes ----------
+
+interface NodeBase {
+  id: string;
+  /** Human label shown on the canvas. */
+  label?: string;
+}
+
+/** Cadence: "manual", a 5-field cron expression, or "event:<platform>:<event>"
+    for on-new-data triggers (e.g. "event:shopify:order_created"). */
+export interface TriggerNode extends NodeBase {
+  kind: "trigger";
+  cadence: string;
+  /** Template; runs sharing a rendered dedup key on the same day are skipped.
+      Default "{{routine.id}}:{{today}}". */
+  dedupKey?: string;
+}
+
+export interface ReadNode extends NodeBase {
+  kind: "read";
+  source: Platform;
+  query: ReadQuery;
+  /** Context alias: results land at reads.<as>. */
+  as: string;
+  /** Reject reads older than this many minutes (certified-input freshness). */
+  freshnessMinutes?: number;
+}
+
+export interface CheckNode extends NodeBase {
+  kind: "check";
+  predicate: Predicate;
+  /** What a false predicate means: "skip" ends the run quietly (nothing to
+      do today), "fail" ends it as an incident. Default "skip". */
+  onFail?: "skip" | "fail";
+  /** Receipt copy for the skip/fail case. */
+  reason?: string;
+}
+
+export interface DecisionOption {
+  id: string;
+  label: string;
+  /** Selecting this option ends the run after a receipt (no gate/execute). */
+  terminal?: boolean;
+  spend?: SpendDescriptor;
+  params?: Record<string, unknown>;
+}
+
+export type SelectionRule =
+  | { kind: "first" }
+  | { kind: "threshold"; metric: string; op: CompareOp; value: PredicateValue; ifTrue: string; ifFalse: string }
+  | { kind: "llm"; prompt: string; fallback?: string };
+
+export interface DecideNode extends NodeBase {
+  kind: "decide";
+  question: string;
+  options: DecisionOption[];
+  rule: SelectionRule;
+}
+
+/** The decision a DecisionProvider returns. Lands at ctx.decision. */
+export interface Decision {
+  optionId: string;
+  label: string;
+  reasoning: string;
+  terminal?: boolean;
+  spend?: SpendAmount;
+  params?: Record<string, unknown>;
+}
+
+/** Templates ({{path}}) are rendered from the run context at gate time. */
+export interface GateNode extends NodeBase {
+  kind: "gate";
+  title: string;
+  detail?: string;
+  before?: string;
+  after?: string;
+  reasoning?: string;
+  expiryHours: number;
+  approver?: string;
+}
+
+export interface Mutation {
+  /** Platform verb, e.g. "update_adset_budget", "publish_post", "update_flow_message". */
+  action: string;
+  target?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+}
+
+export interface ExecuteNode extends NodeBase {
+  kind: "execute";
+  platform: Platform;
+  mutation: Mutation;
+  /** Static spend when the decision doesn't carry one. */
+  spend?: SpendDescriptor;
+  idempotencyKey?: string;
+  rollback?: string;
+}
+
+export interface ReceiptNode extends NodeBase {
+  kind: "receipt";
+  /** Template for the run summary. */
+  summary?: string;
+  measurementWindowDays?: number;
+}
+
+export type Node = TriggerNode | ReadNode | CheckNode | DecideNode | GateNode | ExecuteNode | ReceiptNode;
+export type NodeKind = Node["kind"];
+
+// ---------- spec ----------
+
+export interface RoutineSpec {
+  id: RoutineId;
+  version: number;
+  name: string;
+  /** Launch wave. Wave 1 routines are draft-only (never mutate). */
+  wave: Wave;
+  /** True iff the chain contains an execute node. */
+  mutates: boolean;
+  nodes: Node[];
+}
+
+// ---------- run context + results ----------
+
+export interface AccountContext {
+  accountId: string;
+  currency: string;
+  /** resource_profiles.budget_monthly — the hard spend guardrail source. */
+  budgetMonthly: number;
+  /** Explicit caps; derived from budgetMonthly (÷30 per day) when absent. */
+  caps?: SpendCaps;
+  /** Named approver for gates (team_members.approves). */
+  approver?: string;
+}
+
+export interface RunInput {
+  account: AccountContext;
+  /** How the run started. */
+  triggeredBy?: "schedule" | "manual" | "event";
+  /** Free-form variables available to templates at vars.<key>. */
+  vars?: Record<string, unknown>;
+}
+
+export interface RunContext {
+  runId: string;
+  routineId: RoutineId;
+  version: number;
+  mode: RunMode;
+  startedAt: string;
+  account: AccountContext;
+  caps: SpendCaps;
+  triggeredBy: "schedule" | "manual" | "event";
+  vars: Record<string, unknown>;
+  reads: Record<string, ReadResult>;
+  checks: Record<string, boolean>;
+  decision?: Decision;
+  approval?: ApprovalRecord;
+  execution?: ExecutionResult;
+}
+
+export interface ExecutionResult {
+  ok: boolean;
+  externalRef?: string;
+  readback?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface ApprovalRecord {
+  id: string;
+  accountId: string;
+  runId: string;
+  routineId: RoutineId;
+  title: string;
+  detail?: string;
+  beforeState?: string;
+  afterState?: string;
+  reasoning?: string;
+  status: ApprovalStatus;
+  expiresAt: string;
+  decidedAt?: string;
+  decidedBy?: string;
+  createdAt: string;
+}
+
+export interface Receipt {
+  id: string;
+  accountId: string;
+  runId: string;
+  approvalId?: string;
+  kind: ReceiptKind;
+  platform?: Platform;
+  description: string;
+  payload: Record<string, unknown>;
+  /** Money committed by a mutation receipt (spend-cap accounting). */
+  spend?: SpendAmount;
+  createdAt: string;
+}
+
+export interface TasteEvent {
+  id: string;
+  accountId: string;
+  approvalId?: string;
+  routineId?: RoutineId;
+  action: TasteAction;
+  context: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface RunResult {
+  runId: string;
+  routineId: RoutineId;
+  version: number;
+  mode: RunMode;
+  status: RunStatus;
+  summary: string;
+  receipts: Receipt[];
+  approval?: ApprovalRecord;
+  error?: string;
+}
+
+// ---------- injected adapters ----------
+
+export interface ConnectorReader {
+  read(source: Platform, query: ReadQuery, ctx: RunContext): Promise<ReadResult>;
+}
+
+export interface DecisionProvider {
+  decide(node: DecideNode, ctx: RunContext): Promise<Decision>;
+}
+
+export interface Executor {
+  execute(node: ExecuteNode, mutation: Mutation, ctx: RunContext): Promise<ExecutionResult>;
+}
