@@ -18,7 +18,7 @@ import Module from "node:module";
 import path from "node:path";
 import { parsePlaybookMarkdown, type PlaybookRowLite } from "../src/lib/brain/playbooks";
 import { isServiceRoleConfigured } from "../src/lib/db/server";
-import { CRITERIA, evaluateReply, JUDGE_SYSTEM, judgeUserPrompt, parseJudgeScores, totalScore, type DeterministicResult, type JudgeScores } from "../src/lib/eval/chat-evals/rubric";
+import { coreScore, CRITERIA, evaluateReply, JUDGE_SYSTEM, judgeUserPrompt, MAX_CORE, MAX_TOTAL, parseJudgeScores, totalScore, type DeterministicResult, type JudgeScores } from "../src/lib/eval/chat-evals/rubric";
 import { SCENARIOS, type Scenario } from "../src/lib/eval/chat-evals/scenarios";
 import { complete, describeLlm, resolveModel } from "../src/lib/llm/router";
 
@@ -57,7 +57,10 @@ interface Row {
   deterministic: DeterministicResult;
   judge: JudgeScores | null;
   judgeRaw?: string;
+  /** All seven criteria, /14. */
   total: number | null;
+  /** The original five criteria, /10 — like-for-like with runs before 2026-09-03. */
+  core: number | null;
   /** The JUNCTION PLAYBOOK NOTES block the reply was given (absent when none applied). */
   playbooks?: string;
 }
@@ -141,27 +144,30 @@ async function main() {
     let raw: string | undefined;
     if (judgeModel) ({ scores, raw } = await judge(s, reply, verbose));
     const total = scores ? totalScore(scores) : null;
-    rows.push({ id: s.id, title: s.title, question: s.question, model, reply, deterministic, judge: scores, judgeRaw: raw, total, playbooks: notes || undefined });
-    console.log(`${deterministic.pass ? "det ok " : "det FAIL"} ${total === null ? "" : `judge ${total}/10`}`);
+    const core = scores ? coreScore(scores) : null;
+    rows.push({ id: s.id, title: s.title, question: s.question, model, reply, deterministic, judge: scores, judgeRaw: raw, total, core, playbooks: notes || undefined });
+    console.log(`${deterministic.pass ? "det ok " : "det FAIL"} ${total === null ? "" : `judge ${total}/${MAX_TOTAL} (core ${core}/${MAX_CORE})`}`);
   }
 
   // table
-  const head = ["scenario", "det", ...CRITERIA.map((c) => c.slice(0, 6)), "total"];
-  console.log(`\n${head.map((h, i) => h.padEnd(i === 0 ? 20 : 7)).join("")}`);
+  const head = ["scenario", "det", ...CRITERIA.map((c) => c.slice(0, 6)), "total", "core"];
+  console.log(`\n${head.map((h, i) => h.padEnd(i === 0 ? 22 : 7)).join("")}`);
   for (const r of rows) {
-    const det = r.deterministic.pass ? "ok" : [r.deterministic.bannedPhrases.length && "ban", r.deterministic.unsupportedNumbers.length && "num", r.deterministic.formatIssues.length && "fmt"].filter(Boolean).join("+");
-    console.log([r.id.padEnd(20), det.padEnd(7), ...CRITERIA.map((c) => String(r.judge ? r.judge[c] : "-").padEnd(7)), r.total === null ? "-" : `${r.total}/10`].join(""));
+    const d = r.deterministic;
+    const det = d.pass ? "ok" : [d.bannedPhrases.length && "ban", d.fillerPhrases.length && "fill", d.unsupportedNumbers.length && "num", d.formatIssues.length && "fmt"].filter(Boolean).join("+");
+    console.log([r.id.padEnd(22), det.padEnd(7), ...CRITERIA.map((c) => String(r.judge ? r.judge[c] : "-").padEnd(7)), (r.total === null ? "-" : `${r.total}/${MAX_TOTAL}`).padEnd(7), r.core === null ? "-" : `${r.core}/${MAX_CORE}`].join(""));
   }
   const judged = rows.filter((r) => r.total !== null);
   const detPass = rows.filter((r) => r.deterministic.pass).length;
   const mean = judged.length ? judged.reduce((n, r) => n + (r.total ?? 0), 0) / judged.length : null;
-  console.log(`\ndeterministic: ${detPass}/${rows.length} pass · judge mean: ${mean === null ? "n/a" : `${mean.toFixed(1)}/10 over ${judged.length}`}`);
-  for (const r of rows.filter((x) => !x.deterministic.pass)) console.log(`  ${r.id}: ${JSON.stringify({ banned: r.deterministic.bannedPhrases, numbers: r.deterministic.unsupportedNumbers, format: r.deterministic.formatIssues })}`);
+  const meanCore = judged.length ? judged.reduce((n, r) => n + (r.core ?? 0), 0) / judged.length : null;
+  console.log(`\ndeterministic: ${detPass}/${rows.length} pass · judge mean: ${mean === null ? "n/a" : `${mean.toFixed(1)}/${MAX_TOTAL} over ${judged.length}`} · core (original five): ${meanCore === null ? "n/a" : `${meanCore.toFixed(1)}/${MAX_CORE}`}`);
+  for (const r of rows.filter((x) => !x.deterministic.pass)) console.log(`  ${r.id}: ${JSON.stringify({ banned: r.deterministic.bannedPhrases, filler: r.deterministic.fillerPhrases, numbers: r.deterministic.unsupportedNumbers, format: r.deterministic.formatIssues })}`);
 
   const date = new Date().toISOString().slice(0, 10);
   const out = arg("--out") ?? path.join(ROOT, "design-reference", "evals", `chat-${date}.json`);
   mkdirSync(path.dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify({ ranAt: new Date().toISOString(), chatModel: chat.id, judgeModel: judgeModel?.id ?? null, summary: { scenarios: rows.length, deterministicPass: detPass, judgeMean: mean }, rows }, null, 2));
+  writeFileSync(out, JSON.stringify({ ranAt: new Date().toISOString(), chatModel: chat.id, judgeModel: judgeModel?.id ?? null, summary: { scenarios: rows.length, deterministicPass: detPass, judgeMean: mean, judgeMax: MAX_TOTAL, judgeMeanCore: meanCore, judgeCoreMax: MAX_CORE }, rows }, null, 2));
   console.log(`wrote ${path.relative(ROOT, out)}`);
 }
 

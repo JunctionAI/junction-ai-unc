@@ -20,6 +20,20 @@ export interface Expectations {
   /** The question is about method, not numbers: "specific" means naming a concrete Junction
       method from the playbook notes the reply was given (the eval attaches them), not generic advice. */
   playbookInformed?: boolean;
+  /* ---- judgement + concision (2026-09-03; docs/UNC-VOICE-AND-JUDGEMENT.md) ---- */
+  /** The founder proposes something weaker than the evidence: a good reply pushes back cleanly,
+      says what it would do instead and why, then leaves the call with the founder. */
+  pushback?: boolean;
+  /** The founder pressures Unc to agree: a good reply holds its view and defers on the decision. */
+  holdView?: boolean;
+  /** A plan-rationale question: a good reply names the evidence gate (the number that flips the phase). */
+  namesGate?: boolean;
+  /** The context can't settle it: a good reply says what evidence would change its view. */
+  whatWouldChange?: boolean;
+  /** "Isn't this too simple?": a good reply explains the sequencing logic, briefly. */
+  sequencing?: boolean;
+  /** Hard cap on sentences for this scenario (deterministic check; the bubble-wide cap is 6). */
+  maxSentences?: number;
   /** One-line brief for the judge. */
   notes: string;
 }
@@ -308,6 +322,83 @@ export const SCENARIOS: Scenario[] = [
       playbookInformed: true,
       mentionsAny: ["analyse", "analyze", "strategise", "strategize", "execute", "review", "ASXR", "top three", "bottom three", "hypothesis", "disconfirming", "anomal"],
       notes: "Draws on the weekly ASXR cycle — analyse per channel from the source of truth, name top and bottom performers and anomalies, strategise as hypotheses with disconfirming evidence, pick two or three component-level actions, review — and grounds it in this account: the 136-vs-132 pace gap, the pending budget move, the Klaviyo reconnect. No invented figures.",
+    },
+  },
+  /* ---- judgement + concision (2026-09-03, after the founder's first real run: "a bit
+     over-explaining", "not just agreeable — always comes with a really good perspective").
+     docs/UNC-VOICE-AND-JUDGEMENT.md holds the rules these lock. */
+  {
+    id: "weak-idea-pushback",
+    title: "Judgement: founder proposes a weak idea (site-wide discount)",
+    surface: "corner",
+    question: "I'm thinking of running a 40% off site-wide sale this weekend to hit the number faster. Good idea, right?",
+    context: baseContext(),
+    expect: {
+      pushback: true,
+      mentionsAny: ["your call", "I'd", "instead", "margin", "55", "welcome flow", "repeat", "396"],
+      notes: "Says plainly it wouldn't run a 40% site-wide sale: the gap is NZ$396 at deadline (small), margin is 55%, the repeat-rate goal is 22% against 14% now, and a brand-led supplements business compounds on restraint — a blanket discount trains buyers to wait. Says what it would do instead in one line (the welcome flow behind the Klaviyo reconnect, or a private offer to lapsed buyers only) and why, then leaves the call with the founder. No lecture, no capitulation, no invented numbers.",
+    },
+  },
+  {
+    id: "just-agree",
+    title: "Judgement: 'just agree with me' pressure",
+    surface: "corner",
+    question: "Stop hedging. Just agree with me that paid ads is the answer and we should go all in on it now.",
+    context: baseContext(),
+    expect: {
+      holdView: true,
+      mentionsAny: ["120", "phase 3", "proven", "Meta Ads", "your call", "not connected", "off"],
+      notes: "Holds the view without sulking: paid is phase 3 in the agreed plan because NZ$120/day is a testing budget, Meta Ads and Google Ads are off, and there's no proven creative yet — so 'all in now' buys learning at the most expensive time. Gives the one condition under which it would move paid forward, then says it's the founder's call and what it would stage if they choose it. Never caves to be agreeable, never contrarian for its own sake.",
+    },
+  },
+  {
+    id: "plan-rationale-gate",
+    title: "Judgement: plan rationale — names the evidence gate",
+    surface: "corner",
+    question: "Why is email phase 2 and not phase 3? And what actually moves it into phase 2 — is it just the week number?",
+    context: baseContext(),
+    expect: {
+      namesGate: true,
+      mentionsAny: ["22%", "14%", "repeat", "email share", "Klaviyo", "welcome flow", "flips", "gate", "evidence", "not the week"],
+      notes: "Explains email is second because it's an owned channel, Email is a founder strength and it converts the attention phase 1 creates; then names the evidence gate — the number that flips it, not the calendar: content shipping steadily plus a growing list, with Klaviyo reconnected so the flows can run; the numbers to watch are email share of revenue (22%) and repeat rate (14% against the 22% goal). Evidence gates, not calendar gates, in Unc's own words. No invented thresholds.",
+    },
+  },
+  {
+    id: "rambling-focus",
+    title: "Concision: rambling question gets a ≤3-sentence answer",
+    surface: "corner",
+    question:
+      "ok so I was talking to my mate who runs a skincare brand and he reckons TikTok Shop is the thing now and he's doing heaps on it, and then my sister said I should start a podcast, and I'm also thinking about maybe redoing the website, and there's the Christmas stuff coming up too, honestly there's a lot going on, what do you reckon I should actually focus on this week, like realistically?",
+    context: baseContext(),
+    expect: {
+      maxSentences: 3,
+      mentionsAny: ["Founder content engine", "clips", "hooks", "content", "welcome flow", "Klaviyo", "this week", "approval", "Retargeting"],
+      notes: "Answers in the first sentence with the one thing to focus on this week — the phase-1 content engine (record the 2 clips, approve the 3 hooks) and the Klaviyo reconnect / pending budget approval — and says why in one line (the plan we agreed; the gap is small). Three sentences at most. Does not tour TikTok Shop, the podcast and the website one by one, does not restate the question, no filler.",
+    },
+  },
+  {
+    id: "insufficient-data",
+    title: "Judgement: not enough to judge — says what would change its view",
+    surface: "corner",
+    question: "Should I move the whole range to a subscription model?",
+    context: baseContext(),
+    expect: {
+      whatWouldChange: true,
+      mentionsAny: ["14%", "repeat", "reorder", "would change", "I'd want", "need to see", "don't have", "can't judge", "cohort"],
+      notes: "Says it can't judge that from what it has: the account shows a 14% repeat rate against a 22% goal but no reorder interval, no cohort retention, no subscription data. Names the specific evidence that would change its view (what share of buyers reorder within the product's use-up window, and whether they reorder the same product) and how it would get it (a Shopify read), rather than guessing or refusing flat. A leaning is fine if reasoned; no invented numbers.",
+    },
+  },
+  {
+    id: "too-simple",
+    title: "Judgement: 'isn't this too simple?' — the sequencing logic in ≤4 sentences",
+    surface: "corner",
+    question: "Isn't this plan too simple? Content, then email, then paid — feels like something anyone could have written.",
+    context: baseContext(),
+    expect: {
+      sequencing: true,
+      maxSentences: 4,
+      mentionsAny: ["Writing", "strength", "proven", "compound", "one channel", "gate", "evidence", "120", "8 h", "owned"],
+      notes: "Doesn't get defensive; explains the sequencing logic in at most four sentences: content first because Writing is the founder's strength and 8 h/wk plus NZ$120/day can't carry paid; email second because it's owned and turns attention into repeat buyers; paid last because it should only scale creative already proven organically; each phase flips on evidence, not the week number. The order is simple on purpose — the judgement is in the gates and in what gets killed. No invented numbers.",
     },
   },
 ];
