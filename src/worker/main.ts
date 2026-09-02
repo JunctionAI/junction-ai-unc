@@ -1,11 +1,10 @@
 /* CLI entry for the worker daemon. See src/worker/README.md for the run
-   command and flags. Everything wired here is dry-run, fixture-credential,
-   refusing-executor; the only environment variable consulted is
-   ANTHROPIC_API_KEY (by the SDK, optional — without it llm-rule decisions
-   take their declared fallback). */
+   command and flags. Everything wired here is dry-run + refusing-executor.
+   Credentials and accounts come from wiring.ts: real tokens + DB accounts when
+   Supabase (service role) and CONNECTOR_SECRET_KEY are configured, fixture
+   markers + the static `demo` account otherwise. ANTHROPIC_API_KEY is read by
+   the SDK (optional — without it llm-rule decisions take their declared fallback). */
 
-import { StaticAccountsSource } from "./accounts";
-import { FixtureCredentialProvider } from "./credentials";
 import { startHealthServer } from "./health";
 import { createLogger } from "./log";
 import { readHeartbeatFile, Worker } from "./loop";
@@ -13,6 +12,7 @@ import { createAnthropicLlmClient } from "./providers/llmDecision";
 import { triggerRun, WORKER_RUN_MODE } from "./service";
 import { getStore } from "../lib/runtime/store";
 import { setEnabled } from "../lib/runtime/versioning";
+import { defaultAccountsSource, defaultCredentialProvider, describeWiring } from "./wiring";
 
 export interface CliArgs {
   intervalSec: number;
@@ -63,15 +63,15 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   const args = parseArgs(argv);
   const log = createLogger(undefined, { worker: "unc", mode: WORKER_RUN_MODE });
   const store = getStore();
-  const accounts = new StaticAccountsSource();
+  const accounts = defaultAccountsSource();
   const llm = createAnthropicLlmClient();
-  log.info("worker.config", { ...args, llm: llm ? "anthropic (ANTHROPIC_API_KEY present)" : "none (fallback decisions)" });
+  log.info("worker.config", { ...args, ...describeWiring(), llm: llm ? "anthropic (ANTHROPIC_API_KEY present)" : "none (fallback decisions)" });
 
   // Demo convenience: MemoryStore starts empty, so nothing is enabled until
   // something calls setEnabled. --enable D01-W01,D05-W02 flips those on.
   for (const routineId of args.enable) await setEnabled({ store }, args.accountId, routineId, true);
 
-  const deps = { store, accounts, credentials: new FixtureCredentialProvider(), llm, log };
+  const deps = { store, accounts, credentials: defaultCredentialProvider(process.env, (line) => log.info("credentials", { line })), llm, log };
   const worker = new Worker(deps, { intervalSec: args.intervalSec, heartbeatPath: args.heartbeatPath });
 
   // Smoke test: --run D05-W02 dry-runs it now (manual trigger, same path as POST /api/routines/run).

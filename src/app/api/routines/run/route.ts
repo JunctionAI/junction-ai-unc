@@ -11,20 +11,26 @@
    or    400 { error } | 403 { error } (live mode) | 404 { error } (unknown account/routine)
 
    Runs through src/worker/service.ts — the same adapters and checks as the
-   always-on loop. Store = src/lib/runtime/store getStore() (MemoryStore: runs
-   do not survive a restart). No auth here: the app middleware (built
-   separately) is expected to gate this route. */
+   always-on loop. Store = src/lib/runtime/store getStore(): SupabaseStore when
+   the database is configured (runs persist), MemoryStore otherwise (runs do
+   not survive a restart). Accounts + credentials come from src/worker/wiring.ts.
 
+   DB configured → session-bound: the run is always for the caller's own account
+   (the body's accountId is ignored); no session → 401. Demo mode → unbound. */
+
+import { isDbConfigured } from "@/lib/db/client";
+import { requireAccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
-import { StaticAccountsSource } from "@/worker/accounts";
 import { triggerRun, WorkerError, type ServiceDeps } from "@/worker/service";
+import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun, workerErrorStatus } from "../shared";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function deps(): ServiceDeps {
-  return { store: getStore(), accounts: new StaticAccountsSource() };
+  return { store: getStore(), accounts: defaultAccountsSource() };
 }
 
 export async function POST(req: Request) {
@@ -35,7 +41,12 @@ export async function POST(req: Request) {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const accountId = typeof body.accountId === "string" ? body.accountId.trim().slice(0, 128) : "";
+  let accountId = typeof body.accountId === "string" ? body.accountId.trim().slice(0, 128) : "";
+  if (isDbConfigured()) {
+    const session = await requireAccountSession();
+    if (session instanceof Response) return session;
+    accountId = session.accountId;
+  }
   const routineId = typeof body.routineId === "string" ? body.routineId.trim() : "";
   if (!accountId) return Response.json({ error: "accountId is required" }, { status: 400 });
   if (!ROUTINE_ID_RE.test(routineId)) return Response.json({ error: "routineId must look like D0x-W0y" }, { status: 400 });

@@ -10,8 +10,9 @@
    │ LIVE_MODE_ENABLED = false                                             │
    │ Every run this service starts is a DRY RUN. Flipping this constant is │
    │ a product decision gated by the founder (Wave 2): it also needs real  │
-   │ executors (today: RefusingExecutor), real credentials (today: fixture │
-   │ markers), and the approval UI wired to /api/routines/resume.          │
+   │ executors (today: RefusingExecutor). Credentials come from wiring.ts  │
+   │ (real tokens when DB + secret store are configured, fixtures else);   │
+   │ the approval UI is wired to /api/approvals/<id> → resumeApproval.     │
    └──────────────────────────────────────────────────────────────────────┘ */
 
 import { CATALOG_SPECS, CATALOG_SPEC_BY_ID } from "../lib/runtime/catalog-specs";
@@ -20,12 +21,13 @@ import type { Store } from "../lib/runtime/store/interface";
 import type { AccountContext, RoutineSpec, RunMode, RunResult } from "../lib/runtime/types";
 import { effectiveSpec, getOrInitState } from "../lib/runtime/versioning";
 import type { AccountsSource, WorkerAccount } from "./accounts";
-import { FixtureCredentialProvider, type CredentialProvider } from "./credentials";
+import type { CredentialProvider } from "./credentials";
 import type { Logger } from "./log";
 import { WorkerConnectorReader } from "./providers/connectorReader";
 import { RefusingExecutor } from "./providers/executor";
 import { LlmDecisionProvider, type LlmClient } from "./providers/llmDecision";
 import type { ScheduleCandidate } from "./scheduler";
+import { defaultCredentialProvider } from "./wiring";
 
 /** Hard constant. See the box above — flipping it is founder-gated (Wave 2). */
 export const LIVE_MODE_ENABLED: boolean = false;
@@ -47,7 +49,8 @@ export class WorkerError extends Error {
 export interface ServiceDeps {
   store: Store;
   accounts: AccountsSource;
-  /** Default: FixtureCredentialProvider — the only implementation that exists. */
+  /** Default: wiring.ts defaultCredentialProvider() — ConnectorCredentialProvider when the
+      DB + secret store are configured, FixtureCredentialProvider otherwise. */
   credentials?: CredentialProvider;
   /** null = no LLM (every llm-rule decide takes its fallback). Default null;
       the CLI passes createAnthropicLlmClient() which is env-gated. */
@@ -64,7 +67,7 @@ export interface BuiltAdapters extends Adapters {
 export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
   const now = deps.now ?? (() => new Date());
   return {
-    reader: new WorkerConnectorReader({ credentials: deps.credentials ?? new FixtureCredentialProvider(), now, log: deps.log, fetch: deps.fetch }),
+    reader: new WorkerConnectorReader({ credentials: deps.credentials ?? defaultCredentialProvider(process.env, deps.log ? (line) => deps.log?.info("credentials", { line }) : undefined), now, log: deps.log, fetch: deps.fetch }),
     decider: new LlmDecisionProvider(deps.llm ?? null, { log: deps.log }),
     executor: new RefusingExecutor(),
     store: deps.store,

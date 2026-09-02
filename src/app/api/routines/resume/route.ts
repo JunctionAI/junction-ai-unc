@@ -8,20 +8,27 @@
    Same code path as the worker (src/worker/service.ts resumeApproval). Only
    LIVE runs pause at a gate; dry runs record the gate as a "Would ask" draft
    receipt and finish. With LIVE_MODE_ENABLED = false no run created by this
-   app pauses, so today this route answers 404/409 for anything it is handed —
-   it exists so the approval UI is wired to the right place for Wave 2. Even
-   then, "approved" on a mutating routine fails closed: the shipped executor
-   refuses every mutation. Store = MemoryStore (nothing survives a restart). */
+   app pauses, so today this route answers 404/409 for anything it is handed.
+   The approval UI uses POST /api/approvals/<id> (approval-keyed, session-bound,
+   same resume path); this run-keyed route stays for the worker CLI / tooling.
+   Even then, "approved" on a mutating routine fails closed: the shipped
+   executor refuses every mutation.
 
+   DB configured → session-bound: the run must belong to the caller's account
+   (else 404) and decided_by is the caller. Demo mode → MemoryStore, unbound. */
+
+import { isDbConfigured } from "@/lib/db/client";
+import { requireAccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
-import { StaticAccountsSource } from "@/worker/accounts";
 import { resumeApproval, type ServiceDeps } from "@/worker/service";
+import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun } from "../shared";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function deps(): ServiceDeps {
-  return { store: getStore(), accounts: new StaticAccountsSource() };
+  return { store: getStore(), accounts: defaultAccountsSource() };
 }
 
 export async function POST(req: Request) {
@@ -34,7 +41,14 @@ export async function POST(req: Request) {
   const runId = typeof body.runId === "string" ? body.runId.trim().slice(0, 128) : "";
   if (!runId) return Response.json({ error: "runId is required" }, { status: 400 });
   if (body.decision !== "approved" && body.decision !== "held") return Response.json({ error: 'decision must be "approved" or "held"' }, { status: 400 });
-  const decidedBy = typeof body.decidedBy === "string" ? body.decidedBy.slice(0, 128) : undefined;
+  let decidedBy = typeof body.decidedBy === "string" ? body.decidedBy.slice(0, 128) : undefined;
+  if (isDbConfigured()) {
+    const session = await requireAccountSession();
+    if (session instanceof Response) return session;
+    decidedBy = session.userId;
+    const run = await getStore().getRun(runId);
+    if (!run || run.accountId !== session.accountId) return Response.json({ error: `run ${runId} not found` }, { status: 404 });
+  }
 
   try {
     const result = await resumeApproval(deps(), { runId, decision: body.decision, decidedBy });
