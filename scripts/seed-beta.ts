@@ -28,9 +28,12 @@
    Run (no tsx in node_modules — same tsc pattern as the worker):
      npx tsc -p scripts/beta/tsconfig.json && node dist/beta/scripts/seed-beta.js --dry-run
      npx tsc -p scripts/beta/tsconfig.json && node dist/beta/scripts/seed-beta.js
+     npx tsc -p scripts/beta/tsconfig.json && node dist/beta/scripts/seed-beta.js --sql > scripts/beta/seed-beta.sql
    (with tsx installed: npx tsx scripts/seed-beta.ts --dry-run)
    Env: NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (process.env only — the app never
-   reads .env files; `set -a; source .env.local; set +a` first). --only <slug,slug> limits the run. */
+   reads .env files; `set -a; source .env.local; set +a` first). --only <slug,slug> limits the run.
+   --sql needs no env: it prints idempotent SQL (betaSql) for the same rows, to apply through the
+   Supabase Management SQL endpoint; --now <iso> pins the timestamps (deterministic output). */
 
 import { saveAccountRows } from "../src/lib/db/accountState";
 import { CONNECTOR_PLATFORMS, stateToRows, type AccountRows } from "../src/lib/db/mapping";
@@ -218,8 +221,8 @@ export const BETA_ACCOUNTS: BetaAccount[] = [
     website: "https://home1nvasion.com",
     socials: [],
     category: "DTC hip-hop / pop-culture home decor (rugs, plushies)",
-    currency: "NZD",
-    goal: { category: "revenue", title: "NZ$30,000 monthly revenue", target: 30000, deadline: SIX_MONTHS_OUT, source: "proposed" },
+    currency: "USD",
+    goal: { category: "revenue", title: "US$30,000 monthly revenue", target: 30000, deadline: SIX_MONTHS_OUT, source: "proposed" },
     baseline: null,
     platforms: ["shopify", "klaviyo", "meta_ads"],
     strengths: ["Design", "Product"],
@@ -234,14 +237,14 @@ export const BETA_ACCOUNTS: BetaAccount[] = [
     profile: {
       oneLiner: "Hip-hop and pop-culture home decor — rugs and plushies — sold direct on Shopify; Meta ads are the primary lane.",
       audience: "Hip-hop / streetwear culture buyers",
-      region: "Unknown — store domain is .com; confirm",
+      region: "Auckland-based, trades in USD and ships worldwide (store meta: country NZ, currency USD)",
       products: ["Rugs", "Plushies"],
     },
     notes: [
       "Source: clients/home-invasion/CHANNELS.md (Shopify, Klaviyo installed, Meta pixel installed, IG handle TBC; in scope: Meta ads primary, email, organic, SEO) and clients/REGISTRY.md.",
       "Known: founder Zac; install started 2026-08-06 on the founder's Claude Max.",
-      "Unknown: Instagram handle (TBC in the client file), GA4 property (TBC — not seeded), revenue, budget, margin, market/currency.",
-      "Currency defaulted to NZD per the seeding rule — the store may trade in USD; confirm and re-run (accounts.currency is updated on re-seed).",
+      "Unknown: Instagram handle (TBC in the client file), GA4 property (TBC — not seeded), revenue, budget, margin.",
+      "Currency USD — verified 2026-09-02 from the live store (www.home1nvasion.com/meta.json: currency USD, country NZ, myshopify domain home1nvasionstore.myshopify.com; products.json prices e.g. 160.00). Business is Auckland-based.",
       "Goal line is a Junction placeholder — confirm the number. Baseline unknown (NULL).",
     ],
   },
@@ -309,7 +312,7 @@ export const BETA_ACCOUNTS: BetaAccount[] = [
     },
     notes: [
       "Source: clients/aerspan-airdomes/CLAUDE.md (goal: 12 projects a year, one a month, NZ then AU; team Brett + Daniel Clapham; supplier DUOL; long-cycle named-prospect outreach, draft-only, Mike sends).",
-      "Website is the mailbox domain (Mike.ht@aerspanairdomes.com) — site existence not verified.",
+      "Website is the company mailbox domain (aerspanairdomes.com, Microsoft 365) — site existence not verified. Mike's address is not stored here — it is entered on the invite row at invite time.",
       "Baseline 0 is a FOUND fact (no signed/completed NZ project as of 2026-08-12), not a null written as 0.",
       "Deadline is the 6-month horizon; the goal itself is annual (12/yr ≈ 6 signed in the window).",
       "Claims law applies: DUOL's record ≠ Aerspan's; the price wedge is banned from cold email.",
@@ -470,28 +473,179 @@ export async function seedBeta(db: DbClient, accounts: BetaAccount[] = BETA_ACCO
   return out;
 }
 
+// ---------- SQL mode ----------
+
+/* The same rows as seedBeta(), as idempotent SQL for the Supabase Management SQL endpoint
+   (POST /v1/projects/<ref>/database/query) or the SQL editor — for when the coordinator has
+   the project token but not the service-role key on a machine with node.
+
+   Semantics mirror the seeder: accounts keyed on exact name (insert-if-absent + currency
+   update; a duplicate name makes the account subquery fail loudly rather than pick one);
+   goals / resource_profiles / business_profiles / team_members / account_state_meta are
+   ON CONFLICT DO UPDATE (the seed is the source of truth for those — re-applying after a
+   founder edited them overwrites the edit, same as re-running the seeder); connectors,
+   chat_messages and plans are insert-only (a live connection, a real thread or an agreed
+   plan must never be reset by a re-apply). Membership is not written: the beta_invites rows
+   are emitted COMMENTED OUT with an '[EMAIL: …]' placeholder for Tom to fill in — no founder
+   email lives in the repo. */
+
+type SqlType = "text" | "num" | "bool" | "jsonb" | "text[]" | "date" | "timestamptz";
+
+const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
+
+export function sqlLiteral(v: unknown, t: SqlType = "text"): string {
+  if (v === null || v === undefined) return "null";
+  switch (t) {
+    case "jsonb":
+      return `${q(JSON.stringify(v))}::jsonb`;
+    case "text[]": {
+      const a = (v as unknown[]).map(String);
+      return a.length ? `array[${a.map(q).join(", ")}]::text[]` : "'{}'::text[]";
+    }
+    case "date":
+      return `${q(String(v))}::date`;
+    case "timestamptz":
+      return `${q(String(v))}::timestamptz`;
+    case "num":
+      return String(Number(v));
+    case "bool":
+      return v ? "true" : "false";
+    default:
+      return q(String(v));
+  }
+}
+
+type Col = [name: string, sql: string];
+
+function insertSql(table: string, cols: Col[], tail: string): string {
+  return `insert into ${table} (${cols.map((c) => c[0]).join(", ")})
+  values (${cols.map((c) => c[1]).join(", ")})
+  ${tail};`;
+}
+const doUpdate = (keys: string, cols: string[], touch?: string) => `on conflict (${keys}) do update set ${[...cols.map((c) => `${c} = excluded.${c}`), ...(touch ? [`${touch} = now()`] : [])].join(", ")}`;
+
+/** One founder's statements. `acct` is the account-id subquery every row references. */
+function accountSql(a: BetaAccount, now: string): string {
+  const rows = betaRows(a, "<account>", now);
+  const name = q(a.name);
+  const acct = `(select id from accounts where name = ${name})`;
+  const out: string[] = [];
+  out.push(`-- ===== ${a.slug} → ${a.name} =====`);
+  out.push(`insert into accounts (name, currency) select ${name}, ${q(a.currency)} where not exists (select 1 from accounts where name = ${name});`);
+  out.push(`update accounts set currency = ${q(a.currency)} where name = ${name};`);
+
+  for (const g of rows.goals) {
+    const cols: Col[] = [
+      ["account_id", acct],
+      ["category", q(g.category)],
+      ["tier", q(g.tier)],
+      ["title", q(g.title)],
+      ["baseline", sqlLiteral(g.baseline, "num")],
+      ["baseline_date", sqlLiteral(g.tier === "governing" ? (a.baseline?.asOf ?? null) : null, "date")],
+      ["deadline", sqlLiteral(g.deadline, "date")],
+    ];
+    out.push(insertSql("goals", cols, doUpdate("account_id, category", ["tier", "title", "baseline", "baseline_date", "deadline"], "updated_at")));
+  }
+
+  const rp = rows.resourceProfile;
+  const rpCols: Col[] = [
+    ["account_id", acct],
+    ["budget_monthly", sqlLiteral(rp.budget_monthly, "num")],
+    ["hours_weekly", sqlLiteral(rp.hours_weekly, "num")],
+    ["reinvestment", q(rp.reinvestment)],
+    ["gross_margin_pct", sqlLiteral(rp.gross_margin_pct, "num")],
+    ["website", sqlLiteral(rp.website)],
+    ["socials", sqlLiteral(rp.socials, "jsonb")],
+    ["skills", sqlLiteral(rp.skills, "text[]")],
+    ["known_platforms", sqlLiteral(rp.known_platforms, "text[]")],
+    ["postures", sqlLiteral(rp.postures, "text[]")],
+    ["breadth", q(rp.breadth)],
+  ];
+  out.push(insertSql("resource_profiles", rpCols, doUpdate("account_id", rpCols.slice(1).map((c) => c[0]), "updated_at")));
+
+  for (const m of rows.teamMembers) {
+    const cols: Col[] = [["account_id", acct], ["position", sqlLiteral(m.position, "num")], ["name", q(m.name)], ["role", q(m.role)], ["approves", sqlLiteral(m.approves)]];
+    out.push(insertSql("team_members", cols, doUpdate("account_id, position", ["name", "role", "approves"])));
+  }
+
+  const plan = rows.plan;
+  out.push(`insert into plans (account_id, title, phases, narrative)
+  select ${acct}, ${q(plan.title)}, ${sqlLiteral(plan.phases, "jsonb")}, ${sqlLiteral(plan.narrative)}
+  where not exists (select 1 from plans where account_id = ${acct});`);
+
+  const bp = rows.businessProfile;
+  const bpCols: Col[] = [["account_id", acct], ["scan_status", q(bp.scan_status)], ["profile", sqlLiteral(bp.profile, "jsonb")], ["scanned_at", sqlLiteral(bp.scanned_at, "timestamptz")]];
+  out.push(insertSql("business_profiles", bpCols, doUpdate("account_id", ["scan_status", "profile", "scanned_at"], "updated_at")));
+
+  for (const c of rows.connectors) {
+    out.push(insertSql("connectors", [["account_id", acct], ["platform", q(c.platform)], ["status", q(c.status)]], "on conflict (account_id, platform) do nothing"));
+  }
+
+  for (const m of rows.chatMessages) {
+    const cols: Col[] = [["account_id", acct], ["thread", q(m.thread)], ["position", sqlLiteral(m.position, "num")], ["lane", q(m.lane)], ["sender", q(m.sender)], ["body", q(m.body)], ["meta", sqlLiteral(m.meta, "jsonb")]];
+    out.push(insertSql("chat_messages", cols, "on conflict (account_id, thread, position) do nothing"));
+  }
+
+  const sm = rows.stateMeta;
+  const smCols: Col[] = [["account_id", acct], ["schema_version", sqlLiteral(sm.schema_version, "num")], ["client_state", sqlLiteral(sm.client_state, "jsonb")], ["saved_at", sqlLiteral(now, "timestamptz")]];
+  out.push(insertSql("account_state_meta", smCols, doUpdate("account_id", ["schema_version", "client_state", "saved_at"])));
+
+  // The claim — commented out until Tom fills the address in (never stored in the repo).
+  const who = a.founder ?? `${a.name} founder`;
+  out.push(`-- beta invite (fill the email, uncomment, apply — docs/BETA.md §Invite flow):`);
+  out.push(`-- insert into beta_invites (account_id, email, role, invited_by, note)`);
+  out.push(`--   select id, lower('[EMAIL: ${who}]'), 'owner', 'tom', ${q(a.slug)} from accounts where name = ${name}`);
+  out.push(`--   on conflict (email, account_id) do nothing;`);
+  return out.join("\n");
+}
+
+/** The whole seed as SQL. Pure; `now` pins seeded_at / saved_at so the output is reproducible. */
+export function betaSql(accounts: BetaAccount[] = BETA_ACCOUNTS, now: string = new Date().toISOString()): string {
+  const head = [
+    `-- Unc beta seed — generated by scripts/seed-beta.ts --sql (${now}). Do not edit by hand; re-generate.`,
+    `-- Apply with the service role (Supabase SQL editor, or POST /v1/projects/<ref>/database/query) AFTER`,
+    `-- migrations 0001–0009. Idempotent: accounts keyed on exact name; goals / resource_profiles /`,
+    `-- business_profiles / team_members / account_state_meta are upserted (the seed wins — re-applying`,
+    `-- after a founder edited them overwrites the edit, same as re-running the seeder); connectors,`,
+    `-- chat_messages and plans are insert-only (never reset a live connection, a real thread or an`,
+    `-- agreed plan). Membership is NOT written: the beta_invites inserts at the end of each block are`,
+    `-- commented out with an [EMAIL: …] placeholder — fill the founder's address, uncomment, apply.`,
+    `-- Accounts: ${accounts.map((a) => `${a.slug} → "${a.name}"`).join(" · ")}`,
+    ``,
+  ];
+  return [...head, ...accounts.map((a) => accountSql(a, now))].join("\n") + "\n";
+}
+
 // ---------- CLI ----------
 
-function parseArgs(argv: string[]): { dryRun: boolean; only: string[] | null } {
+function parseArgs(argv: string[]): { dryRun: boolean; sql: boolean; only: string[] | null; now: string | null } {
   const dryRun = argv.includes("--dry-run") || argv.includes("-n");
+  const sql = argv.includes("--sql");
   const i = argv.indexOf("--only");
   const only = i >= 0 && argv[i + 1] ? argv[i + 1].split(",").map((s) => s.trim()).filter(Boolean) : null;
-  return { dryRun, only };
+  const n = argv.indexOf("--now");
+  const now = n >= 0 && argv[n + 1] ? argv[n + 1] : null;
+  if (now && Number.isNaN(new Date(now).getTime())) throw new Error(`--now must be an ISO timestamp, got ${now}`);
+  return { dryRun, sql, only, now };
 }
 
 async function main(): Promise<void> {
-  const { dryRun, only } = parseArgs(process.argv.slice(2));
+  const { dryRun, sql, only, now } = parseArgs(process.argv.slice(2));
   const accounts = only ? BETA_ACCOUNTS.filter((a) => only.includes(a.slug)) : BETA_ACCOUNTS;
   if (only && accounts.length !== only.length) {
     const known = BETA_ACCOUNTS.map((a) => a.slug).join(", ");
     throw new Error(`--only names an unknown slug; known: ${known}`);
+  }
+  if (sql) {
+    process.stdout.write(betaSql(accounts, now ?? new Date().toISOString()));
+    return;
   }
   const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (process.env — the app never reads .env files)");
   const { createClient } = await import("@supabase/supabase-js");
   const db = createClient(url, key, { auth: { persistSession: false } }) as unknown as DbClient;
-  const results = await seedBeta(db, accounts, { dryRun, log: (l) => console.log(l) });
+  const results = await seedBeta(db, accounts, { dryRun, now: now ? () => new Date(now) : undefined, log: (l) => console.log(l) });
   console.log(`${dryRun ? "dry run" : "seeded"}: ${results.length} account(s)`);
 }
 

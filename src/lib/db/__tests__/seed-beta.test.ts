@@ -3,7 +3,7 @@
    unknown baseline is NULL — never 0. */
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { BETA_ACCOUNTS, betaRows, betaState, seedBeta } from "../../../../scripts/seed-beta";
+import { BETA_ACCOUNTS, betaRows, betaSql, betaState, seedBeta, sqlLiteral } from "../../../../scripts/seed-beta";
 import { initialState } from "@/lib/platform/state";
 import { ensureAccount, loadAccountState } from "../accountState";
 import { FakeSupabase } from "./fakeSupabase";
@@ -148,13 +148,21 @@ describe("seedBeta against the fake", () => {
 
   it("re-seeding after a fact changes updates in place (currency, goal line) and keeps NULL baselines NULL", async () => {
     await seedBeta(db, BETA_ACCOUNTS, { now: NOW });
-    const h1 = { ...bySlug("home-invasion"), currency: "USD" as const, goal: { ...bySlug("home-invasion").goal, title: "US$30,000 monthly revenue" } };
+    // Home Invasion is USD now (verified from the live store); pretend it moved to AUD
+    const h1 = { ...bySlug("home-invasion"), currency: "AUD" as const, goal: { ...bySlug("home-invasion").goal, title: "A$30,000 monthly revenue" } };
     await seedBeta(db, [h1], { now: NOW });
     const acct = db.rows("accounts").find((a) => a.name === "Home Invasion")!;
-    expect(acct.currency).toBe("USD");
+    expect(acct.currency).toBe("AUD");
     const goal = db.rows("goals").find((g) => g.account_id === acct.id)!;
-    expect(goal).toMatchObject({ title: "US$30,000 monthly revenue", baseline: null });
+    expect(goal).toMatchObject({ title: "A$30,000 monthly revenue", baseline: null });
     expect(db.rows("goals")).toHaveLength(6);
+  });
+
+  it("Home Invasion trades in USD (home1nvasion.com meta.json, verified 2026-09-02)", () => {
+    const h1 = bySlug("home-invasion");
+    expect(h1.currency).toBe("USD");
+    expect(h1.goal.title).toBe("US$30,000 monthly revenue");
+    expect(betaState(h1).currency).toBe("USD");
   });
 
   it("hydrates through the app's own loader on first login (found=true, so ensureAccount won't re-seed from the client)", async () => {
@@ -201,5 +209,73 @@ describe("seedBeta against the fake", () => {
     expect(db.rows("goals")).toHaveLength(0);
     expect(db.calls.every((c) => c.op === "select")).toBe(true);
     expect(lines.join("\n")).toMatch(/\[dry-run\] avgar "AVGAR Sport" → create/);
+  });
+});
+
+describe("--sql mode (betaSql)", () => {
+  const NOW_ISO = "2026-09-02T09:00:00.000Z";
+  const sql = betaSql(BETA_ACCOUNTS, NOW_ISO);
+  const lines = sql.split("\n");
+
+  it("quotes literals safely", () => {
+    expect(sqlLiteral("Rory O'Keefe")).toBe("'Rory O''Keefe'");
+    expect(sqlLiteral(null)).toBe("null");
+    expect(sqlLiteral(undefined, "num")).toBe("null");
+    expect(sqlLiteral(35000, "num")).toBe("35000");
+    expect(sqlLiteral(0, "num")).toBe("0");
+    expect(sqlLiteral(["Video", "Community"], "text[]")).toBe("array['Video', 'Community']::text[]");
+    expect(sqlLiteral([], "text[]")).toBe("'{}'::text[]");
+    expect(sqlLiteral({ a: "it's" }, "jsonb")).toBe(`'{"a":"it''s"}'::jsonb`);
+    expect(sqlLiteral("2027-03-01", "date")).toBe("'2027-03-01'::date");
+  });
+
+  it("emits one idempotent block per founder: insert-if-absent account, upserted goal/profile/state, insert-only connectors/chat/plan", () => {
+    for (const a of BETA_ACCOUNTS) {
+      const name = a.name.replace(/'/g, "''");
+      expect(sql).toContain(`insert into accounts (name, currency) select '${name}', '${a.currency}' where not exists (select 1 from accounts where name = '${name}');`);
+      expect(sql).toContain(`update accounts set currency = '${a.currency}' where name = '${name}';`);
+    }
+    expect(sql.match(/on conflict \(account_id, category\) do update set tier = excluded\.tier, title = excluded\.title, baseline = excluded\.baseline, baseline_date = excluded\.baseline_date, deadline = excluded\.deadline, updated_at = now\(\)/g)).toHaveLength(6);
+    expect(sql.match(/insert into resource_profiles/g)).toHaveLength(6);
+    expect(sql.match(/insert into business_profiles/g)).toHaveLength(6);
+    expect(sql.match(/insert into account_state_meta/g)).toHaveLength(6);
+    expect(sql.match(/insert into plans \(account_id, title, phases, narrative\)\n  select .* where not exists/g)).toBeNull(); // multi-line: check the pieces
+    expect(sql.match(/where not exists \(select 1 from plans where account_id = /g)).toHaveLength(6);
+    expect(sql.match(/on conflict \(account_id, platform\) do nothing/g)).toHaveLength(5 + 5 + 3); // dbh, avgar, home-invasion
+    expect(sql.match(/on conflict \(account_id, thread, position\) do nothing/g)).toHaveLength(12); // one Unc opener + one human line each
+    expect(sql).not.toMatch(/insert into account_members/);
+    expect(sql).not.toMatch(/insert into approvals/);
+  });
+
+  it("writes NULL for an unknown baseline, the found value (and its date) otherwise, and USD for Home Invasion", () => {
+    expect(sql).toContain(`values ((select id from accounts where name = 'Unity MMA'), 'leads', 'governing', '30 new membership sign-ups/mo', null, null, '2027-03-01'::date)`);
+    expect(sql).toContain(`values ((select id from accounts where name = 'AVGAR Sport'), 'revenue', 'governing', 'NZ$100,000 monthly revenue', 35000, '2026-07-12'::date, '2027-01-15'::date)`);
+    expect(sql).toContain(`values ((select id from accounts where name = 'Aerspan Airdomes'), 'leads', 'governing', '12 signed dome projects per year', 0, '2026-08-12'::date, '2027-03-01'::date)`);
+    expect(sql).toContain(`values ((select id from accounts where name = 'Home Invasion'), 'revenue', 'governing', 'US$30,000 monthly revenue', null, null, '2027-03-01'::date)`);
+    expect(sql).toContain(`select 'Home Invasion', 'USD' where not exists`);
+    // unknown margin is NULL in every profile (gross_margin_pct is the 5th value)
+    expect(sql.match(/insert into resource_profiles \(account_id, budget_monthly, hours_weekly, reinvestment, gross_margin_pct, /g)).toHaveLength(6);
+    expect(sql.match(/, 0, 0, 'balanced', null, /g)).toHaveLength(6);
+    // Rory's apostrophe survives
+    expect(sql).toContain(`where name = 'Rory O''Keefe'`);
+  });
+
+  it("emits the beta_invites claim per founder COMMENTED OUT with an [EMAIL: …] placeholder — never an executable insert", () => {
+    const invites = lines.filter((l) => l.includes("beta_invites"));
+    expect(invites.length).toBeGreaterThanOrEqual(6);
+    for (const l of invites) expect(l.startsWith("--")).toBe(true);
+    for (const l of lines.filter((l) => l.includes("[EMAIL:"))) expect(l.startsWith("--")).toBe(true);
+    expect(sql).toContain("lower('[EMAIL: Heather Anderson]'), 'owner', 'tom', 'avgar' from accounts where name = 'AVGAR Sport'");
+    expect(sql).toContain("lower('[EMAIL: Unity MMA founder]')");
+    expect(sql).toContain("lower('[EMAIL: Mike Hall-Taylor]')");
+    // no real email anywhere
+    expect(sql).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
+  });
+
+  it("is deterministic for a pinned --now and pins seeded_at / saved_at to it", () => {
+    expect(betaSql(BETA_ACCOUNTS, NOW_ISO)).toBe(sql);
+    expect(sql).toContain(`"seeded_at":"${NOW_ISO}"`);
+    expect(sql).toContain(`'${NOW_ISO}'::timestamptz`);
+    expect(lines[0]).toMatch(/^-- Unc beta seed — generated by scripts\/seed-beta.ts --sql/);
   });
 });
