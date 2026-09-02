@@ -12,9 +12,16 @@ import StrategyView from "./StrategyView";
 import RoutinesView from "./RoutinesView";
 import ConnectorsView from "./ConnectorsView";
 import CornerBuddy from "./CornerBuddy";
+import Paywall from "./Paywall";
+import BillingBanner from "./BillingBanner";
+import { isOpen } from "@/lib/billing/gate";
+import type { BillingProps } from "@/lib/billing/server";
 
-export default function Platform() {
+/** `billing` comes from the /app server component (src/lib/billing/server.ts); null or
+    configured=false ⇒ demo — no paywall, no plan line, exactly as before Phase 6. */
+export default function Platform({ billing = null }: { billing?: BillingProps | null }) {
   const { S, set } = usePlatformState();
+  const gated = billing?.configured ? billing.entitlement : null;
   const uncSend = useUncChat(S, set);
   const V = derive(S, set, undefined, uncSend);
   /* Phase 2: a no-op in demo mode (no Supabase env); with an account it hydrates on mount
@@ -84,6 +91,10 @@ export default function Platform() {
     );
   }
 
+  if (gated && !isOpen(gated)) {
+    return <Paywall state={gated.state === "canceled" ? "canceled" : "none"} email={persistence.mode === "account" ? persistence.userEmail : null} />;
+  }
+
   return (
     <div
       style={{
@@ -95,8 +106,9 @@ export default function Platform() {
         WebkitFontSmoothing: "antialiased",
       }}
     >
-      {V.notOnboarding && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} />}
+      {V.notOnboarding && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} billing={gated} />}
       <main style={{ flex: 1, minWidth: 0 }}>
+        {gated?.state === "past_due" && <BillingBanner />}
         {V.isOnboarding && <Onboarding V={V} />}
         {V.isToday && <HomeView V={V} />}
         {V.isStrategy && <StrategyView V={V} />}

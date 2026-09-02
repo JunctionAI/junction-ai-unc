@@ -2,6 +2,8 @@
 
 import type { PlatformVals } from "@/lib/platform/derive";
 import type { Persistence } from "@/lib/db/useAccountPersistence";
+import type { Entitlement } from "@/lib/billing/gate";
+import { openPortal } from "@/lib/billing/clientActions";
 
 const navBtn: React.CSSProperties = {
   display: "flex",
@@ -21,8 +23,24 @@ const dot = (bg: string): React.CSSProperties => ({ width: 7, height: 7, borderR
 
 const SAVE_LABEL: Record<Persistence["autosave"], string> = { idle: "Saved", pending: "Saving…", saving: "Saving…", saved: "Saved", error: "Not saved — retrying" };
 
-/** `account` is null in demo mode (no Supabase env / no session) and the sidebar renders exactly as Phase 1. */
-export default function Sidebar({ V, account = null }: { V: PlatformVals; account?: Persistence | null }) {
+/** Sidebar plan line — only rendered when billing is configured (Phase 6). */
+function planLine(e: Entitlement): { text: string; action: string } | null {
+  switch (e.state) {
+    case "trialing":
+      return { text: `Trial · ${e.trialDaysLeft ?? 0} ${e.trialDaysLeft === 1 ? "day" : "days"} left`, action: "manage" };
+    case "active":
+      return { text: e.cancelAtPeriodEnd && e.periodEnd ? `Plan · ends ${e.periodEnd.slice(0, 10)}` : "Plan · active", action: "manage" };
+    case "past_due":
+      return { text: "Plan · payment failed", action: "Update card" };
+    default:
+      return null;
+  }
+}
+
+/** `account` is null in demo mode (no Supabase env / no session) and the sidebar renders exactly as Phase 1.
+    `billing` is null unless billing is configured; then it adds the plan/trial line. */
+export default function Sidebar({ V, account = null, billing = null }: { V: PlatformVals; account?: Persistence | null; billing?: Entitlement | null }) {
+  const plan = billing ? planLine(billing) : null;
   return (
     <aside
       style={{
@@ -80,6 +98,15 @@ export default function Sidebar({ V, account = null }: { V: PlatformVals; accoun
                 </button>
               </form>
             </div>
+            {plan && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: billing?.state === "past_due" ? "var(--amber)" : "var(--faint-on-navy)" }}>
+                <span>{plan.text}</span>
+                <span>·</span>
+                <button type="button" onClick={() => void openPortal()} className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "inherit" }}>
+                  {plan.action}
+                </button>
+              </div>
+            )}
             <div style={{ marginTop: 6 }}>No live connectors or outward actions.</div>
           </div>
         ) : (
