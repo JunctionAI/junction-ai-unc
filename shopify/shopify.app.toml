@@ -1,0 +1,79 @@
+# Junction — Unc · Shopify public app (Decision 7, 2026-09-02)
+#
+# Shopify CLI-managed configuration. `shopify app deploy` from this directory pushes it as an
+# app version (see docs/SHOPIFY-APP.md). Run `shopify app config link` once the app exists in
+# the Dev Dashboard to fill in `client_id`; the CLI writes it here — the secret never lives in
+# this file (it goes to Vercel env as SHOPIFY_CLIENT_SECRET, alongside SHOPIFY_CLIENT_ID).
+#
+# Mirrors the code, not the other way round:
+#   scopes        src/lib/connectors/registry.ts  (FLOWS.shopify.scopes)
+#   redirect URL  src/lib/connectors/oauth.ts     (callbackUri: <APP_URL>/api/connectors/<platform>/callback)
+#   compliance    src/app/api/webhooks/shopify/[topic]/route.ts  (customers_data_request | customers_redact | shop_redact)
+#   APP_URL env must equal application_url exactly — https://getjunction.ai — or the callback
+#   HMAC/redirect check fails (docs/CONNECTORS-FIRST-BOOT.md §0, §2).
+#
+# ASSUMPTION (verify on the day): api_version = the current stable quarterly release as of
+# 2026-09; Shopify ships 2026-01 / 2026-04 / 2026-07 / 2026-10, so 2026-07 is the latest
+# stable today. Bump when 2026-10 lands. The revoke call in src/lib/connectors/revoke.ts
+# (api_permissions/current.json) pins SHOPIFY_REVOKE_API_VERSION = "2026-01" separately —
+# bump both together on the same pass.
+
+client_id = ""                                   # filled by `shopify app config link`
+name = "Junction — Unc"
+handle = "junction-unc"
+application_url = "https://getjunction.ai"
+
+# Non-embedded: the merchant lives in the Junction app, not inside Shopify admin. Shopify's
+# listing allows this ("works outside Shopify admin" / external-app pattern); App Bridge and
+# session-token rules do not apply, but the install flow still must complete OAuth immediately
+# after install — see shopify/REVIEW-CHECKLIST.md §Install entry.
+embedded = false
+
+[build]
+# Never let `shopify app dev` rewrite application_url/redirects to a tunnel — the callback URL
+# is registered exactly once (production) and mirrored in APP_URL.
+automatically_update_urls_on_dev = false
+# Placeholder — Tom creates a development store in the Dev Dashboard and puts its domain here.
+dev_store_url = "junction-unc-dev.myshopify.com"
+include_config_on_deploy = true
+
+[access_scopes]
+# Launch set = exactly what the warehouse syncs (orders · products · customers). Read-only.
+# read_all_orders (orders older than 60 days, needed for 12-month trend analysis) is NOT a
+# scope you can simply add: it requires the protected-data / "read all orders" access request
+# in the Dev Dashboard first; add it here and in registry.ts only once granted.
+scopes = "read_orders,read_products,read_customers"
+# Shopify-managed installation: Shopify shows the grant screen itself and lands the merchant on
+# application_url; our authorization-code grant then completes without a second consent.
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://getjunction.ai/api/connectors/shopify/callback"
+]
+
+[webhooks]
+api_version = "2026-07"
+
+# Mandatory compliance webhooks — three separate subscriptions because each topic has its own
+# route. HMAC = base64(HMAC-SHA256(SHOPIFY_CLIENT_SECRET, raw body)), timing-safe, checked
+# before the body is parsed (src/lib/connectors/webhooks.ts).
+[[webhooks.subscriptions]]
+compliance_topics = [ "customers/data_request" ]
+uri = "https://getjunction.ai/api/webhooks/shopify/customers_data_request"
+
+[[webhooks.subscriptions]]
+compliance_topics = [ "customers/redact" ]
+uri = "https://getjunction.ai/api/webhooks/shopify/customers_redact"
+
+[[webhooks.subscriptions]]
+compliance_topics = [ "shop/redact" ]
+uri = "https://getjunction.ai/api/webhooks/shopify/shop_redact"
+
+# No app/uninstalled subscription: uninstall is handled by shop/redact (48h after uninstall —
+# token deleted, connector disconnected, warehouse sync torn down) and by the token simply
+# dying on Shopify's side. Add `topics = ["app/uninstalled"]` here + a route only if a same-day
+# disconnect receipt is wanted (REVIEW-CHECKLIST.md, outstanding).
+
+[pos]
+embedded = false
