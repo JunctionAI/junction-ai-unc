@@ -47,3 +47,6 @@ next-env.d.ts
 # playwright
 /test-results/
 /playwright-report/
+
+# waitlist fallback (POST /api/waitlist appends here when neither Supabase nor Resend is configured)
+/.data/

@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004/0005/0006 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
+      "account_model_prefs",
       "account_state_meta",
       "accounts",
       "approvals",
@@ -17,6 +18,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "connector_secrets",
       "connectors",
       "goals",
+      "llm_usage",
       "oauth_states",
       "plans",
       "receipts",
@@ -28,6 +30,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "subscriptions",
       "taste_events",
       "team_members",
+      "waitlist",
     ]);
     // 0006 telemetry
     expect(s.routine_outcomes.uniques).toContainEqual({ columns: ["account_id", "routine_id", "kpi_key", "window_end"] });
