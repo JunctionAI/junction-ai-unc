@@ -14,6 +14,12 @@
 
 import type { BusinessProfile } from "./scan";
 
+export interface NarrativePhaseReasoning {
+  whyThisOrder: string;
+  evidenceGate: string;
+  risk: string;
+}
+
 export interface NarrativePhase {
   /** 1-based phase number. */
   n: number;
@@ -24,6 +30,9 @@ export interface NarrativePhase {
   why: string;
   /** The deterministic sentence(s) currently shown for this phase (span included). */
   text: string;
+  /** Optional (2026-09-03): plan.ts §Reasoning for this phase — the model may fold the gate into
+      the note in plain words; its numbers are the founder's own, so they join the allowed set. */
+  reasoning?: NarrativePhaseReasoning;
 }
 
 export interface NarrativeRequest {
@@ -97,7 +106,13 @@ export function coerceNarrativeRequest(raw: unknown): NarrativeRequest | null {
   const phasesRaw = Array.isArray(plan.phases) ? plan.phases.slice(0, MAX_PHASES) : [];
   const phases: NarrativePhase[] = phasesRaw
     .filter((p): p is Record<string, unknown> => !!p && typeof p === "object")
-    .map((p, i) => ({ n: i + 1, spanLabel: s(p.spanLabel, 60), channel: s(p.channel, 40), why: s(p.why, 200), text: s(p.text, 600) }))
+    .map((p, i): NarrativePhase => {
+      const base: NarrativePhase = { n: i + 1, spanLabel: s(p.spanLabel, 60), channel: s(p.channel, 40), why: s(p.why, 200), text: s(p.text, 600) };
+      const rr = p.reasoning && typeof p.reasoning === "object" ? (p.reasoning as Record<string, unknown>) : null;
+      const reasoning = rr ? { whyThisOrder: s(rr.whyThisOrder, 320), evidenceGate: s(rr.evidenceGate, 320), risk: s(rr.risk, 320) } : null;
+      // the key is only present when the caller sent one — the plan JSON stays byte-identical otherwise
+      return reasoning && (reasoning.whyThisOrder || reasoning.evidenceGate || reasoning.risk) ? { ...base, reasoning } : base;
+    })
     .filter((p) => p.spanLabel && p.channel && p.text);
   if (!phases.length) return null;
   const teamRaw = Array.isArray(res.team) ? res.team.slice(0, 10) : [];
@@ -144,16 +159,17 @@ export function coerceNarrativeRequest(raw: unknown): NarrativeRequest | null {
 
 export const NARRATIVE_SYSTEM = `You are Unc, the Junction operator — the marketing department that runs a founder's growth beside them. Register: "In your corner." You are writing the plan card the founder sees at the end of onboarding.
 
-Voice (non-negotiable): first person, present tense, numbers over adjectives. You propose and show your working; you never command. Warm, direct, concrete. No hype, no filler, no exclamation marks, no emojis, no markdown. Never call yourself a "fully autonomous AI employee"; never promise "10x overnight" or "set and forget".
+Voice (non-negotiable): first person, present tense, numbers over adjectives. You propose and show your working; you never command. Warm, direct, concrete. No hype, no exclamation marks, no emojis, no markdown. Never call yourself a "fully autonomous AI employee"; never promise "10x overnight" or "set and forget".
+Concision: lead with the point; one idea per sentence; say what each phase does, never what it is "about to" do or "aims to" do. No filler — never "great", "exciting", "it's worth noting", "in other words", "absolutely". Every sentence carries a fact from the input or a reason; cut any that carries neither.
 
-What you are given: a DETERMINISTIC PLAN (channels, phase order, week spans — already decided by the scoring model and NOT yours to change), the founder's GOAL and RESOURCES, and, when available, a BUSINESS PROFILE scanned from their site.
+What you are given: a DETERMINISTIC PLAN (channels, phase order, week spans — already decided by the scoring model and NOT yours to change), the founder's GOAL and RESOURCES, and, when available, a BUSINESS PROFILE scanned from their site. A phase may also carry REASONING (whyThisOrder, evidenceGate, risk — the judgement under the plan): you may fold its gate or its reason into the phase note in plainer words, but never change its logic, and never add a number it doesn't hold.
 
 Write these four things, as strict JSON only:
 {"title": string, "mathLine": string, "phaseNotes": string[], "footnote": string}
 
 - title: ≤ 10 words. Names the posture blend using the given posture labels, and — if a profile exists — can nod to what the business actually is. No trailing period.
 - mathLine: ONE sentence, ≤ 40 words, ending with a colon. It states the gap to the goal by the deadline and what the founder is putting in (money per day, hours per week), then leads into the numbered phases. Use the gapLabel, budgetPerDay and hoursPerWeek figures exactly as given.
-- phaseNotes: exactly one per phase, in the given order, each ≤ 2 sentences and ≤ 45 words. DO NOT include the week span or a phase number — the app prepends "Weeks X–Y:" itself. Name the phase's channel. Tie it to the founder's actual strengths, hours or budget, and — when a profile exists — to their actual products, audience or voice phrases (use the brand's words, not generic ones). Keep each phase's channel and the "why" rationale you were given; you may say it better, not differently.
+- phaseNotes: exactly one per phase, in the given order, each ≤ 2 sentences and ≤ 45 words. DO NOT include the week span or a phase number — the app prepends "Weeks X–Y:" itself. Name the phase's channel. Tie it to the founder's actual strengths, hours or budget, and — when a profile exists — to their actual products, audience or voice phrases (use the brand's words, not generic ones). Keep each phase's channel and the "why" rationale you were given; you may say it better, not differently. Where a phase carries reasoning, the second sentence may be its gate in plain words ("it flips to email once…") — evidence, never a week number.
 - footnote: ≤ 2 sentences, ≤ 35 words. Keep the first sentence exactly: "I do the work — you bring taste and okays." Second sentence: if a profile exists, say you've read their site (mention one concrete thing you read) and will keep sharpening; if not, keep the promise to scan their site and socials tonight.
 
 Hard rules:
