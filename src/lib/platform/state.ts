@@ -59,6 +59,11 @@ export interface NarrativeState {
   value: PlanNarrative | null;
 }
 
+/** Where the founder is in the guided first run after "Agree the plan →" (accounts mode):
+    connect → the "Connect your data" step, routine → the "First routine on" step, home → Home.
+    Persisted in account_state_meta.client_state so a refresh lands on the same step. */
+export type SetupFlow = "connect" | "routine" | "home";
+
 export interface PlatformState {
   view: View;
   selCat: string;
@@ -116,6 +121,19 @@ export interface PlatformState {
   buddyText: string;
   scan: ScanState;
   narrative: NarrativeState;
+  /* ---- guided first run (docs/PRODUCT-EXPERIENCE.md spine) — additive ---- */
+  /** Guided step after the plan is agreed; "home" for every account that never entered the flow. Persisted. */
+  setupFlow: SetupFlow;
+  /** The founder chose "I'll do this later" on the Connect-your-data step (honest state, no fake connection). Persisted. */
+  setupConnectLater: boolean;
+  /** The founder dismissed the "Getting set up" card once all five steps were done. Persisted. */
+  setupCardDismissed: boolean;
+  /** plans.agreed_at as the server reports it (hydrated by the setup-progress fetch). Transient. */
+  planAgreedAt: string | null;
+  /** Set by "Agree the plan →": Home's plan timeline settles in on its next mount. Transient. */
+  settlePlan: boolean;
+  /** Set when the first routine's dry run was triggered from the guided step: the first draft card slides in. Transient. */
+  firstRunPending: boolean;
 }
 
 export type Patch = Partial<PlatformState>;
@@ -191,4 +209,10 @@ export const initialState: PlatformState = {
   buddyText: "",
   scan: { status: "idle", key: null, profile: null },
   narrative: { status: "idle", key: null, baseKey: null, value: null },
+  setupFlow: "home",
+  setupConnectLater: false,
+  setupCardDismissed: false,
+  planAgreedAt: null,
+  settlePlan: false,
+  firstRunPending: false,
 };

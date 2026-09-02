@@ -632,6 +632,9 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
         onboarded: true,
         view: "today" as const,
         profile: { ...s.profile, belief: s.obPostureSet.map((k) => ({ brand: "Brand before sales", sales: "Sales conversations first", paid: "Buy learning fast" })[k]).join(" + ") },
+        /* Guided first run (accounts mode reads these; demo mode ignores them and lands on Home as before). */
+        setupFlow: "connect" as const,
+        settlePlan: true,
       })),
     obConns: CONNECTOR_DEFS.slice(0, 10).map((d) => {
       const on = (S.connState[d.name] || d.st) === "ok";
@@ -975,6 +978,38 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     onKey: (e: KEv) => {
       if (e.key === "Enter") send();
     },
+
+    /* ---- guided first run + real-only Home (accounts mode; docs/PRODUCT-EXPERIENCE.md) ---- */
+    setupFlow: S.setupFlow,
+    setSetupFlow: (flow: PlatformState["setupFlow"]) => set({ setupFlow: flow, ...(flow === "home" ? { view: "today" as const } : {}) }),
+    setupConnectLater: S.setupConnectLater,
+    /** "I'll do this later" on the Connect step — an honest state, never a fake connection. */
+    markConnectLater: () => set({ setupConnectLater: true, setupFlow: "routine" }),
+    setupCardDismissed: S.setupCardDismissed,
+    dismissSetupCard: () => set({ setupCardDismissed: true }),
+    planAgreedAt: S.planAgreedAt,
+    setPlanAgreedAt: (iso: string | null) => set((s) => (s.planAgreedAt === iso ? {} : { planAgreedAt: iso })),
+    settlePlan: S.settlePlan,
+    clearSettlePlan: () => set((s) => (s.settlePlan ? { settlePlan: false } : {})),
+    firstRunPending: S.firstRunPending,
+    setFirstRunPending: (v: boolean) => set((s) => (s.firstRunPending === v ? {} : { firstRunPending: v })),
+    /** Flip a routine on locally by catalog id (the autosave persists routine_states.enabled). */
+    enableRoutineLocal: (id: string) => {
+      const s2 = ALL_SYSTEMS.find((x) => x.id === id);
+      if (s2) set((s) => ({ routineOn: { ...s.routineOn, [s2.name]: true } }));
+    },
+    /** Real connector state only (never the demo `|| "expired"` default): Klaviyo really needs a reconnect. */
+    klaviyoNeedsReconnect: S.connState["Klaviyo"] === "expired",
+    /** Open the guided Connect-your-data step's platform in the Connectors view. */
+    goConnectorsView: nav("connectors"),
+    routineOnById: (id: string) => {
+      const s2 = ALL_SYSTEMS.find((x) => x.id === id);
+      return !!s2 && S.routineOn[s2.name] === true;
+    },
+    /** Real connector state by card name ("off" when no row exists — never the demo defaults). */
+    connStateByName: (name: string) => S.connState[name] ?? "off",
+    /** The founder's own answers, for the real Home / guided steps (never demo constants). */
+    accountCtx: { currency: S.currency, budgetMonthly: S.budgetMo },
   };
 }
 

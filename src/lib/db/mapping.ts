@@ -39,6 +39,7 @@ import {
   type PlatformState,
   type Profile,
   type Reinvest,
+  type SetupFlow,
   type TeamMember,
   type WfState,
 } from "../platform/state";
@@ -133,6 +134,10 @@ export interface ClientState {
   scanKey: string | null;
   wfState: WfState;
   wfVer: number;
+  /** Guided first run (2026-09-02, additive; absent on rows saved before it → defaults). */
+  setupFlow?: SetupFlow;
+  setupConnectLater?: boolean;
+  setupCardDismissed?: boolean;
 }
 export interface StateMetaRow {
   account_id: string;
@@ -321,6 +326,9 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
       scanKey: S.scan.key,
       wfState: S.wfState,
       wfVer: S.wfVer,
+      setupFlow: S.setupFlow,
+      setupConnectLater: S.setupConnectLater,
+      setupCardDismissed: S.setupCardDismissed,
     },
   };
 
@@ -362,6 +370,10 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
     S.narrative = { ...cs.narrative };
     S.wfState = cs.wfState;
     S.wfVer = cs.wfVer;
+    // rows saved before the guided first run existed carry none of these: "home" (never trap an existing account)
+    S.setupFlow = cs.setupFlow === "connect" || cs.setupFlow === "routine" ? cs.setupFlow : "home";
+    S.setupConnectLater = cs.setupConnectLater === true;
+    S.setupCardDismissed = cs.setupCardDismissed === true;
   }
 
   if (rows.goals.length) {

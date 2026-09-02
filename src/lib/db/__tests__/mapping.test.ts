@@ -181,7 +181,21 @@ describe("column mapping (0001 + 0003)", () => {
       scanKey: "sk",
       wfState: "draft",
       wfVer: 14,
+      setupFlow: "routine",
+      setupConnectLater: true,
+      setupCardDismissed: true,
     });
+  });
+
+  it("guided-first-run fields: rows saved before them hydrate to their defaults (never trap an existing account)", () => {
+    const meta = { ...rows.stateMeta, client_state: { ...rows.stateMeta.client_state } };
+    delete meta.client_state.setupFlow;
+    delete meta.client_state.setupConnectLater;
+    delete meta.client_state.setupCardDismissed;
+    const back = rowsToState({ ...EMPTY, stateMeta: meta }, initialState);
+    expect(back.setupFlow).toBe("home");
+    expect(back.setupConnectLater).toBe(false);
+    expect(back.setupCardDismissed).toBe(false);
   });
 });
 

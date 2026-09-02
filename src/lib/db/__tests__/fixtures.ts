@@ -38,6 +38,9 @@ export const PERSISTED_KEYS = [
   "obStep",
   "obPace",
   "profile",
+  "setupFlow",
+  "setupConnectLater",
+  "setupCardDismissed",
 ] as const satisfies readonly (keyof PlatformState)[];
 
 export type PersistedKey = (typeof PERSISTED_KEYS)[number];
@@ -121,6 +124,9 @@ export function richState(): PlatformState {
     obStep: 6,
     obPace: "Sprint · 2 weeks",
     profile: { budget: "≤ A$173/day", time: "12 h/wk", strength: "Video & Paid media & SEO", belief: "Buy learning fast + Brand before sales", team: "3 people" },
+    setupFlow: "routine",
+    setupConnectLater: true,
+    setupCardDismissed: true,
   };
 }
 
