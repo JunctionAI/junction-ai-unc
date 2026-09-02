@@ -3,24 +3,48 @@
     "id": "landing",
     "title": "Landing page",
     "width": 1280,
-    "height": 3744,
+    "height": 3861,
     "protoSize": {
       "width": 1280,
       "height": 3744
     },
     "portSize": {
       "width": 1280,
-      "height": 3744
+      "height": 3861
     },
-    "totalPixels": 4792320,
-    "diffPixels": 2571,
-    "sizeOnlyPixels": 0,
-    "diffPct": 0.05364833733974359,
-    "overlapDiffPct": 0.05364833733974359,
-    "pass": true,
+    "totalPixels": 4942080,
+    "diffPixels": 232191,
+    "sizeOnlyPixels": 149760,
+    "diffPct": 4.698244463869464,
+    "overlapDiffPct": 1.7200646033653848,
+    "pass": false,
     "note": "",
-    "textOnlyProto": [],
-    "textOnlyPort": []
+    "textOnlyProto": [
+      "Meet Unc",
+      "Agree your first goal →",
+      "5 quick questions and you're away 🚀",
+      "$100",
+      "USD / month",
+      "Start your free trial",
+      "Meet Unc →"
+    ],
+    "textOnlyPort": [
+      "Join the waitlist",
+      "Join the waitlist →",
+      "I'm onboarding founders in small groups — leave your email and I'll bring you in.",
+      "US$100",
+      "/ month",
+      "Join the waitlist →",
+      "Join the waitlist →",
+      "I'm onboarding founders in small groups — leave your email and I'll bring you in.",
+      "© 2026 Junction",
+      "·",
+      "Privacy",
+      "·",
+      "Terms",
+      "·",
+      "support@getjunction.ai"
+    ]
   },
   {
     "id": "onboarding-0",
