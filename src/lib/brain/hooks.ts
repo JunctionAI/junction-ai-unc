@@ -92,7 +92,8 @@ export function deterministicSummary(turns: TranscriptTurn[]): string {
 export function summaryBlocks(turns: TranscriptTurn[]): { index: number; turns: TranscriptTurn[] }[] {
   const n = turns.length;
   if (n <= CHAT_SUMMARY_THRESHOLD) return [];
-  const count = Math.floor((n - CHAT_SUMMARY_THRESHOLD) / CHAT_SUMMARY_BLOCK) + 1;
+  // block b is summarised once its first turn (12b) has fallen out of the 24-turn window
+  const count = Math.ceil((n - CHAT_SUMMARY_THRESHOLD) / CHAT_SUMMARY_BLOCK);
   const out: { index: number; turns: TranscriptTurn[] }[] = [];
   for (let b = 0; b < count; b++) {
     const slice = turns.slice(b * CHAT_SUMMARY_BLOCK, (b + 1) * CHAT_SUMMARY_BLOCK);

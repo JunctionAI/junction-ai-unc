@@ -28,6 +28,7 @@ export interface RecallOptions {
   query?: string;
   /** Restricts the query-matched slice (pinned constraints/preferences and upcoming events always come). */
   kinds?: MemoryKind[];
+  /** Total memories returned: pinned rules fill first, then upcoming events, then the query slice. */
   limit?: number;
   maxChars?: number;
   now?: () => Date;
@@ -115,7 +116,7 @@ export async function recallForContext(db: DbClient, accountId: string, opts: Re
   // 1. pinned rules
   const pinnedAll = await listMemories(db, accountId, { kinds: ["constraint", "preference"], limit: CANDIDATE_POOL });
   pinnedAll.sort((a, b) => b.importance - a.importance || b.confidence - a.confidence || (a.createdAt < b.createdAt ? 1 : -1));
-  for (const m of pinnedAll.slice(0, PINNED_MAX)) {
+  for (const m of pinnedAll.slice(0, Math.min(PINNED_MAX, limit))) {
     seen.add(m.id);
     picked.push({ id: m.id, kind: m.kind, text: m.text, happensAt: m.happensAt, importance: m.importance, via: "pinned", score: m.importance });
   }
@@ -125,7 +126,7 @@ export async function recallForContext(db: DbClient, accountId: string, opts: Re
   const nowIso = now.toISOString();
   const events = (await listMemories(db, accountId, { kinds: ["event"], limit: CANDIDATE_POOL })).filter((m) => m.happensAt && m.happensAt >= nowIso && m.happensAt <= horizon);
   events.sort((a, b) => (a.happensAt! < b.happensAt! ? -1 : 1));
-  for (const m of events.slice(0, UPCOMING_MAX)) {
+  for (const m of events.slice(0, Math.max(0, Math.min(UPCOMING_MAX, limit - picked.length)))) {
     seen.add(m.id);
     picked.push({ id: m.id, kind: m.kind, text: m.text, happensAt: m.happensAt, importance: m.importance, via: "upcoming", score: 0 });
   }

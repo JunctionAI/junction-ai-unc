@@ -79,7 +79,7 @@ export interface ListMemoriesOptions {
 }
 
 export const MEMORY_TEXT_MAX = 600;
-/** Jaccard similarity on normalised tokens at/above which two texts are "the same memory". */
+/** Jaccard similarity on content words at/above which two texts are "the same memory". */
 export const DEDUPE_THRESHOLD = 0.85;
 const DEFAULT_LIST_LIMIT = 50;
 
@@ -131,12 +131,44 @@ export function jaccard(a: string[], b: string[]): number {
   return union ? inter / union : 0;
 }
 
-/** Same memory? Exact normalised match or near-identical token sets. */
+/** Function words only — directional / comparative words (below, above, before, more, less…)
+    stay in, because "never below 15%" and "never above 15%" are different rules. */
+const STOPWORDS = new Set(
+  "a an the and or but if then than that this these those there here is are was were be been being am do does did done have has had having will would shall should can could may might must not no nor so as at by for from in into of on onto to with about again all any because each few how its it he she they them their we our you your yours i me my mine what which who whom why when where while very just also only own same such too other some s t don now via per".split(" "),
+);
+
+/** Light stemmer so "discounts" ≈ "discount", "shipping" ≈ "ship", "decided" ≈ "decide".
+    Numbers are left alone; a trailing doubled letter collapses so "shipp" reads as "ship". */
+export function stem(w: string): string {
+  if (/^\d/.test(w)) return w;
+  let s = w;
+  if (s.length > 5 && s.endsWith("ing")) s = s.slice(0, -3);
+  else if (s.length > 4 && s.endsWith("ies")) s = `${s.slice(0, -3)}y`;
+  else if (s.length > 4 && s.endsWith("ed")) s = s.slice(0, -2);
+  else if (s.length > 4 && s.endsWith("es")) s = s.slice(0, -2);
+  else if (s.length > 3 && s.endsWith("s")) s = s.slice(0, -1);
+  if (s.length > 3 && s[s.length - 1] === s[s.length - 2] && /[a-z]/.test(s[s.length - 1])) s = s.slice(0, -1);
+  return s;
+}
+
+/** The words that carry meaning: ≥ 3 letters or any number, stopwords out, lightly stemmed. */
+export function contentWords(s: string): string[] {
+  return normaliseText(s)
+    .split(" ")
+    .filter((w) => w && (/\d/.test(w) || w.length >= 3) && !STOPWORDS.has(w))
+    .map(stem);
+}
+
+/** Same memory? Exact normalised match, or near-identical content words (so "a month" vs
+    "per month" merge while "15%" vs "20%" stay apart). */
 export function isNearIdentical(a: string, b: string): boolean {
   const na = normaliseText(a);
   const nb = normaliseText(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
+  const ca = contentWords(a);
+  const cb = contentWords(b);
+  if (ca.length && cb.length) return jaccard(ca, cb) >= DEDUPE_THRESHOLD;
   return jaccard(na.split(" "), nb.split(" ")) >= DEDUPE_THRESHOLD;
 }
 

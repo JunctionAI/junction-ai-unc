@@ -20,7 +20,7 @@
 import type { DbClient } from "../db/types";
 import { complete as routerComplete, resolveModel } from "../llm/router";
 import type { LlmMessage } from "../llm/types";
-import { addMemory, isMemoryKind, normaliseText, type BrainOptions, type Memory, type MemoryKind, type MemorySource, type NewMemory } from "./memory";
+import { addMemory, contentWords, isMemoryKind, normaliseText, stem, type BrainOptions, type Memory, type MemoryKind, type MemorySource, type NewMemory } from "./memory";
 
 export const EXTRACT_MAX_TOKENS = 2000;
 export const EXTRACT_EFFORT = "low" as const;
@@ -111,27 +111,7 @@ export interface ExtractResult {
 
 // ---------- content words + traceability ----------
 
-const STOPWORDS = new Set(
-  "a an the and or but if then than that this these those there here is are was were be been being am do does did done have has had having will would shall should can could may might must not no nor so as at by for from in into of off on onto out over to up with without about above after again against all any because before below between both down during each few further how its it's it he she they them their we our you your yours i me my mine what which who whom why when where while very just also only own same such too more most other some very s t don now via per".split(" "),
-);
-
-/** Light stemmer so "discounts" ≈ "discount", "shipping" ≈ "ship", "decided" ≈ "decide". */
-export function stem(w: string): string {
-  if (/^\d/.test(w)) return w;
-  if (w.length > 5 && w.endsWith("ing")) return w.slice(0, -3);
-  if (w.length > 4 && w.endsWith("ies")) return `${w.slice(0, -3)}y`;
-  if (w.length > 4 && w.endsWith("ed")) return w.slice(0, -2);
-  if (w.length > 4 && w.endsWith("es")) return w.slice(0, -2);
-  if (w.length > 3 && w.endsWith("s")) return w.slice(0, -1);
-  return w;
-}
-
-export function contentWords(s: string): string[] {
-  return normaliseText(s)
-    .split(" ")
-    .filter((w) => w && (/\d/.test(w) || w.length >= 3) && !STOPWORDS.has(w))
-    .map(stem);
-}
+export { contentWords, stem };
 
 /** Share of the candidate's content words that appear in the source. */
 export function traceOverlap(candidateText: string, sourceText: string): number {
