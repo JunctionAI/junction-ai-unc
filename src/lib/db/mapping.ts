@@ -371,7 +371,7 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
     S.wfState = cs.wfState;
     S.wfVer = cs.wfVer;
     // rows saved before the guided first run existed carry none of these: "home" (never trap an existing account)
-    S.setupFlow = cs.setupFlow === "connect" || cs.setupFlow === "routine" ? cs.setupFlow : "home";
+    S.setupFlow = cs.setupFlow === "connect" || cs.setupFlow === "routine" || cs.setupFlow === "channel" ? cs.setupFlow : "home";
     S.setupConnectLater = cs.setupConnectLater === true;
     S.setupCardDismissed = cs.setupCardDismissed === true;
   }
