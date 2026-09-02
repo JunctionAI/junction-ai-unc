@@ -97,7 +97,8 @@ function isPrivateV6(ip: string): boolean {
   return false;
 }
 
-function isPrivateAddress(ip: string): boolean {
+/** Post-DNS guard: true for loopback, RFC1918, link-local/metadata, CGNAT, ULA, mapped-v4 and non-IP strings. */
+export function isPrivateAddress(ip: string): boolean {
   const v = isIP(ip);
   if (v === 4) return isPrivateV4(ip);
   if (v === 6) return isPrivateV6(ip);
