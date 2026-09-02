@@ -1,0 +1,18 @@
+{
+  "//": "Standalone build of the worker daemon (no Next, no tsx). `npx tsc -p tsconfig.worker.json` emits CommonJS to dist/worker; run with `node dist/worker/worker/main.js`. See src/worker/README.md.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist/worker",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "incremental": false,
+    "sourceMap": true,
+    "plugins": []
+  },
+  "include": ["src/worker/**/*.ts", "src/lib/runtime/**/*.ts", "src/lib/platform/catalog.ts"],
+  "exclude": ["node_modules", "**/__tests__/**", "src/lib/runtime/store/supabase.ts"]
+}

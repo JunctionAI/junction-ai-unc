@@ -20,6 +20,10 @@
 # production
 /build
 
+# worker standalone build + heartbeat (see src/worker/README.md)
+/dist
+/.unc-worker/
+
 # misc
 .DS_Store
 *.pem

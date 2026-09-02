@@ -10,7 +10,7 @@ import { startHealthServer } from "./health";
 import { createLogger } from "./log";
 import { readHeartbeatFile, Worker } from "./loop";
 import { createAnthropicLlmClient } from "./providers/llmDecision";
-import { WORKER_RUN_MODE } from "./service";
+import { triggerRun, WORKER_RUN_MODE } from "./service";
 import { getStore } from "../lib/runtime/store";
 import { setEnabled } from "../lib/runtime/versioning";
 
@@ -20,11 +20,13 @@ export interface CliArgs {
   healthPort: number | null;
   once: boolean;
   enable: string[];
+  /** Routines to dry-run immediately (manual trigger), regardless of schedule. */
+  run: string[];
   accountId: string;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { intervalSec: 60, heartbeatPath: ".unc-worker/heartbeat.json", healthPort: null, once: false, enable: [], accountId: "demo" };
+  const args: CliArgs = { intervalSec: 60, heartbeatPath: ".unc-worker/heartbeat.json", healthPort: null, once: false, enable: [], run: [], accountId: "demo" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => argv[++i];
@@ -43,6 +45,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case "--enable":
         args.enable = (next() ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+        break;
+      case "--run":
+        args.run = (next() ?? "").split(",").map((s) => s.trim()).filter(Boolean);
         break;
       case "--account":
         args.accountId = next();
@@ -66,7 +71,14 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   // something calls setEnabled. --enable D01-W01,D05-W02 flips those on.
   for (const routineId of args.enable) await setEnabled({ store }, args.accountId, routineId, true);
 
-  const worker = new Worker({ store, accounts, credentials: new FixtureCredentialProvider(), llm, log }, { intervalSec: args.intervalSec, heartbeatPath: args.heartbeatPath });
+  const deps = { store, accounts, credentials: new FixtureCredentialProvider(), llm, log };
+  const worker = new Worker(deps, { intervalSec: args.intervalSec, heartbeatPath: args.heartbeatPath });
+
+  // Smoke test: --run D05-W02 dry-runs it now (manual trigger, same path as POST /api/routines/run).
+  for (const routineId of args.run) {
+    const result = await triggerRun(deps, { accountId: args.accountId, routineId, triggeredBy: "manual" }, worker.adapters);
+    log.info("run.receipts", { routineId, runId: result.runId, status: result.status, receipts: result.receipts.map((r) => `[${r.kind}] ${r.description}`) });
+  }
 
   if (args.once) {
     const report = await worker.tick();
