@@ -1,6 +1,6 @@
 # Visual parity — React port vs original prototypes
 
-*Generated 2026-09-02T04:26:51.973Z by `npx playwright test tests/e2e/parity.spec.ts` (scripts/parity/capture.ts).*
+*Generated 2026-09-02T04:52:38.687Z by `npx playwright test tests/e2e/parity.spec.ts` (scripts/parity/capture.ts).*
 
 **Method.** Both sources are driven to the same state with the same clicks (Skip → nav items → role card → Tutorial), every CSS animation/transition is frozen at its 0% frame (jfloat, jpulse, toggle knobs, phase dots), web fonts and images are awaited, then a full-page screenshot is taken at a 1280×900 viewport (DPR 1), clipped to the 1280px viewport width. Pixels are compared with a pixelmatch-style YIQ colour delta (threshold 0.1) over the union canvas; a page that is taller in one source counts the extra rows as differences (`diff %`), while `overlap %` restricts the comparison to the shared region so layout drift is visible separately from height drift. `<screen>-diff.png` paints differing pixels red (orange = present in only one source). Visible copy (`document.body.innerText`) is also diffed line by line with quotes/whitespace normalised (`copy Δ`).
 
@@ -13,13 +13,16 @@
 | Control centre · Home (demo data) | `home` | 1280×2474 / 1280×2474 | **0.24%** | 0.24% | none | ✅ pass |  |
 | Strategy | `strategy` | 1280×1032 / 1280×1032 | **0.09%** | 0.09% | none | ✅ pass |  |
 | Routines · role cards | `routines` | 1280×900 / 1280×900 | **0.08%** | 0.08% | none | ✅ pass |  |
-| Routine detail · Founder content engine (D01-W01) | `routine-detail` | 1280×900 / 1280×900 | **0.11%** | 0.11% | none | ✅ pass |  |
+| Routine detail · Founder content engine (D01-W01) | `routine-detail` | 1280×900 / 1280×900 | **0.33%** | 0.33% | 1 line | ✅ pass |  |
 | Connectors | `connectors` | 1280×1035 / 1280×1035 | **0.07%** | 0.07% | none | ✅ pass |  |
 
 Files: `design-reference/parity/<id>-proto.png`, `<id>-port.png`, `<id>-diff.png`, `<id>-{proto,port}.txt`.
 
 ## Copy differences (visible text, line level)
-None — every visible line matches once quotes and whitespace are normalised.
+### `routine-detail`
+Only in the port:
+- `Run now (dry run)`
+
 
 ## Known, accepted sources of difference
 - **Fonts.** The prototypes load Space Grotesk from Google Fonts; the port self-hosts it through `next/font`. Same family and weights, but the served files differ in version/hinting, so glyph edges differ by a pixel here and there across every text run — this is the floor under every number in the table.

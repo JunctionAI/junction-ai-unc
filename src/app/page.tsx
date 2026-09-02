@@ -199,7 +199,7 @@ export default function Landing() {
               margin: "20px 0 0",
             }}
           >
-            Meet Unc: He'll help you grow your business
+            Meet Unc: He&apos;ll help you grow your business
           </h1>
           <p
             style={{

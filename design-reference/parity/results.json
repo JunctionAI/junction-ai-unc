@@ -128,14 +128,16 @@
       "height": 900
     },
     "totalPixels": 1152000,
-    "diffPixels": 1264,
+    "diffPixels": 3751,
     "sizeOnlyPixels": 0,
-    "diffPct": 0.10972222222222223,
-    "overlapDiffPct": 0.10972222222222223,
+    "diffPct": 0.3256076388888889,
+    "overlapDiffPct": 0.3256076388888889,
     "pass": true,
     "note": "",
     "textOnlyProto": [],
-    "textOnlyPort": []
+    "textOnlyPort": [
+      "Run now (dry run)"
+    ]
   },
   {
     "id": "connectors",

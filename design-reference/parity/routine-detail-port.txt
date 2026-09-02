@@ -48,6 +48,7 @@ Schedule
 CADENCE
 DEDUP KEY
 Every run writes a receipt: what was read, prepared, changed and learned. Consequential actions wait for your approval until you graduate them.
+Run now (dry run)
 Set this up
 In your corner
 Ask me anything

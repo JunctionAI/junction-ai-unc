@@ -110,14 +110,14 @@ export default function RoutineDetail({ V, run }: { V: PlatformVals; run: Omit<R
             </div>
           )}
         </div>
-        {V.selId && <RunNowPanel routineId={V.selId} accountId={run.accountId} account={run.account} persisted={run.persisted} />}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10, background: "var(--cyan-wash)", borderRadius: 13, padding: "16px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10, background: "var(--cyan-wash)", borderRadius: 13, padding: "16px 20px", flexWrap: "wrap" }}>
         <img src="/brand/mascot-small.png" alt="" style={{ width: 38, height: 41, objectFit: "contain", flex: "none" }} />
-        <div style={{ fontSize: 13, lineHeight: 1.5, color: "oklch(0.3 0.06 262)" }}>
+        <div style={{ fontSize: 13, lineHeight: 1.5, color: "oklch(0.3 0.06 262)", flex: 1, minWidth: 260 }}>
           Every run writes a receipt: what was read, prepared, changed and learned. Consequential actions wait for your approval until you graduate them.
         </div>
+        {V.selId && <RunNowPanel routineId={V.selId} accountId={run.accountId} account={run.account} persisted={run.persisted} />}
         {V.setupIdle && (
           <button onClick={V.openSetup} className="btn-navy" style={{ flex: "none", marginLeft: "auto", padding: "9px 18px", fontSize: 12.5, fontWeight: 600 }}>
             Set this up

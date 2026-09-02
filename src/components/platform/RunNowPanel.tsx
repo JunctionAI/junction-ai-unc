@@ -49,8 +49,9 @@ export default function RunNowPanel({ routineId, accountId, account, persisted }
     }
   }
 
+  const showCard = Boolean(run || error);
   return (
-    <div data-testid="run-now" style={{ marginTop: 12, background: "white", border: "1px solid var(--card-border)", borderRadius: 14, padding: "14px 22px" }}>
+    <div data-testid="run-now" style={showCard ? { flexBasis: "100%", marginTop: 4, background: "white", border: "1px solid var(--card-border)", borderRadius: 14, padding: "14px 22px" } : { display: "contents" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         <button
           onClick={() => void runNow()}
@@ -60,10 +61,12 @@ export default function RunNowPanel({ routineId, accountId, account, persisted }
         >
           {busy ? "Running…" : "Run now (dry run)"}
         </button>
-        <span style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, flex: 1, minWidth: 240 }}>
-          Runs this system’s chain now against its reads — zero outward actions. The receipts land right here.
-          {!persisted && " Demo mode: runs live in memory and vanish when the server restarts."}
-        </span>
+        {showCard && (
+          <span style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, flex: 1, minWidth: 240 }}>
+            Runs this system’s chain now against its reads — zero outward actions. The receipts land right here.
+            {!persisted && " Demo mode: runs live in memory and vanish when the server restarts."}
+          </span>
+        )}
       </div>
       {error && (
         <div style={{ fontSize: 12.5, color: "var(--amber-text)", marginTop: 10, lineHeight: 1.5 }}>Couldn’t run it: {error}</div>
