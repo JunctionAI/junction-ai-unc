@@ -25,6 +25,8 @@ import { getStore } from "@/lib/runtime/store";
 import type { Store } from "@/lib/runtime/store/interface";
 import type { DbClient } from "@/lib/db/types";
 import type { RoutineSpec } from "@/lib/runtime/types";
+import { scoreAgreement } from "@/lib/runtime/agreement";
+import { skillFor } from "@/lib/runtime/skills";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import { discardDraft, effectiveSpec, getOrInitState, latestDryRunFor, dryRunPassed, PromoteRefusedError, promoteDraft, saveDraft, validateDraft } from "@/lib/runtime/versioning";
 import { buildAdapters, resolveAccount, WorkerError } from "@/worker/service";
@@ -70,6 +72,8 @@ export async function shapeView(store: Store, accountId: string, catalog: Routin
     steps: view.steps,
     version: { live: state.version, draft: draft?.version ?? null },
     canPromote,
+    skillFile: skillFor(catalog.id)?.file ?? null,
+    agreement: await scoreAgreement(store, accountId, catalog.id),
   };
 }
 

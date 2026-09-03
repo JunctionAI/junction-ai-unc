@@ -9,6 +9,18 @@ export const contentGap: Skill = {
   maxItems: 10,
   purpose: "The pages a business in this category is expected to have, compared with what the site has — one brief per gap",
   inputs: ["site profile (sections, products, category, competitors mentioned)", "Search Console queries (when connected)", "competitor crawl (research read, when available)"],
+  file: {
+    goal: "One brief per missing page a business in this category is expected to have",
+    owns: ["the gap list", "the page brief per gap"],
+    reads: ["site profile sections", "Search Console when connected", "competitor crawl when available"],
+    decides: ["which expected pages are actually missing", "which gap is worth a brief first"],
+    writes: ["a content_gap artifact"],
+    never: ["invent competitor traffic", "claim a page exists that the profile didn't show"],
+    apply: "Drafts. I don't write the missing page until you pick one.",
+    examples: [
+      { when: "a supplements store with no 'how to choose' page", does: "one gap brief for that page, grounded in the category norm" },
+    ],
+  },
   minimum: minimum("the site profile (its sections and category); competitor crawls sharpen it", [], ["about_the_business"], ["search_console"]),
   domain: "seo",
   prompt: `CRAFT — content gaps:

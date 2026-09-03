@@ -40,6 +40,8 @@ interface View {
   steps: { id: string; included: boolean; label: string }[];
   version: { live: number; draft: number | null };
   canPromote: boolean;
+  skillFile?: { goal: string } | null;
+  agreement?: { decided: number; applyUnlocked: boolean; line: string };
   error?: string;
   issues?: { key: string; message: string }[];
   run?: { status: string; summary: string };
@@ -100,6 +102,10 @@ describe("GET — the view", () => {
     expect(c.domain).toBe("content");
     expect(c.steps.map((s) => s.id)).toEqual(["read_questions", "read_posts", "read_products"]);
     expect(c.steps.every((s) => s.included)).toBe(true);
+    expect(c.skillFile).toMatchObject({ goal: expect.stringContaining("founder-voice") });
+    expect(c.agreement).toMatchObject({ decided: 0, applyUnlocked: false });
+    expect(v.skillFile).toBeNull();
+    expect(v.agreement).toMatchObject({ decided: 0, applyUnlocked: false, line: expect.stringContaining("keep asking") });
   });
 });
 

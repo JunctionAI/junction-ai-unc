@@ -19,4 +19,4 @@ export function skillFor(id: string): Skill | null {
   return SKILL_BY_ID[id] ?? null;
 }
 
-export type { Skill, SkillCheck, SkillContext, SkillProfile, SkillGoal, PriorArtifact } from "./types";
+export type { Skill, SkillCheck, SkillContext, SkillProfile, SkillGoal, PriorArtifact, SkillFile, SkillExample } from "./types";

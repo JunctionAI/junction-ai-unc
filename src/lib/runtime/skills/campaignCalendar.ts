@@ -9,6 +9,18 @@ export const campaignCalendar: Skill = {
   maxItems: 6,
   purpose: "The next six weeks of campaigns, sequenced from the goal, the plan and the business's own seasonality",
   inputs: ["the goal and its deadline", "the agreed plan's phases", "site profile (products, audience, region)", "order history by week (Shopify, when connected)", "past campaigns (Klaviyo, when connected)", "upcoming launches (Shopify, when connected)", "memories: upcoming events, constraints"],
+  file: {
+    goal: "Six weeks of campaigns sequenced from the goal and the plan",
+    owns: ["the calendar artifact", "the theme per week"],
+    reads: ["goal", "plan phases", "site profile", "order history when connected", "past campaigns when connected"],
+    decides: ["which lever each week pulls", "the send day"],
+    writes: ["a calendar artifact of six weeks"],
+    never: ["invent a seasonal peak", "schedule a send in Klaviyo"],
+    apply: "Drafts. I keep the sequence you keep running.",
+    examples: [
+      { when: "goal NZ$40k MRR, content-first plan, a scanned site", does: "six week themes from the plan phases, no invented order-history peaks" },
+    ],
+  },
   minimum: minimum("the goal + the plan + what the business sells; order history makes the timing real", [], ["about_the_business"], ["shopify", "klaviyo"]),
   domain: "email",
   prompt: `CRAFT — campaign calendar:
