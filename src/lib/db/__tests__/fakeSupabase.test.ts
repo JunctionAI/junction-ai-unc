@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012/0013/0014 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012/0013/0014/0015 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
       "account_model_prefs",
+      "account_presets",
       "account_profiles",
       "account_state_meta",
       "accounts",
@@ -38,6 +39,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "receipts",
       "resource_profiles",
       "routine_outcomes",
+      "routine_params",
       "routine_runs",
       "routine_states",
       "self_reviews",
