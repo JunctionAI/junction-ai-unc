@@ -1,6 +1,6 @@
 # Visual parity — React port vs original prototypes
 
-*Generated 2026-09-03T21:28:15.966Z by `npx playwright test tests/e2e/parity.spec.ts` (scripts/parity/capture.ts).*
+*Generated 2026-09-03T21:47:12.948Z by `npx playwright test tests/e2e/parity.spec.ts` (scripts/parity/capture.ts).*
 
 **Method.** Both sources are driven to the same state with the same clicks (Skip → nav items → role card → Tutorial), every CSS animation/transition is frozen at its 0% frame (jfloat, jpulse, toggle knobs, phase dots), web fonts and images are awaited, then a full-page screenshot is taken at a 1280×900 viewport (DPR 1), clipped to the 1280px viewport width. Pixels are compared with a pixelmatch-style YIQ colour delta (threshold 0.1) over the union canvas; a page that is taller in one source counts the extra rows as differences (`diff %`), while `overlap %` restricts the comparison to the shared region so layout drift is visible separately from height drift. `<screen>-diff.png` paints differing pixels red (orange = present in only one source). Visible copy (`document.body.innerText`) is also diffed line by line with quotes/whitespace normalised (`copy Δ`).
 

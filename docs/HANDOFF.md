@@ -13,7 +13,7 @@ Junction AI (Tom Hall-Taylor, New Zealand; entity JUNCTION CENTRAL LIMITED, co. 
 4. **No assumptions about business type.** Platform suggestions come only from what the founder said (onboarding step 2/4 → `resource_profiles.known_platforms`) or what the site scan evidenced; store-only routines hidden for non-stores (`src/lib/runtime/availability.ts`, `src/lib/unc/businessType.ts`).
 5. **Design system is fixed** (`design-reference/README.md`): OKLCH tokens in `src/app/globals.css`, Space Grotesk, pills, cards, chat-bubble grammar, amber only where a decision waits (≤2 per screen), cyan spent like money, only `jfloat`/`jpulse` move. Copy strings in demo mode are verbatim from the prototype; parity harness `npm run e2e:parity` (≤0.33% diff per screen at last run).
 6. **Secrets**: never read `.env` files in app code; never log or return tokens; never copy keys between services in scripts (the permission classifier blocks it and it's the wrong pattern — the founder pastes into Vercel). Local dev sources the Junction root `.env` in-process via `scripts/dev.sh`.
-7. **Every commit signed** (repo-local SSH signing configured), **main is protected** (CI `verify` must pass, admins enforced, linear history, no force-push). Work on `build/*` branches → PR → squash-merge. Commit trailer used so far: `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
+7. **Main is protected** (CI `verify` must pass, admins enforced, linear history, no force-push). Use a review branch → PR → squash-merge. Do not claim commit signing is configured: the 2026-09-04 worktree has no `user.signingkey` or `commit.gpgsign` setting, and the integrated commits report no verifiable signature.
 
 ## 2. Where everything lives
 | What | Where |
@@ -52,7 +52,7 @@ Billing: Stripe (checkout/webhook/portal/paywall) env-gated, not configured for 
 ```
 
 ## 4. State of the build (facts)
-- **142 test files, 1,745 unit tests green** on `build/overnight-graphed`. Live chat evals: judge mean 9.4–9.8/10 (25 scenarios; `design-reference/evals/`).
+- **158 test files, 1,882 unit tests green** on `codex/overnight-unc-complete` after rebasing onto the 35-skill `build/overnight-graphed` commit. Live chat evals remain an older receipt: judge mean 9.4–9.8/10 (25 scenarios; `design-reference/evals/`).
 - **main** = PR #6 squash-merged 2026-09-03 (auth providers + presets + Meta action library). Production redeployed: https://junction-unc.vercel.app.
 - Migrations applied to the live DB: **0001–0015** (`account_presets`, `routine_params` verified 2026-09-03).
 - Vercel env present: Supabase URL/anon/service, ANTHROPIC/OPENAI/GEMINI/RESEND keys, APP_URLs, TELEGRAM_BOT_TOKEN/USERNAME/WEBHOOK_SECRET, N8N_SIGNING_SECRET, UNC_ADMIN_EMAILS. **Missing: CONNECTOR_SECRET_KEY** (Tom pastes; `openssl rand -base64 32`), STRIPE_*, connector client ids, NANGO_*.
