@@ -11,6 +11,8 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    // Frozen prototype exports are visual source material, not production code.
+    "design-reference/**",
     "next-env.d.ts",
   ]),
 ]);

@@ -70,9 +70,9 @@ export interface ServiceDeps {
   producer?: Producer | null;
   /** The n8n bridge. undefined = HttpN8nBridge on process.env; null = none. */
   n8n?: N8nBridge | null;
-  /** Decision presets for the rule-bound routines + the Meta guards. undefined = presetSource(db)
-      (src/lib/runtime/presets/store.ts: account_presets / routine_params → MetaPreset; defaults
-      without a database); null = the library defaults. */
+  /** Account defaults for rule-bound routines + the Meta guards. undefined = presetSource(db)
+      (src/lib/runtime/presets/store.ts: account_presets → MetaPreset; a promoted decide node may
+      overlay its versioned routine policy); null = the library defaults. */
   presets?: PresetSource | null;
   now?: () => Date;
   log?: Logger;

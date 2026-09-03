@@ -64,7 +64,9 @@ describe("GET/POST /api/artifacts/<id>", () => {
 
     const approved = await onePost(post(`/api/artifacts/${run.artifact.id}`, { action: "approve" }), params(run.artifact.id));
     expect(approved.status).toBe(200);
-    expect((await approved.json()).artifact.status).toBe("approved");
+    const approvedBody = await approved.json();
+    expect(approvedBody.artifact.status).toBe("approved");
+    expect(approvedBody.receipt).toMatchObject({ kind: "notification", payload: { artifactDecision: true, artifactId: run.artifact.id, action: "approve", fromStatus: "draft", toStatus: "approved" } });
     const events = await getStore().listTasteEvents("demo");
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ action: "approved", routineId: "D01-W01", context: { artifactId: run.artifact.id, kind: "post_set" } });
@@ -84,6 +86,8 @@ describe("GET/POST /api/artifacts/<id>", () => {
     // why? opens are taste events too
     await onePost(post(`/api/artifacts/${run2.artifact.id}`, { action: "why" }), params(run2.artifact.id));
     expect((await getStore().listTasteEvents("demo")).some((e) => e.action === "why_opened")).toBe(true);
+    const decisionReceipts = (await getStore().listReceipts("demo", { runId: run2.runId })).filter((r) => r.payload.artifactDecision === true);
+    expect(decisionReceipts.map((r) => r.payload.action)).toEqual(["hold", "edit", "why"]);
   });
 
   it("decideArtifact writes the decision memory when a database is in hand", async () => {

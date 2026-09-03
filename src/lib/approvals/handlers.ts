@@ -25,7 +25,7 @@ import { resumeApproval, type ServiceDeps } from "@/worker/service";
 /** Record-only decision for a proposal whose run is already finished (nothing to resume). */
 async function recordDecision(deps: ServiceDeps, approval: ApprovalRecord, run: RunRecord, input: { decision: "approved" | "held"; decidedBy?: string }): Promise<{ approval: ApprovalRecord; run: RunResult }> {
   const nowIso = (deps.now ?? (() => new Date()))().toISOString();
-  const decided = await deps.store.updateApproval(approval.id, { status: input.decision, decidedAt: nowIso, decidedBy: input.decidedBy });
+  const decided = await deps.store.updateApproval(approval.id, { status: input.decision, decidedAt: nowIso, decidedBy: input.decidedBy }, "pending");
   await deps.store.appendTasteEvent({ id: newId(), accountId: approval.accountId, approvalId: approval.id, routineId: approval.routineId, action: input.decision, context: { runId: run.id, title: approval.title, decidedBy: input.decidedBy ?? null, proposal: true }, createdAt: nowIso });
   const receipt: Receipt = {
     id: newId(),

@@ -152,7 +152,7 @@ export const fakeUuid = () => {
 export class FakeSupabase implements DbClient {
   readonly tables = new Map<string, Row[]>();
   readonly calls: Call[] = [];
-  /** RPCs the fake answers; create_account, accept_beta_invites and match_memories (0010) are built in. */
+  /** RPCs the fake answers; core account, memory and spend-admission RPCs are built in. */
   readonly rpcs: Record<string, (args: Record<string, unknown>) => unknown> = {};
   /** auth.uid() for the built-in RPCs. */
   userId: string | null = "user-1";
@@ -196,6 +196,56 @@ export class FakeSupabase implements DbClient {
         .map((m) => ({ id: m.id, kind: m.kind, text: m.text, importance: m.importance, confidence: m.confidence, happens_at: m.happens_at ?? null, similarity: cosine(q as number[], m.embedding as number[]) }))
         .sort((a, b) => b.similarity - a.similarity)
         .slice(0, count);
+    };
+    // 20260903211025: one synchronous handler is one atomic fake transaction. The real RPC
+    // serialises cross-instance callers by locking accounts(id) before these same sums/insert.
+    this.rpcs.reserve_llm_spend = (args) => {
+      const accountId = String(args.p_account_id ?? "");
+      const ceilingUsd = Number(args.p_ceiling_usd);
+      const fallbackCapUsd = Number(args.p_default_cap_usd);
+      if (!accountId) throw new Error("account id is required");
+      if (!Number.isFinite(ceilingUsd) || ceilingUsd <= 0) throw new Error("request ceiling must be a finite positive amount");
+      if (!Number.isFinite(fallbackCapUsd)) throw new Error("default cap must be finite");
+      const account = (this.tables.get("accounts") ?? []).find((row) => row.id === accountId);
+      if (!account) throw new Error("account not found");
+      const capUsd = account.monthly_llm_cap_usd === null || account.monthly_llm_cap_usd === undefined ? fallbackCapUsd : Number(account.monthly_llm_cap_usd);
+      if (!Number.isFinite(capUsd)) throw new Error("account cap must be finite");
+
+      const now = new Date(this.now());
+      if (!Number.isFinite(now.getTime())) throw new Error("fake clock is invalid");
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      const monthDate = monthStart.toISOString().slice(0, 10);
+      const expired = (this.tables.get("llm_spend_reservations") ?? []).filter((row) => row.account_id === accountId && new Date(String(row.expires_at)).getTime() <= now.getTime());
+      this.deleteRows("llm_spend_reservations", expired);
+
+      const spentUsd = (this.tables.get("llm_usage") ?? [])
+        .filter((row) => {
+          const created = new Date(String(row.created_at)).getTime();
+          return row.account_id === accountId && created >= monthStart.getTime() && created < monthEnd.getTime();
+        })
+        .reduce((sum, row) => sum + (Number(row.est_cost_usd) || 0), 0);
+      const reservedUsd = (this.tables.get("llm_spend_reservations") ?? [])
+        .filter((row) => row.account_id === accountId && new Date(String(row.expires_at)).getTime() > now.getTime())
+        .reduce((sum, row) => sum + (Number(row.ceiling_usd) || 0), 0);
+      if (spentUsd + reservedUsd + ceilingUsd > capUsd) return { ok: false, reason: "budget_exceeded", spent_usd: spentUsd, reserved_usd: reservedUsd, cap_usd: capUsd };
+
+      // A completed call releases immediately after its durable usage insert. If the process
+      // crashes or that insert fails, retain the ceiling through month end (+ rollover buffer)
+      // so unledgered paid usage cannot silently fall out of the cap.
+      const expiresAt = new Date(monthEnd.getTime() + 30 * 60_000).toISOString();
+      const reservation = this.insertRow("llm_spend_reservations", { account_id: accountId, ceiling_usd: ceilingUsd, month_start: monthDate, expires_at: expiresAt, created_at: now.toISOString() });
+      return { ok: true, reservation_id: reservation.id, spent_usd: spentUsd, reserved_usd: reservedUsd, cap_usd: capUsd, expires_at: expiresAt };
+    };
+    this.rpcs.release_llm_spend_reservation = (args) => {
+      const accountId = String(args.p_account_id ?? "");
+      const reservationId = String(args.p_reservation_id ?? "");
+      if (!accountId || !reservationId) throw new Error("account id and reservation id are required");
+      if (!(this.tables.get("accounts") ?? []).some((row) => row.id === accountId)) throw new Error("account not found");
+      const row = (this.tables.get("llm_spend_reservations") ?? []).find((candidate) => candidate.id === reservationId && candidate.account_id === accountId);
+      if (!row) return false;
+      this.deleteRows("llm_spend_reservations", [row]);
+      return true;
     };
   }
 

@@ -28,7 +28,6 @@ export function useRoutinesState(enabled: boolean, initial: RoutinesStateListing
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
     (async () => {
       try {
         const res = await fetch("/api/routines/state", { cache: "no-store" });
@@ -55,7 +54,12 @@ export function useRoutinesState(enabled: boolean, initial: RoutinesStateListing
     setData((d) => (d ? { ...d, routines: d.routines.map((r) => (r.routineId === routine.routineId ? routine : r)) } : d));
   }, []);
 
-  return { active: data !== null, loading, data, error, refresh: () => setTick((n) => n + 1), patch };
+  const refresh = useCallback(() => {
+    setLoading(true);
+    setTick((n) => n + 1);
+  }, []);
+
+  return { active: data !== null, loading: loading || (enabled && data === null && error === null), data, error, refresh, patch };
 }
 
 /** "2h ago" · "just now" · "3d ago" — for the last-run line. */

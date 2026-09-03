@@ -123,7 +123,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
           <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid oklch(0.34 0.05 262)", fontSize: 10, lineHeight: 1.6, color: "var(--faint-on-navy)" }}>
             <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{account.userEmail ?? "Signed in"}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ color: account.autosave === "error" ? "var(--amber)" : "var(--faint-on-navy)" }}>{SAVE_LABEL[account.autosave]}</span>
+              <span data-testid="sidebar-persistence-state" style={{ color: account.autosave === "error" ? "var(--amber)" : "var(--faint-on-navy)" }}>{account.role === "member" ? "Read-only" : SAVE_LABEL[account.autosave]}</span>
               <span>·</span>
               {onWhatUncKnows && (
                 <>

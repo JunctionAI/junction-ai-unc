@@ -26,7 +26,7 @@ import type { PurgeResult, SyncProvisioner } from "./provisioning";
 import { connectorEntry, GOOGLE_CHILDREN, isGoogleUmbrella, META_GRAPH_VERSION, normaliseShopDomain, platformCredentials, type ConnectorEntry } from "./registry";
 import { revokeToken, type RevokeResult } from "./revoke";
 import { insertSystemReceipt } from "@/lib/db/receipts";
-import { accountForUser, consumeOauthState, deleteSecret, getConnector, getSecret, insertOauthState, isMember, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
+import { accountForUser, consumeOauthState, deleteSecret, getConnector, getSecret, insertOauthState, memberRole, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
 import { getAccessTokenFor } from "./tokens";
 import { authProviderMode } from "./registry";
 import { clearProviderRef, providerLabel, revokeViaProvider, startViaProvider } from "./providers/connect";
@@ -95,6 +95,7 @@ export async function handleStart(deps: HandlerDeps, platform: string, body: unk
   if (!deps.userId) return err(401, "sign in first");
   const accountId = await accountForUser(deps.db, deps.userId);
   if (!accountId) return err(403, "no account for this user");
+  if ((await memberRole(deps.db, deps.userId, accountId)) !== "owner") return err(403, "only the account owner can connect a platform");
 
   let shop: string | undefined;
   if (entry.flow === "shopify") {
@@ -171,8 +172,12 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
   };
 
   if (new Date(row.expires_at).getTime() < now.getTime()) return fail("state_expired");
-  // The browser that finishes the flow must be the founder who started it.
-  if (!deps.userId || !(await isMember(db, deps.userId, accountId))) return fail("session_mismatch");
+  // The browser that finishes the flow must be an owner of the account that started it.
+  // Authorization failures do not mutate the connector row through the service client.
+  if (!deps.userId || (await memberRole(db, deps.userId, accountId)) !== "owner") {
+    deps.log?.(`connectors.callback platform=${entry.id} account=${accountId} reason=session_mismatch`);
+    return errRedirect(entry.id);
+  }
   if (params.get("error")) return fail("provider_denied");
   const code = params.get("code") || "";
   if (!code) return fail("no_code");
@@ -247,6 +252,7 @@ export async function handleDisconnect(deps: HandlerDeps, platform: string): Pro
   if (!deps.userId) return { status: 401, body: { error: "sign in first" } };
   const accountId = await accountForUser(deps.db, deps.userId);
   if (!accountId) return { status: 403, body: { error: "no account for this user" } };
+  if ((await memberRole(deps.db, deps.userId, accountId)) !== "owner") return { status: 403, body: { error: "only the account owner can disconnect a platform" } };
   const row = await getConnector(deps.db, accountId, entry.id);
   if (!row) return { status: 404, body: { error: "nothing connected" } };
   const db = deps.db;
@@ -344,7 +350,7 @@ export type OptionsResult =
 
 type PickerGate = { ok: true; accountId: string; row: ConnectorRow; entry: ConnectorEntry } | { ok: false; result: { status: 200; body: { fallback: true; reason: FallbackReason } } | { status: 401 | 403 | 404; body: { error: string } } };
 
-async function pickerGate(deps: HandlerDeps, platform: string): Promise<PickerGate> {
+async function pickerGate(deps: HandlerDeps, platform: string, opts: { ownerOnly?: boolean } = {}): Promise<PickerGate> {
   const entry = connectorEntry(platform);
   if (!entry) return { ok: false, result: { status: 404, body: { error: "unknown platform" } } };
   if (!hasPicker(entry.id)) return { ok: false, result: { status: 404, body: { error: "this platform has no account picker" } } };
@@ -352,6 +358,9 @@ async function pickerGate(deps: HandlerDeps, platform: string): Promise<PickerGa
   if (!deps.userId) return { ok: false, result: { status: 401, body: { error: "sign in first" } } };
   const accountId = await accountForUser(deps.db, deps.userId);
   if (!accountId) return { ok: false, result: { status: 403, body: { error: "no account for this user" } } };
+  if (opts.ownerOnly && (await memberRole(deps.db, deps.userId, accountId)) !== "owner") {
+    return { ok: false, result: { status: 403, body: { error: "only the account owner can choose a platform account" } } };
+  }
   const row = await getConnector(deps.db, accountId, entry.id);
   if (!row || row.status !== "connected") return { ok: false, result: { status: 404, body: { error: "nothing connected" } } };
   return { ok: true, accountId, row, entry };
@@ -387,7 +396,7 @@ export type SelectResult = { status: 200; body: { ok: true; externalRef: string 
 /** Store the founder's choice. The value is validated for shape only — a wrong account reads
     as an honest "couldn't ask" on the next run, never as invented data. */
 export async function handleSelect(deps: HandlerDeps, platform: string, body: unknown): Promise<SelectResult> {
-  const gate = await pickerGate(deps, platform);
+  const gate = await pickerGate(deps, platform, { ownerOnly: true });
   if (!gate.ok) return gate.result;
   const { accountId, row, entry } = gate;
   const raw = body && typeof body === "object" ? (body as { externalRef?: unknown }).externalRef : undefined;

@@ -470,7 +470,7 @@ describe("Routines in accounts mode — no demo constant can render", () => {
 
 /* ---------------- Connectors view ---------------- */
 
-const connListing = (over: Partial<ConnectorsStateListing> = {}): ConnectorsStateListing => ({ role: "member", connectors: [], google: { configured: false, children: [] }, ...over });
+const connListing = (over: Partial<ConnectorsStateListing> = {}): ConnectorsStateListing => ({ role: "owner", connectors: [], google: { configured: false, children: [] }, ...over });
 
 describe("Connectors in accounts mode — untouched platforms are disconnected, never the catalog's demo status", () => {
   it("demo: Shopify/GA4/Meta/Instagram/Slack read Connected and Klaviyo asks for a Reconnect (the guard is real)", () => {
@@ -511,6 +511,16 @@ describe("Connectors in accounts mode — untouched platforms are disconnected, 
     const html = renderToStaticMarkup(createElement(ConnectorsView, { V, initialLive: live }));
     expect(html).not.toContain(">Connected<");
     expect(html).toContain("Nothing connected yet");
+  });
+
+  it("members can inspect connector status but never see connect, select, reconnect or disconnect controls", () => {
+    const S: PlatformState = { ...base, view: "connectors", connState: { Shopify: "ok", Klaviyo: "expired" } };
+    const html = renderToStaticMarkup(createElement(ConnectorsView, { V: dv(S, ACCOUNT), initialLive: connListing({ role: "member" }) }));
+    expect(html).toContain("Owner managed");
+    expect(html).not.toContain(">Connect<");
+    expect(html).not.toContain(">Reconnect<");
+    expect(html).not.toContain("Disconnect");
+    expect(html).not.toContain("<select");
   });
 });
 

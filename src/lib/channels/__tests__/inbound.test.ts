@@ -15,7 +15,7 @@ import { budgetMoveSpec, clock as rtClock, input, SPEND_FIXTURE } from "@/lib/ru
 import { StaticAccountsSource } from "@/worker/accounts";
 import { buildAdapters as buildRunAdapters, type ServiceDeps } from "@/worker/service";
 import { NO_MODEL_LINE } from "../approvals";
-import { handleInbound, type InboundDeps, type RespondFn } from "../inbound";
+import { handleInbound, OWNER_DECISION_LINE, type InboundDeps, type RespondFn } from "../inbound";
 import { findVerifiedLink, issueLinkCode } from "../links";
 import { listOutbound } from "../outbound";
 import { listThread } from "../thread";
@@ -167,6 +167,17 @@ for (const kind of ["memory", "supabase"] as const) {
       const again = await handleInbound(h.d, { channel: "sms", externalId: "+6421", externalMsgId: "SM9", text: `HOLD ${shortId(h.approvalId)}` });
       expect(again).toMatchObject({ kind: "decision_failed" });
       expect(h.d.adapters.sms.sent[0].payload.text).toMatch(/already approved/);
+    });
+
+    it("a member-owned or stale channel link cannot decide an approval", async () => {
+      const h = await decisionHarness(kind);
+      h.d.db.rows("account_members")[0].role = "member";
+      const out = await handleInbound(h.d, { channel: "telegram", externalId: "555", externalMsgId: "555:cb:member", action: approvalButtonId(h.approvalId, "approve") });
+      expect(out).toEqual({ kind: "decision_failed", accountId: ACCT, reply: OWNER_DECISION_LINE });
+      expect((await h.store.getApproval(h.approvalId))?.status).toBe("pending");
+      expect((await h.store.getRun(h.runId))?.status).toBe("waiting_approval");
+      expect(await h.store.listTasteEvents(ACCT)).toEqual([]);
+      expect(h.d.adapters.telegram.sent[0].payload.text).toBe(OWNER_DECISION_LINE);
     });
 
     it("Why → the approval's reasoning, a why_opened taste event, nothing decided", async () => {

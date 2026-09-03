@@ -9,10 +9,10 @@
                                               optional steps removed — what saveDraft stores
 
    Binding is declarative (PARAM_BINDINGS: routine → field → node id + path) so a number the
-   founder sets is visible in the draft spec itself, not only in a side table. Fields without a
-   binding still reach the run through the paid preset getter (store.ts) and the skill prompts. */
+   founder sets is visible in the draft spec itself, not only in a side table. D02-W01 also
+   carries its rules-engine inputs in versioned decide.policy metadata. */
 
-import type { Node, RoutineSpec } from "../types";
+import type { DecideNode, MetaAdsetDecisionPolicy, Node, RoutineSpec } from "../types";
 import { FIELDS_BY_DOMAIN, type PresetDomain, type PresetParams } from "./types";
 
 export const DOMAIN_BY_CATEGORY: Record<string, PresetDomain> = { D01: "content", D02: "paid", D03: "seo", D04: "sales", D05: "email" };
@@ -162,6 +162,42 @@ export function applyParamsToSpec(spec: RoutineSpec, params: PresetParams, disab
     const node = nodes.find((n) => n.id === b.nodeId);
     if (!node) continue;
     setPath(node, b.path, b.map ? b.map(v) : v);
+  }
+  return nodes;
+}
+
+/** The D02-W01 rule engine reads routine-specific values only from this versioned snapshot.
+    `routine_params` remains editor state; it cannot become live until these nodes are promoted.
+    Only explicit routine overrides are snapshotted, so an absent key continues to inherit the
+    account/industry preset at run time. */
+export function applyDecisionPolicy(spec: Pick<RoutineSpec, "id">, nodes: Node[], routineParams: PresetParams = {}): Node[] {
+  if (spec.id !== "D02-W01") return nodes;
+  const decide = nodes.find((node): node is DecideNode => node.kind === "decide");
+  if (!decide) return nodes;
+
+  const preset: NonNullable<MetaAdsetDecisionPolicy["preset"]> = {};
+  const copy = (from: string, to: keyof typeof preset = from as keyof typeof preset) => {
+    const value = routineParams[from];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) preset[to] = value;
+  };
+  copy("targetCpa");
+  copy("maxCpa");
+  copy("roasFloor");
+  copy("minSpendBeforeJudging");
+  copy("fatigueFrequency");
+  copy("fatigueCtrDropPct", "fatigueCtrDrop");
+  copy("scaleStepPct");
+  copy("holdDays");
+  const dailyBudgetCap = routineParams.dailyBudgetCap;
+
+  if (Object.keys(preset).length || (typeof dailyBudgetCap === "number" && Number.isFinite(dailyBudgetCap) && dailyBudgetCap >= 0)) {
+    decide.policy = {
+      kind: "meta.adset",
+      ...(Object.keys(preset).length ? { preset } : {}),
+      ...(typeof dailyBudgetCap === "number" && Number.isFinite(dailyBudgetCap) && dailyBudgetCap >= 0 ? { dailyBudgetCap } : {}),
+    };
+  } else {
+    delete decide.policy;
   }
   return nodes;
 }

@@ -16,7 +16,7 @@ export const welcomeFlow: Skill = {
     decides: ["which step is weakest (only from perf metrics)", "the angle of the replacement"],
     writes: ["an email artifact of one message"],
     never: ["invent a CTOR, a send count or a discount code", "send the flow", "run for a non-store"],
-    apply: "Drafts. Klaviyo send stays yours until we graduate this routine.",
+    apply: "Drafts only. Any future Klaviyo change or send needs a separate exact run-level approval gate.",
     examples: [
       { when: "perf metrics name message 2 at 7.06% CTOR", does: "one replacement for that step, citing 7.06%, no invented send count" },
       { when: "founder pastes the current welcome emails, no Klaviyo yet", does: "one replacement from the pasted copy and the store's products" },

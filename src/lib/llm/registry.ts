@@ -102,7 +102,12 @@ export function parseModelId(id: string | null | undefined, env: Env = process.e
   const model = s.slice(i + 1).trim();
   if (!isProviderId(provider) || !model || model.length > 200) return null;
   const supportsEffort = provider === "custom" ? false : provider === "anthropic" ? anthropicSupportsEffort(model) : true;
-  return { id: s, provider, model, tier: "balanced", inputPer1M: null, outputPer1M: null, label: `${provider}: ${model}`, supportsEffort };
+  // OpenRouter's tier defaults mirror catalogue OpenAI models. Reuse their maintained
+  // estimate so the default fallback is budgetable; arbitrary hosted ids stay unpriced.
+  const mirrored = provider === "openrouter" && model.startsWith("openai/")
+    ? CATALOGUE.find((entry) => entry.provider === "openai" && entry.model === model.slice("openai/".length))
+    : undefined;
+  return { id: s, provider, model, tier: "balanced", inputPer1M: mirrored?.inputPer1M ?? null, outputPer1M: mirrored?.outputPer1M ?? null, label: `${provider}: ${model}`, supportsEffort };
 }
 
 /** USD, 6 dp; null when the model's price is unknown. */

@@ -11,7 +11,7 @@
    deterministic plan and every field is validated against it (numbers must come from the
    input, one note per phase, spans stripped). Keys never reach the client. */
 
-import { optionalAccountContext } from "@/lib/llm/accountContext";
+import { requireModelAccountContext } from "@/lib/llm/accountContext";
 import { complete, resolveModel } from "@/lib/llm/router";
 import { NARRATIVE_EFFORT, NARRATIVE_MAX_TOKENS, NARRATIVE_SYSTEM, buildNarrativeUserMessage, coerceNarrativeRequest, extractJsonObject, parseNarrative } from "@/lib/unc/narrative";
 import { withErrorCapture } from "@/lib/observability/errors";
@@ -24,6 +24,8 @@ const fallback = () => Response.json({ fallback: true });
 
 async function handlePOST(req: Request) {
   if (!resolveModel("plan_narrative")) return fallback();
+  const account = await requireModelAccountContext();
+  if (account instanceof Response) return account;
 
   let raw: unknown;
   try {
@@ -38,7 +40,6 @@ async function handlePOST(req: Request) {
   if (!request) return Response.json({ error: "invalid plan" }, { status: 400 });
 
   try {
-    const account = await optionalAccountContext();
     const response = await complete(
       "plan_narrative",
       { system: NARRATIVE_SYSTEM, messages: [{ role: "user", content: buildNarrativeUserMessage(request) }], maxTokens: NARRATIVE_MAX_TOKENS, effort: NARRATIVE_EFFORT, jsonMode: true },

@@ -16,7 +16,7 @@ export const postPurchase: Skill = {
     decides: ["which product question the flow should answer next", "the delay (day 3 after delivery)"],
     writes: ["an email artifact of one message"],
     never: ["invent a ticket count or a product-share %", "send the flow", "run for a non-store"],
-    apply: "Drafts. Klaviyo send stays yours until we graduate this routine.",
+    apply: "Drafts only. Any future Klaviyo change or send needs a separate exact run-level approval gate.",
     examples: [
       { when: "how-to tickets cluster on mixing Marine Collagen", does: "one day-3 email that answers that, citing the ticket count from the rows" },
       { when: "orders exist but no tickets", does: "one education email from the product pages, labelled as not-yet-from-tickets" },

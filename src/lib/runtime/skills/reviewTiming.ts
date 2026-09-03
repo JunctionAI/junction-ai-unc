@@ -16,7 +16,7 @@ export const reviewTiming: Skill = {
     decides: ["the delay in days after delivery", "who to suppress"],
     writes: ["a generic artifact of one proposal"],
     never: ["invent a peak_day or a review count", "send the request", "run for a non-store"],
-    apply: "Drafts. The timing change stays yours until we graduate this routine.",
+    apply: "Drafts only. Any future timing change or send needs a separate exact run-level approval gate.",
     examples: [
       { when: "reviews metrics include peak_day 9 and the flow asks on day 3", does: "propose day 9, citing 9, and keep open-ticket customers suppressed" },
       { when: "orders exist but no review metrics", does: "a starting-hypothesis delay from delivery windows, labelled as not-yet-measured, no invented peak_day" },

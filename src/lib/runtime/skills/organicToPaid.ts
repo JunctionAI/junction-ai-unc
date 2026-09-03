@@ -16,7 +16,7 @@ export const organicToPaid: Skill = {
     decides: ["which post proved demand", "whether to promote or wait"],
     writes: ["a generic artifact of one Would-card"],
     never: ["invent conversions, reach or like-rate", "publish the paid test", "spend"],
-    apply: "Would-cards. I never spend; promoting the post stays yours.",
+    apply: "Would-cards only. I never spend; any future promotion needs a separate exact run-level approval gate.",
     examples: [
       { when: "top post has reach and saves, GA4 shows Instagram conversions", does: "one promote item naming that post, those numbers, rollback = created PAUSED" },
       { when: "founder pastes a post and GA4 is off", does: "one item from the paste; conversions omitted, never invented" },

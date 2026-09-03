@@ -51,6 +51,13 @@ describe("POST …/start — env gates", () => {
     expect((await handleStart(live({ userId: "stranger" }), "klaviyo", {})).status).toBe(403);
   });
 
+  it("a member cannot start an OAuth connection", async () => {
+    db.rows("account_members")[0].role = "member";
+    expect((await handleStart(live(), "klaviyo", {})).status).toBe(403);
+    expect(db.rows("oauth_states")).toHaveLength(0);
+    expect(db.rows("connectors")).toHaveLength(0);
+  });
+
   it("Shopify needs a valid myshopify.com domain", async () => {
     expect((await handleStart(live(), "shopify", {})).status).toBe(400);
     expect((await handleStart(live(), "shopify", { shop: "evil.com" })).status).toBe(400);
@@ -193,6 +200,14 @@ describe("GET …/callback", () => {
     const anon = live({ userId: null });
     const again = await startFlow("klaviyo");
     expect(await handleCallback(anon, "klaviyo", cb("klaviyo", { code: "c", state: again.state }))).toEqual({ redirect: "/app?connect_error=klaviyo" });
+  });
+
+  it("a member cannot complete an owner's OAuth flow or mutate its connector row", async () => {
+    const { d, state } = await startFlow("klaviyo");
+    db.rows("account_members")[0].role = "member";
+    expect(await handleCallback(d, "klaviyo", cb("klaviyo", { code: "c", state }))).toEqual({ redirect: "/app?connect_error=klaviyo" });
+    expect(d.calls).toHaveLength(0);
+    expect(db.rows("connectors")[0]).toMatchObject({ status: "connecting" });
   });
 
   it("provider denial (?error=access_denied) → error path without an exchange", async () => {

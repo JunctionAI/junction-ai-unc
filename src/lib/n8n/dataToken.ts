@@ -5,25 +5,25 @@
    produce step to a workflow it mints a token bound to THAT run:
 
      unc_dt.<base64url claims>.<base64url HMAC-SHA256(N8N_SIGNING_SECRET, claims)>
-     claims = { v: 1, accountId, runId, routineId, scopes: ["shopify:orders", "klaviyo:*", …],
+     claims = { v: 1, accountId, runId, routineId, scopes: ["shopify:orders", "klaviyo:flows", …],
                 iat, exp }            exp = iat + 15 min
 
    The workflow sends it as `Authorization: Bearer <token>` to /api/n8n/reads, /context and
    /actions; those routes resolve the sealed credential server-side and run the SAME reader
-   the worker uses. Replay safety: a token names one run, and the proxy only answers while
-   that run is still open (or for a test run — runId "test:…" — until the token expires).
-   Scopes come from the routine's spec (its read nodes + the skill minimum's platforms), so a
-   founder-content workflow cannot read Meta insights.
+   the worker uses. Replay safety: a token names one persisted run, and the proxy only answers
+   while that run is still open. The proxy independently compares account, routine and scopes
+   with the stored run/spec, so possession of the HMAC key alone cannot select another tenant or
+   widen a routine's authority. Scopes come only from the routine spec's exact read nodes, so a
+   founder-content workflow cannot read Meta insights or undeclared resources on a helpful platform.
 
    Node's crypto only; relative imports only (the worker's standalone build carries this). */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { CATALOG_SPEC_BY_ID } from "../runtime/catalog-specs";
-import type { Platform, RoutineSpec } from "../runtime/types";
+import type { RoutineSpec } from "../runtime/types";
 
 export const DATA_TOKEN_PREFIX = "unc_dt";
 export const DATA_TOKEN_TTL_MS = 15 * 60_000;
-export const TEST_RUN_PREFIX = "test:";
 
 export interface DataTokenClaims {
   v: 1;
@@ -73,8 +73,26 @@ export function verifyDataToken(secret: string | null | undefined, token: string
   } catch {
     return { ok: false, reason: "malformed" };
   }
-  if (!claims || claims.v !== 1 || typeof claims.accountId !== "string" || typeof claims.runId !== "string" || typeof claims.routineId !== "string" || !Array.isArray(claims.scopes) || typeof claims.exp !== "number") return { ok: false, reason: "malformed" };
+  if (
+    !claims ||
+    claims.v !== 1 ||
+    typeof claims.accountId !== "string" ||
+    !claims.accountId ||
+    typeof claims.runId !== "string" ||
+    !claims.runId ||
+    typeof claims.routineId !== "string" ||
+    !claims.routineId ||
+    !Array.isArray(claims.scopes) ||
+    !claims.scopes.every((scope) => typeof scope === "string" && /^(?:\*|[a-z][a-z0-9_]*:(?:\*|[a-z][a-z0-9_]*))$/.test(scope)) ||
+    typeof claims.iat !== "number" ||
+    !Number.isFinite(claims.iat) ||
+    typeof claims.exp !== "number" ||
+    !Number.isFinite(claims.exp) ||
+    claims.exp <= claims.iat ||
+    claims.exp - claims.iat > DATA_TOKEN_TTL_MS
+  ) return { ok: false, reason: "malformed" };
   const now = (opts.now ?? (() => new Date()))().getTime();
+  if (claims.iat > now + 30_000) return { ok: false, reason: "malformed" };
   if (now > claims.exp) return { ok: false, reason: "expired" };
   return { ok: true, claims };
 }
@@ -89,20 +107,30 @@ export function hasScope(claims: Pick<DataTokenClaims, "scopes">, platform: stri
   return claims.scopes.some((s) => s === "*" || s === `${platform}:*` || s === `${platform}:${resource}`);
 }
 
-export const isTestRun = (runId: string) => runId.startsWith(TEST_RUN_PREFIX);
-
-/** The scopes a routine's workflow may use: every read node's platform:resource, plus
-    platform:* for the skill minimum's required + helpful platforms. */
+/** The scopes a routine's workflow may use: exactly the platform:resource pairs declared by
+    its read nodes. Skill minimums describe what makes the work useful; they are not data-plane
+    authority, and a helpful platform must never silently become `platform:*`. */
 export function scopesForSpec(spec: RoutineSpec): string[] {
   const out = new Set<string>();
   for (const n of spec.nodes) if (n.kind === "read") out.add(`${n.source}:${n.query.resource}`);
-  for (const p of [...(spec.minimum?.platforms ?? []), ...(spec.minimum?.helpful ?? [])] as Platform[]) out.add(`${p}:*`);
   return [...out].sort();
 }
 
 export function scopesForRoutine(routineId: string): string[] {
   const spec = CATALOG_SPEC_BY_ID[routineId];
   return spec ? scopesForSpec(spec) : [];
+}
+
+/** True when every requested scope is covered by the run spec's server-derived allowlist.
+    A platform wildcard may cover one exact resource; the reverse is never true. */
+export function scopesAreSubset(requested: readonly string[], allowed: readonly string[]): boolean {
+  return requested.every((scope) => {
+    if (allowed.includes("*")) return true;
+    if (allowed.includes(scope)) return true;
+    if (scope === "*" || scope.endsWith(":*")) return false;
+    const split = scope.indexOf(":");
+    return split > 0 && allowed.includes(`${scope.slice(0, split)}:*`);
+  });
 }
 
 /** Where a workflow calls back for data: N8N_DATA_BASE_URL, else the app URL. null = not

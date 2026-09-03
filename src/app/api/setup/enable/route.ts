@@ -6,10 +6,10 @@
    or    400 | 401 | 403 | 404 | 503 { error }
 
    Writes routine_states through the runtime Store (the same record the worker reads), so
-   the dry run the client fires next (POST /api/routines/run) sees an enabled routine. The
-   client's autosave also persists the toggle; both write `enabled: true`. */
+   the dry run the client fires next (POST /api/routines/run) sees an enabled routine. This
+   owner-only API is the sole browser-facing write path; client autosave never writes it. */
 
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession } from "@/lib/db/session";
 import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
@@ -29,7 +29,7 @@ async function handlePOST(req: Request) {
   const routineId = typeof body.routineId === "string" ? body.routineId.trim() : "";
   if (!ROUTINE_ID_RE.test(routineId)) return Response.json({ error: "routineId must look like D0x-W0y" }, { status: 400 });
   if (!CATALOG_SPEC_BY_ID[routineId as RoutineId]) return Response.json({ error: `unknown routine ${routineId}` }, { status: 404 });
-  const session = await requireAccountSession();
+  const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   try {
     const store = getStore();

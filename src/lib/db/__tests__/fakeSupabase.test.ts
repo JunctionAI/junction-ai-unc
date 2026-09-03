@@ -30,6 +30,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "intake_events",
       "intake_keys",
       "kpi_snapshots",
+      "llm_spend_reservations",
       "llm_usage",
       "memories",
       "n8n_workflows",
@@ -54,6 +55,9 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.accounts.columns.has("monthly_llm_cap_usd")).toBe(true);
     expect([...s.app_errors.columns]).toEqual(expect.arrayContaining(["scope", "message", "stack", "account_id", "context"]));
     expect(s.worker_heartbeats.primaryKey).toEqual(["worker"]);
+    // 20260903211025 atomic model-spend admission
+    expect(s.llm_spend_reservations.primaryKey).toEqual(["id"]);
+    expect([...s.llm_spend_reservations.columns]).toEqual(expect.arrayContaining(["account_id", "ceiling_usd", "month_start", "expires_at", "created_at"]));
     // 0016 action idempotency ledger
     expect(s.action_ledger.primaryKey).toEqual(["key"]);
     expect(s.action_ledger.enums.status).toEqual(new Set(["started", "ok", "failed"]));
@@ -123,6 +127,43 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect((data as { id: string }[]).map((r) => r.id)).toEqual(["m1", "m3"]);
     const onlyEvents = await db.rpc("match_memories", { acct: "a1", query_embedding: [0, 1], match_count: 5, kinds: ["event"] });
     expect((onlyEvents.data as { id: string; similarity: number }[]).map((r) => r.id)).toEqual(["m3"]);
+  });
+
+  it("atomically reserves against current-month usage plus active reservations across UTC month rollover, then releases by account", async () => {
+    const db = new FakeSupabase();
+    db.now = () => "2026-10-01T00:00:00.000Z";
+    db.seed("accounts", [{ id: "a1", name: "x", monthly_llm_cap_usd: 1 }]);
+    db.seed("llm_usage", [
+      { account_id: "a1", task: "chat", provider: "anthropic", model: "m", input_tokens: 1, output_tokens: 1, est_cost_usd: 0.2, latency_ms: 1, stop_reason: "end", created_at: "2026-10-01T00:00:00.000Z" },
+      { account_id: "a1", task: "chat", provider: "anthropic", model: "m", input_tokens: 1, output_tokens: 1, est_cost_usd: 9, latency_ms: 1, stop_reason: "end", created_at: "2026-09-30T23:59:59.000Z" },
+    ]);
+    db.seed("llm_spend_reservations", [
+      { id: "active", account_id: "a1", ceiling_usd: 0.3, month_start: "2026-09-01", created_at: "2026-09-30T23:55:00.000Z", expires_at: "2026-10-01T00:05:00.000Z" },
+      { id: "expired", account_id: "a1", ceiling_usd: 9, month_start: "2026-09-01", created_at: "2026-09-30T22:00:00.000Z", expires_at: "2026-09-30T23:00:00.000Z" },
+    ]);
+
+    const admitted = await db.rpc("reserve_llm_spend", { p_account_id: "a1", p_ceiling_usd: 0.4, p_default_cap_usd: 15 });
+    expect(admitted.data).toMatchObject({ ok: true, spent_usd: 0.2, reserved_usd: 0.3, cap_usd: 1 });
+    expect((admitted.data as { expires_at: string }).expires_at).toBe("2026-11-01T00:30:00.000Z");
+    expect(db.rows("llm_spend_reservations").some((row) => row.id === "expired")).toBe(false);
+    const reservationId = (admitted.data as { reservation_id: string }).reservation_id;
+    expect((await db.rpc("reserve_llm_spend", { p_account_id: "a1", p_ceiling_usd: 0.2, p_default_cap_usd: 15 })).data).toMatchObject({ ok: false, reason: "budget_exceeded", reserved_usd: 0.7 });
+    expect((await db.rpc("release_llm_spend_reservation", { p_account_id: "other", p_reservation_id: reservationId })).error?.message).toContain("account not found");
+    expect((await db.rpc("release_llm_spend_reservation", { p_account_id: "a1", p_reservation_id: reservationId })).data).toBe(true);
+    expect(db.rows("llm_spend_reservations").some((row) => row.id === reservationId)).toBe(false);
+  });
+
+  it("admits only one of two ceilings that cannot fit together", async () => {
+    const db = new FakeSupabase();
+    db.now = () => "2026-09-04T00:00:00.000Z";
+    db.seed("accounts", [{ id: "a1", name: "x", monthly_llm_cap_usd: 1 }]);
+    const [first, second] = await Promise.all([
+      db.rpc("reserve_llm_spend", { p_account_id: "a1", p_ceiling_usd: 0.75, p_default_cap_usd: 15 }),
+      db.rpc("reserve_llm_spend", { p_account_id: "a1", p_ceiling_usd: 0.75, p_default_cap_usd: 15 }),
+    ]);
+    expect([first.data, second.data].filter((row) => (row as { ok: boolean }).ok)).toHaveLength(1);
+    expect([first.data, second.data].filter((row) => !(row as { ok: boolean }).ok)).toHaveLength(1);
+    expect(db.rows("llm_spend_reservations")).toHaveLength(1);
   });
 
   it("rejects unknown tables and columns loudly", async () => {

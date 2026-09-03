@@ -2,8 +2,8 @@
    /api/skills/n8n, the "Skills" settings; docs/N8N-ROUTINES.md).
 
      source per routine   "n8n"      an active n8n_workflows row (the account's own wins, then a global one)
-                          "builtin"  the skill card + LlmProducer (src/lib/runtime/skills)
-                          "none"     no skill card and no produce node (should not happen — all 35 have cards)
+                          "builtin"  one of the 35 skill cards + LlmProducer (src/lib/runtime/skills)
+                          "none"     reserved for a future catalog entry with no producer
      register             owner only; `global` (account_id null = every account) is admin only
                           (UNC_ADMIN_EMAILS — a comma list; Tom)
      test                 POST the same signed payload the engine sends, built from fixture reads,
@@ -17,6 +17,7 @@ import { CATALOG_SPEC_BY_ID } from "../runtime/catalog-specs";
 import { capsFor } from "../runtime/engine";
 import { newId } from "../runtime/context";
 import { SKILL_BY_ID } from "../runtime/skills";
+import { getStore } from "../runtime/store";
 import type { Store } from "../runtime/store/interface";
 import type { N8nWorkflow, ProduceNode, ReadResult, RunContext } from "../runtime/types";
 import { ROUTINE_ID_RE } from "../runtime/validate";
@@ -24,7 +25,7 @@ import { DEMO_ACCOUNT } from "../../worker/accounts";
 import { FixtureCredentialProvider } from "../../worker/credentials";
 import { WorkerConnectorReader } from "../../worker/providers/connectorReader";
 import { HttpN8nBridge, N8N_SECRET_ENV } from "../../worker/providers/n8n";
-import { TEST_RUN_PREFIX } from "./dataToken";
+import { checkWebhookUrl } from "./urlSecurity";
 
 export const ADMIN_EMAILS_ENV = "UNC_ADMIN_EMAILS";
 export const TEST_TIMEOUT_MS = 30_000;
@@ -107,21 +108,11 @@ export async function listSkills(store: Store, accountId: string): Promise<Skill
   return skillRows(await store.listN8nWorkflows(accountId), accountId);
 }
 
-/** https only (http allowed for localhost / when N8N_ALLOW_HTTP=1 — a dev n8n). null = fine, else the reason. */
+/** HTTPS + public host in production. HTTP/private hosts require an explicit non-production
+    dev allowance (tests are isolated by NODE_ENV=test). null = fine, else the reason. */
 export function webhookUrlProblem(url: unknown, env: Record<string, string | undefined> = process.env): string | null {
-  if (typeof url !== "string" || !url.trim()) return "webhookUrl is required";
-  const s = url.trim();
-  if (s.length > WEBHOOK_URL_MAX) return `webhookUrl is too long (${WEBHOOK_URL_MAX} chars)`;
-  let u: URL;
-  try {
-    u = new URL(s);
-  } catch {
-    return "webhookUrl must be an absolute URL";
-  }
-  const allowHttp = (env.N8N_ALLOW_HTTP ?? "").trim() === "1" || u.hostname === "localhost" || u.hostname === "127.0.0.1";
-  if (u.protocol !== "https:" && !(u.protocol === "http:" && allowHttp)) return "webhookUrl must be https";
-  if (u.username || u.password) return "webhookUrl must not carry credentials";
-  return null;
+  const checked = checkWebhookUrl(url, env, WEBHOOK_URL_MAX);
+  return checked.ok ? null : checked.reason;
 }
 
 export interface RegisterInput {
@@ -135,6 +126,8 @@ export interface RegisterInput {
 /** One row per (scope, routine): an existing row is updated in place (same id) and re-activated. */
 export async function registerWorkflow(store: Store, input: RegisterInput, idGen: () => string = newId): Promise<N8nWorkflow> {
   if (!ROUTINE_ID_RE.test(input.routineId) || !CATALOG_SPEC_BY_ID[input.routineId]) throw new Error(`routine "${input.routineId}" is not in the catalog`);
+  const urlProblem = webhookUrlProblem(input.webhookUrl);
+  if (urlProblem) throw new Error(urlProblem);
   const scopeId = input.global ? null : input.accountId;
   const existing = (await store.listN8nWorkflows(input.accountId)).find((w) => w.routineId === input.routineId && w.accountId === scopeId);
   return store.putN8nWorkflow({ id: existing?.id ?? idGen(), accountId: scopeId, routineId: input.routineId, webhookUrl: input.webhookUrl.trim(), active: true });
@@ -146,6 +139,10 @@ export async function patchWorkflow(store: Store, input: { id: string; active?: 
   const row = (await store.listN8nWorkflows(who.accountId)).find((w) => w.id === input.id);
   if (!row) return { ok: false, status: 404, error: "no such workflow for this account" };
   if (row.accountId === null && !who.admin) return { ok: false, status: 403, error: "a global workflow can only be changed by an admin" };
+  if (input.webhookUrl !== undefined) {
+    const urlProblem = webhookUrlProblem(input.webhookUrl);
+    if (urlProblem) throw new Error(urlProblem);
+  }
   const next: N8nWorkflow = { ...row, ...(input.active !== undefined ? { active: input.active } : {}), ...(input.webhookUrl !== undefined ? { webhookUrl: input.webhookUrl.trim() } : {}) };
   return { ok: true, workflow: await store.putN8nWorkflow(next) };
 }
@@ -160,21 +157,23 @@ export type TestResult =
 
 export interface TestDeps {
   env: Record<string, string | undefined>;
+  /** Persist the test run in the same store the data proxy reads. Defaults to getStore(). */
+  store?: Store;
   fetch?: typeof fetch;
   now?: () => Date;
   idGen?: () => string;
   timeoutMs?: number;
 }
 
-/** The context a test call carries: the demo account's vars, fixture reads for the routine's
-    read nodes (the same readers, fixture credentials), a test run id the data proxy honours
-    without a run row. */
+/** The context a test call carries: the demo account's vars and fixture reads for the routine's
+    read nodes (the same readers and fixture credentials). testWorkflow persists the matching
+    run before it hands out a data token; there is no unaudited test-token bypass. */
 export async function fixtureRunContext(accountId: string, routineId: string, deps: TestDeps): Promise<RunContext> {
   const spec = CATALOG_SPEC_BY_ID[routineId];
   if (!spec) throw new Error(`routine "${routineId}" is not in the catalog`);
   const now = deps.now ?? (() => new Date());
   const account = { accountId, currency: "NZD", budgetMonthly: 0 };
-  const ctx: RunContext = { runId: `${TEST_RUN_PREFIX}${(deps.idGen ?? newId)()}`, routineId, version: spec.version, mode: "dry_run", startedAt: now().toISOString(), account, caps: capsFor(account), triggeredBy: "manual", vars: { ...DEMO_ACCOUNT.vars }, inputs: { about_the_business: "A test call from the Skills settings — fixture material, not this account's data." }, reads: {}, checks: {} };
+  const ctx: RunContext = { runId: (deps.idGen ?? newId)(), routineId, version: spec.version, mode: "dry_run", startedAt: now().toISOString(), account, caps: capsFor(account), triggeredBy: "manual", vars: { ...DEMO_ACCOUNT.vars }, inputs: { about_the_business: "A test call from the Skills settings — fixture material, not this account's data." }, reads: {}, checks: {} };
   const reader = new WorkerConnectorReader({ credentials: new FixtureCredentialProvider(), now });
   for (const n of spec.nodes) {
     if (n.kind !== "read") continue;
@@ -201,13 +200,38 @@ export async function testWorkflow(input: { accountId: string; routineId: string
   }
   const spec = CATALOG_SPEC_BY_ID[input.routineId];
   const produce = spec.nodes.find((n): n is ProduceNode => n.kind === "produce") ?? { kind: "produce" as const, id: "produce", skill: input.routineId };
+  const store = deps.store ?? getStore();
+  const produceIndex = Math.max(0, spec.nodes.findIndex((node) => node.id === produce.id));
+  try {
+    await store.createRun({
+      id: ctx.runId,
+      accountId: input.accountId,
+      routineId: input.routineId,
+      version: spec.version,
+      mode: "dry_run",
+      status: "running",
+      startedAt: ctx.startedAt,
+      dedupKey: `n8n:test:${ctx.runId}`,
+      snapshot: { spec, ctx, nextNodeIndex: produceIndex + 1, awaiting: "n8n" },
+    });
+  } catch (err) {
+    return { ok: false, error: `could not persist the n8n test run: ${err instanceof Error ? err.message : String(err)}`, ms: ms() };
+  }
   const bridge = new HttpN8nBridge({ env: deps.env, fetch: deps.fetch, now: deps.now, timeoutMs: deps.timeoutMs ?? TEST_TIMEOUT_MS });
   try {
     const out = await bridge.call(produce, ctx, { id: "test", accountId: input.accountId, routineId: input.routineId, webhookUrl: input.webhookUrl, active: true });
-    if (out.kind === "artifact") return { ok: true, kind: "artifact", artifact: { kind: out.artifact.kind, title: out.artifact.title, body: out.artifact.body, items: out.artifact.items?.length ?? 0 }, ms: ms() };
-    if (out.kind === "needs") return { ok: true, kind: "needs", needs: out.needs, ms: ms() };
-    return { ok: true, kind: "accepted", note: "The workflow answered 202 — it will POST the artifact to /api/routines/artifacts later. On a real run that finishes the run; a test run has nothing to attach it to.", ms: ms() };
+    if (out.kind === "artifact") {
+      await store.updateRun(ctx.runId, { status: "done", finishedAt: (deps.now ?? (() => new Date()))().toISOString(), summary: "n8n test returned an artifact.", snapshot: undefined });
+      return { ok: true, kind: "artifact", artifact: { kind: out.artifact.kind, title: out.artifact.title, body: out.artifact.body, items: out.artifact.items?.length ?? 0 }, ms: ms() };
+    }
+    if (out.kind === "needs") {
+      await store.updateRun(ctx.runId, { status: "done", finishedAt: (deps.now ?? (() => new Date()))().toISOString(), summary: "n8n test returned an input request.", snapshot: undefined });
+      return { ok: true, kind: "needs", needs: out.needs, ms: ms() };
+    }
+    await store.updateRun(ctx.runId, { summary: "n8n test accepted; waiting for its callback." });
+    return { ok: true, kind: "accepted", note: "The workflow answered 202. Its persisted dry-run remains open for a callback; the token and callback window expire after 15 minutes.", ms: ms() };
   } catch (err) {
+    await store.updateRun(ctx.runId, { status: "failed", finishedAt: (deps.now ?? (() => new Date()))().toISOString(), summary: "n8n test failed.", snapshot: undefined });
     return { ok: false, error: err instanceof Error ? err.message : String(err), ms: ms() };
   }
 }

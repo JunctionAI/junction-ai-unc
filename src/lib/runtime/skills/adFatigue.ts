@@ -16,7 +16,7 @@ export const adFatigue: Skill = {
     decides: ["which ad is both saturated and expensive", "whether spend is large enough to pause"],
     writes: ["a generic artifact of one Would-card"],
     never: ["invent frequency, CPA or spend", "pause an ad without approval", "spend"],
-    apply: "Would-cards. Pausing stays yours; I never spend.",
+    apply: "Would-cards only. Any future pause needs a separate exact run-level approval gate; I never spend.",
     examples: [
       { when: "worst ad frequency 5 and CPA 60% over target on enough spend", does: "one pause item naming that ad, those numbers, rollback = meta.ad.resume" },
       { when: "frequency is high but spend is tiny", does: "one keep item — spend too small to judge, no invented pause" },

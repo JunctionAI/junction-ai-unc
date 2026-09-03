@@ -8,7 +8,7 @@ import { getRoutinePreset, presetSource, setAccountPreset, setPresetDbForTests, 
 import { DEFAULT_META_PRESET, INDUSTRY_META_PRESETS, resolveMetaPreset, withPresetDefaults, type MetaPreset } from "../presets";
 import { adsetMetricsFromRow, cpaCaps, ctrDropPct, evaluateAdset, evaluateAdsets, scaledBudget, type AdsetMetrics, type NextAction, type ReasonCode, type Verdict } from "../rules/meta";
 
-const base: AdsetMetrics = { adsetId: "120210000000001", adsetName: "Prospecting NZ", spend: 420, purchases: 12, purchaseValue: 1302, cpa: 35, roas: 3.1, frequency: 1.8, ctr: 1.9, dailyBudget: 60 };
+const base: AdsetMetrics = { adsetId: "120210000000001", adsetName: "Prospecting NZ", spend: 420, purchases: 12, purchaseValue: 1302, cpa: 35, roas: 3.1, frequency: 1.8, ctr: 1.9, dailyBudget: 60, ageHours: 96, daysSinceLastChange: 7, daysAtOrBelowCapStreak: 3, measurementClean: true };
 const m = (o: Partial<AdsetMetrics>): AdsetMetrics => ({ ...base, ...o });
 const P = DEFAULT_META_PRESET; // target 40, max 70, roas floor 2, min spend 100, fatigue 4 / 30%, step 20 (max 25), hold 3d, price cap 50%, age 48h, streak 3d
 
@@ -28,7 +28,9 @@ const CASES: Case[] = [
   { name: "spend under the minimum → not enough data", metrics: m({ spend: 60, purchases: 1, cpa: 60 }), verdict: "not_enough_data", rule: "not_enough_spend", code: "insufficient_or_initial_evidence", next: "GATHER_EVIDENCE", action: null },
   { name: "exactly the minimum spend is judged", metrics: m({ spend: 100, purchases: 3, cpa: 33.33 }), verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
   { name: "younger than 48h → not enough data (even with great numbers)", metrics: m({ ageHours: 20 }), verdict: "not_enough_data", rule: "too_young", code: "insufficient_or_initial_evidence", next: "GATHER_EVIDENCE", action: null },
+  { name: "required age not read → not enough data", metrics: m({ ageHours: null }), verdict: "not_enough_data", rule: "age_not_read", code: "insufficient_or_initial_evidence", next: "GATHER_EVIDENCE", action: null },
   { name: "age gate off in the preset → judged", metrics: m({ ageHours: 20 }), preset: { minAgeHours: 0 }, verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
+  { name: "age gate off in the preset → a missing age does not block", metrics: m({ ageHours: null }), preset: { minAgeHours: 0 }, verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
   { name: "price policy applies but the price is unmapped → hold pending_product_price", metrics: m({ productPrice: null }), verdict: "hold", rule: "pending_product_price", code: "pending_product_price", next: "RESOLVE_PRODUCT_PRICE_MAPPING", action: null },
   { name: "price policy switched off → unmapped price is ignored", metrics: m({ productPrice: null }), preset: { cpaCapFromProductPricePct: 0 }, verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
   // money protection
@@ -39,7 +41,8 @@ const CASES: Case[] = [
   { name: "ROAS under floor with CPA over target → turn off", metrics: m({ purchases: 8, cpa: 52.5, roas: 1.6 }), verdict: "turn_off", rule: "turn_off_roas", code: "roas_under_floor", next: null, action: { actionId: "meta.adset.pause", params: { adsetId: "120210000000001", reason: "ROAS under floor and CPA over target" } } },
   { name: "ROAS under floor but CPA under target → hold, mixed signal", metrics: m({ cpa: 35, roas: 1.6 }), verdict: "hold", rule: "hold_roas_under_floor", code: "roas_under_floor", next: "GATHER_EVIDENCE", action: null },
   { name: "would be OFF but measurement is unclean → soft OFF blocked", metrics: m({ purchases: 5, cpa: 84, roas: 1.5, measurementClean: false }), verdict: "hold", rule: "soft_off_blocked", code: "soft_off_blocked_unclean_measurement", next: "REPAIR_MEASUREMENT", action: null },
-  { name: "unclean measurement never blocks a scale", metrics: m({ measurementClean: false }), verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
+  { name: "unclean measurement blocks a scale", metrics: m({ measurementClean: false }), verdict: "hold", rule: "measurement_not_verified", code: "measurement_not_verified", next: "REPAIR_MEASUREMENT", action: null },
+  { name: "unknown measurement blocks a pause", metrics: m({ purchases: 5, cpa: 84, roas: 1.5, measurementClean: null }), verdict: "hold", rule: "measurement_not_verified", code: "measurement_not_verified", next: "REPAIR_MEASUREMENT", action: null },
   { name: "product price 120 → cap 60: CPA 62 is off", metrics: m({ purchases: 5, cpa: 62, roas: 2.5, productPrice: 120 }), verdict: "turn_off", rule: "turn_off_cpa", code: "cpa_over_cap", next: null },
   { name: "product price 120 → cap 60: CPA 58 scales (target from preset would have held)", metrics: m({ purchases: 5, cpa: 58, roas: 2.5, productPrice: 120 }), verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
   // reasons not to scale
@@ -47,10 +50,13 @@ const CASES: Case[] = [
   { name: "CTR down 30% from baseline → hold, refresh creative", metrics: m({ ctr: 1.4, ctrBaseline: 2.0 }), verdict: "hold", rule: "hold_fatigue_ctr", code: "fatigue_ctr", next: "REFRESH_CREATIVE", action: null },
   { name: "CTR down 20% is not fatigue", metrics: m({ ctr: 1.6, ctrBaseline: 2.0 }), verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
   { name: "changed 2 days ago → learning hold", metrics: m({ daysSinceLastChange: 2 }), verdict: "hold", rule: "hold_recent_change", code: "learning_hold", next: "GATHER_EVIDENCE", action: null },
+  { name: "required change age not read → learning hold", metrics: m({ daysSinceLastChange: null }), verdict: "hold", rule: "learning_change_not_read", code: "learning_hold", next: "GATHER_EVIDENCE", action: null },
+  { name: "learning hold off in the preset → a missing change age does not block", metrics: m({ daysSinceLastChange: null }), preset: { holdDays: 0 }, verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
   { name: "changed 3 days ago → out of the learning hold", metrics: m({ daysSinceLastChange: 3 }), verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
   { name: "at/under cap for only 2 of 3 days → pending streak", metrics: m({ daysAtOrBelowCapStreak: 2 }), verdict: "hold", rule: "hold_pending_streak", code: "pending_3d_scale_streak", next: "GATHER_EVIDENCE", action: null },
   { name: "3-day streak → scale", metrics: m({ daysAtOrBelowCapStreak: 3 }), verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
-  { name: "streak not measured → scale on the window (says so)", metrics: m({}), verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null, action: { actionId: "meta.adset.set_daily_budget", params: { adsetId: "120210000000001", dailyBudget: 72, currentDailyBudget: 60, reason: "CPA 35.00 at/under the 40.00 line" } } },
+  { name: "required streak not measured → hold", metrics: m({ daysAtOrBelowCapStreak: null }), verdict: "hold", rule: "scale_streak_not_read", code: "pending_3d_scale_streak", next: "GATHER_EVIDENCE", action: null },
+  { name: "streak policy off → a missing streak does not block", metrics: m({ daysAtOrBelowCapStreak: null }), preset: { scaleStreakDays: 0 }, verdict: "scale", rule: "scale", code: "at_or_below_cap", next: null },
   { name: "under target but budget not read → hold, read budget", metrics: m({ dailyBudget: null }), verdict: "hold", rule: "scale_no_budget", code: "budget_not_read", next: "READ_BUDGET", action: null },
   { name: "between target and max → keep", metrics: m({ purchases: 8, cpa: 52.5, roas: 2.4 }), verdict: "keep", rule: "keep_in_band", code: "in_band", next: null, action: null },
   { name: "premium preset: CPA 150 is under a 120 target? no — in band up to 220", metrics: m({ spend: 900, purchases: 6, cpa: 150, roas: 2.8 }), preset: INDUSTRY_META_PRESETS.dtc_premium, verdict: "keep", rule: "keep_in_band", code: "in_band", next: null },
@@ -75,7 +81,7 @@ describe("evaluateAdset table", () => {
   it("covers at least 20 cases and every reason code", () => {
     expect(CASES.length).toBeGreaterThanOrEqual(20);
     const codes = new Set(CASES.map((c) => c.code));
-    for (const code of ["insufficient_or_initial_evidence", "pending_3d_scale_streak", "pending_product_price", "soft_off_blocked_unclean_measurement", "cpa_over_cap", "no_results_over_cap", "roas_under_floor", "fatigue_frequency", "fatigue_ctr", "learning_hold", "budget_not_read", "at_or_below_cap", "in_band"]) expect(codes.has(code as ReasonCode), code).toBe(true);
+    for (const code of ["insufficient_or_initial_evidence", "pending_3d_scale_streak", "pending_product_price", "measurement_not_verified", "soft_off_blocked_unclean_measurement", "cpa_over_cap", "no_results_over_cap", "roas_under_floor", "fatigue_frequency", "fatigue_ctr", "learning_hold", "budget_not_read", "at_or_below_cap", "in_band"]) expect(codes.has(code as ReasonCode), code).toBe(true);
   });
   it("is deterministic", () => {
     const a = evaluateAdset(base, P);
@@ -183,7 +189,7 @@ describe("a stored preset reaches the rules (src/lib/runtime/presets store)", ()
     expect(evaluateAdset(base, DEFAULT_META_PRESET).verdict).toBe("scale");
   });
 
-  it("routine_params targetCpa layers over the account and reaches evaluateAdset", async () => {
+  it("routine_params remains editor-only and cannot bypass promotion through presetSource", async () => {
     await setAccountPreset(db, ACCT, "paid", { targetCpa: 30, maxCpa: 70 });
     const spec = catalogSpec("D02-W01");
     await setRoutineParams(db, ACCT, spec, { params: { targetCpa: 45 } });
@@ -193,7 +199,8 @@ describe("a stored preset reaches the rules (src/lib/runtime/presets store)", ()
     const e = evaluateAdset(m({ purchases: 10, cpa: 42, roas: 3 }), routineScoped);
     expect(e.verdict).toBe("scale");
     expect(e.caps.scaleLine).toBe(45);
-    // the account-level source alone still says 30
+    // RulesDecisionProvider's runtime source remains account-only. The routine override reaches
+    // execution only through the policy snapshot in a promoted decide node.
     expect((await resolveMetaPreset(ACCT, presetSource(db), "D02-W01")).targetCpa).toBe(30);
   });
 });

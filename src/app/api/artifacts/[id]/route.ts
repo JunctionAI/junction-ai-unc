@@ -16,7 +16,7 @@ import { sendOnLink } from "@/lib/channels/outbound";
 import { channelLog, envAdapters, serviceDbOrNull } from "@/lib/channels/server";
 import { isChannel } from "@/lib/channels/types";
 import { isDbConfigured } from "@/lib/db/client";
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession, requireAccountSession } from "@/lib/db/session";
 import type { DbClient } from "@/lib/db/types";
 import { getStore } from "@/lib/runtime/store";
 import { withErrorCapture } from "@/lib/observability/errors";
@@ -27,9 +27,9 @@ export const dynamic = "force-dynamic";
 const ACTIONS = new Set(["approve", "hold", "edit", "why", "use"]);
 const MESSAGE_MAX = 3800;
 
-async function bind(): Promise<{ accountId: string | null; decidedBy?: string; db: DbClient | null } | Response> {
+async function bind(ownerOnly = false): Promise<{ accountId: string | null; decidedBy?: string; db: DbClient | null } | Response> {
   if (!isDbConfigured()) return { accountId: null, db: null };
-  const session = await requireAccountSession();
+  const session = ownerOnly ? await requireAccountOwnerSession() : await requireAccountSession();
   if (session instanceof Response) return session;
   return { accountId: session.accountId, decidedBy: session.userId, db: session.service };
 }
@@ -53,7 +53,7 @@ async function handlePOST(req: Request, ctx: { params: Promise<{ id: string }> }
   } catch {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
-  const b = await bind();
+  const b = await bind(true);
   if (b instanceof Response) return b;
   const store = getStore();
 
@@ -80,7 +80,7 @@ async function handlePOST(req: Request, ctx: { params: Promise<{ id: string }> }
     const out = await decideArtifact({ store, db: b.db }, { accountId: b.accountId, artifactId, action: body.action as "approve", reason: typeof body.reason === "string" ? body.reason : undefined, editedBody: typeof body.editedBody === "string" ? body.editedBody : undefined, decidedBy: b.decidedBy });
     return Response.json(out);
   } catch (err) {
-    if (err instanceof ArtifactError) return Response.json({ error: err.message, code: err.code }, { status: err.code === "not_found" ? 404 : 400 });
+    if (err instanceof ArtifactError) return Response.json({ error: err.message, code: err.code }, { status: err.code === "not_found" ? 404 : err.code === "conflict" ? 409 : 400 });
     return Response.json({ error: err instanceof Error ? err.message : "decision failed" }, { status: 500 });
   }
 }

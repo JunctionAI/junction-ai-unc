@@ -4,7 +4,7 @@
 import { asDb, isDbConfigured } from "@/lib/db/client";
 import { getServerSupabase, isServiceRoleConfigured } from "@/lib/db/server";
 import { listMemberships } from "@/lib/db/accountState";
-import { requireAccountSession, type AccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession, type AccountSession } from "@/lib/db/session";
 import { toLocalePricing, type LocalePricing } from "@/lib/locale/countries";
 import { resolveLocaleForRequest } from "@/lib/locale/server";
 import { isBillingConfigured } from "./config";
@@ -40,7 +40,7 @@ export async function getBillingForRequest(): Promise<BillingProps> {
   } = await supabase.auth.getUser();
   if (!user) return { configured: true, entitlement: { state: "none" } }; // the proxy sends /app → /login first
   const db = asDb(supabase);
-  const memberships = await listMemberships(db);
+  const memberships = await listMemberships(db, user.id);
   if (!memberships.length) return { configured: true, entitlement: { state: "none" } };
   return { configured: true, entitlement: await getEntitlement(db, memberships[0].accountId) };
 }
@@ -52,11 +52,10 @@ const json = (body: unknown, status: number) => Response.json(body, { status });
 
 /** Resolve the signed-in founder + their account for a billing route, or the Response to
     return instead: {fallback:true} when billing isn't active, 503 without the service role,
-    401 without a session. Creates the account when the user has none yet (first sign-in
-    raced the client-side bootstrap). Same resolution as every other session-bound route
-    (src/lib/db/session.ts) with the billing gate in front. */
+    401 without a session, or 403 when the identity has no invited account. Same resolution
+    as every other session-bound route (src/lib/db/session.ts) with the billing gate in front. */
 export async function requireBillingSession(): Promise<BillingSession | Response> {
   if (!isBillingActive()) return json({ fallback: true }, 200);
   if (!isServiceRoleConfigured()) return json({ error: "billing storage is not configured" }, 503);
-  return requireAccountSession({ createAccount: true });
+  return requireAccountOwnerSession();
 }

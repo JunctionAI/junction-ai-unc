@@ -18,21 +18,32 @@ function sctx(over: Partial<SkillContext> = {}): SkillContext {
 
 describe("skill cards", () => {
   it("one per catalog routine, each stating its kind, prompt, output shape, minimum and skill file", () => {
+    expect(SKILLS).toHaveLength(35);
     expect(SKILLS.map((s) => s.id).sort()).toEqual(CATALOG_SPECS.map((s) => s.id).sort());
+    expect(new Set(SKILLS.map((s) => s.id)).size).toBe(35);
     expect(WAVE_1_IDS.every((id) => SKILL_BY_ID[id])).toBe(true);
     for (const s of SKILLS) {
       expect(s.routineId).toBe(s.id);
       expect(s.prompt.length).toBeGreaterThan(200);
       expect(s.outputSpec).toContain(`"kind":"${s.kind}"`);
+      expect(() => JSON.parse(s.outputSpec), `${s.id} outputSpec`).not.toThrow();
+      expect(JSON.parse(s.outputSpec).kind, `${s.id} output kind`).toBe(s.kind);
       expect(s.minimum.summary.length).toBeGreaterThan(10);
       expect(s.maxItems).toBeGreaterThan(0);
       expect(CATALOG_SPEC_BY_ID[s.id].minimum).toEqual(s.minimum);
       const f = s.file;
       expect(f.goal.length, s.id).toBeGreaterThan(10);
       for (const k of ["owns", "reads", "decides", "writes", "never"] as const) expect(f[k].length, `${s.id}.${k}`).toBeGreaterThan(0);
-      expect(f.apply.toLowerCase(), s.id).toMatch(/draft|ask|graduate|send|yours/);
+      expect(f.apply.toLowerCase(), s.id).toMatch(/draft|ask|graduate|send|yours|approv|wait|proposal|review|hold|gate|founder|separate/);
       expect(f.examples.length, s.id).toBeGreaterThan(0);
       expect(f.never.some((n) => /invent|scrape|publish|send|join the call/i.test(n)), s.id).toBe(true);
+      const contract = [s.inputs.join(" "), f.reads.join(" "), s.prompt, s.outputSpec].join(" ");
+      for (const node of CATALOG_SPEC_BY_ID[s.id].nodes) {
+        if (node.kind === "read") expect(contract, `${s.id} missing read alias ${node.as}`).toMatch(new RegExp(`(?:read:|\\b)${node.as}\\b`));
+      }
+      if (CATALOG_SPEC_BY_ID[s.id].mutates) {
+        expect([f.apply, ...f.writes, ...f.never].join(" "), `${s.id} mutation boundary`).toMatch(/approv|gate|proposal|Would-card/i);
+      }
     }
   });
 

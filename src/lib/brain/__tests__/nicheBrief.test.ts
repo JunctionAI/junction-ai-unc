@@ -192,6 +192,16 @@ describe("route", () => {
     expect(got.brief?.categoryBand).toBe("dtc_supplements");
   });
 
+  it("lets members read but blocks generation before memories or model usage are written", async () => {
+    db.rows("account_members")[0].role = "member";
+    expect((await GET()).status).toBe(200);
+    const res = await post({ profile });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "owner_only" });
+    expect(db.rows("memories")).toHaveLength(0);
+    expect(db.rows("llm_usage")).toHaveLength(0);
+  });
+
   it("POST with no profile in the body reads business_profiles; with nothing at all it still answers (unknown band)", async () => {
     db.seed("business_profiles", [{ account_id: ACCT, profile: { name: "Studio", category: "Pilates studio", businessType: "local", sells: "services" } }]);
     const b1 = (await (await post({})).json()) as { brief: NicheBrief };

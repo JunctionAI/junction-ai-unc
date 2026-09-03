@@ -25,11 +25,16 @@ export default function LoginForm({ next = "/app" }: { next?: string }) {
     try {
       const { error } = await getBrowserSupabase().auth.signInWithOtp({
         email: addr,
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+          // Private beta is invite-only. Tom pre-creates/invites the Auth user; typing an
+          // arbitrary address here must never create a new identity.
+          shouldCreateUser: false,
+        },
       });
       if (error) throw error;
       setPhase("sent");
-      setMessage(`Link’s on its way to ${addr}. Open it on this device and I’ll take it from there.`);
+      setMessage(`If ${addr} is on the private beta, the link’s on its way. Open it on this device and I’ll take it from there.`);
     } catch {
       setPhase("error");
       setMessage("I couldn’t send that just now. Give it a moment and try again.");
@@ -83,7 +88,7 @@ export default function LoginForm({ next = "/app" }: { next?: string }) {
         {phase === "sending" ? "Sending…" : "Send me the link"}
       </button>
       <p style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.5, margin: "14px 0 0" }}>
-        First time here? The same link creates your account. Nothing outward ever happens without your okay.
+        This private beta is invite-only. Use the exact address Tom invited; nothing outward ever happens without your okay.
       </p>
     </form>
   );

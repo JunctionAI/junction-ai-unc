@@ -16,7 +16,7 @@ export const segmentation: Skill = {
     decides: ["which definitions to propose or refresh", "the thresholds fitted to the rows"],
     writes: ["a generic artifact of up to five definitions"],
     never: ["invent a drift percentage or a profile count", "publish segment changes", "run for a non-store"],
-    apply: "Drafts. Segment updates stay yours until we graduate this routine.",
+    apply: "Drafts only. Any future segment update needs a separate exact run-level approval gate.",
     examples: [
       { when: "customers show a clear top-spend cluster and a 90-day gap", does: "VIP / Active / Lapsed / New / Never purchased, thresholds taken from the rows" },
       { when: "Klaviyo already has VIP and Lapsed 90d", does: "refresh those two plus any missing core segment; no invented drift %" },

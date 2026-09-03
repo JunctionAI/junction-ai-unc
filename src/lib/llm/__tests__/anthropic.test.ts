@@ -36,7 +36,9 @@ describe("anthropic adapter", () => {
 
   it("SDK errors become error results with codes — never thrown, never carrying a key", async () => {
     const throwing = (err: unknown) => createAnthropicProvider({ client: fake(async () => { throw err; }).client }).complete(req);
-    expect(await throwing(new Anthropic.AuthenticationError(401, { error: { message: "invalid x-api-key sk-ant-api03-secretsecret" } }, "invalid x-api-key sk-ant-api03-secretsecret", new Headers()))).toMatchObject({ stopReason: "error", errorCode: "auth", errorMessage: expect.stringContaining("sk-ant-…") });
+    const auth = await throwing(new Anthropic.AuthenticationError(401, { error: { message: "invalid x-api-key sk-ant-api03-secretsecret" } }, "invalid x-api-key sk-ant-api03-secretsecret", new Headers()));
+    expect(auth).toMatchObject({ stopReason: "error", errorCode: "auth", errorMessage: expect.stringContaining("[redacted]") });
+    expect(auth.errorMessage).not.toContain("sk-ant-api03-secretsecret");
     expect(await throwing(new Anthropic.NotFoundError(404, {}, "model: claude-99", new Headers()))).toMatchObject({ errorCode: "not_found", errorMessage: expect.stringMatching(/^404 /) });
     expect(await throwing(new Anthropic.RateLimitError(429, {}, "rate", new Headers()))).toMatchObject({ errorCode: "rate_limited" });
     expect(await throwing(new Anthropic.InternalServerError(529, {}, "overloaded", new Headers()))).toMatchObject({ errorCode: "provider_error" });

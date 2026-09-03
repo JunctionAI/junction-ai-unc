@@ -14,11 +14,11 @@
    Even then, "approved" on a mutating routine fails closed: the shipped
    executor refuses every mutation.
 
-   DB configured → session-bound: the run must belong to the caller's account
+   DB configured → owner-only and session-bound: the run must belong to the caller's account
    (else 404) and decided_by is the caller. Demo mode → MemoryStore, unbound. */
 
 import { isDbConfigured } from "@/lib/db/client";
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { resumeApproval, type ServiceDeps } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
@@ -44,7 +44,7 @@ async function handlePOST(req: Request) {
   if (body.decision !== "approved" && body.decision !== "held") return Response.json({ error: 'decision must be "approved" or "held"' }, { status: 400 });
   let decidedBy = typeof body.decidedBy === "string" ? body.decidedBy.slice(0, 128) : undefined;
   if (isDbConfigured()) {
-    const session = await requireAccountSession();
+    const session = await requireAccountOwnerSession();
     if (session instanceof Response) return session;
     decidedBy = session.userId;
     const run = await getStore().getRun(runId);

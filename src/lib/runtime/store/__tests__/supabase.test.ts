@@ -155,6 +155,8 @@ describe("SupabaseStore call shapes (columns/filters match the migrations)", () 
     const upd = await store.updateApproval(a.id, { status: "approved", decidedAt: "2026-09-02T09:00:00.000Z", decidedBy: U(7) });
     expect(db.lastCall("approvals", "update")).toMatchObject({ values: { status: "approved", decided_at: "2026-09-02T09:00:00.000Z", decided_by: U(7) }, filters: [{ kind: "eq", column: "id", value: a.id }] });
     expect(upd).toEqual({ ...a, status: "approved", decidedAt: "2026-09-02T09:00:00.000Z", decidedBy: U(7) });
+    await expect(store.updateApproval(a.id, { status: "held" }, "pending")).rejects.toThrow(`approval ${a.id} already approved`);
+    expect((await store.getApproval(a.id))!.status).toBe("approved");
     expect(await store.listApprovals(ACCT, "pending")).toEqual([]);
     expect(db.lastCall("approvals", "select")).toMatchObject({
       filters: [

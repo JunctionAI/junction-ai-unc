@@ -1,8 +1,8 @@
 /* Unc's daily brief for the caller's account (docs/PROACTIVE.md).
 
    GET  → { brief: DailyBriefRecord | null, day }        today's brief (account-local day)
-   POST → { brief: DailyBriefRecord, author, existed }   generate today's brief now — idempotent
-          per local day (an existing row is returned untouched; body { force: true } regenerates)
+   POST → { brief: DailyBriefRecord, author, existed }   owner-only generation — idempotent per
+          local day (an existing row is returned untouched; body { force: true } regenerates)
    or   { fallback: true }   demo mode (no database) — Home renders nothing for the brief
    or   401 | 403 | 503 { error }
 
@@ -14,7 +14,7 @@
 
 import { BRIEF_EFFORT, BRIEF_MAX_TOKENS, generateDailyBrief, getDailyBrief, localDay, readTimezone, type BriefLlm } from "@/lib/brain/brief";
 import { createTextClient } from "@/lib/llm/router";
-import { requireAccountSession, type AccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession, requireAccountSession, type AccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { withErrorCapture } from "@/lib/observability/errors";
 
@@ -39,7 +39,7 @@ async function handleGET() {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   let force = false;
   try {

@@ -9,7 +9,7 @@ import type { DbClient } from "../db/types";
 import { ALL_SYSTEMS } from "../platform/catalog";
 import { newId } from "../runtime/context";
 import type { Store } from "../runtime/store/interface";
-import type { Artifact, ArtifactStatus, TasteAction } from "../runtime/types";
+import type { Artifact, ArtifactStatus, Receipt, TasteAction } from "../runtime/types";
 import { firstLines } from "./markdown";
 
 export interface ArtifactView {
@@ -88,7 +88,7 @@ export interface ArtifactDecision {
 
 export class ArtifactError extends Error {
   constructor(
-    readonly code: "not_found" | "invalid",
+    readonly code: "not_found" | "invalid" | "conflict",
     message: string,
   ) {
     super(message);
@@ -130,7 +130,7 @@ export function decisionMemoryText(a: Artifact, action: ArtifactAction, reason?:
   }
 }
 
-export async function decideArtifact(deps: ArtifactsDeps, input: ArtifactDecision): Promise<{ artifact: ArtifactView; memory: string | null }> {
+export async function decideArtifact(deps: ArtifactsDeps, input: ArtifactDecision): Promise<{ artifact: ArtifactView; memory: string | null; receipt: Receipt }> {
   const a = await deps.store.getArtifact(input.artifactId);
   if (!a || (input.accountId && a.accountId !== input.accountId)) throw new ArtifactError("not_found", `artifact ${input.artifactId} not found`);
   const now = (deps.now ?? (() => new Date()))().toISOString();
@@ -141,7 +141,17 @@ export async function decideArtifact(deps: ArtifactsDeps, input: ArtifactDecisio
   const status = STATUS_BY_ACTION[input.action];
   if (status) patch.status = status;
   if (input.action === "edit") patch.editedBody = input.editedBody!.trim().slice(0, 12_000);
-  const updated = Object.keys(patch).length ? await deps.store.updateArtifact(a.id, patch) : a;
+  let updated = a;
+  if (Object.keys(patch).length) {
+    try {
+      // Compare against the version we inspected. Two browser tabs may both decide a draft,
+      // but only the first state transition is allowed to win.
+      updated = await deps.store.updateArtifact(a.id, patch, a.status);
+    } catch (error) {
+      if (/changed from/.test(error instanceof Error ? error.message : String(error))) throw new ArtifactError("conflict", "This draft changed while you were reviewing it. Refresh before deciding again.");
+      throw error;
+    }
+  }
 
   const taste = TASTE_BY_ACTION[input.action];
   if (taste) {
@@ -154,6 +164,33 @@ export async function decideArtifact(deps: ArtifactsDeps, input: ArtifactDecisio
       createdAt: now,
     });
   }
+  const receipt: Receipt = {
+    id: newId(),
+    accountId: a.accountId,
+    runId: a.runId,
+    kind: "notification",
+    description:
+      input.action === "approve"
+        ? `Approved draft: ${a.title}.`
+        : input.action === "hold"
+          ? `Held draft: ${a.title} — nothing was sent or published.`
+          : input.action === "edit"
+            ? `Edited draft: ${a.title}; the original was retained.`
+            : input.action === "use"
+              ? `Marked draft as used: ${a.title}.`
+              : `Opened the evidence for draft: ${a.title}.`,
+    payload: {
+      artifactDecision: true,
+      artifactId: a.id,
+      action: input.action,
+      fromStatus: a.status,
+      toStatus: updated.status,
+      reason: reason ?? null,
+      decidedBy: input.decidedBy ?? null,
+    },
+    createdAt: now,
+  };
+  await deps.store.appendReceipt(receipt);
   let memory: string | null = null;
   const text = decisionMemoryText(a, input.action, reason);
   if (text && deps.db) {
@@ -164,5 +201,5 @@ export async function decideArtifact(deps: ArtifactsDeps, input: ArtifactDecisio
       memory = null; // the decision stands without the memory
     }
   }
-  return { artifact: artifactView(updated), memory };
+  return { artifact: artifactView(updated), memory, receipt };
 }

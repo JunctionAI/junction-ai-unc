@@ -57,6 +57,8 @@ export type LlmErrorCode =
   | "network" // DNS / TLS / connection reset
   | "bad_response" // 2xx but the body wasn't what the API promises
   | "budget_exceeded" // the account is over its monthly cap (src/lib/llm/budget.ts) — no provider was called
+  | "budget_unavailable" // the cap could not be verified, so no provider was called
+  | "unpriced_model" // a hosted model has no trusted price, so it cannot use the account budget rail
   | "unknown";
 
 export interface LlmUsage {

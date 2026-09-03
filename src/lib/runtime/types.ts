@@ -179,11 +179,35 @@ export type SelectionRule =
   | { kind: "threshold"; metric: string; op: CompareOp; value: PredicateValue; ifTrue: string; ifFalse: string }
   | { kind: "llm"; prompt: string; fallback?: string };
 
+/** Versioned rule inputs carried inside a promoted routine spec. The worker treats this as
+    untrusted JSON and applies only its explicit numeric allowlist. Keeping routine-specific
+    policy on the decide node means an editor row cannot change live decisions before the
+    containing draft has passed validation and been promoted. */
+export interface MetaAdsetDecisionPolicy {
+  kind: "meta.adset";
+  preset?: {
+    targetCpa?: number;
+    maxCpa?: number;
+    roasFloor?: number;
+    minSpendBeforeJudging?: number;
+    fatigueFrequency?: number;
+    fatigueCtrDrop?: number;
+    scaleStepPct?: number;
+    holdDays?: number;
+  };
+  /** Optional routine ceiling. It may tighten, never loosen, the account's per-day cap. */
+  dailyBudgetCap?: number;
+}
+
+export type DecisionPolicy = MetaAdsetDecisionPolicy;
+
 export interface DecideNode extends NodeBase {
   kind: "decide";
   question: string;
   options: DecisionOption[];
   rule: SelectionRule;
+  /** Optional policy snapshot governed by the routine draft -> validate -> promote lifecycle. */
+  policy?: DecisionPolicy;
 }
 
 /** The decision a DecisionProvider returns. Lands at ctx.decision. */

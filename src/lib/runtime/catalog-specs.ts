@@ -11,13 +11,13 @@
    for a source (web, llm_search, calendar) the read is a research read and
    the routine stays draft-only.
 
-   Every non-mutating chain PRODUCE: trigger → optional reads → produce (the skill
-   card in ./skills) → gate → receipt. Reads are `optional` unless they define the
-   routine (Abandoned cart / Winback → Shopify). A founder with only a site profile
-   still gets a draft; the skill's `minimum` (copied onto the spec) says what it
-   truly needs, and a run that lacks it ends waiting_input with an honest ask
-   instead of "Nothing worth drafting today". Mutating chains keep check → decide
-   → gate → execute; they still carry a skill file for the inspector. */
+   Every chain PRODUCES before its gate: draft-only routines make the deliverable;
+   mutating routines make an inspectable proposal before approval. Non-mutating
+   reads are `optional` unless they define the routine (Abandoned cart / Winback →
+   Shopify), so the skill can use founder context or return a precise missing-input
+   ask instead of failing at an unavailable connector. Mutation reads remain strict.
+   The skill card in ./skills is also the replaceable n8n seam, and its `minimum`
+   is copied onto the spec. */
 
 import { ALL_SYSTEMS } from "../platform/catalog";
 import { SKILL_BY_ID } from "./skills";
@@ -299,8 +299,9 @@ const D02: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.spend.top_adset_roas", op: "gte", value: 2.5, ifTrue: "scale", ifFalse: "hold" },
     ),
+    produce("D02-W01"),
     gate("{{decision.label}}", {
-      detail: "7-day read on {{account.currency}} {{reads.spend.spend}} spend, reconciled against Shopify. Verdict by your preset ({{decision.params.preset}}): {{decision.params.verdict}}.",
+      detail: "7-day Meta spend and return read alongside Shopify orders. Verdict by your preset ({{decision.params.preset}}): {{decision.params.verdict}}.",
       before: "{{reads.spend.top_adset_name}} at {{account.currency}} {{reads.spend.top_adset_daily_budget}}/day",
       after: "{{decision.label}} — inside your cap of {{account.currency}} {{caps.perDay}}/day",
       expiryHours: 24,
@@ -321,21 +322,22 @@ const D02: RoutineSpec[] = [
     decide(
       "Which creatives go into this week's test cell?",
       [
-        { id: "launch", label: "Launch a 3-creative test at the sprint budget", spend: { amount: 30, period: "day" }, params: { creativeIds: "{{reads.creatives.rows}}" } },
+        { id: "launch", label: "Prepare a PAUSED 3-creative test at the sprint budget", spend: { amount: 30, period: "day" }, params: { creativeIds: "{{reads.creatives.rows}}" } },
         { id: "wait", label: "Wait — test cell still running", terminal: true },
       ],
       { kind: "threshold", metric: "reads.ads.active_tests", op: "lt", value: 2, ifTrue: "launch", ifFalse: "wait" },
     ),
-    gate("Launch this week's creative test ({{reads.creatives.count}} creatives, {{account.currency}} {{decision.spend.amount}}/day)", {
-      detail: "Testing 10+ concepts a month is what keeps CPA falling. Runs 7 days, then the winner is promoted by the decisioning routine.",
-      before: "No test cell live",
-      after: "1 test ad set live at {{account.currency}} {{decision.spend.amount}}/day",
+    produce("D02-W02"),
+    gate("Prepare this week's PAUSED creative test ({{reads.creatives.count}} creatives, {{account.currency}} {{decision.spend.amount}}/day)", {
+      detail: "Testing fresh concepts creates evidence for future decisions. This proposal shapes a 7-day test cell; activation remains a separate founder-controlled step.",
+      before: "No new test cell prepared",
+      after: "PAUSED test objects ready for separate activation",
     }),
     execute("meta_ads", "meta.campaign.create_from_brief", {
       params: { name: "Creative test — {{today}}", objective: "OUTCOME_SALES", dailyBudget: "{{decision.spend.amount}}", audience: { countries: "{{vars.countries}}" }, creatives: "{{decision.params.creativeIds}}", pixelId: "{{vars.metaPixelId}}", pageId: "{{vars.metaPageId}}", durationDays: 7 },
       rollback: "everything is created PAUSED; switch it off in Ads Manager",
     }),
-    receipt("Creative testing sprint launched.", 7),
+    receipt("Creative testing sprint proposal prepared.", 7),
   ]),
   // Hook rotation engine — wave 2, MUTATES (swap creative on fatigued ad)
   spec("D02-W03", 2, [
@@ -351,6 +353,7 @@ const D02: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.hooks.count", op: "gte", value: 1, ifTrue: "rotate", ifFalse: "none_ready" },
     ),
+    produce("D02-W03"),
     gate("Rotate a fresh hook into {{reads.ads.most_fatigued_ad_name}}", { detail: "Frequency {{reads.ads.most_fatigued_frequency}}, CTR down {{reads.ads.most_fatigued_ctr_drop}}% since launch.", before: "Current hook running", after: "Next hook variant live, old one paused", expiryHours: 24 }),
     execute("meta_ads", "meta.ad.rotate", { params: { pauseAdId: "{{decision.params.adId}}", resumeAdId: "{{decision.params.nextAdId}}", reason: "hook fatigue" }, rollback: "meta.ad.rotate the other way (pause the new, resume the old)" }),
     receipt("Hook rotation: {{decision.label}}.", 7),
@@ -368,6 +371,7 @@ const D02: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.ads.worst_spend", op: "gte", value: 50, ifTrue: "pause", ifFalse: "keep" },
     ),
+    produce("D02-W04"),
     gate("Pause {{reads.ads.worst_ad_name}} — frequency {{reads.ads.worst_frequency}}, CPA {{reads.ads.worst_cpa_vs_target_pct}}% over target", { before: "Ad active, {{account.currency}} {{reads.ads.worst_spend}} spent in 7d", after: "Ad paused; budget flows to the rest of the ad set", expiryHours: 12 }),
     execute("meta_ads", "meta.ad.pause", { target: { adId: "{{decision.params.adId}}" }, params: { reason: "frequency {{reads.ads.worst_frequency}}, CPA {{reads.ads.worst_cpa_vs_target_pct}}% over target" }, rollback: "meta.ad.resume" }),
     receipt("Ad fatigue watch: {{decision.label}}.", 7),
@@ -406,7 +410,8 @@ const D02: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.meta.projected_daily_spend", op: "gt", value: { ref: "caps.perDay" }, ifTrue: "cut", ifFalse: "fine" },
     ),
-    gate("Spend pacing at {{account.currency}} {{reads.meta.projected_daily_spend}}/day vs cap {{account.currency}} {{caps.perDay}} — cut budgets?", { before: "Budgets total {{account.currency}} {{reads.meta.daily_budget_total}}/day", after: "Budgets reduced to {{account.currency}} {{caps.perDay}}/day total", expiryHours: 6 }),
+    produce("D02-W07"),
+    gate("Spend pacing at {{account.currency}} {{reads.meta.projected_daily_spend}}/day vs cap {{account.currency}} {{caps.perDay}} — cut the largest ad set by 25%?", { before: "Budgets total {{account.currency}} {{reads.meta.daily_budget_total}}/day", after: "25% reduction proposed; a fresh pacing read is required before any further change", expiryHours: 6 }),
     execute("meta_ads", "meta.adset.set_daily_budget", { target: { adsetId: "{{decision.params.adsetId}}" }, params: { changePct: "{{decision.params.changePct}}", currentDailyBudget: "{{decision.params.currentDailyBudget}}", reason: "pacing {{reads.meta.projected_daily_spend}}/day over the {{caps.perDay}}/day cap" }, rollback: "restore the previous daily budget" }),
     receipt("Budget pacing guard: {{decision.label}}.", 1),
   ]),
@@ -419,17 +424,18 @@ const D02: RoutineSpec[] = [
     decide(
       "Promote the proven post as a paid test?",
       [
-        { id: "promote", label: "Run {{reads.posts.top_post_caption}} as a paid test", spend: { amount: 20, period: "day" }, params: { actionId: "meta.campaign.create_from_brief", mediaId: "{{reads.posts.top_post_id}}" } },
+        { id: "promote", label: "Prepare {{reads.posts.top_post_caption}} as a PAUSED paid test", spend: { amount: 20, period: "day" }, params: { actionId: "meta.campaign.create_from_brief", mediaId: "{{reads.posts.top_post_id}}" } },
         { id: "skip", label: "Not yet — wait for conversions from it", terminal: true },
       ],
       { kind: "threshold", metric: "reads.ga.conversions", op: "gte", value: 1, ifTrue: "promote", ifFalse: "skip" },
     ),
-    gate("Promote your top post as a {{account.currency}} {{decision.spend.amount}}/day ad test", { detail: "Reach {{reads.posts.top_post_reach}}, like-rate {{reads.posts.top_post_like_rate_pct}}%, {{reads.ga.conversions}} conversions from Instagram this week.", before: "Organic only", after: "Boosted as a 7-day paid test" }),
+    produce("D02-W08"),
+    gate("Prepare your top post as a PAUSED {{account.currency}} {{decision.spend.amount}}/day ad test", { detail: "Reach {{reads.posts.top_post_reach}}, like-rate {{reads.posts.top_post_like_rate_pct}}%, {{reads.ga.conversions}} conversions from Instagram this week. Activation remains a separate founder-controlled step.", before: "Organic only", after: "PAUSED paid-test proposal ready for separate activation" }),
     execute("meta_ads", "meta.campaign.create_from_brief", {
       params: { name: "Organic-to-paid test — {{today}}", objective: "OUTCOME_TRAFFIC", optimizationGoal: "LANDING_PAGE_VIEWS", dailyBudget: "{{decision.spend.amount}}", audience: { countries: "{{vars.countries}}" }, creatives: { instagramMediaId: "{{decision.params.mediaId}}" }, pageId: "{{vars.metaPageId}}", durationDays: 7 },
       rollback: "everything is created PAUSED; switch it off in Ads Manager",
     }),
-    receipt("Organic-to-paid: {{decision.label}}.", 7),
+    receipt("Organic-to-paid proposal: {{decision.label}}.", 7),
   ]),
 ];
 
@@ -478,9 +484,10 @@ const D03: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.gsc.worst_page_impressions", op: "gte", value: 200, ifTrue: "fix", ifFalse: "none" },
     ),
-    gate("Rewrite the meta title + description on /{{reads.pages.worst_page_handle}}", { detail: "{{reads.gsc.worst_page_impressions}} impressions at {{reads.gsc.worst_page_ctr}}% CTR. New copy attached.", before: "Current: {{reads.pages.worst_page_meta_title}}", after: "Proposed: {{decision.params.newTitle}}" }),
+    produce("D03-W04"),
+    gate("Rewrite the meta title + description on /{{reads.pages.worst_page_handle}}", { detail: "{{reads.gsc.worst_page_impressions}} impressions at {{reads.gsc.worst_page_ctr}}% CTR. New copy attached.", before: "Current: {{reads.pages.worst_page_meta_title}}", after: "Proposed copy attached in {{artifact.title}}" }),
     execute("shopify", "update_page_seo", { target: { pageId: "{{decision.params.pageId}}" }, params: { metaTitle: "{{decision.params.newTitle}}", metaDescription: "{{decision.params.newDescription}}" }, rollback: "restore previous meta fields" }),
-    receipt("On-page SEO fix applied: {{decision.label}}.", 28),
+    receipt("On-page SEO proposal prepared: {{decision.label}}.", 28),
   ]),
   // SERP position watch — wave 2, draft (notify only)
   spec("D03-W05", 2, [
@@ -554,9 +561,10 @@ const D04: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.threads.count", op: "gte", value: 1, ifTrue: "capture", ifFalse: "unclear" },
     ),
-    gate("Record win/loss reasons on {{reads.closed.count}} closed deals", { detail: "Inferred from the email trail. Edit any reason before it lands in HubSpot.", before: "Deals closed, no reason recorded", after: "Reason + evidence stored on each deal" }),
+    produce("D04-W05"),
+    gate("Review proposed win/loss reasons for {{reads.closed.count}} closed deals", { detail: "Drafted from the email trail and marked HOLD where evidence is missing. Edit every reason before any future HubSpot write.", before: "Deals closed, no verified reason recorded", after: "Exact reason-and-evidence proposal ready for a separately supported write" }),
     execute("hubspot", "update_deal_properties", { target: { dealIds: "{{decision.params.dealIds}}" }, params: { win_loss_reason: "{{decision.params.reasons}}" }, rollback: "clear the win_loss_reason property" }),
-    receipt("Win/loss capture: {{decision.label}}.", 28),
+    receipt("Win/loss proposal prepared: {{decision.label}}.", 28),
   ]),
   // Pipeline hygiene — wave 2, MUTATES (closes dead deals / fixes stages)
   spec("D04-W06", 2, [
@@ -571,9 +579,10 @@ const D04: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.deals.stale_over_30d_count", op: "lte", value: 15, ifTrue: "close", ifFalse: "review" },
     ),
-    gate("Close {{reads.deals.stale_over_30d_count}} dead deals ({{account.currency}} {{reads.deals.stale_over_30d_amount}} of phantom pipeline)", { before: "{{reads.deals.count}} open deals", after: "Pipeline reflects reality; closed deals stay searchable", reasoning: "No activity for 30+ days and no close date in the future." }),
+    produce("D04-W06"),
+    gate("Review {{reads.deals.stale_over_30d_count}} stale deals ({{account.currency}} {{reads.deals.stale_over_30d_amount}} of pipeline)", { detail: "Stale is not dead. The attached review separates evidenced closure candidates from deals that need an owner decision.", before: "{{reads.deals.count}} open deals", after: "Only explicitly approved deals close; held deals stay open", reasoning: "No activity for 30+ days is a review trigger, not proof that a deal is lost." }),
     execute("hubspot", "update_deal_stage", { target: { dealIds: "{{decision.params.dealIds}}" }, params: { stage: "closedlost", reason: "no activity 30+ days (Unc pipeline hygiene)" }, rollback: "reopen the deals at their previous stage" }),
-    receipt("Pipeline hygiene: {{decision.label}}.", 28),
+    receipt("Pipeline hygiene proposal prepared: {{decision.label}}.", 28),
   ]),
 ];
 
@@ -595,9 +604,10 @@ const D05: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.perf.weakest_ctor_pct", op: "lt", value: 8, ifTrue: "swap", ifFalse: "keep" },
     ),
-    gate("Replace welcome message {{reads.perf.weakest_message_position}} (CTOR {{reads.perf.weakest_ctor_pct}}%)", { detail: "New subject, preview and body drafted in your voice. Previous version kept for rollback.", before: "CTOR {{reads.perf.weakest_ctor_pct}}% on {{reads.perf.sends}} sends", after: "New variant live; measured over 14 days" }),
+    produce("D05-W01"),
+    gate("Review the proposed welcome-message replacement for position {{reads.perf.weakest_message_position}} (CTOR {{reads.perf.weakest_ctor_pct}}%)", { detail: "New subject, preview and body are attached in the proposal. Current-copy readback and a typed Klaviyo action are required before it can go live.", before: "CTOR {{reads.perf.weakest_ctor_pct}}% on {{reads.perf.sends}} sends", after: "Exact variant proposal ready for a separately supported write and 14-day measurement" }),
     execute("klaviyo", "update_flow_message", { target: { messageId: "{{decision.params.messageId}}" }, params: { subject: "{{decision.params.subject}}", previewText: "{{decision.params.preview}}", body: "{{decision.params.body}}" }, rollback: "restore the previous message content" }),
-    receipt("Welcome flow tuning: {{decision.label}}.", 14),
+    receipt("Welcome-flow proposal prepared: {{decision.label}}.", 14),
   ]),
   // Abandoned cart recovery — wave 1, draft
   spec("D05-W02", 1, [
@@ -623,9 +633,10 @@ const D05: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.segments.drifted_count", op: "lte", value: 5, ifTrue: "refresh", ifFalse: "hold" },
     ),
-    gate("Refresh {{reads.segments.drifted_count}} Klaviyo segments (drift {{reads.segments.drift_pct}}%)", { before: "Definitions from {{reads.segments.oldest_definition_date}}", after: "Thresholds re-fitted to this year's purchase behaviour" }),
+    produce("D05-W03"),
+    gate("Review proposed changes to {{reads.segments.drifted_count}} Klaviyo segments (drift {{reads.segments.drift_pct}}%)", { detail: "The attached proposal shows each current definition, measured drift and exact replacement. Consent, suppression and identity checks must be verified before any write.", before: "Definitions from {{reads.segments.oldest_definition_date}}", after: "Exact definition proposal ready for a separately supported write" }),
     execute("klaviyo", "update_segment_definitions", { target: { segmentIds: "{{decision.params.segmentIds}}" }, params: { definitions: "{{decision.params.definitions}}" }, rollback: "restore previous definitions" }),
-    receipt("Segmentation refresh: {{decision.label}}.", 28),
+    receipt("Segmentation-refresh proposal prepared: {{decision.label}}.", 28),
   ]),
   // Winback campaign prep — wave 2, draft
   spec("D05-W04", 2, [
@@ -651,9 +662,10 @@ const D05: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.flow.covers_top_product", op: "eq", value: false, ifTrue: "add", ifFalse: "covered" },
     ),
-    gate("Add a post-purchase education email about {{reads.tickets.top_product}}", { detail: "{{reads.tickets.count}} how-to tickets this month; {{reads.tickets.top_product_share_pct}}% about this product. Copy drafted.", before: "Flow has {{reads.flow.message_count}} messages", after: "One more message, day 3 after delivery" }),
+    produce("D05-W05"),
+    gate("Review a post-purchase education email about {{reads.tickets.top_product}}", { detail: "{{reads.tickets.count}} how-to tickets this month; {{reads.tickets.top_product_share_pct}}% about this product. Product-faithful copy is attached for review; eligibility must be verified before any write.", before: "Flow has {{reads.flow.message_count}} messages", after: "Exact day-3 message proposal ready for a separately supported write" }),
     execute("klaviyo", "add_flow_message", { target: { flowId: "{{decision.params.flowId}}" }, params: { position: "after_delivery_day_3", subject: "{{decision.params.subject}}", body: "{{decision.params.body}}" }, rollback: "remove the added message" }),
-    receipt("Post-purchase education: {{decision.label}}.", 28),
+    receipt("Post-purchase education proposal prepared: {{decision.label}}.", 28),
   ]),
   // Review request timing — wave 2, MUTATES (changes flow delay)
   spec("D05-W06", 2, [
@@ -671,9 +683,10 @@ const D05: RoutineSpec[] = [
       ],
       { kind: "threshold", metric: "reads.reviews.peak_day_delta", op: "gte", value: 2, ifTrue: "retime", ifFalse: "keep" },
     ),
-    gate("Move review requests from day {{reads.flow.delay_days}} to day {{reads.reviews.peak_day}} after delivery", { detail: "Reviews peak {{reads.reviews.peak_day}} days post-delivery. Customers with open tickets stay suppressed.", before: "Day {{reads.flow.delay_days}}", after: "Day {{reads.reviews.peak_day}}, suppressed for open tickets" }),
+    produce("D05-W06"),
+    gate("Review moving requests from day {{reads.flow.delay_days}} to day {{reads.reviews.peak_day}} after delivery", { detail: "The attached proposal states the sample and delivery-relative evidence. Consent and open-support-ticket suppression must remain verified before any write.", before: "Day {{reads.flow.delay_days}}", after: "Exact timing proposal ready for a separately supported write" }),
     execute("klaviyo", "update_flow_delay", { target: { flowId: "{{decision.params.flowId}}" }, params: { delayDays: "{{decision.params.delayDays}}", suppressIf: "open_support_ticket" }, rollback: "restore previous delay" }),
-    receipt("Review request timing: {{decision.label}}.", 28),
+    receipt("Review-request timing proposal prepared: {{decision.label}}.", 28),
   ]),
   // Campaign calendar prep — wave 1, draft
   spec("D05-W07", 1, [

@@ -114,6 +114,10 @@ describe("Slack install", () => {
     const { state: s3 } = await startSlackInstall({ db, config, appUrl: "https://unc.test", accountId: ACCT, now: clk.now(), redirectTo: "/app" });
     expect(await finishSlackInstall({ ...base, keyring: null }, new URLSearchParams({ code: "c", state: s3 }))).toMatchObject({ ok: false, reason: "no_keyring" });
 
+    const { state: unauthorisedState } = await startSlackInstall({ db, config, appUrl: "https://unc.test", accountId: ACCT, now: clk.now(), redirectTo: "/app" });
+    expect(await finishSlackInstall({ ...base, userId: null }, new URLSearchParams({ code: "c", state: unauthorisedState }))).toMatchObject({ ok: false, reason: "session_mismatch" });
+    expect(f.calls).toHaveLength(0);
+
     const { state: s4 } = await startSlackInstall({ db, config, appUrl: "https://unc.test", accountId: ACCT, now: clk.now(), redirectTo: "/app" });
     const bad = stubFetch([() => json({ ok: false, error: "invalid_code" })]);
     expect(await finishSlackInstall({ ...base, fetch: bad.fetch }, new URLSearchParams({ code: "c", state: s4 }))).toMatchObject({ ok: false, reason: "exchange_failed" });

@@ -1,4 +1,4 @@
-/* LlmProducer — the Producer behind every wave-1 produce node: the routine's skill card
+/* LlmProducer — the Producer behind every built-in produce node: the routine's skill card
    (src/lib/runtime/skills) + the business profile + memories + ≤ 3 playbooks + the run's
    reads + the founder's answers and voice notes → one strict-JSON Artifact.
 
@@ -24,13 +24,13 @@ import { recallForContext } from "../../lib/brain/retrieve";
 import { compactReads, skillContextFrom, type GatheredMaterial } from "../../lib/artifacts/material";
 import { allowedNumbersFrom, parseArtifactReply, type ParsedArtifact } from "../../lib/artifacts/validate";
 import { unwrap, type DbClient, type Row } from "../../lib/db/types";
-import { BUDGET_EXHAUSTED_LINE } from "../../lib/llm/budget";
+import { BUDGET_EXHAUSTED_LINE, BUDGET_UNAVAILABLE_LINE } from "../../lib/llm/budget";
 import { createTextClient, describeLlm, type CompleteContext, type TextClient } from "../../lib/llm/router";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
 import type { Skill, SkillContext } from "../../lib/runtime/skills/types";
 import type { Store } from "../../lib/runtime/store/interface";
 import type { ProduceNode, Producer, ProduceResult, RunContext } from "../../lib/runtime/types";
-import type { Logger } from "../log";
+import { redact, type Logger } from "../log";
 
 export const PRODUCE_MAX_TOKENS = 8000; // adaptive thinking counts against it; a 5-item post set needs room
 export const PRODUCE_EFFORT = "medium" as const;
@@ -168,9 +168,25 @@ export interface ProducePromptInput {
   rejection?: string;
 }
 
+/** The narrow, prompt-safe view of the deterministic decision that preceded production.
+    Do not pass the whole run context to the model: params are needed to draft the actual
+    proposal, but secret-looking keys and token-shaped values are redacted first. */
+export function selectedDecisionMaterial(ctx: RunContext): Record<string, unknown> | null {
+  const decision = ctx.decision;
+  if (!decision) return null;
+  return redact({
+    option: decision.optionId,
+    label: decision.label,
+    reasoning: decision.reasoning,
+    ...(decision.spend ? { spend: decision.spend } : {}),
+    ...(decision.params ? { params: decision.params } : {}),
+  }) as Record<string, unknown>;
+}
+
 export function buildProducePrompt(input: ProducePromptInput): { system: string; user: string } {
   const { skill, sctx, ctx, maxItems } = input;
   const reads = compactReads(ctx.reads);
+  const decision = selectedDecisionMaterial(ctx);
   const inputs = Object.entries(sctx.inputs ?? {});
   const prior = sctx.priorArtifacts.filter((a) => a.routineId !== ctx.routineId || a.status !== "draft").slice(0, 4);
   const user = [
@@ -183,6 +199,10 @@ export function buildProducePrompt(input: ProducePromptInput): { system: string;
     section("PLAN PHASES:", sctx.plan?.length ? JSON.stringify(sctx.plan.slice(0, 4)) : ""),
     section("FOUNDER'S ANSWERS (asked for by this routine):", inputs.map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`).join("\n")),
     section("READS (what the connected platforms answered; provenance 'unavailable' = couldn't ask):", Object.keys(reads).length ? JSON.stringify(reads) : ""),
+    section(
+      "SELECTED ROUTINE DECISION (the resolved decision this artifact must review):",
+      decision ? `Draft around this exact option and its resolved values; do not substitute a different decision.\n${JSON.stringify(decision)}` : "",
+    ),
     section("EARLIER ARTIFACTS FOR THIS ACCOUNT (don't repeat them; build on them):", prior.map((a) => `- [${a.kind} · ${a.routineId} · ${a.status}] ${a.title}: ${a.body.slice(0, 500).replace(/\s+/g, " ")}`).join("\n")),
     input.playbookBlock.trim(),
     skill.prompt.trim(),
@@ -244,7 +264,7 @@ export class LlmProducer implements Producer {
 
     const maxItems = node.maxItems ?? skill.maxItems;
     const playbookBlock = await this.playbooksFor(skill, ctx);
-    const allowedNumbers = allowedNumbersFrom([sctx.profile, sctx.memories, compactReads(ctx.reads), sctx.inputs, sctx.goal, sctx.plan, sctx.priorArtifacts.map((a) => `${a.title}\n${a.body}`), sctx.vars, sctx.founderNotes], { now: this.opts.now?.() });
+    const allowedNumbers = allowedNumbersFrom([sctx.profile, sctx.memories, compactReads(ctx.reads), sctx.inputs, sctx.goal, sctx.plan, sctx.priorArtifacts.map((a) => `${a.title}\n${a.body}`), sctx.vars, sctx.founderNotes, selectedDecisionMaterial(ctx)], { now: this.opts.now?.() });
     const attempts = Math.max(1, this.opts.attempts ?? 2);
     let rejection: string | undefined;
     let parsed: ParsedArtifact = { ok: false, reason: "not attempted" };
@@ -258,6 +278,7 @@ export class LlmProducer implements Producer {
         this.opts.log?.warn("produce.llm_failed", { runId: ctx.runId, routineId: ctx.routineId, attempt, error: err instanceof Error ? err.name : "unknown" });
         // Over the month's cap (src/lib/llm/budget.ts): the honest line, not a transport excuse.
         if (/budget_exceeded/.test(message)) throw new ProducerUnavailableError(`${BUDGET_EXHAUSTED_LINE} Nothing was drafted.`);
+        if (/budget_unavailable/.test(message)) throw new ProducerUnavailableError(`${BUDGET_UNAVAILABLE_LINE} Nothing was drafted.`);
         throw new ProducerUnavailableError(`the model call failed (${message}) — nothing was drafted; I'll retry on schedule`);
       }
       parsed = parseArtifactReply(text, { kind: skill.kind, maxItems, allowedNumbers });

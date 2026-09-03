@@ -16,7 +16,7 @@ export const hookRotation: Skill = {
     decides: ["which ad is past its hook life", "whether a variant is ready to swap"],
     writes: ["a generic artifact of one Would-card"],
     never: ["invent frequency, CTR or days live", "rotate a hook live without approval", "spend"],
-    apply: "Would-cards. The rotate stays yours until you approve; I never spend.",
+    apply: "Would-cards only. The exact rotation needs a separate run-level approval gate; I never spend.",
     examples: [
       { when: "an ad at frequency 4.6 with CTR down and a paused Hook v5", does: "one rotate item naming both ads, numbers from the rows, rollback = pause the new and resume the old" },
       { when: "fatigue is visible but no paused variant", does: "one item flagging the tired ad for the content engine, no invented next hook" },

@@ -15,11 +15,11 @@
    the database is configured (runs persist), MemoryStore otherwise (runs do
    not survive a restart). Accounts + credentials come from src/worker/wiring.ts.
 
-   DB configured → session-bound: the run is always for the caller's own account
-   (the body's accountId is ignored); no session → 401. Demo mode → unbound. */
+   DB configured → owner-only and session-bound: the run is always for the caller's own
+   account (the body's accountId is ignored); no session → 401. Demo mode → unbound. */
 
 import { isDbConfigured } from "@/lib/db/client";
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import { triggerRun, WorkerError, type ServiceDeps } from "@/worker/service";
@@ -44,7 +44,7 @@ async function handlePOST(req: Request) {
 
   let accountId = typeof body.accountId === "string" ? body.accountId.trim().slice(0, 128) : "";
   if (isDbConfigured()) {
-    const session = await requireAccountSession();
+    const session = await requireAccountOwnerSession();
     if (session instanceof Response) return session;
     accountId = session.accountId;
   }

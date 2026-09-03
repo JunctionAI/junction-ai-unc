@@ -1,29 +1,25 @@
 /* SERVER ONLY (imports next/headers through ../db/server).
 
-   optionalAccountContext(): for routes that are NOT session-bound (chat, scan, narrative
-   run during onboarding, before an account may exist). When a signed-in founder with an
-   account is calling, returns { accountId, db } so the router can honour their model
-   setting and attribute the ledger row; otherwise null and the call proceeds exactly as
-   in demo mode. Never throws. */
+   requireModelAccountContext(): the spend boundary for browser-triggered model calls.
+   A configured deployment requires the signed-in account owner and returns its service-role
+   DB so usage is tenant-attributed and checked against the durable account budget. A production
+   deployment is not allowed to expose paid model calls without account storage. Local/test
+   demo mode (no Supabase) can still exercise the deterministic/model fallback path. */
 
-import { listMemberships } from "../db/accountState";
-import { asDb, isDbConfigured } from "../db/client";
-import { getServerSupabase, getServiceSupabase, isServiceRoleConfigured } from "../db/server";
+import { isDbConfigured } from "../db/client";
+import { requireAccountOwnerSession } from "../db/session";
 import type { DbClient } from "../db/types";
 
-export async function optionalAccountContext(): Promise<{ accountId: string; db: DbClient } | null> {
-  try {
-    if (!isDbConfigured() || !isServiceRoleConfigured()) return null;
-    const supabase = await getServerSupabase();
-    if (!supabase) return null;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return null;
-    const memberships = await listMemberships(asDb(supabase));
-    if (!memberships.length) return null;
-    return { accountId: memberships[0].accountId, db: asDb(getServiceSupabase()) };
-  } catch {
-    return null;
-  }
+export interface ModelAccountContext {
+  accountId: string;
+  db: DbClient;
+}
+
+const unavailable = () => Response.json({ error: "account storage is required for model access" }, { status: 503 });
+
+export async function requireModelAccountContext(): Promise<ModelAccountContext | Response | null> {
+  if (!isDbConfigured()) return process.env.NODE_ENV === "production" ? unavailable() : null;
+  const session = await requireAccountOwnerSession();
+  if (session instanceof Response) return session;
+  return { accountId: session.accountId, db: session.service };
 }

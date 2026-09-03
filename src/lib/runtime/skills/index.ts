@@ -1,6 +1,9 @@
-/* Skill cards, by routine id — every catalog routine has one. Wave-1 and the
-   remaining draft-only chains PRODUCE through theirs; mutating routines carry
-   the file for the inspector (and a future produce step) without changing execute. */
+/* The built-in skill cards for all 35 routines, by routine id.
+
+   A ProduceNode is a replaceable seam: an account-registered n8n workflow may
+   produce the same artifact contract, with this built-in skill as the honest
+   fallback. Mutation skills prepare an inspectable proposal; the runtime gate
+   and action executor remain the only path to an outward change. */
 import { abandonedCart } from "./abandonedCart";
 import { adFatigue } from "./adFatigue";
 import { aiVisibility } from "./aiVisibility";

@@ -104,6 +104,11 @@ describe("RoutineDetail — accounts mode shows the real routine", () => {
     expect(html).toContain("v3 · active");
     expect(html).toContain('data-testid="spec-node"');
     expect(html).toContain("Schedule");
+    expect(html).toContain('data-testid="contract-cadence"');
+    expect(html).toContain("Mondays 08:00");
+    expect(html).toContain("Draft only — produces inspectable work and never changes the destination.");
+    expect(html).toContain("Campaign calendars delivered — target at least 1 calendars / 28d, measured over 28 days.");
+    expect(html).not.toContain("Reconciled accuracy");
     expect(html).toContain('data-testid="source-shopify" data-ok="1"');
     expect(html).toContain('data-testid="source-klaviyo" data-ok="0"');
     expect(html).toContain("Open Connectors");
@@ -152,6 +157,10 @@ describe("ConnectorsView — the owner's token path and the first-read line", ()
     expect(hubspot).not.toContain(">Connect<");
     const member = render(state("member", [{ platform: "klaviyo", oauthConfigured: true }]));
     expect(member).not.toContain("Connect with a token");
+    expect(member).not.toContain(">Connect<");
+    expect(member).not.toContain(">Reconnect<");
+    expect(member).not.toContain("Disconnect");
+    expect(member).toContain("Owner managed");
   });
 
   it("connected cards say Reading… → Read ✓ · N metrics → the honest failure with Reconnect", () => {

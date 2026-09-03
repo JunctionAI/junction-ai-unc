@@ -61,7 +61,7 @@ describe("the math", () => {
     expect(all.get(OTHER)).toBe(9);
   });
 
-  it("checkBudget: cached 30 s per account; a database failure reads as ok and is logged", async () => {
+  it("checkBudget: cached 30 s for views; a database failure fails closed and is logged", async () => {
     db.seed("llm_usage", [usage(ACCT, 14)]);
     let t = NOW.getTime();
     const now = () => new Date(t);
@@ -73,7 +73,7 @@ describe("the math", () => {
     expect(await checkBudget(db, ACCT, { now })).toMatchObject({ ok: false, spentUsd: 19 });
     const logs: string[] = [];
     const broken = { from: () => { throw new Error("db down"); }, rpc: () => { throw new Error("db down"); } } as unknown as FakeSupabase;
-    expect((await checkBudget(broken, "x", { now, log: (e) => logs.push(e) })).ok).toBe(true);
+    expect(await checkBudget(broken, "x", { now, log: (e) => logs.push(e) })).toMatchObject({ ok: false, checkFailed: true, remainingUsd: 0 });
     expect(logs).toEqual(["llm.budget_check_failed"]);
   });
 });
@@ -105,7 +105,6 @@ describe("where it bites", () => {
     expect(anthropic.calls).toHaveLength(1);
     expect(db.rows("llm_usage")).toHaveLength(1);
     db.seed("llm_usage", [usage(ACCT, 15)]);
-    resetBudgetCache();
     const over = await complete("chat", req, { accountId: ACCT, db, now: () => NOW });
     expect(over).toMatchObject({ stopReason: "error", errorCode: "budget_exceeded", provider: "anthropic" });
     expect(isBudgetExceeded(over)).toBe(true);
@@ -125,24 +124,25 @@ describe("where it bites", () => {
     expect(anthropic.calls).toHaveLength(0);
   });
 
-  it("the worker skips an over-cap account's produce routines and still runs deterministic ones", async () => {
+  it("the worker skips every over-cap production routine account-wide", async () => {
     const clk = clock("2026-09-02T07:00:30.000Z");
     const store = new MemoryStore();
     const { sink, entries } = memorySink();
     db.seed("llm_usage", [usage(ACCT, 15)]);
     const deps: WorkerDeps = { store, accounts: new StaticAccountsSource([{ account: { accountId: ACCT, currency: "NZD", budgetMonthly: 3000 } }, { account: { accountId: OTHER, currency: "NZD", budgetMonthly: 3000 } }]), credentials: new FixtureCredentialProvider(), llm: null, producer: new FakeProducer(), db, now: clk.now, log: createLogger(sink, {}, clk.now) };
     await setEnabled({ store, now: clk.now }, ACCT, "D01-W01", true); // daily 07:00, produces
-    await setEnabled({ store, now: clk.now }, ACCT, "D02-W01", true); // daily 07:00, wave-2 chain without a produce step
+    await setEnabled({ store, now: clk.now }, ACCT, "D02-W01", true); // daily 07:00, deterministic decision plus an inspectable proposal
     await setEnabled({ store, now: clk.now }, OTHER, "D01-W01", true); // under its 40 cap
     const worker = new Worker(deps, { intervalSec: 60, heartbeatPath: null, handleSignals: false, jobs: false, briefs: false });
     const report = await worker.tick();
-    expect(report.budgetSkipped).toBe(1);
+    expect(report.budgetSkipped).toBe(2);
     const byKey = Object.fromEntries(report.started.map((r) => [`${r.accountId}:${r.routineId}`, r]));
     expect(byKey[`${ACCT}:D01-W01`]).toMatchObject({ status: "skipped", summary: BUDGET_EXHAUSTED_LINE });
     expect(byKey[`${ACCT}:D01-W01`].runId).toBeUndefined();
-    expect(byKey[`${ACCT}:D02-W01`].runId).toBeDefined();
+    expect(byKey[`${ACCT}:D02-W01`]).toMatchObject({ status: "skipped", summary: BUDGET_EXHAUSTED_LINE });
+    expect(byKey[`${ACCT}:D02-W01`].runId).toBeUndefined();
     expect(byKey[`${OTHER}:D01-W01`]).toMatchObject({ status: "done" });
-    expect((await store.listRuns(ACCT)).map((r) => r.routineId)).toEqual(["D02-W01"]);
+    expect(await store.listRuns(ACCT)).toEqual([]);
     expect(entries.some((e) => e.event === "run.budget_skipped")).toBe(true);
     // the heartbeat row landed (migration 0014) so /api/health can see the worker
     await new Promise((r) => setTimeout(r, 0));

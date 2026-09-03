@@ -16,7 +16,7 @@ export const dailyPaid: Skill = {
     decides: ["which ad set the verdict names", "scale vs turn_off vs hold from the numbers that are present"],
     writes: ["a generic artifact of one recommendation (a Would-card)"],
     never: ["invent a reconciliation %, ROAS, spend or CPA", "apply a budget move", "spend"],
-    apply: "Would-cards. I never spend; the move stays yours until we graduate this routine.",
+    apply: "Would-cards only. I never spend; any future move needs a separate exact run-level approval gate.",
     examples: [
       { when: "Prospecting NZ holds 7-day ROAS above the preset floor", does: "one scale item naming that ad set, the spend and ROAS from the read, rollback = restore the previous daily budget" },
       { when: "reconciliation_pct is null on the spend read", does: "cite spend and ROAS only — never mention a reconciliation %" },

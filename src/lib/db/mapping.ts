@@ -467,5 +467,6 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
 
 /** The persisted projection of a state — two states with equal projections need no save. */
 export function persistedProjection(S: PlatformState): string {
-  return JSON.stringify(stateToRows("_", S, { now: "_" }));
+  const { routineStates: _routineStates, connectors: _connectors, ...autosaved } = stateToRows("_", S, { now: "_" });
+  return JSON.stringify(autosaved);
 }

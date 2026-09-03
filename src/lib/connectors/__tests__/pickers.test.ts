@@ -190,4 +190,15 @@ describe("POST …/select", () => {
     expect((await handleSelect(live({ userId: null }), "google_ads", { externalRef: "1234567890" })).status).toBe(401);
     expect(await handleSelect(makeDeps({ config: config({ dbConfigured: false }) }), "ga4", { externalRef: "1" })).toEqual({ status: 200, body: { fallback: true, reason: "accounts_not_configured" } });
   });
+
+  it("members may list options but cannot select one", async () => {
+    connected("ga4");
+    db.rows("account_members")[0].role = "member";
+    const d = live();
+    d.routes.push((c) => (c.url.startsWith("https://analyticsadmin.googleapis.com/") ? json({ accountSummaries: [] }) : undefined));
+    expect((await handleOptions(d, "ga4")).status).toBe(200);
+    expect((await handleSelect(d, "ga4", { externalRef: "111" })).status).toBe(403);
+    expect(db.rows("connectors")[0].external_ref).toBeNull();
+    expect(db.rows("receipts")).toHaveLength(0);
+  });
 });

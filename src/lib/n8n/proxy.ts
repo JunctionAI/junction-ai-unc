@@ -25,7 +25,7 @@ import { newId } from "../runtime/context";
 import { SKILL_BY_ID } from "../runtime/skills";
 import type { Skill } from "../runtime/skills/types";
 import type { RunRecord, Store } from "../runtime/store/interface";
-import type { ApprovalRecord, Platform, ReadQuery, Receipt, RunContext } from "../runtime/types";
+import type { ApprovalRecord, Platform, ReadQuery, Receipt, RoutineSpec, RunContext } from "../runtime/types";
 import { PLATFORMS } from "../runtime/validate";
 import { skillContextFrom } from "../artifacts/material";
 import { ALL_SYSTEMS } from "../platform/catalog";
@@ -34,7 +34,7 @@ import { WorkerConnectorReader } from "../../worker/providers/connectorReader";
 import { DbProducerContext, EmptyProducerContext, PLAYBOOKS_PER_PRODUCE, renderProfile } from "../../worker/providers/producer";
 import type { Reader } from "../../worker/readers/types";
 import type { CredentialsKind } from "../../worker/wiring";
-import { bearerToken, hasScope, isTestRun, RateLimiter, tokenKey, verifyDataToken, type DataTokenClaims } from "./dataToken";
+import { bearerToken, hasScope, RateLimiter, scopesAreSubset, scopesForSpec, tokenKey, verifyDataToken, type DataTokenClaims } from "./dataToken";
 
 export const READ_LIMIT_MAX = 500;
 export const ACTION_EXPIRY_HOURS = 24 * 7;
@@ -58,9 +58,25 @@ export interface ProxyDeps {
   playbooks?: ((query: string, domains: Skill["domain"][] | null, limit: number) => Promise<Playbook[]>) | null;
 }
 
-export type ProxyAuth = { ok: true; claims: DataTokenClaims; run: RunRecord | null } | { ok: false; status: number; error: string };
+export type ProxyAuth = { ok: true; claims: DataTokenClaims; run: RunRecord } | { ok: false; status: number; error: string };
 
 const sharedLimiter = new RateLimiter();
+
+/** Resolve the exact authority a stored run was created under. A resumable snapshot wins; a
+    promoted custom live spec is accepted only at the run's version; otherwise the catalog spec
+    must match. No exact spec means no data authority. */
+async function specForStoredRun(deps: ProxyDeps, run: RunRecord): Promise<RoutineSpec | null> {
+  const snapshot = run.snapshot?.spec;
+  if (snapshot && snapshot.id === run.routineId && snapshot.version === run.version) return snapshot;
+  const state = await deps.store.getRoutineState(run.accountId, run.routineId);
+  if (state) {
+    if (state.draftSpec?.id === run.routineId && state.draftSpec.version === run.version) return state.draftSpec;
+    if (state.version !== run.version) return null;
+    if (state.liveSpec) return state.liveSpec.id === run.routineId && state.liveSpec.version === run.version ? state.liveSpec : null;
+  }
+  const catalog = CATALOG_SPEC_BY_ID[run.routineId];
+  return catalog && catalog.version === run.version ? catalog : null;
+}
 
 export async function authenticate(deps: ProxyDeps, req: Request): Promise<ProxyAuth> {
   const secret = (deps.secret ?? "").trim();
@@ -69,22 +85,30 @@ export async function authenticate(deps: ProxyDeps, req: Request): Promise<Proxy
   if (!token) return { ok: false, status: 401, error: "send the run's data token as Authorization: Bearer <token>" };
   const v = verifyDataToken(secret, token, { now: deps.now });
   if (!v.ok) return { ok: false, status: 401, error: `data token ${v.reason}` };
-  if (!(deps.limiter ?? sharedLimiter).take(tokenKey(token))) return { ok: false, status: 429, error: "too many calls on this token — at most 60 a minute" };
   const { claims } = v;
-  if (isTestRun(claims.runId)) return { ok: true, claims, run: null };
   const run = await deps.store.getRun(claims.runId);
-  if (!run || run.accountId !== claims.accountId) return { ok: false, status: 404, error: "no run for this token" };
+  if (!run) return { ok: false, status: 404, error: "no stored run for this token" };
+  if (run.accountId !== claims.accountId || run.routineId !== claims.routineId) {
+    return { ok: false, status: 404, error: "no stored run for this token" };
+  }
+  const spec = await specForStoredRun(deps, run);
+  if (!spec) return { ok: false, status: 403, error: "the stored run has no matching routine specification" };
+  const allowedScopes = scopesForSpec(spec);
+  if (!scopesAreSubset(claims.scopes, allowedScopes)) {
+    return { ok: false, status: 403, error: "data token asks for scopes outside its stored routine specification" };
+  }
   if (run.status !== "running") return { ok: false, status: 409, error: `run ${run.id} is ${run.status} — its data token is no longer valid` };
+  if (!(deps.limiter ?? sharedLimiter).take(tokenKey(token))) return { ok: false, status: 429, error: "too many calls on this token — at most 60 a minute" };
   return { ok: true, claims, run };
 }
 
-function ctxFor(claims: DataTokenClaims, run: RunRecord | null, now: () => Date, currency = "NZD"): RunContext {
-  const startedAt = run?.startedAt ?? now().toISOString();
+function ctxFor(claims: DataTokenClaims, run: RunRecord, currency = "NZD"): RunContext {
+  const startedAt = run.startedAt;
   return {
     runId: claims.runId,
     routineId: claims.routineId,
-    version: run?.version ?? 0,
-    mode: run?.mode ?? "dry_run",
+    version: run.version,
+    mode: run.mode,
     startedAt,
     account: { accountId: claims.accountId, currency, budgetMonthly: 0 },
     caps: { currency, perDay: 0, perMonth: 0 },
@@ -151,9 +175,8 @@ export async function readForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, { o
   const platform = q.platform;
   if (!hasScope(claims, platform, q.resource)) return { ok: false, code: "forbidden", reason: `this run's token is not scoped for ${platform}:${q.resource} (scopes: ${claims.scopes.join(", ") || "none"})`, status: 403 };
   const query: ReadQuery = { resource: q.resource, window: q.window, limit: q.limit, fields: q.fields, filter: q.filter };
-  const ctx = ctxFor(claims, run, now);
+  const ctx = ctxFor(claims, run);
   const receipt = async (kind: Receipt["kind"], description: string, payload: Record<string, unknown>) => {
-    if (!run) return null;
     const r: Receipt = { id: idGen(), accountId: claims.accountId, runId: run.id, kind, platform, description, payload: { via: "n8n", query, ...payload }, createdAt: now().toISOString() };
     await deps.store.appendReceipt(r);
     return r.id;
@@ -206,7 +229,7 @@ export async function contextForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, 
   const now = deps.now ?? (() => new Date());
   const { claims, run } = auth;
   const skill = skillOrStub(claims.routineId);
-  const ctx = ctxFor(claims, run, now);
+  const ctx = ctxFor(claims, run);
   const source = deps.db ? new DbProducerContext(deps.db, deps.store, { now }) : new EmptyProducerContext(deps.store);
   const material = await source.gather(ctx, skill);
   const sctx = skillContextFrom(ctx, material);
@@ -233,7 +256,7 @@ export async function contextForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, 
     priorArtifacts: sctx.priorArtifacts.map((a) => ({ id: a.id, kind: a.kind, routineId: a.routineId, title: a.title, status: a.status, createdAt: a.createdAt, excerpt: a.body.slice(0, 500) })),
     playbooks: playbooks.map((p) => ({ id: p.id, domain: p.domain, title: p.title, body: p.body.slice(0, PLAYBOOK_BODY_CHARS), tags: p.tags })),
     scopes: claims.scopes,
-    run: run ? { id: run.id, status: run.status, mode: run.mode, startedAt: run.startedAt } : { id: claims.runId, status: "test", mode: "dry_run", startedAt: ctx.startedAt },
+    run: { id: run.id, status: run.status, mode: run.mode, startedAt: run.startedAt },
   };
 }
 
@@ -253,7 +276,7 @@ export function parseAction(body: unknown): { ok: true; action: ProposedAction }
   const b = body as Record<string, unknown>;
   if (!isPlatform(b.platform)) return { ok: false, error: `platform must be one of ${PLATFORMS.join(", ")}` };
   const action = typeof b.action === "string" ? b.action.trim().slice(0, 64) : "";
-  if (!/^[a-z][a-z0-9_]*$/.test(action)) return { ok: false, error: 'action is a platform verb like "update_adset_budget" (lower-case, underscores)' };
+  if (!/^[a-z][a-z0-9_.]*$/.test(action)) return { ok: false, error: 'action is a typed action id like "meta.adset.set_daily_budget" (lower-case, dots or underscores)' };
   const params = b.params === undefined ? {} : b.params;
   if (!params || typeof params !== "object" || Array.isArray(params)) return { ok: false, error: "params must be a JSON object" };
   if (JSON.stringify(params).length > 4000) return { ok: false, error: "params is too large (4 KB)" };
@@ -275,11 +298,33 @@ export type ProposeResult = { queued: true; approvalId: string; receiptId: strin
 
 export const ACTION_NOTE = "Recorded as a proposal for the founder to approve or hold. Nothing was executed — running approved proposals arrives with wave 2 (LIVE_MODE_ENABLED is false).";
 
+function allowedActions(spec: RoutineSpec): { platform: Platform; action: string }[] {
+  const out: { platform: Platform; action: string }[] = [];
+  for (const node of spec.nodes) {
+    if (node.kind === "execute" && !node.mutation.action.includes("{{")) out.push({ platform: node.platform, action: node.mutation.action });
+    if (node.kind === "decide") {
+      for (const option of node.options) {
+        const actionId = option.params?.actionId;
+        const execute = spec.nodes.find((candidate) => candidate.kind === "execute");
+        if (execute?.kind === "execute" && typeof actionId === "string" && !actionId.includes("{{")) out.push({ platform: execute.platform, action: actionId });
+      }
+    }
+  }
+  return out;
+}
+
 export async function proposeAction(deps: ProxyDeps, auth: Extract<ProxyAuth, { ok: true }>, action: ProposedAction): Promise<ProposeResult> {
   const now = deps.now ?? (() => new Date());
   const idGen = deps.idGen ?? newId;
   const { claims, run } = auth;
-  if (!run) return { queued: false, executed: false, reason: "a test run has nothing to attach a proposal to — the shape is accepted; on a real run it becomes an approval" };
+  const spec = await specForStoredRun(deps, run);
+  const permitted = spec ? allowedActions(spec) : [];
+  if (!permitted.some((candidate) => candidate.platform === action.platform && candidate.action === action.action)) {
+    return { queued: false, executed: false, reason: `this run is not authorised to propose ${action.action} on ${action.platform}` };
+  }
+  if (run.dedupKey?.startsWith("n8n:test:")) {
+    return { queued: false, executed: false, reason: "test run validated the proposal shape; test calls never create approvals" };
+  }
   const nowIso = now().toISOString();
   const expiresAt = new Date(now().getTime() + ACTION_EXPIRY_HOURS * 3_600_000).toISOString();
   const summary = `${action.action} on ${action.platform}`;

@@ -57,7 +57,7 @@ const facts = (over: Partial<AccountFacts> = {}): AccountFacts => ({
 });
 
 const account = (over: Partial<AccountFactsState> = {}): AccountFactsState => ({ mode: "account", accountId: "acct-1", facts: facts(), loading: false, error: null, ...over });
-const persistence: Persistence = { mode: "account", accountId: "acct-1", userEmail: "ana@example.test", accountName: "", setAccountName: () => {}, autosave: "saved", error: null };
+const persistence: Persistence = { mode: "account", accountId: "acct-1", role: "owner", userEmail: "ana@example.test", accountName: "", setAccountName: () => {}, autosave: "saved", error: null, retry: () => {} };
 
 const state = (over: Partial<PlatformState> = {}): PlatformState => ({ ...initialState, onboarded: true, view: "today", ...over });
 const V = (S: PlatformState) => derive(S, noop);
@@ -93,6 +93,14 @@ describe("Sidebar", () => {
     expect(html).toContain("Reading your connections…");
     expect(html).toContain(">0 on<");
     expect(accountConnectorLine(null, false)).toBe("Nothing connected yet");
+  });
+
+  it("labels a member account read-only instead of claiming its browser state is saved", () => {
+    __setAccountFactsForTests(account());
+    const html = renderToStaticMarkup(createElement(Sidebar, { V: V(state()), account: { ...persistence, role: "member", autosave: "idle" } }));
+    expect(html).toContain('data-testid="sidebar-persistence-state"');
+    expect(html).toContain(">Read-only<");
+    expect(html).not.toContain(">Saved<");
   });
 
   it("the demo banner copy is the spec's line and the banner is never part of an account render", () => {

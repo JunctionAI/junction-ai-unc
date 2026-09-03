@@ -23,8 +23,10 @@ vi.mock("@/lib/channels/server", async (importOriginal) => ({
   processInbound: async (events: unknown[]) => void processed.events.push(...events),
 }));
 
-import { DELETE, GET, PATCH, POST, instructionFor } from "@/app/api/channels/links/route";
+import { DELETE, GET, PATCH, POST } from "@/app/api/channels/links/route";
+import { instructionFor } from "@/lib/channels/instructions";
 import { GET as THREAD } from "@/app/api/channels/thread/route";
+import { GET as SLACK_START } from "@/app/api/channels/slack/start/route";
 import { POST as TELEGRAM } from "@/app/api/webhooks/telegram/route";
 
 const CHANNEL_ENV = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "TELEGRAM_BOT_USERNAME", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM", "APP_URL"] as const;
@@ -107,6 +109,17 @@ describe("/api/channels/links", () => {
     expect((await DELETE(req("DELETE", { linkId: theirs.id }))).status).toBe(404);
     expect(await (await DELETE(req("DELETE", { linkId: mine.id }))).json()).toEqual({ ok: true });
     expect(db.rows("channel_links").map((r) => r.id)).toEqual([theirs.id]);
+  });
+
+  it("lets members read channel state but not create, change, or remove account links", async () => {
+    const mine = seedLink(db, { channel: "telegram", external_id: "555" });
+    db.rows("account_members")[0].role = "member";
+    expect((await GET()).status).toBe(200);
+    expect((await POST(req("POST", { channel: "telegram" }))).status).toBe(403);
+    expect((await PATCH(req("PATCH", { linkId: mine.id, prefs: { brief: false } }))).status).toBe(403);
+    expect((await DELETE(req("DELETE", { linkId: mine.id }))).status).toBe(403);
+    expect((await SLACK_START(req("GET", undefined, "/api/channels/slack/start"))).status).toBe(403);
+    expect(db.rows("channel_links")).toHaveLength(1);
   });
 });
 

@@ -27,7 +27,7 @@ import { getProfile, renderProfileForPrompt } from "@/lib/brain/profile";
 import { recallForContext } from "@/lib/brain/retrieve";
 import { loadAccountState } from "@/lib/db/accountState";
 import type { DbClient } from "@/lib/db/types";
-import { BUDGET_EXHAUSTED_LINE, isBudgetExceeded } from "@/lib/llm/budget";
+import { BUDGET_EXHAUSTED_LINE, BUDGET_UNAVAILABLE_LINE, isBudgetExceeded, isBudgetUnavailable } from "@/lib/llm/budget";
 import { complete, resolveModel } from "@/lib/llm/router";
 import type { LlmMessage } from "@/lib/llm/types";
 import { getMetrics, renderCertifiedMetrics } from "@/lib/metrics/catalog";
@@ -111,6 +111,7 @@ export async function respondAsUnc(input: RespondInput): Promise<RespondResult> 
     if (!response) return { ok: false, reason: "error" };
     // Over the month's cap (src/lib/llm/budget.ts): one honest line, no canned fallback, no learning hook.
     if (isBudgetExceeded(response)) return { ok: true, reply: BUDGET_EXHAUSTED_LINE };
+    if (isBudgetUnavailable(response)) return { ok: true, reply: BUDGET_UNAVAILABLE_LINE };
     if (response.stopReason === "refusal") return { ok: false, reason: "refusal" };
     if (response.stopReason === "error") return { ok: false, reason: "error" };
     const first = response.text.trim();

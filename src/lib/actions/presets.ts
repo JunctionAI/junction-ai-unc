@@ -37,7 +37,7 @@ export interface MetaPreset {
   cpaCapFromProductPricePct: number;
   /** Hours of delivery before an ad set is judged at all (0 = no age gate). */
   minAgeHours: number;
-  /** Consecutive days at/under the cap required before a scale, when the streak is measured (0 = off). */
+  /** Consecutive days at/under the cap required before a scale; a missing streak holds (0 = off). */
   scaleStreakDays: number;
 }
 
@@ -74,7 +74,8 @@ export const META_INDUSTRIES = Object.keys(INDUSTRY_META_PRESETS) as MetaIndustr
 
 /** The interface the presets store implements (src/lib/runtime/presets/). */
 export interface PresetSource {
-  /** `routineId` lets a source layer routine_params over the account preset; a source may ignore it. */
+  /** `routineId` is decision context for a source, but the default source deliberately ignores
+      unversioned routine_params. Routine overrides arrive on the effective DecideNode policy. */
   getPreset(accountId: string, platform: "meta", routineId?: string): Promise<Partial<MetaPreset> | null>;
 }
 

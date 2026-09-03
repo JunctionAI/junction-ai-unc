@@ -2,8 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 /* Phase 1 acceptance harness.
 
-   - The Next dev server must ALREADY be running on :3400 (scripts/dev.sh). We never start
-     or stop it from here (webServer is deliberately undefined).
+   - Locally, the Next dev server must ALREADY be running on :3400 (scripts/dev.sh).
+     CI starts and owns one through Playwright's webServer hook.
    - tests/e2e/global-setup.ts serves design-reference/ over http on a spare port so the
      original .dc.html prototypes render (they load React from unpkg and need http://, not
      file://). Its origin reaches the specs through process.env.PROTO_BASE.
@@ -35,5 +35,12 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 },
     },
   ],
-  webServer: undefined,
+  webServer: process.env.CI
+    ? {
+        command: "npm run dev -- --port 3400",
+        url: PORT_BASE,
+        reuseExistingServer: false,
+        timeout: 120_000,
+      }
+    : undefined,
 });

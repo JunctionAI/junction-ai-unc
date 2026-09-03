@@ -317,7 +317,7 @@ test.describe("Routines", () => {
 });
 
 test.describe("Routines — Run now (dry run)", () => {
-  test("manual trigger from the routine detail: the receipts trail appears inline (demo mode, MemoryStore)", async ({ page }) => {
+  test("manual trigger shows the receipt trail and an honest missing-context ask in demo mode", async ({ page }) => {
     await openControlCentre(page);
     await nav.routines(page).click();
     await page.getByRole("button", { name: /^Content\s*Get seen consistently/ }).click();
@@ -341,7 +341,12 @@ test.describe("Routines — Run now (dry run)", () => {
     await expect(rows.first()).toContainText("read");
     await expect(rows.first().locator("span").first()).toHaveText(/^[0-9a-f]{8}$/);
     await expect(rows.first()).toContainText(/Read /);
-    await expect(page.getByText(/^(Dry run complete|Nothing to do today)/)).toBeVisible();
+    // Demo mode has no persisted business profile. The real producer must ask for that
+    // minimum instead of fabricating a founder-voice draft or claiming completion.
+    await expect(page.getByText(/^I need something from you/)).toBeVisible();
+    await expect(page.getByTestId("run-needs")).toContainText("about the business");
+    await expect(page.getByLabel("about the business")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send answers and draft" })).toBeDisabled();
     await expect(page.getByText(/Demo mode: runs live in memory and vanish when the server restarts/)).toBeVisible();
     // dry run only: no mutation receipt, ever
     await expect(page.getByTestId("run-trail-row").filter({ hasText: /^\S+\s*mutation/ })).toHaveCount(0);

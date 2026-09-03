@@ -5,11 +5,11 @@
 import { describe, expect, it } from "vitest";
 import { RulesDecisionProvider } from "../../lib/actions";
 import { CATALOG_SPECS, catalogSpec } from "../../lib/runtime/catalog-specs";
-import { resumeRun, runRoutine } from "../../lib/runtime/engine";
+import { runRoutine } from "../../lib/runtime/engine";
 import { DeterministicDecisionProvider, StaticReader, type Fixtures } from "../../lib/runtime/providers";
 import { MemoryStore } from "../../lib/runtime/store/memory";
 import type { ExecuteNode, RoutineSpec, RunContext } from "../../lib/runtime/types";
-import { account, clock, input } from "../../lib/runtime/__tests__/helpers";
+import { account, budgetMoveSpec, clock, FakeProducer, input, SPEND_FIXTURE } from "../../lib/runtime/__tests__/helpers";
 import { FixtureCredentialProvider, type CredentialProvider, type PlatformCredential } from "../credentials";
 import { ActionExecutor, disabledRisks, enabledActionRisks, LIVE_DISABLED_REASON, MemoryIdempotencyLedger, NOT_IMPLEMENTED_REASON, parseEnabledRisks, riskDisabledReason } from "../providers/executor";
 import { LIVE_MODE_ENABLED } from "../service";
@@ -21,8 +21,8 @@ class MetaCreds implements CredentialProvider {
 }
 
 const ROWS = [
-  { adset_id: "120210000000001", adset_name: "Winner", spend: 420, purchases: 12, purchase_value: 1302, roas: 3.1, frequency: 1.8, ctr: 1.9, daily_budget: 60 },
-  { adset_id: "120210000000002", adset_name: "Loser", spend: 260, purchases: 2, purchase_value: 180, roas: 0.69, frequency: 2.1, ctr: 1.1, daily_budget: 40 },
+  { adset_id: "120210000000001", adset_name: "Winner", spend: 420, purchases: 12, purchase_value: 1302, roas: 3.1, frequency: 1.8, ctr: 1.9, daily_budget: 60, age_hours: 96, days_since_change: 3, streak_days: 3, measurement_clean: true },
+  { adset_id: "120210000000002", adset_name: "Loser", spend: 260, purchases: 2, purchase_value: 180, roas: 0.69, frequency: 2.1, ctr: 1.1, daily_budget: 40, age_hours: 96, days_since_change: 3, streak_days: 3, measurement_clean: true },
 ];
 const META_FIXTURES: Fixtures = {
   "meta_ads:insights": { rows: ROWS, metrics: { spend: 680, reconciliation_pct: 100, top_adset_id: "120210000000001", top_adset_name: "Winner", top_adset_roas: 3.1, top_adset_daily_budget: 60, worst_ad_id: "120210000000002", worst_ad_name: "Loser", worst_frequency: 2.1, worst_spend: 260 } },
@@ -73,7 +73,7 @@ describe("dry run through the engine", () => {
     const clk = clock();
     const store = new MemoryStore();
     const executor = new ActionExecutor({ liveModeEnabled: false, credentials: new MetaCreds(), now: clk.now });
-    const adapters = { reader: new StaticReader(META_FIXTURES, clk.now), decider: new RulesDecisionProvider(new DeterministicDecisionProvider()), executor, store, now: clk.now };
+    const adapters = { reader: new StaticReader(META_FIXTURES, clk.now), decider: new RulesDecisionProvider(new DeterministicDecisionProvider()), executor, producer: new FakeProducer(), store, now: clk.now };
     const res = await runRoutine(catalogSpec("D02-W01"), input(), adapters, { mode: "dry_run" });
     expect(res.status, res.summary).toBe("done");
     const would = res.receipts.find((r) => r.description.startsWith("Would ") && !r.description.startsWith("Would ask"))!;
@@ -96,7 +96,7 @@ describe("dry run through the engine", () => {
     const clk = clock();
     const executor = new ActionExecutor({ liveModeEnabled: false, credentials: new MetaCreds(), now: clk.now });
     const fixtures: Fixtures = { ...META_FIXTURES, "meta_ads:insights": { rows: [ROWS[0]], metrics: { ...(META_FIXTURES["meta_ads:insights"] as { metrics: Record<string, number | string> }).metrics } } };
-    const adapters = { reader: new StaticReader(fixtures, clk.now), decider: new RulesDecisionProvider(new DeterministicDecisionProvider()), executor, store: new MemoryStore(), now: clk.now };
+    const adapters = { reader: new StaticReader(fixtures, clk.now), decider: new RulesDecisionProvider(new DeterministicDecisionProvider()), executor, producer: new FakeProducer(), store: new MemoryStore(), now: clk.now };
     const res = await runRoutine(catalogSpec("D02-W01"), input(), adapters, { mode: "dry_run" });
     expect(res.status, res.summary).toBe("done");
     const gate = res.receipts.find((r) => r.description.startsWith("Would ask"))!;
@@ -112,7 +112,7 @@ describe("dry run through the engine", () => {
     const clk = clock();
     const executor = new ActionExecutor({ liveModeEnabled: false, credentials: new MetaCreds(), now: clk.now, spendCeiling: async () => 5 });
     const fixtures: Fixtures = { ...META_FIXTURES, "meta_ads:insights": { rows: [ROWS[0]], metrics: { ...(META_FIXTURES["meta_ads:insights"] as { metrics: Record<string, number | string> }).metrics } } };
-    const adapters = { reader: new StaticReader(fixtures, clk.now), decider: new RulesDecisionProvider(new DeterministicDecisionProvider()), executor, store: new MemoryStore(), now: clk.now };
+    const adapters = { reader: new StaticReader(fixtures, clk.now), decider: new RulesDecisionProvider(new DeterministicDecisionProvider()), executor, producer: new FakeProducer(), store: new MemoryStore(), now: clk.now };
     const res = await runRoutine(catalogSpec("D02-W01"), input(), adapters, { mode: "dry_run" });
     expect(res.status).toBe("done");
     const would = res.receipts.find((r) => r.description.startsWith("Would ") && !r.description.startsWith("Would ask"))!;
@@ -120,9 +120,82 @@ describe("dry run through the engine", () => {
     expect(would.payload.blocked).toContain("usually approve");
   });
 
-  it("an unregistered verb keeps the engine's generic line (no action payload)", async () => {
-    const executor = new ActionExecutor({ liveModeEnabled: false });
-    expect(await executor.dryRun(node("update_adset_budget"), { action: "update_adset_budget" }, rctx({ mode: "dry_run" }))).toBeNull();
+  it("an unregistered verb is visibly blocked as not implemented without touching providers", async () => {
+    let credentialReads = 0;
+    let spendCeilingReads = 0;
+    const { fetch, calls } = fakeFetch([{ json: { success: true } }]);
+    const executor = new ActionExecutor({
+      liveModeEnabled: false,
+      credentials: {
+        async get() {
+          credentialReads += 1;
+          return null;
+        },
+      },
+      spendCeiling: async () => {
+        spendCeilingReads += 1;
+        return null;
+      },
+      fetch,
+    });
+
+    expect(await executor.dryRun(node("update_adset_budget"), { action: "update_adset_budget" }, rctx({ mode: "dry_run" }))).toEqual({
+      preview: "refuse unsupported action update_adset_budget on meta_ads",
+      payload: {
+        actionId: "update_adset_budget",
+        platform: "meta_ads",
+        implemented: false,
+        request: null,
+        attempted: false,
+      },
+      blocked: NOT_IMPLEMENTED_REASON,
+    });
+
+    const clk = clock();
+    const res = await runRoutine(
+      budgetMoveSpec(),
+      input(),
+      { reader: new StaticReader(SPEND_FIXTURE, clk.now), decider: new DeterministicDecisionProvider(), executor, producer: new FakeProducer(), store: new MemoryStore(), now: clk.now },
+      { mode: "dry_run" },
+    );
+    expect(res.status).toBe("done");
+    const receipt = res.receipts.find((item) => item.description.startsWith("Would refuse unsupported action"))!;
+    expect(receipt.description).toBe(`Would refuse unsupported action update_adset_budget on meta_ads — but guards would block it: ${NOT_IMPLEMENTED_REASON}.`);
+    expect(receipt.payload).toMatchObject({
+      blocked: NOT_IMPLEMENTED_REASON,
+      action: { actionId: "update_adset_budget", platform: "meta_ads", implemented: false, request: null, attempted: false },
+    });
+    expect(credentialReads).toBe(0);
+    expect(spendCeilingReads).toBe(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("live preflight exposes impossible approvals while ordinary dry runs remain informative", async () => {
+    const off = new ActionExecutor({ liveModeEnabled: false, credentials: new MetaCreds() });
+    const mutation = { action: "meta.adset.pause", target: { adsetId: "120210000000002" } };
+    const dry = await off.dryRun(node(mutation.action, mutation.target), mutation, rctx({ mode: "dry_run" }));
+    expect(dry?.blocked).toBeUndefined();
+    expect(dry?.preview).toBe("Pause ad set …000002");
+
+    const livePreflight = await off.dryRun(node(mutation.action, mutation.target), mutation, rctx({ mode: "live" }));
+    expect(livePreflight?.blocked).toBe(LIVE_DISABLED_REASON);
+    expect(livePreflight?.preview).toBe("Pause ad set …000002");
+  });
+
+  it("live preflight blocks actions whose execute implementation is deliberately dry-run-only", async () => {
+    const executor = new ActionExecutor({ liveModeEnabled: true, credentials: new MetaCreds(), enabledRisks: ALL_ON });
+    const params = {
+      name: "Creative test",
+      objective: "OUTCOME_TRAFFIC",
+      dailyBudget: 30,
+      audience: { countries: ["NZ"] },
+      creatives: [{ instagramMediaId: "17900000000000001" }],
+    };
+    const action = "meta.campaign.create_from_brief";
+    const preflight = await executor.dryRun(node(action, {}, params), { action, params }, rctx({ mode: "live" }));
+
+    expect(preflight?.preview).toContain("everything PAUSED until you switch it on");
+    expect(preflight?.blocked).toBe("not_available — meta.campaign.create_from_brief is dry-run only; the request was shaped, not sent");
   });
 });
 
@@ -179,19 +252,18 @@ describe("live gating", () => {
     expect(calls).toHaveLength(3);
   });
 
-  it("engine integration: an approved live run reaches the executor and is refused with live_disabled (nothing mutated, no spend)", async () => {
+  it("engine integration: live-disabled is exposed before an impossible approval (nothing mutated, no spend)", async () => {
     const clk = clock();
     const store = new MemoryStore();
     const executor = new ActionExecutor({ liveModeEnabled: LIVE_MODE_ENABLED, credentials: new MetaCreds(), enabledRisks: ALL_ON, now: clk.now });
-    const adapters = { reader: new StaticReader(META_FIXTURES, clk.now), decider: new RulesDecisionProvider(new DeterministicDecisionProvider()), executor, store, now: clk.now };
+    const adapters = { reader: new StaticReader(META_FIXTURES, clk.now), decider: new RulesDecisionProvider(new DeterministicDecisionProvider()), executor, producer: new FakeProducer(), store, now: clk.now };
     const paused = await runRoutine(catalogSpec("D02-W01"), input({ triggeredBy: "manual" }), adapters, { mode: "live" });
-    expect(paused.status).toBe("waiting_approval");
-    expect(paused.approval!.title).toBe("Turn off Loser");
-    const done = await resumeRun(paused.runId, "approved", adapters, { now: clk.now } as never);
-    expect(done.status).toBe("failed");
-    expect(done.error).toBe(LIVE_DISABLED_REASON);
-    expect(done.receipts.some((r) => r.kind === "mutation")).toBe(false);
-    expect(executor.refused).toEqual([{ action: "meta.adset.pause", platform: "meta_ads", runId: paused.runId }]);
+    expect(paused.status).toBe("skipped");
+    expect(paused.summary).toContain(LIVE_DISABLED_REASON);
+    expect(paused.approval).toBeUndefined();
+    expect(paused.receipts.some((r) => r.kind === "mutation")).toBe(false);
+    expect(paused.receipts.at(-1)).toMatchObject({ kind: "notification", payload: { blocked: LIVE_DISABLED_REASON } });
+    expect(executor.refused).toEqual([]);
     expect(await store.sumSpend("acct-1", "2026-09-01T00:00:00.000Z", "2026-09-05T00:00:00.000Z")).toBe(0);
   });
 });
@@ -235,7 +307,7 @@ describe("spec wiring — the Meta routines reach execute with a typed action id
     for (const id of META_MUTATORS) {
       const clk = clock();
       const executor = new ActionExecutor({ liveModeEnabled: false, credentials: new FixtureCredentialProvider(), now: clk.now });
-      const adapters = { reader: new StaticReader(fixtures, clk.now), decider: new DeterministicDecisionProvider(), executor, store: new MemoryStore(), now: clk.now };
+      const adapters = { reader: new StaticReader(fixtures, clk.now), decider: new DeterministicDecisionProvider(), executor, producer: new FakeProducer(), store: new MemoryStore(), now: clk.now };
       const res = await runRoutine(catalogSpec(id), input({ vars: { countries: "NZ, AU", metaPixelId: "123456789012345", metaPageId: "100000000000001" } }), adapters, { mode: "dry_run" });
       expect(res.status, `${id}: ${res.summary}`).toBe("done");
       const would = res.receipts.find((r) => r.description.startsWith("Would ") && !r.description.startsWith("Would ask"))!;

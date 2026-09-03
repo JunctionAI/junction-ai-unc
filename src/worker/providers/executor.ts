@@ -37,6 +37,10 @@ export const NOT_IMPLEMENTED_REASON = "not_implemented — mutations are Wave 2,
 export const LIVE_DISABLED_REASON = "live_disabled — LIVE_MODE_ENABLED is false (service.ts); the action was shaped, not sent";
 export const ENABLED_RISKS_ENV = "UNC_LIVE_ACTION_RISKS";
 
+const DRY_RUN_ONLY_REASONS: Readonly<Record<string, string>> = {
+  "meta.campaign.create_from_brief": "not_available — meta.campaign.create_from_brief is dry-run only; the request was shaped, not sent",
+};
+
 /** Parse UNC_LIVE_ACTION_RISKS ("reversible,spend") into the enabled set. Unknown words are
     ignored; the default is nothing. */
 export function parseEnabledRisks(value: string | undefined | null): Set<ActionRisk> {
@@ -155,11 +159,23 @@ export class ActionExecutor implements Executor {
     return pickDeclaredParams(action, { ...(mutation.target ?? {}), ...(mutation.params ?? {}) });
   }
 
-  /** Dry run: the exact request + preview, or null when the mutation names no action (the
-      engine then keeps its generic "Would <verb>" line). */
+  /** Dry run: the exact request + preview. Unknown actions return an explicit fail-closed
+      preview so the receipt cannot imply an unsupported mutation is available. */
   async dryRun(node: ExecuteNode, mutation: Mutation, ctx: RunContext): Promise<DryRunReceipt | null> {
     const action = getAction(mutation.action);
-    if (!action) return null;
+    if (!action) {
+      return {
+        preview: `refuse unsupported action ${mutation.action} on ${node.platform}`,
+        payload: {
+          actionId: mutation.action,
+          platform: node.platform,
+          implemented: false,
+          request: null,
+          attempted: false,
+        },
+        blocked: NOT_IMPLEMENTED_REASON,
+      };
+    }
     const actx = await this.context(node, ctx);
     const params = this.paramsFor(action, mutation);
     const violations = action.guards(params, actx);
@@ -170,6 +186,12 @@ export class ActionExecutor implements Executor {
       return { preview: `${action.title} — could not shape the request`, payload: { actionId: action.id, risk: action.risk, risks: risksOf(action), params, violations, error: err instanceof Error ? err.message : String(err) }, blocked: `could not shape the request: ${err instanceof Error ? err.message : String(err)}` };
     }
     const key = idempotencyKey(ctx.runId, action.id, params);
+    const blockers = violations.length ? [violationsLine(violations)] : [];
+    if (ctx.mode === "live") {
+      if (!this.deps.liveModeEnabled) blockers.push(LIVE_DISABLED_REASON);
+      const dryRunOnly = DRY_RUN_ONLY_REASONS[action.id];
+      if (dryRunOnly) blockers.push(dryRunOnly);
+    }
     return {
       preview: dry.preview,
       payload: {
@@ -189,7 +211,7 @@ export class ActionExecutor implements Executor {
         enabled: { liveMode: this.deps.liveModeEnabled, risks: this.enabled, disabled: disabledRisks(action, this.enabled) },
         connected: actx.credential?.kind === "meta_ads",
       },
-      ...(violations.length ? { blocked: violationsLine(violations) } : {}),
+      ...(blockers.length ? { blocked: blockers.join("; ") } : {}),
     };
   }
 

@@ -16,7 +16,7 @@ export const budgetPacing: Skill = {
     decides: ["whether projected spend is over the cap", "which ad set to cut"],
     writes: ["a generic artifact of one Would-card"],
     never: ["invent spend, a pacing % or a cap", "cut a budget without approval", "spend"],
-    apply: "Would-cards. I never spend; cutting a budget stays yours.",
+    apply: "Would-cards only. I never spend; any future budget change needs a separate exact run-level approval gate.",
     examples: [
       { when: "Meta projected daily spend is over the cap and Prospecting is the largest set", does: "one cut item naming that set, the Meta numbers, rollback = restore the previous daily budget" },
       { when: "Google Ads is unavailable", does: "pace on Meta rows alone — never invent a Google cost" },

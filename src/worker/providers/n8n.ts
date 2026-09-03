@@ -17,9 +17,11 @@ import { compactReads } from "../../lib/artifacts/material";
 import { sign, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "../../lib/artifacts/signing";
 import { isArtifactKind, validateArtifactObject } from "../../lib/artifacts/validate";
 import { DATA_ENDPOINTS, dataBaseUrl, issueDataToken, scopesForRoutine } from "../../lib/n8n/dataToken";
+import { checkWebhookTarget, type HostLookup } from "../../lib/n8n/urlSecurity";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
 import type { N8nBridge, N8nCallResult, N8nNode, N8nWorkflow, ProduceNeed, ProduceNode, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
+import { pinnedWebhookFetch, type WebhookFetch, type WebhookResponse } from "./pinnedWebhookFetch";
 
 export const N8N_DEFAULT_TIMEOUT_MS = 60_000;
 export const N8N_SECRET_ENV = "N8N_SIGNING_SECRET";
@@ -100,10 +102,13 @@ export function parseN8nReply(parsed: unknown, expectedKind: string, maxItems?: 
 
 export interface HttpN8nBridgeOptions {
   env?: Record<string, string | undefined>;
-  fetch?: typeof fetch;
+  /** Injectable transport for tests; production defaults to the DNS-pinned Node transport. */
+  fetch?: WebhookFetch;
   now?: () => Date;
   log?: Logger;
   timeoutMs?: number;
+  /** Test seam for request-time DNS validation. */
+  lookup?: HostLookup;
 }
 
 export class HttpN8nBridge implements N8nBridge {
@@ -125,20 +130,23 @@ export class HttpN8nBridge implements N8nBridge {
   async call(node: ProduceNode | N8nNode, ctx: RunContext, workflow: N8nWorkflow | null): Promise<N8nCallResult> {
     const url = this.resolveUrl(node, workflow);
     if (!url) throw new Error("no n8n webhook is registered for this routine");
+    const target = await checkWebhookTarget(url, this.env, { maxLength: 2000, lookup: this.opts.lookup });
+    if (!target.ok) throw new Error(`n8n webhook refused: ${target.reason}`);
     const secret = (this.env[N8N_SECRET_ENV] ?? "").trim();
     if (!secret) throw new Error(`${N8N_SECRET_ENV} is not set — refusing to call n8n unsigned`);
     const payload = buildN8nPayload(node, ctx, { secret, env: this.env, now: this.now });
     const body = JSON.stringify(payload);
     const ts = String(this.now().getTime());
-    const f = this.opts.fetch ?? fetch;
+    const f = this.opts.fetch ?? pinnedWebhookFetch;
     const timeoutMs = node.kind === "n8n" && node.timeoutMs ? node.timeoutMs : (this.opts.timeoutMs ?? N8N_DEFAULT_TIMEOUT_MS);
-    let res: Response;
+    let res: WebhookResponse;
     try {
-      res = await f(url, { method: "POST", headers: { "content-type": "application/json", [SIGNATURE_HEADER]: sign(secret, body, ts), [TIMESTAMP_HEADER]: ts }, body, signal: AbortSignal.timeout(timeoutMs) });
+      res = await f(target.url.toString(), { method: "POST", redirect: "manual", headers: { "content-type": "application/json", [SIGNATURE_HEADER]: sign(secret, body, ts), [TIMESTAMP_HEADER]: ts }, body, signal: AbortSignal.timeout(timeoutMs) }, target.pin);
     } catch (err) {
       this.opts.log?.warn("n8n.call_failed", { runId: ctx.runId, routineId: ctx.routineId, error: err instanceof Error ? err.name : "unknown" });
       throw new Error(`n8n webhook unreachable (${err instanceof Error ? err.name : "error"})`);
     }
+    if (res.status >= 300 && res.status < 400) throw new Error(`n8n webhook redirect refused (${res.status})`);
     if (res.status === 202) {
       this.opts.log?.info("n8n.accepted", { runId: ctx.runId, routineId: ctx.routineId });
       return { kind: "accepted" };

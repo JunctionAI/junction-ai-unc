@@ -11,6 +11,7 @@
    Never throws: every failure is an LlmResult with stopReason "error" + a code. The key
    only ever lands in the Authorization header. */
 
+import { sanitiseProviderError } from "../errors";
 import type { LlmErrorCode, LlmProvider, LlmResult, ProviderId, ProviderRequest } from "../types";
 
 export interface OpenAiCompatibleOptions {
@@ -48,7 +49,7 @@ export function codeForStatus(status: number): LlmErrorCode {
   return "unknown";
 }
 
-const head = (s: string, n = 200) => s.replace(/\s+/g, " ").trim().slice(0, n);
+const head = (s: string, n = 200) => sanitiseProviderError(s, n);
 
 function errorMessageFromBody(status: number, body: string): string {
   try {

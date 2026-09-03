@@ -20,6 +20,7 @@ vi.mock("@/lib/db/server", () => ({
 import { GET as getProgress } from "@/app/api/setup/progress/route";
 import { POST as postAgree } from "@/app/api/setup/agree/route";
 import { POST as postEnable } from "@/app/api/setup/enable/route";
+import { GET as getRoutineState, POST as postRoutineState } from "@/app/api/routines/state/route";
 
 const ACCT = "00000000-0000-4000-8000-00000000acc1";
 const USER = "00000000-0000-4000-8000-00000000u5e1";
@@ -90,5 +91,19 @@ describe("the spine through the routes", () => {
     expect((await postEnable(post("/api/setup/enable", "{nope"))).status).toBe(400);
     expect((await postEnable(post("/api/setup/enable", { routineId: "nope" }))).status).toBe(400);
     expect((await postEnable(post("/api/setup/enable", { routineId: "D05-W08" }))).status).toBe(404);
+  });
+
+  it("members may read routine state but cannot enable or toggle routines", async () => {
+    db.rows("account_members")[0].role = "member";
+    expect((await getRoutineState(new Request("http://unc.test/api/routines/state"))).status).toBe(200);
+    expect((await postAgree()).status).toBe(403);
+    expect((await postEnable(post("/api/setup/enable", { routineId: "D01-W01" }))).status).toBe(403);
+    const toggle = new Request("http://unc.test/api/routines/state", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ routineId: "D01-W01", enabled: true }),
+    });
+    expect((await postRoutineState(toggle)).status).toBe(403);
+    expect(db.rows("routine_states")).toHaveLength(0);
   });
 });

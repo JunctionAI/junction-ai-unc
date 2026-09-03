@@ -73,7 +73,9 @@ describe("openaiCompatible — responses + failures", () => {
 
   it("HTTP failures map to codes with the provider's message head (401 auth, 404 not_found, 429, 5xx) — never a throw", async () => {
     const mk = (status: number, body: unknown) => createOpenAiCompatibleProvider({ id: "openai", baseUrl: "https://x/v1", apiKey: "k", supportsReasoningEffort: true, maxTokensParam: "max_tokens", streamUsage: true, fetchImpl: capture(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })).fetchImpl });
-    expect(await mk(401, { error: { message: "Incorrect API key provided: sk-abc" } }).complete(req)).toMatchObject({ stopReason: "error", errorCode: "auth", errorMessage: "401 Incorrect API key provided: sk-abc" });
+    const auth = await mk(401, { error: { message: "Incorrect API key provided: sk-abcdef123456" } }).complete(req);
+    expect(auth).toMatchObject({ stopReason: "error", errorCode: "auth", errorMessage: "401 Incorrect API key provided: [redacted]" });
+    expect(auth.errorMessage).not.toContain("sk-abcdef123456");
     expect(await mk(404, { error: { message: "The model `gpt-99` does not exist" } }).complete(req)).toMatchObject({ errorCode: "not_found" });
     expect(await mk(429, { error: { message: "slow down" } }).complete(req)).toMatchObject({ errorCode: "rate_limited" });
     expect(await mk(503, "upstream down").complete(req)).toMatchObject({ errorCode: "provider_error", errorMessage: '503 "upstream down"' });

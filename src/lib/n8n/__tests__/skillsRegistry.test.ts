@@ -53,7 +53,7 @@ afterEach(() => {
 });
 
 describe("registry (lib)", () => {
-  it("source: own active row → global active row → built-in → none; rows for all 35", async () => {
+  it("source: own active row → global active row → built-in; rows for all 35", async () => {
     const rows = [
       { id: "g", accountId: null, routineId: "D01-W01", webhookUrl: "https://g.test", active: true },
       { id: "o", accountId: ACCT, routineId: "D01-W01", webhookUrl: "https://o.test", active: false },
@@ -66,17 +66,22 @@ describe("registry (lib)", () => {
     const all = skillRows(rows, ACCT);
     expect(all).toHaveLength(35);
     expect(all.find((r) => r.routineId === "D01-W01")).toMatchObject({ source: "n8n", builtIn: true, produces: true, workflow: { id: "g", global: true }, workflows: [{ id: "g" }, { id: "o" }] });
-    expect(all.find((r) => r.routineId === "D02-W04")).toMatchObject({ source: "builtin", builtIn: true, produces: false, workflow: null, workflows: [] });
+    expect(all.find((r) => r.routineId === "D02-W04")).toMatchObject({ source: "builtin", builtIn: true, produces: true, workflow: null, workflows: [] });
     expect(isAdminEmail("Tom@getjunction.ai", { UNC_ADMIN_EMAILS: "tom@getjunction.ai" })).toBe(true);
     expect(isAdminEmail("founder@example.test", { UNC_ADMIN_EMAILS: "tom@getjunction.ai" })).toBe(false);
     expect(isAdminEmail(null)).toBe(false);
   });
 
-  it("webhook URLs: https only (http for localhost), no credentials, no junk", () => {
+  it("webhook URLs: HTTPS/public in production; local and HTTP only inside the explicit test/dev boundary", () => {
     expect(webhookUrlProblem(HOOK)).toBeNull();
     expect(webhookUrlProblem("http://localhost:5678/webhook/x")).toBeNull();
     expect(webhookUrlProblem("http://n8n.example/webhook/x")).toMatch(/https/);
-    expect(webhookUrlProblem("http://n8n.example/webhook/x", { N8N_ALLOW_HTTP: "1" })).toBeNull();
+    expect(webhookUrlProblem("http://n8n.example/webhook/x", { NODE_ENV: "development", N8N_ALLOW_HTTP: "1" })).toBeNull();
+    expect(webhookUrlProblem("http://localhost:5678/webhook/x", { NODE_ENV: "development", N8N_ALLOW_HTTP: "1", N8N_ALLOW_PRIVATE_DEV: "1" })).toBeNull();
+    expect(webhookUrlProblem("https://localhost:5678/webhook/x", { NODE_ENV: "production", N8N_ALLOW_PRIVATE_DEV: "1" })).toMatch(/public host/);
+    expect(webhookUrlProblem("https://127.0.0.1/webhook/x", { NODE_ENV: "production" })).toMatch(/public host/);
+    expect(webhookUrlProblem("https://169.254.169.254/latest/meta-data", { NODE_ENV: "production" })).toMatch(/public host/);
+    expect(webhookUrlProblem("https://n8n.internal/webhook/x", { NODE_ENV: "production" })).toMatch(/public host/);
     expect(webhookUrlProblem("https://user:pw@n8n.example/x")).toMatch(/credentials/);
     expect(webhookUrlProblem("not a url")).toMatch(/absolute/);
     expect(webhookUrlProblem("")).toMatch(/required/);
@@ -106,20 +111,24 @@ describe("registry (lib)", () => {
       }) as typeof fetch;
     const env = { N8N_SIGNING_SECRET: "s3cret", APP_URL: "https://unc.test" };
     const NOW = new Date("2026-09-03T07:00:00.000Z");
-    const art = await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env, fetch: stub(200, { artifact: { kind: "post_set", title: "From n8n", body: "Three posts the workflow wrote from fixture material.", items: [{ title: "a", body: "b" }] } }), now: () => NOW });
+    const art = await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env, store, fetch: stub(200, { artifact: { kind: "post_set", title: "From n8n", body: "Three posts the workflow wrote from fixture material.", items: [{ title: "a", body: "b" }] } }), now: () => NOW });
     expect(art).toMatchObject({ ok: true, kind: "artifact", artifact: { kind: "post_set", title: "From n8n", items: 1 } });
     expect(calls[0].url).toBe(HOOK);
     expect(verify("s3cret", calls[0].body, calls[0].headers["x-unc-timestamp"], calls[0].headers["x-unc-signature"], { now: () => NOW })).toEqual({ ok: true });
     const payload = JSON.parse(calls[0].body);
-    expect(payload.runId).toMatch(/^test:/);
+    expect(payload.runId).toMatch(/^[0-9a-f-]{36}$/);
     expect(payload.dataBaseUrl).toBe("https://unc.test");
     expect(payload.data.endpoints.reads).toBe("/api/n8n/reads");
     expect(verifyDataToken("s3cret", payload.dataToken, { now: () => NOW })).toMatchObject({ ok: true, claims: { accountId: ACCT, routineId: "D01-W01", runId: payload.runId } });
     expect(payload.reads.questions).toMatchObject({ provenance: "fixture" });
-    expect(await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env, fetch: stub(200, { needs: [{ input: "brand_notes", why: "x" }] }) })).toMatchObject({ ok: true, kind: "needs", needs: [{ input: "brand_notes" }] });
-    expect(await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env, fetch: stub(202) })).toMatchObject({ ok: true, kind: "accepted" });
-    expect(await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env, fetch: stub(500) })).toMatchObject({ ok: false, error: "n8n webhook answered 500" });
-    expect(await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env: {}, fetch: stub(200) })).toMatchObject({ ok: false, error: expect.stringContaining("N8N_SIGNING_SECRET") });
+    expect((await store.getRun(payload.runId))?.status).toBe("done");
+    expect(await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env, store, fetch: stub(200, { needs: [{ input: "brand_notes", why: "x" }] }) })).toMatchObject({ ok: true, kind: "needs", needs: [{ input: "brand_notes" }] });
+    const accepted = await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env, store, fetch: stub(202) });
+    expect(accepted).toMatchObject({ ok: true, kind: "accepted" });
+    const acceptedPayload = JSON.parse(calls.at(-1)!.body);
+    expect(await store.getRun(acceptedPayload.runId)).toMatchObject({ status: "running", snapshot: { awaiting: "n8n" } });
+    expect(await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env, store, fetch: stub(500) })).toMatchObject({ ok: false, error: "n8n webhook answered 500" });
+    expect(await testWorkflow({ accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK }, { env: {}, store, fetch: stub(200) })).toMatchObject({ ok: false, error: expect.stringContaining("N8N_SIGNING_SECRET") });
   });
 });
 

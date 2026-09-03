@@ -34,6 +34,8 @@ export type Log = (event: string, fields: Record<string, unknown>) => void;
 export type RespondFn = (input: { accountId: string; db: DbClient; history: HistoryTurn[] }) => Promise<{ ok: true; reply: string } | { ok: false; reason: string }>;
 export type DecideFn = (input: DecideInput) => Promise<DecideOutcome>;
 
+export const OWNER_DECISION_LINE = "Only the account owner can approve or hold this. The decision is still waiting in the app.";
+
 export interface InboundDeps {
   /** Service-role client. */
   db: DbClient;
@@ -65,6 +67,19 @@ const defaultRespond: RespondFn = async ({ accountId, db, history }) => {
 async function seen(db: DbClient, event: InboundEvent): Promise<boolean> {
   const row = await unwrap<{ id: string } | null>("chat_messages.select", db.from("chat_messages").select("id").eq("channel", event.channel).eq("external_msg_id", event.externalMsgId).maybeSingle());
   return !!row;
+}
+
+/** Channel links name the app user who created them. Re-resolve that user's current role for
+    every consequential decision; a stale, transferred or member-owned link never inherits the
+    service role used by the webhook processor. */
+async function linkedOwner(db: DbClient, link: Pick<ChannelLink, "accountId" | "userId">): Promise<boolean> {
+  if (!link.userId) return false;
+  try {
+    const row = await unwrap<{ role: string } | null>("account_members.select", db.from("account_members").select("role").eq("account_id", link.accountId).eq("user_id", link.userId).maybeSingle());
+    return row?.role === "owner";
+  } catch {
+    return false;
+  }
 }
 
 /** A direct line to a sender we hold no account for — no ledger row can exist without one. */
@@ -137,15 +152,21 @@ export async function handleInbound(deps: InboundDeps, event: InboundEvent): Pro
       }
     } else {
       const decision = verb === "approve" ? "approved" : "held";
-      const decide: DecideFn = deps.decide ?? ((input) => decideApproval({ store: deps.store, accounts: deps.accounts, db: deps.db, now: deps.now }, input));
-      try {
-        const out = await decide({ accountId, approvalId: resolved.approval.id, decision, decidedBy: link.userId ?? undefined });
-        reply = receiptLine(decision, out.approval, out.run);
-        outcome = { kind: "decided", accountId, approvalId: resolved.approval.id, decision, reply };
-      } catch (err) {
-        reply = err instanceof DecideError ? (err.code === "already_decided" ? "That one's already been decided — the receipt is in the app." : err.code === "not_found" ? "I can't find that decision any more." : "That run can't be resumed from here — open it in the app.") : "Something went wrong taking that decision — it's still waiting in the app.";
+      if (!(await linkedOwner(deps.db, link))) {
+        reply = OWNER_DECISION_LINE;
         outcome = { kind: "decision_failed", accountId, reply };
-        log("channels.decide_failed", { accountId, error: err instanceof Error ? err.message : String(err) });
+        log("channels.decide_refused", { accountId, reason: "owner_only", userId: link.userId });
+      } else {
+        const decide: DecideFn = deps.decide ?? ((input) => decideApproval({ store: deps.store, accounts: deps.accounts, db: deps.db, now: deps.now }, input));
+        try {
+          const out = await decide({ accountId, approvalId: resolved.approval.id, decision, decidedBy: link.userId ?? undefined });
+          reply = receiptLine(decision, out.approval, out.run);
+          outcome = { kind: "decided", accountId, approvalId: resolved.approval.id, decision, reply };
+        } catch (err) {
+          reply = err instanceof DecideError ? (err.code === "already_decided" ? "That one's already been decided — the receipt is in the app." : err.code === "not_found" ? "I can't find that decision any more." : "That run can't be resumed from here — open it in the app.") : "Something went wrong taking that decision — it's still waiting in the app.";
+          outcome = { kind: "decision_failed", accountId, reply };
+          log("channels.decide_failed", { accountId, error: err instanceof Error ? err.message : String(err) });
+        }
       }
     }
     await deps.adapters[event.channel]?.ack?.(event, reply.slice(0, 200)).catch(() => undefined);

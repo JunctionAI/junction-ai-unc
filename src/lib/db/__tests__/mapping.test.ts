@@ -255,10 +255,11 @@ describe("rows → state on partial accounts", () => {
 });
 
 describe("persistedProjection", () => {
-  it("ignores the clock and transient UI, changes with any persisted field", () => {
+  it("ignores the clock, transient UI and server-owned connector/routine state", () => {
     const S = richState();
     expect(persistedProjection(S)).toBe(persistedProjection({ ...S, view: "today", chatOpen: false, apWhy: [false, false, false], buddyText: "x" }));
-    for (const key of PERSISTED_KEYS) {
+    expect(persistedProjection({ ...S, routineOn: { "Trend watch": true }, connState: { Slack: "ok" } })).toBe(persistedProjection(S));
+    for (const key of PERSISTED_KEYS.filter((key) => key !== "routineOn" && key !== "connState")) {
       const mutated = { ...S, [key]: (VALID_MUTATIONS[key] ?? mutate)(S[key]) } as typeof S;
       expect(persistedProjection(mutated), key).not.toBe(persistedProjection(S));
     }

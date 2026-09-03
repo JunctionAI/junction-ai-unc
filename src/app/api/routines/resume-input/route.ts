@@ -5,10 +5,10 @@
    or    400 { error } | 404 (unknown run / not this account's) | 409 (run is not waiting_input)
 
    Same service the worker uses (src/worker/service.ts resumeWithInput → engine
-   resumeRunWithInput): the answers land in ctx.inputs and the produce step re-runs. */
+   resumeRunWithInput): the owner's answers land in ctx.inputs and the produce step re-runs. */
 
 import { isDbConfigured } from "@/lib/db/client";
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { resumeWithInput, type ServiceDeps } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
@@ -33,7 +33,7 @@ async function handlePOST(req: Request) {
   if (!runId) return Response.json({ error: "runId is required" }, { status: 400 });
   if (!body.answers || typeof body.answers !== "object" || Array.isArray(body.answers)) return Response.json({ error: "answers must be an object of strings" }, { status: 400 });
   if (isDbConfigured()) {
-    const session = await requireAccountSession();
+    const session = await requireAccountOwnerSession();
     if (session instanceof Response) return session;
     const run = await getStore().getRun(runId);
     if (!run || run.accountId !== session.accountId) return Response.json({ error: `run ${runId} not found` }, { status: 404 });

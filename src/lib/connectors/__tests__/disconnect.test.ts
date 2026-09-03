@@ -56,6 +56,17 @@ describe("handleDisconnect", () => {
     expect(db.rows("receipts")).toHaveLength(0);
   });
 
+  it("a member cannot disconnect or revoke the owner's connection", async () => {
+    db.rows("account_members")[0].role = "member";
+    const d = live();
+    const res = await handleDisconnect(d, "klaviyo");
+    expect(res.status).toBe(403);
+    expect(d.calls).toHaveLength(0);
+    expect(db.rows("connectors")[0].status).toBe("connected");
+    expect(await getSecret(db, connectorId)).not.toBeNull();
+    expect(db.rows("receipts")).toHaveLength(0);
+  });
+
   it("revokes on Klaviyo's side (Basic auth, refresh token), purges the sync, deletes the secret, marks the row, receipts — no token anywhere", async () => {
     const provisioner = recordingProvisioner();
     const d = live({ provisioner });

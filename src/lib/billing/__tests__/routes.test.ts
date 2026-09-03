@@ -30,7 +30,7 @@ const fakeStripe = {
 };
 vi.mock("@/lib/billing/config", async (importOriginal) => ({ ...(await importOriginal<typeof import("../config")>()), getStripe: () => fakeStripe as unknown as Stripe }));
 
-import { POST as checkout } from "@/app/api/billing/checkout/route";
+import { POST as checkoutRoute } from "@/app/api/billing/checkout/route";
 import { POST as portal } from "@/app/api/billing/portal/route";
 import { GET as ret } from "@/app/api/billing/return/route";
 import { checkoutParams } from "../checkout";
@@ -38,6 +38,7 @@ import { FAKE_ENV } from "./env";
 
 const ACCT = "00000000-0000-4000-8000-00000000acc1";
 const USER = "00000000-0000-4000-8000-00000000u5e1";
+const checkout = () => checkoutRoute(new Request("https://unc.example.test/api/billing/checkout"));
 
 beforeEach(() => {
   setFakeEnv();
@@ -73,6 +74,16 @@ describe("POST /api/billing/checkout", () => {
     serviceRole = false;
     expect((await checkout()).status).toBe(503);
   });
+  it("403 for a member — billing changes are account-owner only", async () => {
+    // RLS lets account members see peer membership rows. A peer owner must never make the
+    // caller look like an owner: session resolution filters to this exact user id.
+    db.rows("account_members")[0].user_id = "owner-peer";
+    db.insertRow("account_members", { account_id: ACCT, user_id: USER, role: "member" });
+    const res = await checkout();
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "owner_only" });
+    expect(stripeCalls).toEqual([]);
+  });
   it("creates the customer, pins it on the row, and builds a 14-day-trial subscription session with card required", async () => {
     const res = await checkout();
     expect(await res.json()).toEqual({ url: "https://checkout.stripe.test/c/cs_1" });
@@ -98,13 +109,13 @@ describe("POST /api/billing/checkout", () => {
     expect(stripeCalls[0].params).toMatchObject({ customer: "cus_existing" });
     expect(db.rows("subscriptions")).toEqual([expect.objectContaining({ stripe_customer_id: "cus_existing", status: "canceled" })]);
   });
-  it("creates the account first when the signed-in user has none yet", async () => {
+  it("refuses checkout when the signed-in identity has no invited account", async () => {
     db.tables.set("account_members", []);
     const res = await checkout();
-    expect(res.status).toBe(200);
-    const created = db.rows("account_members")[0];
-    expect(created).toMatchObject({ user_id: USER, role: "owner" });
-    expect(stripeCalls[1].params).toMatchObject({ client_reference_id: created.account_id });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "invite_required" });
+    expect(db.rows("account_members")).toHaveLength(0);
+    expect(stripeCalls).toHaveLength(0);
   });
   it("502 (no details) when Stripe fails", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -135,6 +146,12 @@ describe("POST /api/billing/portal", () => {
   });
   it("409 when the account has no Stripe customer yet", async () => {
     expect((await portal()).status).toBe(409);
+    expect(stripeCalls).toEqual([]);
+  });
+  it("403 for a member before a portal session is created", async () => {
+    db.rows("account_members")[0].role = "member";
+    db.seed("subscriptions", [{ account_id: ACCT, stripe_customer_id: "cus_existing", status: "active" }]);
+    expect((await portal()).status).toBe(403);
     expect(stripeCalls).toEqual([]);
   });
   it("opens a portal session for the account's customer, returning to /app", async () => {

@@ -150,7 +150,7 @@ async function resolveMode(): Promise<void> {
     // being created by the app); the id fills in when it can.
     let accountId: string | null = null;
     try {
-      const memberships = await listMemberships(db());
+      const memberships = await listMemberships(db(), data.session.user.id);
       accountId = memberships[0]?.accountId ?? null;
     } catch {
       accountId = null;

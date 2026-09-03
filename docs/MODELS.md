@@ -5,7 +5,7 @@ through `src/lib/llm/` — a small router with per-task and per-account model ch
 
 Copy in the app: **"Which brain for which job — I default to the best value for each."**
 
-## The five tasks
+## The five founder-configurable tasks
 
 | Task | Where | Default | Budget kept from before |
 |---|---|---|---|
@@ -20,6 +20,12 @@ count against `max_tokens` (a tight cap starves the visible answer). Effort stay
 for the mechanical jobs. Every call site keeps the exact validator and fallback it had when
 the Anthropic SDK was inline — a refusal, a transport error or "nothing configured" lands on
 the canned / deterministic path, never on the founder.
+
+Internal tasks use the same router but do not appear in account settings. Most important for
+the routine system is `routine_produce`: balanced tier by default, 8000 tokens, effort medium,
+strict JSON, overrideable with `LLM_MODEL_ROUTINE_PRODUCE`. It writes the artifact behind each
+of the 35 skill contracts. `memory_extract`, `daily_brief`, `kpi_insight`, `eval_judge`, and
+`niche_brief` are also internal; their defaults live in `src/lib/llm/router.ts`.
 
 ## Providers
 
@@ -61,9 +67,11 @@ they are not a bill.
 | `gemini-2.5-pro` | gemini | best | 1.25 / 10 |
 | `custom` | custom | balanced | from `LLM_CUSTOM_*_PER_1M`, else unknown |
 
-**Ad-hoc ids** — anything shaped `<provider>:<model>` (e.g. `openrouter:deepseek/deepseek-chat`,
-`anthropic:claude-sonnet-4-6`, `openai:gpt-5.2`) resolves to that provider with tier
-`balanced` and unknown cost. That is the Hyperagent-style escape hatch without a bigger UI.
+**Ad-hoc ids** — an operator can name `<provider>:<model>` through `LLM_MODEL_<TASK>` (for
+example `openrouter:deepseek/deepseek-chat`). Arbitrary hosted ids resolve with unknown cost and
+an account-scoped call refuses them as `unpriced_model` before the network. The one automatic
+exception is an OpenRouter `openai/<catalogue model>` mirror, which reuses that maintained OpenAI
+estimate. The account settings API accepts catalogue ids only.
 
 Tier stand-ins when a request has to move providers (`TIER_EQUIVALENTS`):
 anthropic haiku/sonnet/opus · openai gpt-5-mini/gpt-5/gpt-5 · gemini flash/pro/pro ·
@@ -92,18 +100,36 @@ onboarding routes (chat/scan/narrative) attach it when a signed-in founder is ca
 
 Sidebar bottom, DB mode only: **Models ·** (demo mode never shows it). One select per task
 with tier and approximate cost; providers without a key are listed as "not connected" and
-disabled. Saves through `GET/POST /api/settings/models` (session-bound, member RLS on
-`account_model_prefs`); `null` returns a task to its default.
+disabled. Members may inspect the resolved choices, but only the server-verified account owner
+may save through `POST /api/settings/models`; the body must name a maintained catalogue id.
+`null` returns a task to its default. Table RLS remains an additional tenant boundary.
+Direct authenticated writes to `account_model_prefs` are revoked; the owner-checked route writes
+through the service role.
 
-## Cost telemetry
+## Cost admission and telemetry
 
-Every call writes one row to `llm_usage` (migration `0008`): `account_id` (nullable — pre-account
-onboarding calls and the dev ping), `task`, `provider`, `model`, `input_tokens`, `output_tokens`,
-`est_cost_usd` (null when the price is unknown), `latency_ms`, `stop_reason`
-(`end | max_tokens | refusal | error:<code>`), `created_at`. Service role writes; members can
-read their own account's rows. Without a database the same record is one JSON log line
-(`{"event":"llm.usage",…}`). A failed insert is logged (`llm.usage_write_failed`) and never
-fails the call.
+Before an account-scoped hosted call, the router computes a conservative ceiling from UTF-8 input
+bytes plus the full output-token cap. The service-role-only `reserve_llm_spend` RPC locks that
+account, totals current-UTC-month `llm_usage` plus every still-active reservation, and admits the
+ceiling only when it fits the account cap. Missing database/RPC access fails closed as
+`budget_unavailable`; an unpriced hosted model fails as `unpriced_model`. Embedding batches use the
+same rail. `text-embedding-3-small` carries its maintained price; any non-default
+`EMBEDDING_MODEL` also requires a finite positive `EMBEDDING_INPUT_PER_1M`.
+
+Every provider call then attempts one `llm_usage` row (migration `0008`): `account_id` (nullable —
+pre-account/demo work and the dev ping), `task`, `provider`, `model`, `input_tokens`,
+`output_tokens`, `est_cost_usd`, `latency_ms`, `stop_reason`
+(`end | max_tokens | refusal | error:<code>`), `created_at`. Service role writes; members can read
+their own account's rows. The reservation is released only after that row is durable. If the
+ledger insert or release fails, its conservative ceiling remains through the admission month plus
+a 30-minute rollover buffer; operators investigate before releasing it. Without an account, no
+cap applies and a missing database emits the same record as a JSON log line.
+
+The `custom` provider is an operator-trusted self-hosted exception when both prices are absent or
+both are zero: it still requires a fresh readable cap for account work, but has no variable vendor
+amount to reserve. Supplying complete positive/non-negative `LLM_CUSTOM_INPUT_PER_1M` and
+`LLM_CUSTOM_OUTPUT_PER_1M` pricing moves it onto the same atomic reservation path as hosted
+providers; partial pricing is refused.
 
 Quick look: `select task, provider, model, count(*), sum(est_cost_usd), avg(latency_ms) from
 llm_usage where created_at > now() - interval '7 days' group by 1,2,3 order by 5 desc;`
@@ -148,10 +174,11 @@ produce the deterministic fallback, never a wrong number.
 
 ## Files
 
-`src/lib/llm/types.ts` · `registry.ts` · `router.ts` · `prefs.ts` · `telemetry.ts` ·
-`accountContext.ts` · `providers/{anthropic,openaiCompatible,index}.ts` ·
+`src/lib/llm/types.ts` · `registry.ts` · `router.ts` · `budget.ts` · `embed.ts` · `errors.ts` ·
+`prefs.ts` · `telemetry.ts` · `accountContext.ts` · `providers/{anthropic,openaiCompatible,index}.ts` ·
 `src/app/api/settings/models/route.ts` · `src/app/api/llm/ping/route.ts` ·
-`src/components/platform/ModelSettings.tsx` · `supabase/migrations/0008_model_prefs_llm_usage.sql`
+`src/components/platform/ModelSettings.tsx` · `supabase/migrations/0008_model_prefs_llm_usage.sql` ·
+`supabase/migrations/20260903211025_llm_spend_reservations.sql`
 
 The worker's standalone build has no `@/` alias: everything under `src/lib/llm` uses relative
 imports (see `src/worker/README.md`).

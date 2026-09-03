@@ -6,7 +6,7 @@ import { receiptHandle } from "@/lib/platform/approvals";
 import type { PlatformVals } from "@/lib/platform/derive";
 import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
 import { readPlatforms, requiredPlatforms } from "@/lib/runtime/availability";
-import type { Node } from "@/lib/runtime/types";
+import type { KpiContract, Node, RoutineSpec } from "@/lib/runtime/types";
 import RunNowPanel, { type RunNowProps } from "./RunNowPanel";
 import DraftCard, { type ArtifactView } from "./DraftCard";
 import RoutineInspector, { type ParamsView } from "./RoutineInspector";
@@ -48,6 +48,30 @@ function cadenceLabel(c: string): string {
   if (c === "0 */6 * * *") return "Every 6 h";
   if (c === "0 * * * *") return "Hourly";
   return `cron ${c}`;
+}
+
+function accountCadence(spec: RoutineSpec | undefined): string {
+  const trigger = spec?.nodes.find((node) => node.kind === "trigger");
+  return trigger?.kind === "trigger" ? cadenceLabel(trigger.cadence) : "On demand";
+}
+
+function accountWriteMode(spec: RoutineSpec | undefined): string {
+  return spec?.mutates
+    ? "Approval gated — prepares the exact change and waits for an owner before any destination write."
+    : "Draft only — produces inspectable work and never changes the destination.";
+}
+
+function targetLabel(kpi: KpiContract, currency: string): string {
+  const target = Number.isInteger(kpi.target) ? String(kpi.target) : String(kpi.target);
+  if (kpi.unit === "$") return `${currency} ${target}`;
+  if (kpi.unit === "%" || kpi.unit === "×" || kpi.unit === "h") return `${target}${kpi.unit}`;
+  return `${target} ${kpi.unit}`;
+}
+
+function accountKpi(spec: RoutineSpec | undefined, currency: string): string {
+  if (!spec?.kpi) return "No measurement contract published yet.";
+  const direction = spec.kpi.op === "gte" ? "at least" : "at most";
+  return `${spec.kpi.label} — target ${direction} ${targetLabel(spec.kpi, currency)}, measured over ${spec.kpi.windowDays} days.`;
 }
 
 /** The spec's chain as canvas cards: name + one honest line per node. */
@@ -150,6 +174,9 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
   const stateText = accounts ? (mine ? (mine.enabled ? "On" : "Off") : "…") : V.selState;
   const stateColor = accounts ? (mine?.enabled ? "oklch(0.45 0.1 240)" : "oklch(0.52 0.03 260)") : V.selStateColor;
   const stateBg = accounts ? (mine?.enabled ? "oklch(0.94 0.03 225)" : "oklch(0.945 0.008 260)") : V.selStateBg;
+  const cadence = accounts ? accountCadence(spec) : V.selCadence;
+  const writeMode = accounts ? accountWriteMode(spec) : V.selMode;
+  const kpi = accounts ? accountKpi(spec, run.account.currency) : V.selKpi;
 
   return (
     <>
@@ -177,15 +204,15 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 28 }}>
         <div style={contractCard}>
           <div style={contractLabel}>Trigger &amp; cadence</div>
-          <div style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.5 }}>{V.selCadence}</div>
+          <div data-testid="contract-cadence" style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.5 }}>{cadence}</div>
         </div>
         <div style={contractCard}>
           <div style={contractLabel}>Write mode</div>
-          <div style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.5 }}>{V.selMode}</div>
+          <div data-testid="contract-mode" style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.5 }}>{writeMode}</div>
         </div>
         <div style={contractCard}>
           <div style={contractLabel}>KPI</div>
-          <div style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.5 }}>{V.selKpi}</div>
+          <div data-testid="contract-kpi" style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.5 }}>{kpi}</div>
         </div>
       </div>
 

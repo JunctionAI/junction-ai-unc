@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { CATALOG_SPEC_BY_ID } from "../../runtime/catalog-specs";
-import { bearerToken, dataBaseUrl, DATA_TOKEN_TTL_MS, hasScope, isTestRun, issueDataToken, RateLimiter, scopesForRoutine, scopesForSpec, tokenKey, verifyDataToken } from "../dataToken";
+import { bearerToken, dataBaseUrl, DATA_TOKEN_TTL_MS, hasScope, issueDataToken, RateLimiter, scopesAreSubset, scopesForRoutine, scopesForSpec, tokenKey, verifyDataToken } from "../dataToken";
 
 const NOW = new Date("2026-09-03T07:00:00.000Z");
 const SECRET = "s3cret";
@@ -26,6 +26,10 @@ describe("issue / verify", () => {
     expect(verifyDataToken(SECRET, "nope", { now: () => NOW })).toEqual({ ok: false, reason: "malformed" });
     expect(verifyDataToken(SECRET, token.replace("unc_dt.", "unc_xx."), { now: () => NOW })).toEqual({ ok: false, reason: "malformed" });
     expect(verifyDataToken("other", token, { now: () => NOW })).toEqual({ ok: false, reason: "mismatch" });
+    const overlong = issueDataToken(SECRET, input, { now: () => NOW, ttlMs: DATA_TOKEN_TTL_MS * 10 }).token;
+    expect(verifyDataToken(SECRET, overlong, { now: () => NOW })).toEqual({ ok: false, reason: "malformed" });
+    const future = issueDataToken(SECRET, input, { now: () => new Date(NOW.getTime() + 60_000) }).token;
+    expect(verifyDataToken(SECRET, future, { now: () => NOW })).toEqual({ ok: false, reason: "malformed" });
     // tamper: swap the claims for another account's, keep the MAC
     const [p, , mac] = token.split(".");
     const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()), accountId: "acct-2" })).toString("base64url");
@@ -33,7 +37,7 @@ describe("issue / verify", () => {
     expect(() => issueDataToken("", input)).toThrow(/N8N_SIGNING_SECRET/);
   });
 
-  it("bearer parsing, scope matching, test-run ids, base URL", () => {
+  it("bearer parsing, scope matching and base URL", () => {
     expect(bearerToken("Bearer abc.def.ghi")).toBe("abc.def.ghi");
     expect(bearerToken("bearer   x ")).toBe("x");
     expect(bearerToken("Basic x")).toBeNull();
@@ -43,8 +47,6 @@ describe("issue / verify", () => {
     expect(hasScope(c, "shopify", "orders")).toBe(false);
     expect(hasScope(c, "gorgias", "tickets")).toBe(true);
     expect(hasScope({ scopes: ["*"] }, "meta_ads", "insights")).toBe(true);
-    expect(isTestRun("test:abc")).toBe(true);
-    expect(isTestRun("run-1")).toBe(false);
     expect(dataBaseUrl({ APP_URL: "https://unc.getjunction.ai/" })).toBe("https://unc.getjunction.ai");
     expect(dataBaseUrl({ N8N_DATA_BASE_URL: "https://x.test", APP_URL: "https://y.test" })).toBe("https://x.test");
     expect(dataBaseUrl({})).toBeNull();
@@ -52,14 +54,16 @@ describe("issue / verify", () => {
 });
 
 describe("scopes from the spec", () => {
-  it("founder content: every read node's platform:resource plus platform:* for the helpful platforms", () => {
+  it("grants only the exact platform:resource pairs declared by read nodes", () => {
     const scopes = scopesForRoutine("D01-W01");
-    expect(scopes).toContain("gorgias:tickets");
-    expect(scopes).toContain("linkedin:posts");
-    expect(scopes).toContain("shopify:products");
-    expect(scopes).not.toContain("meta_ads:insights");
-    expect(scopesForSpec(CATALOG_SPEC_BY_ID["D02-W01"])).toContain("meta_ads:insights");
+    expect(scopes).toEqual(["gorgias:tickets", "linkedin:posts", "shopify:products"]);
+    expect(scopes.every((scope) => !scope.endsWith(":*") && scope !== "*")).toBe(true);
+    expect(scopesForSpec(CATALOG_SPEC_BY_ID["D02-W01"])).toEqual(["ga4:report", "meta_ads:adsets", "meta_ads:insights", "shopify:orders"]);
     expect(scopesForRoutine("nope")).toEqual([]);
+    expect(scopesAreSubset(["shopify:products"], ["shopify:*"])).toBe(true);
+    expect(scopesAreSubset(["shopify:*"], ["shopify:products"])).toBe(false);
+    expect(scopesAreSubset(["*"], ["shopify:*"])).toBe(false);
+    expect(scopesAreSubset(["shopify:products", "meta_ads:insights"], ["shopify:*"])).toBe(false);
   });
 });
 

@@ -69,6 +69,38 @@ describe("LlmProducer", () => {
     expect(JSON.stringify(entries)).toContain("produce.ok");
   });
 
+  it("grounds a proposal in the selected deterministic decision and allows its resolved numbers", async () => {
+    const decisionOnlyNumber = JSON.stringify({
+      kind: "post_set",
+      title: "Budget decision review",
+      body: "I reviewed the selected scale decision: NZD 87 per day with a 37 percent change, using the resolved ad set.",
+      items: [{ title: "Proposed review", body: "Scale the selected ad set by 37 percent to NZD 87 per day, subject to founder approval." }],
+      evidence: [{ source: "routine_decision", ref: "scale" }],
+    });
+    const c = client([decisionOnlyNumber]);
+    const p = new LlmProducer(c, { context: withProfile, playbooks: null, now: () => new Date("2026-09-03T07:00:00Z") });
+    const out = await p.produce(node, ctx({
+      decision: {
+        optionId: "scale",
+        label: "Scale the winning ad set",
+        reasoning: "The reconciled return clears the threshold.",
+        spend: { amount: 87, currency: "NZD", period: "day" },
+        params: { adsetId: "adset-selected", changePct: 37, apiToken: "do-not-send-12345" },
+      },
+    }));
+
+    expect("artifact" in out).toBe(true);
+    if ("artifact" in out) expect(out.artifact.meta).toMatchObject({ attempts: 1 });
+    const prompt = c.prompts[0].user;
+    expect(prompt).toContain("SELECTED ROUTINE DECISION (the resolved decision this artifact must review):");
+    expect(prompt).toContain('"option":"scale"');
+    expect(prompt).toContain('"label":"Scale the winning ad set"');
+    expect(prompt).toContain('"reasoning":"The reconciled return clears the threshold."');
+    expect(prompt).toContain('"spend":{"amount":87,"currency":"NZD","period":"day"}');
+    expect(prompt).toContain('"params":{"adsetId":"adset-selected","changePct":37,"apiToken":"[redacted]"}');
+    expect(prompt).not.toContain("do-not-send-12345");
+  });
+
   it("an invented number is rejected, the retry carries the reason, and a second rejection ends in an honest ask — never a placeholder", async () => {
     const invented = JSON.stringify({ kind: "post_set", title: "3 founder posts", body: "We have treated 12,000 runners.", items: [{ title: "a", body: "b" }] });
     const c = client([invented, invented]);

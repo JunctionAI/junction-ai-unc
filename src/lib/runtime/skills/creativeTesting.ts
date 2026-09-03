@@ -16,7 +16,7 @@ export const creativeTesting: Skill = {
     decides: ["which three creatives run", "the angle each one tests"],
     writes: ["a generic artifact of three Would-cards"],
     never: ["invent CPA, spend or a creative name", "launch a test without approval", "spend"],
-    apply: "Would-cards. I never launch a test; sending it live stays yours.",
+    apply: "Would-cards only. I never launch a test; any future launch needs a separate exact run-level approval gate.",
     examples: [
       { when: "three paused creatives named Hook v4 / v5 / v6", does: "one item each, titles from the rows, sprint budget only if vars carry it" },
       { when: "no sprint budget in vars", does: "say the founder sets the sprint budget — never invent $30/day" },

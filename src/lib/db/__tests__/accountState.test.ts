@@ -13,21 +13,23 @@ beforeEach(() => {
 describe("first sign-in bootstrap", () => {
   it("creates the account + owner membership through the 0003 RPC and seeds it from the client state", async () => {
     const seed = richState();
-    const res = await ensureAccount(db, seed, { userId: "user-1" });
+    const res = await ensureAccount(db, seed, { userId: "user-1", allowCreate: true });
     expect(res.created).toBe(true);
+    expect(res.role).toBe("owner");
     expect(db.rows("accounts")).toEqual([expect.objectContaining({ id: res.accountId, name: "Example Co", currency: "AUD" })]);
     expect(db.rows("account_members")).toEqual([expect.objectContaining({ account_id: res.accountId, user_id: "user-1", role: "owner" })]);
-    expect(await listMemberships(db)).toEqual([{ accountId: res.accountId, role: "owner" }]);
+    expect(await listMemberships(db, "user-1")).toEqual([{ accountId: res.accountId, role: "owner" }]);
     // seeded: a fresh load returns what the client had
     const { state, found } = await loadAccountState(db, res.accountId, initialState);
     expect(found).toBe(true);
-    expect(pick(state)).toEqual(pick(expectedAfterRoundTrip(seed)));
+    expect(pick(state)).toEqual(pick({ ...expectedAfterRoundTrip(seed), routineOn: initialState.routineOn, connState: initialState.connState }));
   });
 
   it("second sign-in finds the account and hydrates from the rows instead of the client seed", async () => {
-    const first = await ensureAccount(db, richState(), { userId: "user-1" });
+    const first = await ensureAccount(db, richState(), { userId: "user-1", allowCreate: true });
     const second = await ensureAccount(db, initialState, { userId: "user-1" });
     expect(second.created).toBe(false);
+    expect(second.role).toBe("owner");
     expect(second.accountId).toBe(first.accountId);
     expect(second.state.goalTitle).toBe("A$90,000 MRR");
     expect(db.rows("accounts")).toHaveLength(1);
@@ -43,6 +45,37 @@ describe("first sign-in bootstrap", () => {
   it("the RPC refuses when there is no signed-in user", async () => {
     db.userId = null;
     await expect(createAccount(db)).rejects.toThrow(/not signed in/);
+  });
+
+  it("membership lookup filters to the exact user, not visible peers on the account", async () => {
+    const accountId = await createAccount(db);
+    db.insertRow("account_members", { account_id: accountId, user_id: "user-2", role: "member" });
+    expect(await listMemberships(db, "user-2")).toEqual([{ accountId, role: "member" }]);
+  });
+
+  it("hydrates a member with their role and never seeds a missing account state", async () => {
+    const accountId = db.insertRow("accounts", { name: "Client account", currency: "USD" }).id as string;
+    db.seed("account_members", [{ account_id: accountId, user_id: "user-1", role: "member" }]);
+    const res = await ensureAccount(db, { ...initialState, currency: "NZD", goalTitle: "Demo goal must not be written" }, { userId: "user-1" });
+    expect(res).toMatchObject({ accountId, created: false, role: "member", name: "Client account" });
+    expect(res.state.currency).toBe("USD");
+    expect(db.rows("account_state_meta")).toHaveLength(0);
+    expect(db.rows("goals")).toHaveLength(0);
+    expect(db.calls.filter((c) => ["insert", "upsert", "update", "delete"].includes(c.op))).toHaveLength(0);
+  });
+
+  it("selects an owned account before an older member-only account", async () => {
+    const memberAccount = db.insertRow("accounts", { name: "Old client account", currency: "NZD" }).id as string;
+    const ownerAccount = db.insertRow("accounts", { name: "Founder's account", currency: "NZD" }).id as string;
+    db.seed("account_members", [
+      { account_id: memberAccount, user_id: "user-1", role: "member", created_at: "2026-01-01T00:00:00.000Z" },
+      { account_id: ownerAccount, user_id: "user-1", role: "owner", created_at: "2026-02-01T00:00:00.000Z" },
+    ]);
+    expect(await listMemberships(db, "user-1")).toEqual([
+      { accountId: ownerAccount, role: "owner" },
+      { accountId: memberAccount, role: "member" },
+    ]);
+    expect((await ensureAccount(db, initialState, { userId: "user-1" })).accountId).toBe(ownerAccount);
   });
 });
 
@@ -80,17 +113,14 @@ describe("beta invites (0009) — attach on first login", () => {
     expect(db.rows("beta_invites").every((i) => i.accepted_user_id === "user-1")).toBe(true);
   });
 
-  it("the wrong mailbox (no invite for it) gets an empty account as before — and the seeded one is left for a second invite", async () => {
+  it("the wrong mailbox gets no account; a corrected invite attaches the seeded one", async () => {
     const seededId = await seeded("heather@example.com");
     db.userEmail = "someone.else@example.com";
-    const res = await ensureAccount(db, initialState, { userId: "user-1" });
-    expect(res.created).toBe(true);
-    expect(res.accountId).not.toBe(seededId);
+    await expect(ensureAccount(db, initialState, { userId: "user-1" })).rejects.toThrow(/not been invited/i);
     expect(db.rows("beta_invites")[0].accepted_at).toBeNull();
-    expect(db.rows("account_members")).toEqual([expect.objectContaining({ account_id: res.accountId })]);
-    // recovery: a second invite row for that address, then sign in again (after the empty account is deleted by hand)
+    expect(db.rows("account_members")).toEqual([]);
+    // recovery: a second invite row for that address, then sign in again
     db.seed("beta_invites", [{ account_id: seededId, email: "someone.else@example.com", invited_by: "tom" }]);
-    db.tables.set("account_members", []);
     const fixed = await ensureAccount(db, initialState, { userId: "user-1" });
     expect(fixed.accountId).toBe(seededId);
   });
@@ -98,27 +128,26 @@ describe("beta invites (0009) — attach on first login", () => {
   it("an unconfirmed email attaches nothing; two invites for one address attach both (the first one is home)", async () => {
     const a = await seeded("heather@example.com", "AVGAR Sport");
     db.userEmail = null;
-    expect((await ensureAccount(db, initialState, { userId: "user-1" })).created).toBe(true);
-    db.tables.set("account_members", []);
+    await expect(ensureAccount(db, initialState, { userId: "user-1" })).rejects.toThrow(/not been invited/i);
+    expect(db.rows("account_members")).toEqual([]);
     const b = db.insertRow("accounts", { name: "Second Co", currency: "NZD" }).id as string;
     db.seed("beta_invites", [{ account_id: b, email: "heather@example.com", role: "member", created_at: "2026-09-02T10:00:00.000Z" }]);
     db.userEmail = "heather@example.com";
     const res = await ensureAccount(db, initialState, { userId: "user-1" });
     expect(res.accountId).toBe(a);
-    expect(await listMemberships(db)).toEqual([
+    expect(await listMemberships(db, "user-1")).toEqual([
       { accountId: a, role: "owner" },
       { accountId: b, role: "member" },
     ]);
   });
 
-  it("a project without 0009 (function not found) is logged, not fatal — sign-in falls through to create_account", async () => {
+  it("a project without 0009 logs the migration issue and still refuses self-provisioning", async () => {
     // PostgREST's answer for a missing function (the fake wraps a handler throw into { error })
     db.rpcs.accept_beta_invites = () => {
       throw new Error("Could not find the function public.accept_beta_invites without parameters in the schema cache (PGRST202)");
     };
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const res = await ensureAccount(db, initialState, { userId: "user-1" });
-    expect(res.created).toBe(true);
+    await expect(ensureAccount(db, initialState, { userId: "user-1" })).rejects.toThrow(/not been invited/i);
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/accept_beta_invites unavailable/));
     warn.mockRestore();
     // …but a real failure (not signed in) still propagates
@@ -135,7 +164,7 @@ describe("save → load through the (schema-checked) fake", () => {
     const S = richState();
     await saveAccountState(db, accountId, S, { userId: "user-1" });
     const { state } = await loadAccountState(db, accountId, initialState);
-    expect(pick(state)).toEqual(pick(expectedAfterRoundTrip(S)));
+    expect(pick(state)).toEqual(pick({ ...expectedAfterRoundTrip(S), routineOn: initialState.routineOn, connState: initialState.connState }));
   });
 
   it("uses the 0003 upsert keys for every list", async () => {
@@ -147,8 +176,6 @@ describe("save → load through the (schema-checked) fake", () => {
       resource_profiles: "account_id",
       team_members: "account_id,position",
       business_profiles: "account_id",
-      routine_states: "account_id,routine_id",
-      connectors: "account_id,platform",
       chat_messages: "account_id,thread,position",
       account_state_meta: "account_id",
     });
@@ -179,14 +206,22 @@ describe("save → load through the (schema-checked) fake", () => {
     expect(state.obCats).toEqual(["revenue"]);
   });
 
-  it("routine toggles persist without touching the runtime's version / specs", async () => {
+  it("client autosave never writes routine state; the server routine API owns enabled/version/specs", async () => {
     const accountId = await createAccount(db);
     db.seed("routine_states", [{ account_id: accountId, routine_id: "D01-W01", enabled: false, version: 3, live_spec: { id: "D01-W01", version: 3 } }]);
     await saveAccountState(db, accountId, { ...initialState, routineOn: { "Founder content engine": true } });
     const row = db.rows("routine_states").find((r) => r.routine_id === "D01-W01")!;
-    expect(row).toMatchObject({ enabled: true, version: 3, live_spec: { id: "D01-W01", version: 3 } });
-    expect(db.lastCall("routine_states", "upsert").values).toEqual([{ account_id: accountId, routine_id: "D01-W01", enabled: true }]);
-    expect((await loadAccountState(db, accountId)).state.routineOn).toEqual({ "Founder content engine": true });
+    expect(row).toMatchObject({ enabled: false, version: 3, live_spec: { id: "D01-W01", version: 3 } });
+    expect(db.callsFor("routine_states", "upsert")).toHaveLength(0);
+    expect((await loadAccountState(db, accountId)).state.routineOn).toEqual({ "Founder content engine": false });
+  });
+
+  it("client autosave never writes connector status; connector APIs own connection state", async () => {
+    const accountId = await createAccount(db);
+    db.seed("connectors", [{ account_id: accountId, platform: "shopify", status: "disconnected" }]);
+    await saveAccountState(db, accountId, { ...initialState, connState: { Shopify: "ok" } });
+    expect(db.rows("connectors")[0]).toMatchObject({ platform: "shopify", status: "disconnected" });
+    expect(db.callsFor("connectors", "upsert")).toHaveLength(0);
   });
 
   it("the demo approval cards are never written for a real account, and the runtime's approvals are never read as them", async () => {
@@ -246,7 +281,7 @@ describe("the account's name (accounts.name was '' for real accounts)", () => {
 
   it("a brand-new account is created with the best name in hand (the website host before any scan), never ''", async () => {
     const seed = { ...initialState, website: "studionorth.example", goalTitle: "40 qualified leads/mo", scan: { status: "idle" as const, key: null, profile: null } };
-    const res = await ensureAccount(db, seed, { userId: "user-1" });
+    const res = await ensureAccount(db, seed, { userId: "user-1", allowCreate: true });
     expect(res.name).toBe("studionorth.example");
     expect(db.rows("accounts")[0].name).toBe("studionorth.example");
     // second sign-in hands the stored name back
