@@ -65,8 +65,6 @@ describe("RoutinesView — accounts mode reads the database, demo mode is the pr
     // recommended-first (plan phase 1, wave 1) — off, chipped; Shopify (required) is in, Klaviyo only helps
     expect(html).toContain('data-testid="routine-D05-W02" data-enabled="0"');
     expect(html).toContain(ROUTINES_COPY.recommended);
-    // a mutating routine is off and says why
-    expect(html).toContain("coming in wave 2");
     // derive's demo defaults never leak: the demo marks "Welcome flow tuning" Active, the DB does not
     const welcome = ALL_SYSTEMS.find((s) => s.name === "Welcome flow tuning")!;
     expect(html).toContain(`data-testid="routine-${welcome.id}" data-enabled="0"`);

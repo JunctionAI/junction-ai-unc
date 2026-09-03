@@ -34,8 +34,11 @@ describe("availability", () => {
     expect(helpfulPlatforms(CATALOG_SPEC_BY_ID["D03-W03"])).toEqual([]);
   });
 
-  it("wave_2 for anything that mutates, needs_connector only for a missing REQUIRED platform, ready / draft_only otherwise; optional reads surface as 'Better with …'", () => {
-    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads", "shopify"])).toBe("wave_2");
+  it("approval_gated for a connected mutator, needs_connector for a missing REQUIRED platform, ready / draft_only otherwise; optional reads surface as 'Better with …'", () => {
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads", "shopify"])).toBe("needs_connector:ga4");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads", "shopify", "ga4"])).toBe("approval_gated");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W04"], ["meta_ads"])).toBe("approval_gated");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W04"], [])).toBe("needs_connector:meta_ads");
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], [])).toBe("needs_connector:shopify");
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify"])).toBe("ready"); // Klaviyo is optional — a hint, not a block
     expect(betterWith(CATALOG_SPEC_BY_ID["D05-W02"], ["shopify"])).toEqual(["klaviyo"]);
@@ -53,10 +56,11 @@ describe("availability", () => {
     expect(availabilityCopy("needs_connector:klaviyo")).toBe("needs Klaviyo connected");
     expect(availabilityCopy("draft_only")).toBe("draft-only for now");
     expect(availabilityCopy("ready")).toBe("drafts only — nothing goes out without you");
-    expect(canEnable("wave_2")).toBe(false);
+    expect(canEnable("approval_gated")).toBe(true);
     expect(canEnable("needs_connector:shopify")).toBe(false);
     expect(canEnable("ready")).toBe(true);
-    // every wave-1 routine with all its cards connected is ready; no wave-1 routine is wave_2
+    expect(availabilityCopy("approval_gated")).toBe("I'll prepare the exact change and wait for you");
+    // every wave-1 routine with all its cards connected is ready; no wave-1 routine is approval_gated
     const all = [...new Set(CATALOG_SPECS.flatMap(readPlatforms))];
     for (const id of WAVE_1_IDS) expect(routineAvailability(CATALOG_SPEC_BY_ID[id], all)).toBe("ready");
   });
@@ -95,7 +99,7 @@ describe("routinesStateForAccount", () => {
     expect(listing.planChannel).toBe("Email & SMS");
     const ac = listing.routines.find((r) => r.routineId === "D05-W02")!;
     expect(ac).toMatchObject({ name: "Abandoned cart recovery", category: "Email & SMS", wave: 1, enabled: false, version: 1, availability: "ready", canEnable: true, recommended: true, lastRun: null, lastDraft: null });
-    expect(listing.routines.find((r) => r.routineId === "D02-W01")).toMatchObject({ availability: "wave_2", canEnable: false, recommended: false });
+    expect(listing.routines.find((r) => r.routineId === "D02-W01")).toMatchObject({ availability: "needs_connector:meta_ads", canEnable: false, recommended: false });
     // optional reads never block: the content engine is ready with Shopify alone, better with the other two
     expect(listing.routines.find((r) => r.routineId === "D01-W01")).toMatchObject({ availability: "ready", availabilityCopy: "drafts only — nothing goes out without you", canEnable: true, betterWith: ["gorgias", "linkedin"], betterWithCopy: "Better with Gorgias, LinkedIn connected", recommended: true });
     expect(ac.betterWith).toEqual([]);
