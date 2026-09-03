@@ -18,6 +18,8 @@ import { needsReseal, open, seal, SecretStoreError, type Keyring } from "./crypt
 import { bundleFromResponse, refreshTokens, TokenCallError, type FetchLike, type TokenBundle } from "./oauth";
 import { connectorEntry, platformCredentials } from "./registry";
 import { getConnector, getConnectorById, getSecret, putSecret, updateConnector, type ConnectorRow } from "./store";
+import { makeAuthProvider } from "./providers/index";
+import { AuthProviderError, providerRefOf, type ProviderRef } from "./providers/interface";
 import type { Platform } from "../runtime/types";
 
 export const REFRESH_SKEW_MS = 5 * 60 * 1000;
@@ -68,6 +70,12 @@ async function tokenForRow(row: ConnectorRow, deps: TokenDeps): Promise<AccessTo
   const entry = connectorEntry(row.platform);
   if (!entry || entry.flow === "none") return null;
 
+  // Hosted-provider rows (PROTOTYPE): the token lives in the provider's vault, not in
+  // connector_secrets — fetch it per call; the provider refreshes on its side. Same contract:
+  // null = reconnect, the row flipped, a code (never a value) in the log.
+  const providerRef = providerRefOf(row);
+  if (providerRef) return tokenViaProvider(row, providerRef, deps, entry.id as Platform);
+
   const sealed = await getSecret(deps.db, row.id);
   if (!sealed) {
     await markReconnect(deps, row, "no_secret");
@@ -109,6 +117,30 @@ async function tokenForRow(row: ConnectorRow, deps: TokenDeps): Promise<AccessTo
   if (rewrite) await putSecret(deps.db, row.id, seal(JSON.stringify(bundle), deps.keyring, row.id), now.toISOString());
 
   return { accessToken: bundle.accessToken, platform: entry.id as Platform, externalRef: row.external_ref, expiresAt: bundle.expiresAt ?? null, ...(bundle.refreshToken ? { refreshToken: bundle.refreshToken } : {}) };
+}
+
+async function tokenViaProvider(row: ConnectorRow, ref: ProviderRef, deps: TokenDeps, platform: Platform): Promise<AccessToken | null> {
+  const provider = makeAuthProvider(ref.provider, { env: deps.env, fetch: deps.fetch, now: deps.now });
+  if (!provider || !provider.supports(platform)) {
+    await markReconnect(deps, row, "provider_not_configured");
+    return null;
+  }
+  if (!ref.connectionId) {
+    await markReconnect(deps, row, "provider_no_connection");
+    return null;
+  }
+  try {
+    const tok = await provider.getAccessToken({ accountId: row.account_id, platform, connectionId: ref.connectionId });
+    if (tok.expiresAt && new Date(tok.expiresAt).getTime() <= deps.now().getTime()) {
+      // The provider handed back a token it did not refresh — treat as expired, never use it.
+      await markReconnect(deps, row, "provider_token_expired");
+      return null;
+    }
+    return { accessToken: tok.accessToken, platform, externalRef: row.external_ref, expiresAt: tok.expiresAt, ...(tok.refreshToken ? { refreshToken: tok.refreshToken } : {}) };
+  } catch (e) {
+    await markReconnect(deps, row, e instanceof AuthProviderError ? `provider_${e.code}` : "provider_unexpected");
+    return null;
+  }
 }
 
 // ---------- worker-shaped credential provider ----------

@@ -5,7 +5,7 @@
    "error" (plus a code) or "refusal", so every call site keeps exactly the deterministic /
    canned fallback it had when the Anthropic SDK was wired in directly. */
 
-export type LlmTask = "chat" | "plan_narrative" | "business_scan" | "self_review" | "routine_decision" | "routine_produce" | "memory_extract" | "daily_brief" | "kpi_insight" | "eval_judge";
+export type LlmTask = "chat" | "plan_narrative" | "business_scan" | "self_review" | "routine_decision" | "routine_produce" | "memory_extract" | "daily_brief" | "kpi_insight" | "eval_judge" | "niche_brief";
 
 /** The founder-settable tasks (the settings UI + account_model_prefs, whose check constraint
     lists exactly these). memory_extract is an internal task: default fast tier, env override
@@ -13,7 +13,9 @@ export type LlmTask = "chat" | "plan_narrative" | "business_scan" | "self_review
     kpi_insight (fast tier) are internal too — docs/PROACTIVE.md. */
 /** eval_judge (balanced tier, env LLM_MODEL_EVAL_JUDGE) is internal too — the chat eval harness,
     scripts/eval-chat.ts — and is deliberately not listed below. routine_produce (balanced tier,
-    env LLM_MODEL_ROUTINE_PRODUCE) writes the artifacts routines produce (docs/ROUTINES-REAL-WORK.md). */
+    env LLM_MODEL_ROUTINE_PRODUCE) writes the artifacts routines produce (docs/ROUTINES-REAL-WORK.md).
+    niche_brief (balanced tier, env LLM_MODEL_NICHE_BRIEF) is the one-call market read after the scan
+    (docs/PRESETS.md) — internal too. */
 export const LLM_TASKS: readonly LlmTask[] = ["chat", "plan_narrative", "business_scan", "self_review", "routine_decision"] as const;
 
 export type ProviderId = "anthropic" | "openai" | "gemini" | "openrouter" | "custom";
@@ -118,4 +120,5 @@ export const TASK_LABELS: Record<LlmTask, string> = {
   daily_brief: "My morning brief",
   kpi_insight: "Reading your numbers",
   eval_judge: "Grading my own replies (evals)",
+  niche_brief: "Reading your market",
 };

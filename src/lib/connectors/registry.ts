@@ -316,6 +316,44 @@ export function isPlatformConfigured(platform: string, env: Record<string, strin
   return !!entry && entry.flow !== "none" && platformCredentials(platform, env) !== null;
 }
 
+// ---------- hosted auth provider flag (PROTOTYPE — src/lib/connectors/providers/) ----------
+
+/* CONNECTOR_AUTH_PROVIDER=own|composio|nango            default for every platform
+   CONNECTOR_AUTH_PROVIDER_<PLATFORM>=own|composio|nango  per-platform override (META_ADS, GA4, …)
+
+   Own app wins whenever our client id + secret for the platform are present: the provider is
+   only ever consulted for platforms WITHOUT our own app configured. The Google umbrella has no
+   provider path (one consent → three rows is our own flow); its children may. Absent / unknown
+   values read as "own", so a deployment that never sets the flag is byte-identical. */
+
+export type AuthProviderMode = "own" | "composio" | "nango";
+
+const AUTH_PROVIDER_MODES: AuthProviderMode[] = ["own", "composio", "nango"];
+
+export const AUTH_PROVIDER_ENV = "CONNECTOR_AUTH_PROVIDER";
+
+function parseMode(raw: string | undefined): AuthProviderMode | null {
+  const v = (raw || "").trim().toLowerCase();
+  return (AUTH_PROVIDER_MODES as string[]).includes(v) ? (v as AuthProviderMode) : null;
+}
+
+/** The provider named by env for a platform (before the own-app-wins rule) — null = not set. */
+export function authProviderFlag(platform: string, env: Record<string, string | undefined> = process.env): AuthProviderMode | null {
+  return parseMode(env[`${AUTH_PROVIDER_ENV}_${platform.toUpperCase()}`]) ?? parseMode(env[AUTH_PROVIDER_ENV]);
+}
+
+/** Which path Connect takes for a platform: "own" when our app is configured (or nothing is
+    flagged / the platform has no card flow), otherwise the flagged provider. Presence of the
+    provider's own credentials (COMPOSIO_API_KEY / NANGO_SECRET_KEY) is checked by the provider
+    module, not here — this is the routing decision only. */
+export function authProviderMode(platform: string, env: Record<string, string | undefined> = process.env): AuthProviderMode {
+  const entry = connectorEntry(platform);
+  if (!entry || entry.flow === "none" || isGoogleUmbrella(platform)) return "own";
+  if (platformCredentials(platform, env) !== null) return "own";
+  const flagged = authProviderFlag(platform, env);
+  return flagged ?? "own";
+}
+
 /** Validate + normalise a Shopify shop domain from user input ("Acme.myshopify.com", with or
     without scheme). null when it isn't a myshopify.com domain — never build a URL from raw input. */
 export function normaliseShopDomain(raw: unknown): string | null {

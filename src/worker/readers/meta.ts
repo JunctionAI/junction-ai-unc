@@ -6,6 +6,8 @@
                 (an exact window from `window`; date_preset only when there is no window)
      ads        GET act_{id}/ads?fields=id,name,status,effective_status,creative&filtering=…
      campaigns  GET act_{id}/campaigns?fields=id,name,status,effective_status,daily_budget,lifetime_budget
+     adsets     GET act_{id}/adsets?fields=id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget
+                (budgets in currency units; the typed action library's rules read these)
 
    The catalog names convenience fields (roas, purchases, purchase_value, cpa, daily_budget).
    Insights carry purchase_roas / actions / action_values for the first three (omni_purchase
@@ -38,6 +40,10 @@ const FIXTURE_ROWS: Record<string, Row[]> = {
     { id: "cmp-1", name: "Always-on prospecting", status: "ACTIVE", daily_budget: 100 },
     { id: "cmp-2", name: "Retargeting", status: "ACTIVE", daily_budget: 60 },
   ],
+  adsets: [
+    { id: "as-1", ad_id: "as-1", name: "Prospecting NZ", status: "ACTIVE", effective_status: "ACTIVE", campaign_id: "cmp-1", daily_budget: 100 },
+    { id: "as-2", ad_id: "as-2", name: "Retargeting 30d", status: "ACTIVE", effective_status: "ACTIVE", campaign_id: "cmp-2", daily_budget: 60 },
+  ],
 };
 
 const FIELD_ALIASES: Record<string, string | null> = {
@@ -58,6 +64,16 @@ const FIELD_ALIASES: Record<string, string | null> = {
 export function metaMetrics(resource: string, rows: Row[]): Metrics {
   if (resource !== "insights") {
     if (resource === "campaigns") return { daily_budget_total: sum(rows, "daily_budget"), count: rows.length };
+    if (resource === "adsets") {
+      const largest = [...rows].sort((a, b) => num(b.daily_budget) - num(a.daily_budget))[0];
+      return {
+        daily_budget_total: sum(rows, "daily_budget"),
+        count: rows.length,
+        largest_adset_id: largest ? String(largest.id ?? "") : null,
+        largest_adset_name: largest ? String(largest.name ?? "") : null,
+        largest_daily_budget: largest ? num(largest.daily_budget) : null,
+      };
+    }
     return { count: rows.length };
   }
   const spend = sum(rows, "spend");
@@ -136,8 +152,9 @@ export function metaRequest(query: ReadQuery, adAccountId: string, accessToken: 
       return { url: `${BASE}/${act}/insights?${params}`, init: { method: "GET", headers }, note: `GET ${act}/insights level=${level} ${windowNote}${dropped.length ? `; dropped non-insights fields: ${dropped.join(", ")}` : ""}` };
     }
     case "ads":
+    case "adsets":
     case "campaigns": {
-      params.set("fields", query.resource === "ads" ? "id,name,status,effective_status,adset_id,creative" : "id,name,status,effective_status,objective,daily_budget,lifetime_budget");
+      params.set("fields", query.resource === "ads" ? "id,name,status,effective_status,adset_id,creative" : query.resource === "adsets" ? "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget" : "id,name,status,effective_status,objective,daily_budget,lifetime_budget");
       if (typeof filter.status === "string") params.set("filtering", JSON.stringify([{ field: "effective_status", operator: "IN", value: [filter.status] }]));
       return { url: `${BASE}/${act}/${query.resource}?${params}`, init: { method: "GET", headers }, note: `GET ${act}/${query.resource}` };
     }
@@ -230,6 +247,6 @@ export async function read(query: ReadQuery, creds: PlatformCredential, opts: Re
   }
   const rows = query.resource === "insights" ? raw.map(normaliseInsightRow) : raw.map(normaliseBudgetRow);
   const missing = query.resource === "insights" ? missingInsightFields(rows) : [];
-  const note = `${shaped.note} (${pages} page${pages === 1 ? "" : "s"}${url ? ", more available — capped" : ""})${missing.length ? `; fields absent from every row (read as 0): ${missing.join(", ")}` : ""}${query.resource === "campaigns" ? "; budgets converted from minor units" : ""}`;
+  const note = `${shaped.note} (${pages} page${pages === 1 ? "" : "s"}${url ? ", more available — capped" : ""})${missing.length ? `; fields absent from every row (read as 0): ${missing.join(", ")}` : ""}${query.resource === "campaigns" || query.resource === "adsets" ? "; budgets converted from minor units" : ""}`;
   return ok(PLATFORM, rows, metaMetrics(query.resource, rows), now().toISOString(), "live", note);
 }

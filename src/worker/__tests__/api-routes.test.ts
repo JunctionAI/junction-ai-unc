@@ -68,7 +68,9 @@ describe("POST /api/routines/resume", () => {
   async function seedPausedLiveRun() {
     // Only live runs pause; the app never creates one. Seed through the engine
     // (triggeredBy manual so the engine's live per-day dedup lets a second seed through).
-    const clk = clock();
+    // Clock is relative to now: the resume route uses wall-clock adapters, and the spec's
+    // 24h gate lapsed against a frozen 2026-09-02 start the next day.
+    const clk = clock(new Date().toISOString());
     const adapters = { ...buildAdapters({ store, accounts: new StaticAccountsSource(), now: clk.now }), reader: new StaticReader(SPEND_FIXTURE, clk.now) };
     const paused = await runRoutine(budgetMoveSpec(), input({ account: { accountId: "demo", currency: "NZD", budgetMonthly: 3000 }, triggeredBy: "manual" }), adapters, { mode: "live" });
     expect(paused.status).toBe("waiting_approval");

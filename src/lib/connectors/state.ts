@@ -5,6 +5,7 @@
 
 import type { HandlerDeps } from "./handlers";
 import { hasTokenPath } from "./manualFields";
+import { authProviderFor, isPlatformConnectable } from "./providers/index";
 import { CONNECTOR_REGISTRY, GOOGLE_CHILDREN, GOOGLE_UMBRELLA, isPlatformConfigured } from "./registry";
 import { accountForUser, listConnectors, memberRole, readLastReadMetrics, type ConnectorStatus } from "./store";
 
@@ -19,8 +20,10 @@ export interface ConnectorStateView {
   lastSyncResult: string | null;
   /** KPI metrics the last read wrote (0011); null when unknown. */
   lastReadMetrics: number | null;
-  /** The OAuth app's client id + secret are present → Connect is the primary path. */
+  /** The OAuth app's client id + secret are present (or a hosted auth provider is configured for it — PROTOTYPE) → Connect is the primary path. */
   oauthConfigured: boolean;
+  /** Which path Connect takes: our own app, or a hosted provider (only when set). */
+  authProvider?: "composio" | "nango";
   /** An owner can paste a key for it. */
   tokenPath: boolean;
 }
@@ -33,6 +36,11 @@ export interface ConnectorsStateListing {
 }
 
 export type ConnectorsStateResult = { status: 200; body: ConnectorsStateListing } | { status: 200; body: { fallback: true; reason: "accounts_not_configured" } } | { status: 401 | 403; body: { error: string } };
+
+function providerMarker(platform: string, deps: HandlerDeps): { authProvider?: "composio" | "nango" } {
+  const r = authProviderFor(platform, { env: deps.config.env, fetch: deps.fetch });
+  return r.mode !== "own" && r.provider ? { authProvider: r.mode } : {};
+}
 
 export async function handleConnectorsState(deps: HandlerDeps): Promise<ConnectorsStateResult> {
   if (!deps.config.dbConfigured || !deps.db) return { status: 200, body: { fallback: true, reason: "accounts_not_configured" } };
@@ -52,8 +60,9 @@ export async function handleConnectorsState(deps: HandlerDeps): Promise<Connecto
       lastSyncAt: r?.last_sync_at ?? null,
       lastSyncResult: r?.last_sync_result ?? null,
       lastReadMetrics: r ? (metrics[r.id] ?? null) : null,
-      oauthConfigured: isPlatformConfigured(e.id, deps.config.env),
+      oauthConfigured: isPlatformConnectable(e.id, { env: deps.config.env, fetch: deps.fetch }),
       tokenPath: hasTokenPath(e.id),
+      ...providerMarker(e.id, deps),
     };
   });
   return { status: 200, body: { role, connectors, google: { configured: isPlatformConfigured(GOOGLE_UMBRELLA.id, deps.config.env), children: [...GOOGLE_CHILDREN] } } };

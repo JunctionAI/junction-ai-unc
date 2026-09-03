@@ -10,7 +10,7 @@
    │ LIVE_MODE_ENABLED = false                                             │
    │ Every run this service starts is a DRY RUN. Flipping this constant is │
    │ a product decision gated by the founder (Wave 2): it also needs real  │
-   │ executors (today: RefusingExecutor). Credentials come from wiring.ts  │
+   │ executors (ActionExecutor: dry-run shapes, live refuses). Credentials │
    │ (real tokens when DB + secret store are configured, fixtures else);   │
    │ the approval UI is wired to /api/approvals/<id> → resumeApproval.     │
    └──────────────────────────────────────────────────────────────────────┘ */
@@ -25,8 +25,10 @@ import type { DbClient } from "../lib/db/types";
 import type { CredentialProvider } from "./credentials";
 import type { Logger } from "./log";
 import { WorkerConnectorReader } from "./providers/connectorReader";
-import { RefusingExecutor } from "./providers/executor";
+import { ActionExecutor, enabledActionRisks } from "./providers/executor";
 import { LlmDecisionProvider, StorePersonalisation, type LlmClient } from "./providers/llmDecision";
+import { RulesDecisionProvider, type PresetSource } from "../lib/actions";
+import { presetSource } from "../lib/runtime/presets/store";
 import { HttpN8nBridge } from "./providers/n8n";
 import { createProducerClient, DbProducerContext, LlmProducer } from "./providers/producer";
 import type { ScheduleCandidate } from "./scheduler";
@@ -67,13 +69,17 @@ export interface ServiceDeps {
   producer?: Producer | null;
   /** The n8n bridge. undefined = HttpN8nBridge on process.env; null = none. */
   n8n?: N8nBridge | null;
+  /** Decision presets for the rule-bound routines + the Meta guards. undefined = presetSource(db)
+      (src/lib/runtime/presets/store.ts: account_presets / routine_params → MetaPreset; defaults
+      without a database); null = the library defaults. */
+  presets?: PresetSource | null;
   now?: () => Date;
   log?: Logger;
   fetch?: typeof fetch;
 }
 
 export interface BuiltAdapters extends Adapters {
-  executor: RefusingExecutor;
+  executor: ActionExecutor;
 }
 
 let producerOverride: Producer | null | undefined;
@@ -88,10 +94,24 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
   const chosen = producerOverride !== undefined ? producerOverride : deps.producer;
   const producer = chosen === undefined ? new LlmProducer(createProducerClient(), { context: new DbProducerContext(db, deps.store, { now, log: deps.log }), log: deps.log, now }) : (chosen ?? undefined);
   const n8n = deps.n8n === undefined ? new HttpN8nBridge({ env: process.env, fetch: deps.fetch, now, log: deps.log }) : (deps.n8n ?? undefined);
+  const presets = deps.presets === undefined ? presetSource(db) : deps.presets;
+  const credentials = deps.credentials ?? defaultCredentialProvider(process.env, deps.log ? (line) => deps.log?.info("credentials", { line }) : undefined);
+  const personalisation = new StorePersonalisation(deps.store, db, { now });
+  const llmDecider = new LlmDecisionProvider(deps.llm ?? null, { log: deps.log, personalisation });
   return {
-    reader: new WorkerConnectorReader({ credentials: deps.credentials ?? defaultCredentialProvider(process.env, deps.log ? (line) => deps.log?.info("credentials", { line }) : undefined), now, log: deps.log, fetch: deps.fetch }),
-    decider: new LlmDecisionProvider(deps.llm ?? null, { log: deps.log, personalisation: new StorePersonalisation(deps.store, db, { now }) }),
-    executor: new RefusingExecutor(),
+    reader: new WorkerConnectorReader({ credentials, now, log: deps.log, fetch: deps.fetch }),
+    // Rule-bound routines (D02-W01) decide deterministically; the LLM only writes the line.
+    decider: new RulesDecisionProvider(llmDecider, { presets, writer: deps.llm ?? null, log: deps.log ? (event, fields) => deps.log?.info(event, fields) : undefined }),
+    executor: new ActionExecutor({
+      liveModeEnabled: LIVE_MODE_ENABLED,
+      enabledRisks: enabledActionRisks(process.env),
+      credentials,
+      presets,
+      spendCeiling: async (accountId, currency) => (await personalisation.forAccount(accountId, currency))?.spendCeiling ?? null,
+      now,
+      fetch: deps.fetch,
+      log: deps.log,
+    }),
     store: deps.store,
     ...(producer ? { producer } : {}),
     ...(n8n ? { n8n } : {}),

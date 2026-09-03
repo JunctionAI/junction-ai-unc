@@ -35,6 +35,7 @@ export const TASK_DEFAULTS: Record<LlmTask, { id: string } | { tier: ModelTier }
   daily_brief: { tier: "balanced" },
   kpi_insight: { tier: "fast" },
   eval_judge: { id: "claude-sonnet-5" }, // scripts/eval-chat.ts; env LLM_MODEL_EVAL_JUDGE overrides
+  niche_brief: { tier: "balanced" }, // the one-call market read after the scan (src/lib/brain/nicheBrief.ts)
 };
 
 export const envOverrideKey = (task: LlmTask) => `LLM_MODEL_${task.toUpperCase()}`;

@@ -8,6 +8,8 @@ import type { LiveApprovals } from "./useLiveApprovals";
 import type { HomeTelemetryState } from "./useHomeTelemetry";
 import { barCards, hoursSavedLabel, weekLabel, type BarCardView, type HomeReviewView } from "@/lib/platform/telemetry";
 import TodayBrief, { approvalAnchorId } from "./TodayBrief";
+import MarketRead from "./MarketRead";
+import type { NicheBrief } from "@/lib/brain/nicheBrief";
 import GettingSetUp, { SetupMotionStyles } from "./GettingSetUp";
 import type { SetupProgressState } from "@/lib/setup/useSetupProgress";
 import type { SetupAnchor } from "@/lib/setup/progress";
@@ -160,6 +162,8 @@ export interface HomeViewProps {
   artifactsInitial?: ArtifactView[] | null;
   /** Bump to make "What I drafted" refetch (a run just landed). */
   draftsRefreshKey?: number;
+  /** Accounts mode, server render / tests: the niche brief in hand (null = none; undefined = fetch). */
+  marketReadInitial?: NicheBrief | null;
 }
 
 /** Demo mode renders the prototype's Home verbatim (DemoHome). Accounts mode renders the
@@ -739,7 +743,7 @@ function BarCard({ hb, onFix }: { hb: BarCardView; onFix: () => void }) {
 
 const EMPTY_TELEMETRY = { review: null, segment: "all", bar: [], automation: { hoursSavedWk: 0, runsThisWeek: 0, routinesOn: 0 } };
 
-export function AccountHome({ V, live = null, telemetry = null, setup = null, onSetupAction, onTurnOn, briefInitial, artifactsInitial, draftsRefreshKey = 0 }: HomeViewProps) {
+export function AccountHome({ V, live = null, telemetry = null, setup = null, onSetupAction, onTurnOn, briefInitial, artifactsInitial, draftsRefreshKey = 0, marketReadInitial }: HomeViewProps) {
   const isLive = !!live && live.active;
   const liveLoading = !isLive && !live?.error;
   const pendingCount = isLive ? live.pendingCount : 0;
@@ -852,6 +856,9 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
         )}
         <GettingSetUp progress={progress} loading={!!setup?.loading} error={setup?.error ?? null} dismissed={V.setupCardDismissed} onDismiss={V.dismissSetupCard} onAction={go} />
       </div>
+
+      {/* ---- how I read your market (the niche brief; renders nothing until one exists) ---- */}
+      <MarketRead initial={marketReadInitial} />
 
       {/* ---- needs you ---- */}
       <section id={NEEDS_YOU_ID} data-buddy="Only you can clear these. A tap each and the machine keeps moving without you." style={{ marginTop: 34 }}>

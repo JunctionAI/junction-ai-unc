@@ -29,6 +29,7 @@ import { applySpendCeiling, readAccountProfile, renderProfileForDecision, render
 import type { DbClient } from "../../lib/db/types";
 import { createTextClient, describeLlm, type CompleteContext } from "../../lib/llm/router";
 import { ALL_SYSTEMS, type CategoryName } from "../../lib/platform/catalog";
+import { describeActionsForPrompt, isActionId } from "../../lib/actions";
 import { renderParams, renderTemplate, resolveSpend } from "../../lib/runtime/context";
 import { DeterministicDecisionProvider } from "../../lib/runtime/providers";
 import type { Store } from "../../lib/runtime/store/interface";
@@ -145,10 +146,13 @@ export function buildDecisionPrompt(node: DecideNode, ctx: RunContext, personal?
     spend: resolveSpend(o.spend, ctx) ?? null,
     params: o.params ? renderParams(o.params, ctx) : null,
   }));
+  // Options that name a typed action get the library's description of what it does and risks.
+  const actionIds = [...new Set(node.options.map((o) => o.params?.actionId).filter(isActionId))];
   const user = [
     `QUESTION: ${node.question}`,
     rule?.prompt ? `GUIDANCE: ${renderTemplate(rule.prompt, ctx)}` : "",
     `OFFERED OPTIONS (choose one id): ${JSON.stringify(options)}`,
+    actionIds.length ? describeActionsForPrompt(actionIds) : "",
     renderFounderBlock(personal),
     playbookBlock.trim(),
     `CONTEXT (your only source of numbers): ${JSON.stringify(compactContext(ctx))}`,
