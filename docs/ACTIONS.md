@@ -50,9 +50,11 @@ credential (or `null`), `now`, and `fetch` for execute. Nothing in `src/lib/acti
 database, the worker or the network on its own.
 
 **Idempotency.** `idempotencyKey(runId, actionId, params)` = `runId:actionId:<stable hash of the
-params>`. The executor's ledger (`MemoryIdempotencyLedger`; a durable table is the wave-2 follow-up)
-refuses a repeat with `duplicate — …`. The key is also on every dry-run receipt so the approval and
-the mutation can be matched.
+params>`. The executor **claims** that key on `action_ledger` (migration 0016) *before* it sends:
+a unique-key clash is `duplicate — …` and nothing goes out. A crash after claim and before
+complete leaves `status='started'`; retry is still duplicate (fail closed). Demo / tests use
+`MemoryIdempotencyLedger`. The key is also on every dry-run receipt so the approval and the
+mutation can be matched.
 
 **Redaction.** `ShapedRequest.headers.Authorization` is always `Bearer ••••`. The token is added to a
 copy of the headers inside `graph.send()` and nowhere else; it never appears in a URL, a body, a
@@ -212,8 +214,7 @@ actions, so the two can be run on the same rows and diffed; and the flow's "undo
 
 ## What is deliberately not here
 
-* No durable idempotency ledger yet (in-memory per worker process) — a `action_ledger` table when live
-  mode is on the table.
+* Durable `action_ledger` (migration 0016): claim-before-send; crash after claim is still duplicate.
 * No Google Ads / Klaviyo / Shopify actions — same contract, next platforms.
 * `meta.campaign.create_from_brief` does not execute (wave 2); its dry run is complete.
 * The streak / age / measurement-clean / product-price fields are read when a row carries them

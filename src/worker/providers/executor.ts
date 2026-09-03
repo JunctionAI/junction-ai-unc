@@ -12,7 +12,7 @@
                  3. every risk the action carries must be enabled   → risk_disabled otherwise
                     (ENABLED_ACTION_RISKS from UNC_LIVE_ACTION_RISKS, default none)
                  4. guards must pass                                 → guard_violation otherwise
-                 5. the idempotency key must be unseen               → duplicate otherwise
+                 5. the idempotency key is claimed on the ledger     → duplicate otherwise
                and only then action.execute(). Errors map to honest reasons (Meta codes →
                token_expired / permission / rate_limited …) and a rate-limited reply sets a
                back-off the executor honours for the rest of its life.
@@ -21,6 +21,7 @@
 
    LIVE_MODE_ENABLED stays false (service.ts) so today every live execute stops at step 2 —
    with a receipt naming the action, the risk and the env var that would enable it.
+   The ledger is claimed before any send so a restart cannot double-apply.
 
    RefusingExecutor is kept as the zero-capability fallback (tests, audits). */
 
@@ -28,6 +29,9 @@ import { getAction, idempotencyKey, pickDeclaredParams, risksOf, resolveMetaPres
 import type { ExecuteNode, ExecutionResult, Executor, Mutation, RunContext } from "../../lib/runtime/types";
 import type { CredentialProvider } from "../credentials";
 import type { Logger } from "../log";
+import { MemoryIdempotencyLedger, type IdempotencyLedger } from "./ledger";
+
+export { MemoryIdempotencyLedger, DbIdempotencyLedger, type IdempotencyLedger } from "./ledger";
 
 export const NOT_IMPLEMENTED_REASON = "not_implemented — mutations are Wave 2, founder-gated";
 export const LIVE_DISABLED_REASON = "live_disabled — LIVE_MODE_ENABLED is false (service.ts); the action was shaped, not sent";
@@ -59,23 +63,6 @@ export function disabledRisks(action: Pick<AnyAction, "risk" | "secondaryRisks">
 export function riskDisabledReason(action: Pick<AnyAction, "id" | "risk" | "secondaryRisks">, enabled: EnabledActionRisks): string {
   const off = disabledRisks(action, enabled);
   return `risk_disabled — ${action.id} carries ${off.map((r) => `'${r}'`).join(" + ")} and ${off.length === 1 ? "that risk is" : "those risks are"} not enabled (${ENABLED_RISKS_ENV})`;
-}
-
-/** Remembers executed keys so a repeated (runId, actionId, params) is refused. In-memory by
-    default; a durable ledger (a table) is the wave-2 follow-up in docs/ACTIONS.md. */
-export interface IdempotencyLedger {
-  seen(key: string): Promise<boolean>;
-  record(key: string, result: { ok: boolean; externalId?: string }): Promise<void>;
-}
-
-export class MemoryIdempotencyLedger implements IdempotencyLedger {
-  readonly entries = new Map<string, { ok: boolean; externalId?: string }>();
-  async seen(key: string) {
-    return this.entries.has(key);
-  }
-  async record(key: string, result: { ok: boolean; externalId?: string }) {
-    this.entries.set(key, result);
-  }
 }
 
 /** Per-day proposal ceiling from the taste ledger; null = no pattern. Injected so this file
@@ -226,11 +213,17 @@ export class ActionExecutor implements Executor {
     if (violations.length) return this.refuse(node, mutation, ctx, `guard_violation — ${violationsLine(violations)}`, { actionId: action.id, violations });
 
     const key = idempotencyKey(ctx.runId, action.id, params);
-    if (await this.ledger.seen(key)) return this.refuse(node, mutation, ctx, `duplicate — this exact action already ran for this run (${key})`, { actionId: action.id, idempotencyKey: key });
-
     if (this.backoffUntil !== null && this.now().getTime() < this.backoffUntil) {
       return this.refuse(node, mutation, ctx, `rate_limited — backing off Meta until ${new Date(this.backoffUntil).toISOString()}`, { actionId: action.id, backoffUntil: new Date(this.backoffUntil).toISOString() });
     }
+    let claimed: "claimed" | "duplicate";
+    try {
+      claimed = await this.ledger.claim(key, { accountId: ctx.account.accountId, runId: ctx.runId, actionId: action.id });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      return this.refuse(node, mutation, ctx, `ledger_failed — ${reason}`, { actionId: action.id, idempotencyKey: key });
+    }
+    if (claimed === "duplicate") return this.refuse(node, mutation, ctx, `duplicate — this exact action already ran for this run (${key})`, { actionId: action.id, idempotencyKey: key });
 
     let result: ExecuteResult;
     try {
@@ -238,11 +231,14 @@ export class ActionExecutor implements Executor {
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       this.deps.log?.error("executor.threw", { action: action.id, runId: ctx.runId, reason });
+      await this.ledger.complete(key, { ok: false, error: reason }).catch(() => {});
       return { ok: false, error: `${action.id} threw: ${reason}`, readback: { actionId: action.id, idempotencyKey: key } };
     }
     if (result.rateLimit?.throttled) this.backoffUntil = this.now().getTime() + result.rateLimit.backoffMs;
     if (result.error?.code === "rate_limited") this.backoffUntil = this.now().getTime() + (result.error.backoffMs ?? 60_000);
-    await this.ledger.record(key, { ok: result.ok, externalId: result.externalId });
+    await this.ledger.complete(key, { ok: result.ok, externalId: result.externalId, error: result.ok ? undefined : result.error ? `${result.error.code} — ${result.error.reason}` : result.receipt }).catch((err) => {
+      this.deps.log?.warn("executor.ledger_complete_failed", { action: action.id, runId: ctx.runId, reason: err instanceof Error ? err.message : String(err) });
+    });
     const readback: Record<string, unknown> = {
       actionId: action.id,
       risk: action.risk,

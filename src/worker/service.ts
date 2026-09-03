@@ -26,6 +26,7 @@ import type { CredentialProvider } from "./credentials";
 import type { Logger } from "./log";
 import { WorkerConnectorReader } from "./providers/connectorReader";
 import { ActionExecutor, enabledActionRisks } from "./providers/executor";
+import { DbIdempotencyLedger, MemoryIdempotencyLedger, type IdempotencyLedger } from "./providers/ledger";
 import { LlmDecisionProvider, StorePersonalisation, type LlmClient } from "./providers/llmDecision";
 import { RulesDecisionProvider, type PresetSource } from "../lib/actions";
 import { presetSource } from "../lib/runtime/presets/store";
@@ -76,6 +77,8 @@ export interface ServiceDeps {
   now?: () => Date;
   log?: Logger;
   fetch?: typeof fetch;
+  /** undefined = DbIdempotencyLedger when db is set, else memory. Tests inject MemoryIdempotencyLedger. */
+  ledger?: IdempotencyLedger;
 }
 
 export interface BuiltAdapters extends Adapters {
@@ -108,6 +111,7 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
       credentials,
       presets,
       spendCeiling: async (accountId, currency) => (await personalisation.forAccount(accountId, currency))?.spendCeiling ?? null,
+      ledger: deps.ledger ?? (db ? new DbIdempotencyLedger(db) : new MemoryIdempotencyLedger()),
       now,
       fetch: deps.fetch,
       log: deps.log,

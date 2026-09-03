@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012/0013/0014/0015 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012/0013/0014/0015/0016 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
@@ -11,6 +11,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "account_profiles",
       "account_state_meta",
       "accounts",
+      "action_ledger",
       "app_errors",
       "approvals",
       "artifacts",
@@ -53,6 +54,10 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.accounts.columns.has("monthly_llm_cap_usd")).toBe(true);
     expect([...s.app_errors.columns]).toEqual(expect.arrayContaining(["scope", "message", "stack", "account_id", "context"]));
     expect(s.worker_heartbeats.primaryKey).toEqual(["worker"]);
+    // 0016 action idempotency ledger
+    expect(s.action_ledger.primaryKey).toEqual(["key"]);
+    expect(s.action_ledger.enums.status).toEqual(new Set(["started", "ok", "failed"]));
+    expect([...s.action_ledger.columns]).toEqual(expect.arrayContaining(["key", "account_id", "run_id", "action_id", "status", "external_id", "error"]));
     // 0006 telemetry
     expect(s.routine_outcomes.uniques).toContainEqual({ columns: ["account_id", "routine_id", "kpi_key", "window_end"] });
     expect(s.routine_outcomes.enums.kpi_op).toEqual(new Set(["gte", "lte"]));
