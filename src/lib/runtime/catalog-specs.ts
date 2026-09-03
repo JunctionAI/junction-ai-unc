@@ -294,7 +294,7 @@ const D02: RoutineSpec[] = [
     read("spend", "meta_ads", "insights", { window: "7d", filter: { level: "adset" }, fields: ["adset_id", "adset_name", "spend", "purchases", "purchase_value", "roas", "frequency", "ctr", "daily_budget"], limit: 100 }, 60),
     read("adsets", "meta_ads", "adsets", { fields: ["id", "name", "status", "effective_status", "campaign_id", "daily_budget"], limit: 200 }),
     read("orders", "shopify", "orders", { window: "7d", fields: ["id", "total_price", "landing_site", "referring_site"] }, 60),
-    read("ga", "ga4", "report", { window: "7d", fields: ["sessions", "conversions", "purchaseRevenue"], groupBy: ["sessionCampaignName"], filter: { sessionSource: "facebook" } }),
+    optRead("ga", "ga4", "report", { window: "7d", fields: ["sessions", "conversions", "purchaseRevenue"], groupBy: ["sessionCampaignName"], filter: { sessionSource: "facebook" } }),
     check("spend_present", { metric: "reads.spend.spend", op: "gt", value: 0, window: "7d" }, "No paid spend in the last 7 days — nothing to rebalance."),
     check("reconciled", { metric: "reads.spend.reconciliation_pct", op: "between", value: [98.5, 101.5] }, "Platform revenue and store revenue disagree by more than ±1.5% — blocking until reconciled.", "fail"),
     /* DECIDE is rule-bound (src/lib/actions/rules): the worker's RulesDecisionProvider evaluates

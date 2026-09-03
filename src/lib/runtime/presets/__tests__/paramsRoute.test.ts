@@ -95,7 +95,7 @@ describe("GET — the view", () => {
     expect(by.fatigueFrequency.relevant).toBe(false);
     expect(by.targetCpa.value).toBeNull(); // no AOV yet
     expect(by.dailyBudgetCap).toMatchObject({ value: 100, source: "founder" });
-    expect(v.steps).toEqual([]);
+    expect(v.steps).toEqual([{ id: "read_ga", kind: "read", label: "ga4 report · 7d", included: true }]);
     const c = (await (await get("?routineId=D01-W01")).json()) as View;
     expect(c.domain).toBe("content");
     expect(c.steps.map((s) => s.id)).toEqual(["read_questions", "read_posts", "read_products"]);
