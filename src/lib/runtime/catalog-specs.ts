@@ -296,7 +296,9 @@ const D02: RoutineSpec[] = [
     read("orders", "shopify", "orders", { window: "7d", fields: ["id", "total_price", "landing_site", "referring_site"] }, 60),
     optRead("ga", "ga4", "report", { window: "7d", fields: ["sessions", "conversions", "purchaseRevenue"], groupBy: ["sessionCampaignName"], filter: { sessionSource: "facebook" } }),
     check("spend_present", { metric: "reads.spend.spend", op: "gt", value: 0, window: "7d" }, "No paid spend in the last 7 days — nothing to rebalance."),
-    check("reconciled", { metric: "reads.spend.reconciliation_pct", op: "between", value: [98.5, 101.5] }, "Platform revenue and store revenue disagree by more than ±1.5% — blocking until reconciled.", "fail"),
+    /* Do not gate on reconciliation_pct here: the live Meta reader leaves it null (warehouse
+       view, not a Graph field). `between` on null always fails, so this check bricked every
+       real run. Measurement holds belong in rules/meta.ts when we actually have the %. */
     /* DECIDE is rule-bound (src/lib/actions/rules): the worker's RulesDecisionProvider evaluates
        every ad set against the account's Meta preset (target CPA / max CPA / ROAS floor /
        fatigue / hold days) and picks scale | turn_off | hold deterministically; the LLM only
