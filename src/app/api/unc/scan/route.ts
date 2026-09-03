@@ -14,6 +14,7 @@ import { afterScan } from "@/lib/brain/hooks";
 import { optionalAccountContext } from "@/lib/llm/accountContext";
 import { resolveModel } from "@/lib/llm/router";
 import { isSafeUrl, scanBusiness } from "@/lib/unc/scan";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,7 @@ const MAX_SOCIALS_CHARS = 1000;
 
 const fallback = () => Response.json({ fallback: true });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!resolveModel("business_scan")) return fallback();
 
   let body: { website?: unknown; socials?: unknown };
@@ -54,3 +55,5 @@ export async function POST(req: Request) {
     return fallback();
   }
 }
+
+export const POST = withErrorCapture("api/unc/scan", handlePOST);

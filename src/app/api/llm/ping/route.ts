@@ -5,11 +5,12 @@
    model id is wrong — say so rather than guessing. Writes a "ping" row to llm_usage. */
 
 import { completeModel, parseModelId } from "@/lib/llm/router";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   if (process.env.NODE_ENV === "production") return Response.json({ error: "not found" }, { status: 404 });
   const url = new URL(req.url);
   const model = (url.searchParams.get("model") ?? "").trim();
@@ -19,3 +20,5 @@ export async function GET(req: Request) {
   const ok = result.stopReason !== "error";
   return Response.json({ provider: result.provider, model: result.model, ok, latencyMs: result.latencyMs, stopReason: result.stopReason, usage: result.usage, text: ok ? result.text.slice(0, 200) : undefined, error: ok ? undefined : { code: result.errorCode, message: result.errorMessage } });
 }
+
+export const GET = withErrorCapture("api/llm/ping", handleGET);

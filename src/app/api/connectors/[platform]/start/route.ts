@@ -10,11 +10,12 @@
 
 import { handleStart } from "@/lib/connectors/handlers";
 import { handlerDeps } from "@/lib/connectors/server";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, ctx: { params: Promise<{ platform: string }> }) {
+async function handlePOST(req: Request, ctx: { params: Promise<{ platform: string }> }) {
   const { platform } = await ctx.params;
   let body: unknown = {};
   try {
@@ -27,3 +28,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ platform: stri
   const result = await handleStart(deps, platform, body);
   return Response.json(result.body, { status: result.status });
 }
+
+export const POST = withErrorCapture("api/connectors/[platform]/start", handlePOST);

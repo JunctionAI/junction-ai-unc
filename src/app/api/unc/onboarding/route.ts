@@ -12,11 +12,12 @@
 import { afterOnboarding } from "@/lib/brain/hooks";
 import { coerceOnboardingAnswers } from "@/lib/brain/onboarding";
 import { requireAccountSession } from "@/lib/db/session";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
 
@@ -32,3 +33,5 @@ export async function POST(req: Request) {
   const r = await afterOnboarding({ accountId: session.accountId, answers }, { db: session.service });
   return Response.json(r ?? { written: 0, merged: 0, failed: 0 });
 }
+
+export const POST = withErrorCapture("api/unc/onboarding", handlePOST);

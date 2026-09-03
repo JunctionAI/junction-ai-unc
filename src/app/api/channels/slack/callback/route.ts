@@ -10,11 +10,12 @@ import { finishSlackInstall } from "@/lib/channels/slackOauth";
 import { appUrlFor } from "@/lib/connectors/server";
 import { getServerSupabase } from "@/lib/db/server";
 import { envKeyring } from "@/worker/wiring";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const appUrl = appUrlFor(req);
   const back = (to: string, q: Record<string, string>) => Response.redirect(`${appUrl}${to}${to.includes("?") ? "&" : "?"}${new URLSearchParams(q).toString()}`, 302);
   const config = slackConfig(process.env);
@@ -30,3 +31,5 @@ export async function GET(req: Request) {
   const r = await finishSlackInstall({ db, keyring: envKeyring(process.env), config, fetch: (input, init) => fetch(input, init), appUrl, now: new Date(), userId, adapters: envAdapters(db), log: channelLog }, new URL(req.url).searchParams);
   return r.ok ? back(r.redirectTo, { channel: "slack", linked: "1" }) : back(r.redirectTo, { channel: "slack", error: r.reason });
 }
+
+export const GET = withErrorCapture("api/channels/slack/callback", handleGET);

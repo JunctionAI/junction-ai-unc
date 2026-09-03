@@ -6,11 +6,12 @@ import { slackConfig } from "@/lib/channels/adapters/slack";
 import { startSlackInstall } from "@/lib/channels/slackOauth";
 import { appUrlFor } from "@/lib/connectors/server";
 import { requireAccountSession } from "@/lib/db/session";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   const config = slackConfig(process.env);
@@ -23,3 +24,5 @@ export async function GET(req: Request) {
     return Response.json({ error: err instanceof Error ? err.message : "could not start the Slack install" }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture("api/channels/slack/start", handleGET);

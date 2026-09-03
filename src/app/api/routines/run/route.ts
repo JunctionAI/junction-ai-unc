@@ -25,6 +25,7 @@ import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import { triggerRun, WorkerError, type ServiceDeps } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun, workerErrorStatus } from "../shared";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ function deps(): ServiceDeps {
   return { store: getStore(), accounts: defaultAccountsSource() };
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: { accountId?: unknown; routineId?: unknown; vars?: unknown; account?: unknown; mode?: unknown };
   try {
     body = await req.json();
@@ -71,3 +72,5 @@ export async function POST(req: Request) {
     return Response.json({ error: message }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture("api/routines/run", handlePOST);

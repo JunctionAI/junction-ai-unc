@@ -14,11 +14,12 @@ import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import type { RoutineId } from "@/lib/runtime/types";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: { routineId?: unknown };
   try {
     body = await req.json();
@@ -43,3 +44,5 @@ export async function POST(req: Request) {
     return Response.json({ error: err instanceof Error ? err.message : "enable failed" }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture("api/setup/enable", handlePOST);

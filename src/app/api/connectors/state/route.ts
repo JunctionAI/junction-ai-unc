@@ -10,12 +10,15 @@
 
 import { handlerDeps } from "@/lib/connectors/server";
 import { handleConnectorsState } from "@/lib/connectors/state";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const deps = await handlerDeps(req);
   const result = await handleConnectorsState(deps);
   return Response.json(result.body, { status: result.status, headers: { "cache-control": "no-store" } });
 }
+
+export const GET = withErrorCapture("api/connectors/state", handleGET);

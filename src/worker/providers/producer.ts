@@ -24,6 +24,7 @@ import { recallForContext } from "../../lib/brain/retrieve";
 import { compactReads, skillContextFrom, type GatheredMaterial } from "../../lib/artifacts/material";
 import { allowedNumbersFrom, parseArtifactReply, type ParsedArtifact } from "../../lib/artifacts/validate";
 import { unwrap, type DbClient, type Row } from "../../lib/db/types";
+import { BUDGET_EXHAUSTED_LINE } from "../../lib/llm/budget";
 import { createTextClient, describeLlm, type CompleteContext, type TextClient } from "../../lib/llm/router";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
 import type { Skill, SkillContext } from "../../lib/runtime/skills/types";
@@ -253,8 +254,11 @@ export class LlmProducer implements Producer {
       try {
         text = await this.client.complete({ ...prompt, accountId: ctx.account.accountId });
       } catch (err) {
+        const message = err instanceof Error ? err.message : "error";
         this.opts.log?.warn("produce.llm_failed", { runId: ctx.runId, routineId: ctx.routineId, attempt, error: err instanceof Error ? err.name : "unknown" });
-        throw new ProducerUnavailableError(`the model call failed (${err instanceof Error ? err.message : "error"}) — nothing was drafted; I'll retry on schedule`);
+        // Over the month's cap (src/lib/llm/budget.ts): the honest line, not a transport excuse.
+        if (/budget_exceeded/.test(message)) throw new ProducerUnavailableError(`${BUDGET_EXHAUSTED_LINE} Nothing was drafted.`);
+        throw new ProducerUnavailableError(`the model call failed (${message}) — nothing was drafted; I'll retry on schedule`);
       }
       parsed = parseArtifactReply(text, { kind: skill.kind, maxItems, allowedNumbers });
       if (parsed.ok) {

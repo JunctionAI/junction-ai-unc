@@ -14,11 +14,12 @@ import { handleShopifyWebhook } from "@/lib/connectors/webhooks";
 import { isDbConfigured } from "@/lib/db/client";
 import { asDb } from "@/lib/db/client";
 import { getServiceSupabase, isServiceRoleConfigured } from "@/lib/db/server";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, ctx: { params: Promise<{ topic: string }> }) {
+async function handlePOST(req: Request, ctx: { params: Promise<{ topic: string }> }) {
   const { topic } = await ctx.params;
   const rawBody = await req.text();
   const secret = (process.env.SHOPIFY_CLIENT_SECRET || "").trim() || null;
@@ -36,3 +37,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ topic: string 
   );
   return Response.json(result.body, { status: result.status });
 }
+
+export const POST = withErrorCapture("api/webhooks/shopify/[topic]", handlePOST);

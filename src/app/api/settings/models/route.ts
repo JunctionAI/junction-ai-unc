@@ -12,6 +12,7 @@ import { requireAccountSession } from "@/lib/db/session";
 import { isLlmTask, listModelPrefs, writeModelPref } from "@/lib/llm/prefs";
 import { CATALOGUE, isProviderConfigured, parseModelId, resolveModel } from "@/lib/llm/router";
 import { LLM_TASKS, PROVIDER_IDS, type LlmTask, type ProviderId, type ResolvedModel } from "@/lib/llm/types";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ function resolvedFor(prefs: Partial<Record<LlmTask, string>>) {
   return Object.fromEntries(LLM_TASKS.map((t) => [t, summary(resolveModel(t, { accountOverride: prefs[t] ?? null }))])) as Record<LlmTask, ReturnType<typeof summary>>;
 }
 
-export async function GET() {
+async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -34,7 +35,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   let body: { task?: unknown; modelId?: unknown };
@@ -54,3 +55,6 @@ export async function POST(req: Request) {
     return Response.json({ error: err instanceof Error ? err.message : "settings write failed" }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture("api/settings/models", handleGET);
+export const POST = withErrorCapture("api/settings/models", handlePOST);

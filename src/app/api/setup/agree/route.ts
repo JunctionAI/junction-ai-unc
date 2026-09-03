@@ -8,11 +8,12 @@
 
 import { requireAccountSession } from "@/lib/db/session";
 import { agreePlan } from "@/lib/setup/progress";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+async function handlePOST() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -21,3 +22,5 @@ export async function POST() {
     return Response.json({ error: err instanceof Error ? err.message : "agree failed" }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture("api/setup/agree", handlePOST);

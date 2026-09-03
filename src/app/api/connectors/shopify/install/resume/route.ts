@@ -6,6 +6,7 @@
 import { handleShopifyInstallResume, INSTALL_COOKIE } from "@/lib/connectors/install";
 import { ensureMerchantAccount, installErrorResponse, installResponse } from "@/lib/connectors/installServer";
 import { handlerDeps } from "@/lib/connectors/server";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ function cookieValue(req: Request, name: string): string | null {
   return null;
 }
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const origin = new URL(req.url).origin;
   try {
     const deps = await handlerDeps(req);
@@ -29,3 +30,5 @@ export async function GET(req: Request) {
     return installErrorResponse(origin);
   }
 }
+
+export const GET = withErrorCapture("api/connectors/shopify/install/resume", handleGET);

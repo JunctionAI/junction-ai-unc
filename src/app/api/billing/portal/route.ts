@@ -4,10 +4,11 @@
 import { billingEnv, getStripe } from "@/lib/billing/config";
 import { createPortalSession } from "@/lib/billing/checkout";
 import { requireBillingSession } from "@/lib/billing/server";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 
-export async function POST() {
+async function handlePOST() {
   const env = billingEnv();
   if (!env) return Response.json({ fallback: true });
   const session = await requireBillingSession();
@@ -21,3 +22,5 @@ export async function POST() {
     return Response.json({ error: "could not open the billing portal" }, { status: 502 });
   }
 }
+
+export const POST = withErrorCapture("api/billing/portal", handlePOST);

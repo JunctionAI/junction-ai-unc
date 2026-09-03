@@ -7,11 +7,12 @@
 import { NextResponse } from "next/server";
 import { handleCallback } from "@/lib/connectors/handlers";
 import { handlerDeps } from "@/lib/connectors/server";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request, ctx: { params: Promise<{ platform: string }> }) {
+async function handleGET(req: Request, ctx: { params: Promise<{ platform: string }> }) {
   const { platform } = await ctx.params;
   const origin = new URL(req.url).origin;
   try {
@@ -22,3 +23,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ platform: strin
     return NextResponse.redirect(new URL(`/app?connect_error=${encodeURIComponent(platform)}`, origin));
   }
 }
+
+export const GET = withErrorCapture("api/connectors/[platform]/callback", handleGET);

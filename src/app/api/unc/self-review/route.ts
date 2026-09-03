@@ -19,6 +19,7 @@ import { getStore } from "@/lib/runtime/store";
 import { homeTelemetryForAccount } from "@/lib/telemetry/home";
 import { afterSelfReview } from "@/lib/brain/hooks";
 import { generateSelfReview, SELF_REVIEW_EFFORT, SELF_REVIEW_MAX_TOKENS, type SelfReviewLlm } from "@/lib/telemetry/selfReview";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ function reviewLlm(accountId: string, db: AccountSession["service"]): SelfReview
   return createTextClient("self_review", { maxTokens: SELF_REVIEW_MAX_TOKENS, effort: SELF_REVIEW_EFFORT, jsonMode: true }, { accountId, db });
 }
 
-export async function GET() {
+async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -38,7 +39,7 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+async function handlePOST() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -53,3 +54,6 @@ export async function POST() {
     return Response.json({ error: err instanceof Error && !/api[_ ]?key|anthropic/i.test(err.message) ? err.message : "review generation failed" }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture("api/unc/self-review", handleGET);
+export const POST = withErrorCapture("api/unc/self-review", handlePOST);
