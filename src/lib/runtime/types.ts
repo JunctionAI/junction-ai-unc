@@ -209,7 +209,8 @@ export interface GateNode extends NodeBase {
 }
 
 export interface Mutation {
-  /** Platform verb, e.g. "update_adset_budget", "publish_post", "update_flow_message". */
+  /** Typed action id (src/lib/actions, e.g. "meta.adset.set_daily_budget") or a legacy
+      platform verb ("update_adset_budget"). Unknown ids fail closed at the executor. */
   action: string;
   target?: Record<string, unknown>;
   params?: Record<string, unknown>;
@@ -507,6 +508,18 @@ export interface DecisionProvider {
 
 export interface Executor {
   execute(node: ExecuteNode, mutation: Mutation, ctx: RunContext): Promise<ExecutionResult>;
+  /** Optional: in dry_run the engine asks for the exact request the mutation WOULD send
+      (typed action library — src/lib/actions). null = no action for this mutation, so the
+      engine keeps its generic "Would <verb>" draft receipt. Never sends anything. */
+  dryRun?(node: ExecuteNode, mutation: Mutation, ctx: RunContext): Promise<ExecuteDryRun | null>;
+}
+
+/** What Executor.dryRun answers: the human line, the payload for the draft receipt (the
+    shaped request, guards, spend …) and, when the action's guards would stop it, why. */
+export interface ExecuteDryRun {
+  preview: string;
+  payload: Record<string, unknown>;
+  blocked?: string;
 }
 
 /** Makes the artifact. Throws when it cannot work at all (no model configured, transport

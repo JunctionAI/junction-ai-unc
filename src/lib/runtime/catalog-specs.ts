@@ -291,26 +291,37 @@ const D02: RoutineSpec[] = [
   // Daily paid decisioning — wave 2, MUTATES (budget moves)
   spec("D02-W01", 2, [
     trigger(CADENCE.DAILY_0700),
-    read("spend", "meta_ads", "insights", { window: "7d", filter: { level: "adset" }, fields: ["adset_id", "adset_name", "spend", "purchases", "purchase_value", "roas", "daily_budget"], limit: 100 }, 60),
+    read("spend", "meta_ads", "insights", { window: "7d", filter: { level: "adset" }, fields: ["adset_id", "adset_name", "spend", "purchases", "purchase_value", "roas", "frequency", "ctr", "daily_budget"], limit: 100 }, 60),
+    read("adsets", "meta_ads", "adsets", { fields: ["id", "name", "status", "effective_status", "campaign_id", "daily_budget"], limit: 200 }),
     read("orders", "shopify", "orders", { window: "7d", fields: ["id", "total_price", "landing_site", "referring_site"] }, 60),
     read("ga", "ga4", "report", { window: "7d", fields: ["sessions", "conversions", "purchaseRevenue"], groupBy: ["sessionCampaignName"], filter: { sessionSource: "facebook" } }),
     check("spend_present", { metric: "reads.spend.spend", op: "gt", value: 0, window: "7d" }, "No paid spend in the last 7 days — nothing to rebalance."),
     check("reconciled", { metric: "reads.spend.reconciliation_pct", op: "between", value: [98.5, 101.5] }, "Platform revenue and store revenue disagree by more than ±1.5% — blocking until reconciled.", "fail"),
+    /* DECIDE is rule-bound (src/lib/actions/rules): the worker's RulesDecisionProvider evaluates
+       every ad set against the account's Meta preset (target CPA / max CPA / ROAS floor /
+       fatigue / hold days) and picks scale | turn_off | hold deterministically; the LLM only
+       writes the reasoning line. The threshold rule below is the honest fallback when no rules
+       provider is wired (demo / tests): ROAS ≥ 2.5 on the best ad set → one +20% step. */
     decide(
-      "Where should tomorrow's budget go?",
+      "Which ad set gets a change today — scale the winner, turn off a loser, or hold?",
       [
-        { id: "scale_winner", label: "Move 20% of budget to the best ad set", spend: { amountMetric: "reads.spend.top_adset_daily_budget", multiplier: 0.2, period: "day" }, params: { adsetId: "{{reads.spend.top_adset_id}}", pct: 20 } },
+        { id: "scale", label: "Scale {{reads.spend.top_adset_name}} by one budget step", spend: { amountMetric: "reads.spend.top_adset_daily_budget", multiplier: 0.2, period: "day" }, params: { actionId: "meta.adset.set_daily_budget", adsetId: "{{reads.spend.top_adset_id}}", currentDailyBudget: "{{reads.spend.top_adset_daily_budget}}", changePct: 20 } },
+        { id: "turn_off", label: "Turn off {{reads.spend.worst_ad_name}}", params: { actionId: "meta.adset.pause", adsetId: "{{reads.spend.worst_ad_id}}" } },
         { id: "hold", label: "Hold budgets as they are", terminal: true },
       ],
-      { kind: "threshold", metric: "reads.spend.top_adset_roas", op: "gte", value: 2.5, ifTrue: "scale_winner", ifFalse: "hold" },
+      { kind: "threshold", metric: "reads.spend.top_adset_roas", op: "gte", value: 2.5, ifTrue: "scale", ifFalse: "hold" },
     ),
-    gate("Move {{account.currency}} {{decision.spend.amount}}/day to {{reads.spend.top_adset_name}}", {
-      detail: "7-day ROAS {{reads.spend.top_adset_roas}} on {{account.currency}} {{reads.spend.spend}} spend, reconciled against Shopify.",
+    gate("{{decision.label}}", {
+      detail: "7-day read on {{account.currency}} {{reads.spend.spend}} spend, reconciled against Shopify. Verdict by your preset ({{decision.params.preset}}): {{decision.params.verdict}}.",
       before: "{{reads.spend.top_adset_name}} at {{account.currency}} {{reads.spend.top_adset_daily_budget}}/day",
-      after: "+{{account.currency}} {{decision.spend.amount}}/day, inside your cap of {{account.currency}} {{caps.perDay}}/day",
+      after: "{{decision.label}} — inside your cap of {{account.currency}} {{caps.perDay}}/day",
       expiryHours: 24,
     }),
-    execute("meta_ads", "update_adset_budget", { target: { adsetId: "{{decision.params.adsetId}}" }, params: { dailyBudgetIncrease: "{{decision.spend.amount}}" }, rollback: "restore previous daily_budget" }),
+    execute("meta_ads", "{{decision.params.actionId}}", {
+      target: { adsetId: "{{decision.params.adsetId}}" },
+      params: { dailyBudget: "{{decision.params.dailyBudget}}", changePct: "{{decision.params.changePct}}", currentDailyBudget: "{{decision.params.currentDailyBudget}}", reason: "{{decision.params.reason}}" },
+      rollback: "the inverse action: restore the previous daily budget / resume the ad set",
+    }),
     receipt("Daily paid decisioning: {{decision.label}} — read back and receipted.", 7),
   ]),
   // Creative testing sprints — wave 2, MUTATES (launch test ad set)
@@ -332,7 +343,10 @@ const D02: RoutineSpec[] = [
       before: "No test cell live",
       after: "1 test ad set live at {{account.currency}} {{decision.spend.amount}}/day",
     }),
-    execute("meta_ads", "create_test_adset", { params: { dailyBudget: "{{decision.spend.amount}}", creativeIds: "{{decision.params.creativeIds}}", durationDays: 7 }, rollback: "pause the created ad set" }),
+    execute("meta_ads", "meta.campaign.create_from_brief", {
+      params: { name: "Creative test — {{today}}", objective: "OUTCOME_SALES", dailyBudget: "{{decision.spend.amount}}", audience: { countries: "{{vars.countries}}" }, creatives: "{{decision.params.creativeIds}}", pixelId: "{{vars.metaPixelId}}", pageId: "{{vars.metaPageId}}", durationDays: 7 },
+      rollback: "everything is created PAUSED; switch it off in Ads Manager",
+    }),
     receipt("Creative testing sprint launched.", 7),
   ]),
   // Hook rotation engine — wave 2, MUTATES (swap creative on fatigued ad)
@@ -344,13 +358,13 @@ const D02: RoutineSpec[] = [
     decide(
       "Rotate a fresh hook into the fatigued ad?",
       [
-        { id: "rotate", label: "Swap in the next hook variant", params: { adId: "{{reads.ads.most_fatigued_ad_id}}", creativeId: "{{reads.hooks.next_creative_id}}" } },
+        { id: "rotate", label: "Swap in the next hook variant", params: { actionId: "meta.ad.rotate", adId: "{{reads.ads.most_fatigued_ad_id}}", nextAdId: "{{reads.hooks.next_ad_id}}", creativeId: "{{reads.hooks.next_creative_id}}" } },
         { id: "none_ready", label: "No fresh hook ready — flag for the content engine", terminal: true },
       ],
       { kind: "threshold", metric: "reads.hooks.count", op: "gte", value: 1, ifTrue: "rotate", ifFalse: "none_ready" },
     ),
     gate("Rotate a fresh hook into {{reads.ads.most_fatigued_ad_name}}", { detail: "Frequency {{reads.ads.most_fatigued_frequency}}, CTR down {{reads.ads.most_fatigued_ctr_drop}}% since launch.", before: "Current hook running", after: "Next hook variant live, old one paused", expiryHours: 24 }),
-    execute("meta_ads", "swap_ad_creative", { target: { adId: "{{decision.params.adId}}" }, params: { creativeId: "{{decision.params.creativeId}}" }, rollback: "re-enable the previous creative" }),
+    execute("meta_ads", "meta.ad.rotate", { params: { pauseAdId: "{{decision.params.adId}}", resumeAdId: "{{decision.params.nextAdId}}", reason: "hook fatigue" }, rollback: "meta.ad.rotate the other way (pause the new, resume the old)" }),
     receipt("Hook rotation: {{decision.label}}.", 7),
   ]),
   // Ad fatigue watch — wave 2, MUTATES (pause tired ad)
@@ -361,13 +375,13 @@ const D02: RoutineSpec[] = [
     decide(
       "Pause the tired ad?",
       [
-        { id: "pause", label: "Pause {{reads.ads.worst_ad_name}}", params: { adId: "{{reads.ads.worst_ad_id}}" } },
+        { id: "pause", label: "Pause {{reads.ads.worst_ad_name}}", params: { actionId: "meta.ad.pause", adId: "{{reads.ads.worst_ad_id}}" } },
         { id: "keep", label: "Keep running — spend too small to matter", terminal: true },
       ],
       { kind: "threshold", metric: "reads.ads.worst_spend", op: "gte", value: 50, ifTrue: "pause", ifFalse: "keep" },
     ),
     gate("Pause {{reads.ads.worst_ad_name}} — frequency {{reads.ads.worst_frequency}}, CPA {{reads.ads.worst_cpa_vs_target_pct}}% over target", { before: "Ad active, {{account.currency}} {{reads.ads.worst_spend}} spent in 7d", after: "Ad paused; budget flows to the rest of the ad set", expiryHours: 12 }),
-    execute("meta_ads", "pause_ad", { target: { adId: "{{decision.params.adId}}" }, rollback: "re-enable the ad" }),
+    execute("meta_ads", "meta.ad.pause", { target: { adId: "{{decision.params.adId}}" }, params: { reason: "frequency {{reads.ads.worst_frequency}}, CPA {{reads.ads.worst_cpa_vs_target_pct}}% over target" }, rollback: "meta.ad.resume" }),
     receipt("Ad fatigue watch: {{decision.label}}.", 7),
   ]),
   // Creator whitelisting — wave 2, draft (needs the creator's permission — outside Unc's hands)
@@ -396,17 +410,18 @@ const D02: RoutineSpec[] = [
     read("meta", "meta_ads", "insights", { window: "1d", filter: { level: "account" }, fields: ["spend", "daily_budget_total"] }, 60),
     read("google", "google_ads", "campaigns", { window: "1d", fields: ["campaign_id", "cost", "budget_amount", "status"] }, 60),
     read("mtd", "meta_ads", "insights", { window: "28d", filter: { level: "account" }, fields: ["spend"] }, 60),
+    read("adsets", "meta_ads", "adsets", { fields: ["id", "name", "status", "effective_status", "daily_budget"], limit: 200 }),
     check("over_pace", { any: [{ metric: "reads.meta.projected_daily_spend", op: "gt", value: { ref: "caps.perDay" } }, { metric: "reads.google.projected_daily_spend", op: "gt", value: { ref: "caps.perDay" } }] }, "Pacing inside the {{account.currency}} {{caps.perDay}}/day cap."),
     decide(
       "Is the account pacing over its hard cap?",
       [
-        { id: "cut", label: "Cut daily budgets back to the cap", params: { reduceTo: "{{caps.perDay}}" } },
+        { id: "cut", label: "Cut {{reads.adsets.largest_adset_name}} by 25% to pull pacing back under the cap", params: { actionId: "meta.adset.set_daily_budget", adsetId: "{{reads.adsets.largest_adset_id}}", currentDailyBudget: "{{reads.adsets.largest_daily_budget}}", changePct: -25, reduceTo: "{{caps.perDay}}" } },
         { id: "fine", label: "Pacing inside the cap", terminal: true },
       ],
       { kind: "threshold", metric: "reads.meta.projected_daily_spend", op: "gt", value: { ref: "caps.perDay" }, ifTrue: "cut", ifFalse: "fine" },
     ),
     gate("Spend pacing at {{account.currency}} {{reads.meta.projected_daily_spend}}/day vs cap {{account.currency}} {{caps.perDay}} — cut budgets?", { before: "Budgets total {{account.currency}} {{reads.meta.daily_budget_total}}/day", after: "Budgets reduced to {{account.currency}} {{caps.perDay}}/day total", expiryHours: 6 }),
-    execute("meta_ads", "reduce_daily_budgets", { params: { totalDailyBudget: "{{decision.params.reduceTo}}" }, rollback: "restore previous budgets" }),
+    execute("meta_ads", "meta.adset.set_daily_budget", { target: { adsetId: "{{decision.params.adsetId}}" }, params: { changePct: "{{decision.params.changePct}}", currentDailyBudget: "{{decision.params.currentDailyBudget}}", reason: "pacing {{reads.meta.projected_daily_spend}}/day over the {{caps.perDay}}/day cap" }, rollback: "restore the previous daily budget" }),
     receipt("Budget pacing guard: {{decision.label}}.", 1),
   ]),
   // Organic-to-paid promotion — wave 2, MUTATES (create ad from proven post)
@@ -418,13 +433,16 @@ const D02: RoutineSpec[] = [
     decide(
       "Promote the proven post as a paid test?",
       [
-        { id: "promote", label: "Run {{reads.posts.top_post_caption}} as a paid test", spend: { amount: 20, period: "day" }, params: { mediaId: "{{reads.posts.top_post_id}}" } },
+        { id: "promote", label: "Run {{reads.posts.top_post_caption}} as a paid test", spend: { amount: 20, period: "day" }, params: { actionId: "meta.campaign.create_from_brief", mediaId: "{{reads.posts.top_post_id}}" } },
         { id: "skip", label: "Not yet — wait for conversions from it", terminal: true },
       ],
       { kind: "threshold", metric: "reads.ga.conversions", op: "gte", value: 1, ifTrue: "promote", ifFalse: "skip" },
     ),
     gate("Promote your top post as a {{account.currency}} {{decision.spend.amount}}/day ad test", { detail: "Reach {{reads.posts.top_post_reach}}, like-rate {{reads.posts.top_post_like_rate_pct}}%, {{reads.ga.conversions}} conversions from Instagram this week.", before: "Organic only", after: "Boosted as a 7-day paid test" }),
-    execute("meta_ads", "create_ad_from_post", { target: { mediaId: "{{decision.params.mediaId}}" }, params: { dailyBudget: "{{decision.spend.amount}}", durationDays: 7 }, rollback: "pause the created ad" }),
+    execute("meta_ads", "meta.campaign.create_from_brief", {
+      params: { name: "Organic-to-paid test — {{today}}", objective: "OUTCOME_TRAFFIC", optimizationGoal: "LANDING_PAGE_VIEWS", dailyBudget: "{{decision.spend.amount}}", audience: { countries: "{{vars.countries}}" }, creatives: { instagramMediaId: "{{decision.params.mediaId}}" }, pageId: "{{vars.metaPageId}}", durationDays: 7 },
+      rollback: "everything is created PAUSED; switch it off in Ads Manager",
+    }),
     receipt("Organic-to-paid: {{decision.label}}.", 7),
   ]),
 ];

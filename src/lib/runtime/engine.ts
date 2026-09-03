@@ -485,18 +485,20 @@ class RunSession {
   }
 
   private async execute(node: ExecuteNode) {
-    const mutation = { action: node.mutation.action, target: renderParams(node.mutation.target, this.ctx), params: renderParams(node.mutation.params, this.ctx) };
+    // The action may be a template ("{{decision.params.actionId}}") so one execute node can
+    // carry whichever action the decision proposed; a plain verb renders to itself.
+    const action = renderTemplate(node.mutation.action, this.ctx) || node.mutation.action;
+    const mutation = { action, target: renderParams(node.mutation.target, this.ctx), params: renderParams(node.mutation.params, this.ctx) };
     const spend = this.ctx.decision?.spend ?? resolveSpend(node.spend, this.ctx);
     const base = { node: node.id, platform: node.platform, mutation, spend: spend ?? null };
 
     if (this.dry) {
       const caps = await this.capsCheck(spend);
-      await this.receipt(
-        "draft",
-        `Would ${mutation.action} on ${node.platform}${spend ? ` (${spend.currency} ${spend.amount.toFixed(2)})` : ""}${caps.ok ? "" : ` — but caps would block it: ${caps.reason}`}.`,
-        { ...base, dryRun: true, capsCheck: caps },
-        { platform: node.platform },
-      );
+      // An executor with a dry-run (the typed action library) shapes the exact request.
+      const shaped = this.adapters.executor.dryRun ? await this.adapters.executor.dryRun(node, mutation, this.ctx) : null;
+      const blockers = [shaped?.blocked ? `guards would block it: ${shaped.blocked}` : "", caps.ok ? "" : `caps would block it: ${caps.reason}`].filter(Boolean);
+      const line = shaped ? `Would ${shaped.preview}` : `Would ${mutation.action} on ${node.platform}${spend ? ` (${spend.currency} ${spend.amount.toFixed(2)})` : ""}`;
+      await this.receipt("draft", `${line}${blockers.length ? ` — but ${blockers.join("; ")}` : ""}.`, { ...base, dryRun: true, capsCheck: caps, ...(shaped ? { action: shaped.payload, blocked: shaped.blocked ?? null } : {}) }, { platform: node.platform });
       return undefined;
     }
 
