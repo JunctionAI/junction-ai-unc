@@ -365,6 +365,11 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
               {minimum.inputs.length ? <span style={{ color: "var(--muted)" }}> · I ask you for {minimum.inputs.map((i) => i.replace(/_/g, " ")).join(", ")} when I don’t have it</span> : null}
             </div>
           )}
+          {mine?.skillSource === "n8n" && (
+            <div data-testid="skill-source-n8n" style={{ fontSize: 12.5, color: "oklch(0.35 0.05 262)", marginTop: 10, lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 600 }}>Powered by your n8n workflow.</span> <span style={{ color: "var(--muted)" }}>It reads your data through me, never with its own keys; if it doesn’t answer I draft with my built-in skill instead.</span>
+            </div>
+          )}
           <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.5 }}>
             {sources.some((p) => required.has(p) && !have.has(p)) ? (
               <>

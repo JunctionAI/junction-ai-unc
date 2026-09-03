@@ -14,6 +14,7 @@
    model" — off, not recommended, still listed honestly. Unknown type ⇒ nothing is hidden. */
 
 import { unwrap, type DbClient } from "../db/types";
+import { skillSourceFor } from "../n8n/registry";
 import { ALL_SYSTEMS } from "../platform/catalog";
 import { modelFromProfile, type BusinessModel } from "../unc/businessType";
 import { availabilityCopy, betterWith, betterWithCopy, canEnable, fitsBusiness, routineAvailability, type Availability } from "./availability";
@@ -54,6 +55,8 @@ export interface RoutineStateView {
   recommended: boolean;
   lastRun: RoutineLastRun | null;
   lastDraft: RoutineLastDraft | null;
+  /** Who drafts the produce step: an active n8n workflow (own, else global), the built-in skill card, or nothing yet. */
+  skillSource: "n8n" | "builtin" | "none";
 }
 
 export interface RoutinesStateListing {
@@ -114,13 +117,14 @@ export async function businessModelFor(db: DbClient | null, accountId: string): 
 }
 
 export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId: string, opts: { routineId?: string } = {}): Promise<RoutinesStateListing> {
-  const [states, runs, drafts, connected, phases, business] = await Promise.all([
+  const [states, runs, drafts, connected, phases, business, workflows] = await Promise.all([
     deps.store.listRoutineStates(accountId),
     deps.store.listRuns(accountId, { limit: RUNS_WINDOW }),
     deps.store.listReceipts(accountId, { kind: "draft", limit: DRAFTS_WINDOW }),
     connectedPlatformsFor(deps.db, accountId),
     latestPlanPhases(deps.db, accountId),
     businessModelFor(deps.db, accountId),
+    deps.store.listN8nWorkflows(accountId),
   ]);
   const stateById = new Map(states.map((s) => [s.routineId, s]));
   const lastRunById = new Map<string, RoutineLastRun>();
@@ -159,6 +163,7 @@ export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId
       recommended: recommendedFirst.includes(spec.id),
       lastRun: lastRunById.get(spec.id) ?? null,
       lastDraft: lastDraftById.get(spec.id) ?? null,
+      skillSource: skillSourceFor(workflows, accountId, spec.id),
     };
   });
 
