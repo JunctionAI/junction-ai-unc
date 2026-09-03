@@ -9,6 +9,19 @@ export const founderContent: Skill = {
   maxItems: 3,
   purpose: "Three founder-voice posts drafted from what customers actually ask and what the business stands for",
   inputs: ["site profile (products, audience, voice)", "memories about the business", "customer questions (Gorgias tickets, when connected)", "past posts that performed (LinkedIn, when connected)", "products (Shopify, when connected)"],
+  file: {
+    goal: "Three founder-voice posts a week the founder can post as-is",
+    owns: ["the draft post set", "the angle mix (question / belief / behind-the-scenes)"],
+    reads: ["site profile", "business memories", "customer questions when connected", "past posts when connected"],
+    decides: ["which three angles to run this week", "which platform each post fits"],
+    writes: ["a post_set artifact", "a draft receipt"],
+    never: ["invent numbers, awards or customer stories", "publish", "write in Unc's voice as if it were the founder"],
+    apply: "I keep handing drafts until we agree on ≥80% of them over four weeks — then I still don't post; you do, or we graduate the routine.",
+    examples: [
+      { when: "a physio clinic with a scanned site and no tickets", does: "three posts from the profile: a Saturday-clinic question, a no-referral belief, a behind-the-scenes assessment" },
+      { when: "Gorgias is connected with refund questions", does: "one post answers the real question in the founder's voice; the other two stay belief + process" },
+    ],
+  },
   minimum: minimum("a scanned site profile or three things I know about the business", [], ["about_the_business"], ["gorgias", "linkedin", "shopify"]),
   domain: "content",
   prompt: `CRAFT — founder posts:

@@ -15,10 +15,10 @@ export function facts(over: Partial<AccountFacts> = {}): AccountFacts {
   return {
     accountId: "acct-1",
     connectors: [
-      { platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: "2026-09-01T20:00:00.000Z" },
-      { platform: "ga4", name: "Google Analytics 4", status: "connected", lastSyncAt: null },
-      { platform: "klaviyo", name: "Klaviyo", status: "needs_reconnect", lastSyncAt: null },
-      { platform: "meta_ads", name: "Meta Ads", status: "disconnected", lastSyncAt: null },
+      { platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: "2026-09-01T20:00:00.000Z", lastSyncResult: "ok" },
+      { platform: "ga4", name: "Google Analytics 4", status: "connected", lastSyncAt: "2026-09-01T20:00:00.000Z", lastSyncResult: "ok" },
+      { platform: "klaviyo", name: "Klaviyo", status: "needs_reconnect", lastSyncAt: null, lastSyncResult: "error:token_expired" },
+      { platform: "meta_ads", name: "Meta Ads", status: "disconnected", lastSyncAt: null, lastSyncResult: null },
     ],
     routineStates: [
       { routineId: "D01-W01", name: "Founder content engine", enabled: true },
@@ -53,9 +53,10 @@ export function facts(over: Partial<AccountFacts> = {}): AccountFacts {
 describe("account facts — pure copy helpers", () => {
   it("connectorSummary: counts connected, names the one platform needing attention, honest when nothing is connected", () => {
     expect(connectorSummary(facts())).toBe("2 connected · Klaviyo needs attention");
-    expect(connectorSummary(facts({ connectors: [{ platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: null }] }))).toBe("1 connected");
-    expect(connectorSummary(facts({ connectors: [{ platform: "klaviyo", name: "Klaviyo", status: "error", lastSyncAt: null }, { platform: "meta_ads", name: "Meta Ads", status: "needs_reconnect", lastSyncAt: null }] }))).toBe("2 need attention");
-    expect(connectorSummary(facts({ connectors: [{ platform: "meta_ads", name: "Meta Ads", status: "disconnected", lastSyncAt: null }] }))).toBe("Nothing connected yet");
+    expect(connectorSummary(facts({ connectors: [{ platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: "2026-09-01T20:00:00.000Z", lastSyncResult: "ok" }] }))).toBe("1 connected");
+    expect(connectorSummary(facts({ connectors: [{ platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: null, lastSyncResult: null }] }))).toBe("Nothing connected yet");
+    expect(connectorSummary(facts({ connectors: [{ platform: "klaviyo", name: "Klaviyo", status: "error", lastSyncAt: null, lastSyncResult: "error:first_read" }, { platform: "meta_ads", name: "Meta Ads", status: "needs_reconnect", lastSyncAt: null, lastSyncResult: "error:token_expired" }] }))).toBe("2 need attention");
+    expect(connectorSummary(facts({ connectors: [{ platform: "meta_ads", name: "Meta Ads", status: "disconnected", lastSyncAt: null, lastSyncResult: null }] }))).toBe("Nothing connected yet");
     expect(connectorSummary(null)).toBe("Nothing connected yet");
   });
 
@@ -130,7 +131,7 @@ describe("buildUncContext in account mode — no demo furniture", () => {
     expect(by.Slack).toBe("disconnected"); // demo default is "ok"
     // no facts: the hydrated state alone, unknown → disconnected
     const noFacts = buildUncContext(S, { mode: "account", now: NOW });
-    expect(Object.fromEntries(noFacts.connectors.map((c) => [c.name, c.status]))).toMatchObject({ Shopify: "connected", Instagram: "disconnected", Klaviyo: "disconnected" });
+    expect(Object.fromEntries(noFacts.connectors.map((c) => [c.name, c.status]))).toMatchObject({ Shopify: "connecting", Instagram: "disconnected", Klaviyo: "disconnected" });
     // demo keeps the prototype's defaults
     expect(Object.fromEntries(buildUncContext(initialState).connectors.map((c) => [c.name, c.status]))).toMatchObject({ Instagram: "ok", Klaviyo: "expired" });
   });

@@ -9,6 +9,19 @@ export const outboundDrafts: Skill = {
   maxItems: 3,
   purpose: "First-touch outreach emails for right-fit leads, personalised from the lead brief — never sent by Unc",
   inputs: ["the account's latest lead brief artifact (from Lead research & scoring)", "right-fit HubSpot leads (when connected)", "past sent threads (Gmail, when connected)"],
+  file: {
+    goal: "Three first-touch emails the founder sends — Unc never hits send",
+    owns: ["the outreach_draft artifact"],
+    reads: ["the latest lead brief", "HubSpot leads when connected", "Gmail threads when connected"],
+    decides: ["which three leads/segments to write", "the opening line from the brief"],
+    writes: ["an outreach_draft artifact"],
+    never: ["send the email", "invent a personal detail", "write without a lead brief"],
+    apply: "Drafts until you keep the same opener two weeks running. Sending stays yours.",
+    examples: [
+      { when: "lead brief exists, no CRM", does: "three segment drafts with [first name] [company] placeholders" },
+      { when: "three HubSpot leads scored right-fit", does: "one draft each, first name and company from the row" },
+    ],
+  },
   minimum: minimum("a lead brief from Lead research & scoring first; HubSpot leads give me real names to write to", [], ["lead_brief"], ["hubspot", "gmail"]),
   domain: "sales",
   prompt: `CRAFT — outreach drafts:

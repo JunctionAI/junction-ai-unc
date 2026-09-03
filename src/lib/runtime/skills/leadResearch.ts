@@ -10,6 +10,19 @@ export const leadResearch: Skill = {
   maxItems: 8,
   purpose: "An ICP definition, a scoring rubric and a research brief template for the leads the founder wants — no scraping of people",
   inputs: ["the founder's description of the target buyer (asked for when missing)", "new HubSpot leads (when connected)", "site profile (what is sold, to whom)"],
+  file: {
+    goal: "An ICP, a scoring rubric and a research brief — never a scraped people list",
+    owns: ["the lead_brief artifact", "the scoring criteria"],
+    reads: ["founder target description", "HubSpot leads when connected", "site profile"],
+    decides: ["how to score a fit", "which fields the research template asks for"],
+    writes: ["a lead_brief artifact"],
+    never: ["scrape people", "invent job titles or companies", "email anyone"],
+    apply: "Drafts. HubSpot rows let me score real leads; I still don't outreach from this skill.",
+    examples: [
+      { when: "founder describes 'gym owners in Auckland'", does: "ICP + rubric + a blank research template, no names" },
+      { when: "HubSpot has 8 new leads", does: "score those rows against the rubric, names from the CRM only" },
+    ],
+  },
   minimum: minimum("a description of who you want to reach (I ask for it); HubSpot leads let me score real rows", [], ["target_description"], ["hubspot"]),
   domain: "sales",
   prompt: `CRAFT — lead research brief:

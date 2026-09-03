@@ -29,9 +29,9 @@ describe("availability", () => {
     // D05-W02: the checkouts read is required (and the minimum says shopify); Klaviyo is optional
     expect(requiredPlatforms(CATALOG_SPEC_BY_ID["D05-W02"])).toEqual(["shopify"]);
     expect(helpfulPlatforms(CATALOG_SPEC_BY_ID["D05-W02"])).toEqual(["klaviyo"]);
-    // a wave-2 research chain with plain reads: every card read is required, nothing merely helps
-    expect(requiredPlatforms(CATALOG_SPEC_BY_ID["D03-W03"])).toEqual(["shopify"]);
-    expect(helpfulPlatforms(CATALOG_SPEC_BY_ID["D03-W03"])).toEqual([]);
+    // AI search visibility now drafts from buyer prompts + the site: shopify is helpful, not a gate
+    expect(requiredPlatforms(CATALOG_SPEC_BY_ID["D03-W03"])).toEqual([]);
+    expect(helpfulPlatforms(CATALOG_SPEC_BY_ID["D03-W03"])).toEqual(["shopify"]);
   });
 
   it("approval_gated for a connected mutator, needs_connector for a missing REQUIRED platform, ready / draft_only otherwise; optional reads surface as 'Better with …'", () => {
@@ -52,8 +52,9 @@ describe("availability", () => {
     expect(betterWithCopy([])).toBeNull();
     // no hint under a block — a blocked routine never reads as doubly blocked
     expect(betterWith(CATALOG_SPEC_BY_ID["D05-W02"], [])).toEqual([]);
-    expect(routineAvailability(CATALOG_SPEC_BY_ID["D03-W03"], [])).toBe("needs_connector:shopify");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D03-W03"], [])).toBe("draft_only");
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D03-W03"], ["shopify"])).toBe("draft_only");
+    expect(betterWith(CATALOG_SPEC_BY_ID["D03-W03"], [])).toEqual(["shopify"]);
     expect(availabilityCopy("needs_connector:klaviyo")).toBe("needs Klaviyo connected");
     expect(availabilityCopy("draft_only")).toBe("draft-only for now");
     expect(availabilityCopy("ready")).toBe("drafts only — nothing goes out without you");
@@ -79,8 +80,8 @@ describe("routinesStateForAccount", () => {
     const db = new FakeSupabase();
     db.seed("accounts", [{ id: ACCT, name: "Example", currency: "NZD" }]);
     db.seed("connectors", [
-      { account_id: ACCT, platform: "shopify", status: "connected" },
-      { account_id: ACCT, platform: "klaviyo", status: "connected" },
+      { account_id: ACCT, platform: "shopify", status: "connected", last_sync_result: "ok" },
+      { account_id: ACCT, platform: "klaviyo", status: "connected", last_sync_result: "ok" },
       { account_id: ACCT, platform: "meta_ads", status: "needs_reconnect" },
     ]);
     db.seed("plans", [
@@ -110,6 +111,15 @@ describe("routinesStateForAccount", () => {
     expect(demo.connected).toEqual([]);
     expect(demo.recommendedFirst).toEqual([]);
     expect(demo.planChannel).toBeNull();
+  });
+
+  it("a connected row with no real sync does not unlock routines", async () => {
+    const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT, name: "Example", currency: "NZD" }]);
+    db.seed("connectors", [{ account_id: ACCT, platform: "shopify", status: "connected", last_sync_result: null }]);
+    const listing = await routinesStateForAccount({ store: new MemoryStore(), db }, ACCT);
+    expect(listing.connected).toEqual([]);
+    expect(listing.routines.find((r) => r.routineId === "D05-W02")!.availability).toBe("needs_connector:shopify");
   });
 
   it("carries the last run and the last draft per routine, and the trail for one", async () => {
@@ -150,9 +160,9 @@ describe("routinesStateForAccount — business type", () => {
     const db = new FakeSupabase();
     db.seed("accounts", [{ id: ACCT2, name: "Studio North", currency: "NZD" }]);
     db.seed("connectors", [
-      { account_id: ACCT2, platform: "shopify", status: "connected" },
-      { account_id: ACCT2, platform: "klaviyo", status: "connected" },
-      { account_id: ACCT2, platform: "hubspot", status: "connected" },
+      { account_id: ACCT2, platform: "shopify", status: "connected", last_sync_result: "ok" },
+      { account_id: ACCT2, platform: "klaviyo", status: "connected", last_sync_result: "ok" },
+      { account_id: ACCT2, platform: "hubspot", status: "connected", last_sync_result: "ok" },
     ]);
     db.seed("plans", [{ account_id: ACCT2, title: "Retention", phases: [{ n: "1", routines: ["Abandoned cart recovery", "Winback campaign prep", "Founder content engine"] }], created_at: "2026-09-01T00:00:00.000Z" }]);
     db.seed("business_profiles", [{ account_id: ACCT2, scan_status: "done", profile: { name: "Studio North", businessType: "services", sells: "services", storefront: "none" } }]);

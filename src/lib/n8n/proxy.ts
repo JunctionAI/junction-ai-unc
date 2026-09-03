@@ -193,6 +193,7 @@ function skillOrStub(routineId: string): Skill {
     maxItems: 10,
     purpose: name,
     inputs: [],
+    file: { goal: name, owns: [], reads: [], decides: [], writes: ["an artifact from the n8n workflow"], never: ["execute a mutation"], apply: "Drafts until we graduate this routine.", examples: [] },
     minimum: { summary: "", platforms: [], inputs: [], helpful: [] },
     domain: "strategy",
     prompt: "",

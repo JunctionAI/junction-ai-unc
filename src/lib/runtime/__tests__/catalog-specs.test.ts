@@ -120,7 +120,7 @@ describe("catalog specs", () => {
       expect(executor.calls).toHaveLength(0);
       const gate = res.receipts.find((r) => r.description.startsWith("Would ask"));
       expect(gate, `${spec.id} reached its gate`).toBeDefined();
-      if (spec.wave === 1) {
+      if (spec.nodes.some((n) => n.kind === "produce")) {
         expect(res.artifact, `${spec.id} produced an artifact`).toBeDefined();
         expect(res.receipts.some((r) => r.kind === "draft" && r.payload.artifactId === res.artifact!.id), `${spec.id} draft receipt links the artifact`).toBe(true);
         expect((gate!.payload.approvalPreview as { artifactId?: string }).artifactId).toBe(res.artifact!.id);

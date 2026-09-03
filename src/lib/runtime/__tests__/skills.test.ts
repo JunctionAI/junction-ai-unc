@@ -1,12 +1,12 @@
-/* Each wave-1 skill's `minimum` on fixture accounts: a services business with only a site
-   profile gets founder content, questions, keywords, gaps and a calendar; the sales skills ask
-   for what they honestly need; the cart routine is store-only. */
+/* Skill cards: every catalog routine has one. Wave-1 (and the other draft-only
+   routines) produce from a site profile when they can, or ask; store-only and
+   mutating skills fail closed without their required read. */
 
 import { describe, expect, it } from "vitest";
 import { SKILL_BY_ID, SKILLS } from "../skills";
 import type { SkillContext } from "../skills/types";
 import type { ReadResult } from "../types";
-import { CATALOG_SPEC_BY_ID, WAVE_1_IDS } from "../catalog-specs";
+import { CATALOG_SPECS, CATALOG_SPEC_BY_ID, WAVE_1_IDS } from "../catalog-specs";
 
 const SERVICES_PROFILE = { name: "Harbour Physio", oneLiner: "Sports physiotherapy in Auckland", category: "Health services", products: ["ACC physio", "Running assessments"], audience: "Runners and gym-goers", voice: { tone: "plain, warm", phrases: ["get you back out there"] }, market: { region: "Auckland, NZ", competitorsMentioned: [] }, signals: ["FAQ: do I need a referral?", "Open Saturdays"], confidence: "medium" as const, sources: ["https://harbourphysio.test"] };
 
@@ -17,8 +17,9 @@ function sctx(over: Partial<SkillContext> = {}): SkillContext {
 }
 
 describe("skill cards", () => {
-  it("one per wave-1 routine, each stating its kind, prompt, output shape and minimum", () => {
-    expect(SKILLS.map((s) => s.id).sort()).toEqual([...WAVE_1_IDS].sort());
+  it("one per catalog routine, each stating its kind, prompt, output shape, minimum and skill file", () => {
+    expect(SKILLS.map((s) => s.id).sort()).toEqual(CATALOG_SPECS.map((s) => s.id).sort());
+    expect(WAVE_1_IDS.every((id) => SKILL_BY_ID[id])).toBe(true);
     for (const s of SKILLS) {
       expect(s.routineId).toBe(s.id);
       expect(s.prompt.length).toBeGreaterThan(200);
@@ -26,6 +27,12 @@ describe("skill cards", () => {
       expect(s.minimum.summary.length).toBeGreaterThan(10);
       expect(s.maxItems).toBeGreaterThan(0);
       expect(CATALOG_SPEC_BY_ID[s.id].minimum).toEqual(s.minimum);
+      const f = s.file;
+      expect(f.goal.length, s.id).toBeGreaterThan(10);
+      for (const k of ["owns", "reads", "decides", "writes", "never"] as const) expect(f[k].length, `${s.id}.${k}`).toBeGreaterThan(0);
+      expect(f.apply.toLowerCase(), s.id).toMatch(/draft|ask|graduate|send|yours/);
+      expect(f.examples.length, s.id).toBeGreaterThan(0);
+      expect(f.never.some((n) => /invent|scrape|publish|send|join the call/i.test(n)), s.id).toBe(true);
     }
   });
 
@@ -61,10 +68,13 @@ describe("a services business with only a site profile (no connectors)", () => {
     expect(SKILL_BY_ID["D01-W03"].check(sctx({ reads: { tickets: read([{ subject: "Refund?" }]) } }))).toEqual({ ok: true, using: ["1 tickets"] });
   });
 
-  it("Keyword scan and Content gap produce hypotheses from the profile", () => {
+  it("Keyword scan, Content gap, viral hooks, test planner and AI visibility produce hypotheses from the profile", () => {
     expect(SKILL_BY_ID["D03-W01"].check(base).ok).toBe(true);
     expect(SKILL_BY_ID["D03-W02"].check(base).ok).toBe(true);
     expect(SKILL_BY_ID["D03-W01"].check(sctx({ reads: { gsc: read([{ query: "physio auckland" }]) } })).ok).toBe(true);
+    expect(SKILL_BY_ID["D01-W02"].check(base).ok).toBe(true);
+    expect(SKILL_BY_ID["D02-W06"].check(base).ok).toBe(true);
+    expect(SKILL_BY_ID["D03-W03"].check(sctx({ profile: SERVICES_PROFILE, vars: { buyerPrompts: ["best physio auckland"] } })).ok).toBe(true);
   });
 
   it("Campaign calendar produces from the profile (goal + plan enrich it)", () => {

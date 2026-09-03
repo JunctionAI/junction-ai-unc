@@ -9,6 +9,19 @@ export const socialRepurposing: Skill = {
   maxItems: 5,
   purpose: "The best recent post repurposed into five formats: reel script, carousel, LinkedIn post, email blurb, X thread",
   inputs: ["recent Instagram posts with plays/saves (when connected)", "LinkedIn posts (when connected)", "YouTube videos + transcripts (when connected)", "a post the founder pastes"],
+  file: {
+    goal: "One strong post turned into five formats this week",
+    owns: ["the five-format post_set", "which source post was strongest"],
+    reads: ["Instagram / LinkedIn / YouTube when connected", "a pasted source post"],
+    decides: ["which source post to lift", "how each format carries the same claim"],
+    writes: ["a post_set of five items"],
+    never: ["invent plays or saves", "publish", "change the claim the source post made"],
+    apply: "Drafts. I keep asking which format you actually used until we agree.",
+    examples: [
+      { when: "founder pastes a Saturday-clinic post", does: "reel script, carousel, LinkedIn, email blurb, X thread from that copy" },
+      { when: "Instagram connected with saves", does: "pick the highest-save post and say so in the body" },
+    ],
+  },
   minimum: minimum("at least one recent post — from a connected social account or pasted by you", [], ["source_post"], ["instagram", "linkedin", "youtube"]),
   domain: "content",
   prompt: `CRAFT — repurposing:

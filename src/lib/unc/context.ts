@@ -12,6 +12,7 @@
               strategy rationale is built from the founder's own budget / hours / strengths, with
               no invented date or evidence gate. */
 
+import { connectorHasRealSync } from "@/lib/connectors/sync";
 import { ALL_SYSTEMS, CATEGORIES, CONNECTOR_DEFS } from "@/lib/platform/catalog";
 import { AP_DATA, AP_WHY_TEXTS, COMPLETED_DEFS, LEVER_DEFS, SIGNAL_DEFS, postureDefs } from "@/lib/platform/derive";
 import { DEMO_TODAY, goalMath } from "@/lib/platform/goal";
@@ -96,7 +97,12 @@ export function buildUncContext(S: PlatformState, opts: ContextOptions = {}) {
     ? (() => {
         const byName = new Map((facts?.connectors ?? []).map((c) => [c.name, c]));
         const fromState: Record<string, string> = { ok: "connected", off: "disconnected", expired: "needs_reconnect" };
-        return CONNECTOR_DEFS.map((d) => ({ name: d.name, status: byName.get(d.name)?.status ?? (S.connState[d.name] ? fromState[S.connState[d.name]] : "disconnected"), reads: d.note }));
+        return CONNECTOR_DEFS.map((d) => {
+          const row = byName.get(d.name);
+          const raw = row?.status ?? (S.connState[d.name] ? fromState[S.connState[d.name]] : "disconnected");
+          const status = connectorHasRealSync(raw, row?.lastSyncResult) ? "connected" : raw === "connected" ? "connecting" : raw;
+          return { name: d.name, status, reads: d.note };
+        });
       })()
     : CONNECTOR_DEFS.map((d) => ({ name: d.name, status: S.connState[d.name] || d.st, reads: d.note }));
 
@@ -173,7 +179,7 @@ export type UncContext = ReturnType<typeof buildUncContext>;
    never as raw JSON. Anything the client sent under these keys is dropped first — the brain is
    server truth. */
 
-export const BRAIN_CONTEXT_KEYS = ["memories", "profile", "playbooks"] as const;
+export const BRAIN_CONTEXT_KEYS = ["memories", "profile", "playbooks", "certifiedMetrics"] as const;
 
 export interface BrainContext {
   /** "[kind] text" lines from recallForContext — the founder's stated truth, compact. */
@@ -182,6 +188,8 @@ export interface BrainContext {
   profile: string;
   /** The rendered JUNCTION PLAYBOOK NOTES block (prompt.ts recallPlaybookNotes); "" when none apply. */
   playbooks?: string;
+  /** renderCertifiedMetrics output (catalog snapshots). Client-sent values are dropped. */
+  certifiedMetrics?: string;
 }
 
 export type UncContextWithBrain = UncContext & Partial<BrainContext>;
@@ -192,6 +200,7 @@ export function attachBrain(context: unknown, brain: BrainContext | null): Recor
   if (!brain) return base;
   const out: Record<string, unknown> = { ...base, memories: brain.memories.filter((m) => typeof m === "string" && m.trim()), profile: brain.profile ?? "" };
   if (brain.playbooks && brain.playbooks.trim()) out.playbooks = brain.playbooks;
+  if (brain.certifiedMetrics && brain.certifiedMetrics.trim()) out.certifiedMetrics = brain.certifiedMetrics;
   return out;
 }
 
@@ -201,7 +210,11 @@ export function splitBrain(context: unknown): { context: Record<string, unknown>
   const memories = Array.isArray(base.memories) ? base.memories.filter((m): m is string => typeof m === "string" && !!m.trim()) : [];
   const profile = typeof base.profile === "string" ? base.profile : "";
   const playbooks = typeof base.playbooks === "string" ? base.playbooks.trim() : "";
+  const certifiedMetrics = typeof base.certifiedMetrics === "string" ? base.certifiedMetrics.trim() : "";
   for (const k of BRAIN_CONTEXT_KEYS) delete base[k];
-  if (!memories.length && !profile.trim() && !playbooks) return { context: base, brain: null };
-  return { context: base, brain: playbooks ? { memories, profile, playbooks } : { memories, profile } };
+  if (!memories.length && !profile.trim() && !playbooks && !certifiedMetrics) return { context: base, brain: null };
+  const brain: BrainContext = { memories, profile };
+  if (playbooks) brain.playbooks = playbooks;
+  if (certifiedMetrics) brain.certifiedMetrics = certifiedMetrics;
+  return { context: base, brain };
 }

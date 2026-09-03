@@ -28,7 +28,7 @@ Every wave-1 spec also carries `minimum` (from its skill) so the UI can say **"N
 | `src/lib/runtime/types.ts` | `ArtifactKind`, `Artifact`, `ArtifactDraft`, `ProduceNeed`, `ProduceResult`, `ProduceNode`, `N8nNode`, `Producer`, `N8nBridge`, `N8nWorkflow`, `SpecMinimum`; `RunStatus` + `waiting_input`; `ReadNode.optional`; `RunContext.inputs / artifact`; `RunResult.artifact / needs` |
 | `src/lib/runtime/engine.ts` | the produce / n8n steps, optional reads, `waiting_input`, `resumeRunWithInput`, `completeExternalArtifact`, `describeNeed(s)`, `cleanAnswers` |
 | `src/lib/runtime/validate.ts` | node order `trigger→read→check→decide→produce|n8n→gate→execute→receipt` |
-| `src/lib/runtime/skills/*.ts` | the ten wave-1 skill cards + `types.ts` (SkillContext, shared checks) + `index.ts` (`SKILL_BY_ID`) |
+| `src/lib/runtime/skills/*.ts` | one skill card per catalog routine (35) + `types.ts` (SkillContext, shared checks) + `index.ts` (`SKILL_BY_ID`) |
 | `src/lib/runtime/catalog-specs.ts` | wave-1 chains rewritten around `produce`; `optRead`, `produce` builders; `spec.minimum` |
 | `src/lib/runtime/store/{interface,memory,supabase}.ts` | `putArtifact / getArtifact / updateArtifact / listArtifacts`, `findN8nWorkflow / putN8nWorkflow`, `RunSnapshot.needs / awaiting` |
 | `src/lib/artifacts/validate.ts` | `parseArtifactReply` / `validateArtifactObject`: kind, title, body, ≤ maxItems, banned phrases, **numbers only from the evidence** |
@@ -61,6 +61,20 @@ Every wave-1 spec also carries `minimum` (from its skill) so the UI can say **"N
 | D04-W03 Meeting brief builder | meeting_brief ≤5 | today's meetings from a calendar / HubSpot, or the founder says who | HubSpot, Gmail | `meeting` (or connect HubSpot) |
 | D05-W02 Abandoned cart recovery | email ×3 | **a Shopify store** with abandoned checkouts this week (store only) | Klaviyo | — (not applicable without a store) |
 | D05-W07 Campaign calendar prep | calendar ×6 | the goal + plan + what the business sells | Shopify, Klaviyo | `about_the_business` |
+| D01-W02 Viral hook mining | hook_list ≤8 | site profile / niche note (hypotheses until TikTok/IG rows) | TikTok, Instagram | `about_the_business` |
+| D01-W04 UGC creator pipeline | outreach_draft ≤5 | who you want (niche, follower band, region) — **no scraping** | Instagram, Shopify | `creator_brief` |
+| D01-W06 Winning elements | generic ≤8 | site profile (library schema); Meta ads make an entry a winner | Meta Ads, Instagram | `about_the_business` |
+| D01-W07 Trend watch | post_set ×3 | rising TikTok trends, or the niche for hypothetical angles | TikTok | `about_the_business` |
+| D01-W08 Content performance | generic ≤4 | recent posts, a pasted post, or the profile (what I'd measure) | Instagram, LinkedIn, GA4 | `source_post` |
+| D02-W05 Creator whitelisting | outreach_draft ≤3 | tagged creator posts, or a pasted URL/handle | Instagram, Meta Ads | `creator_post` |
+| D02-W06 Creative test planner | generic ≤8 | site profile (hypothesis matrix); Meta ads make cells measured | Meta Ads, Instagram | `about_the_business` |
+| D03-W03 AI search visibility | content_gap ≤8 | buyer prompts + what you sell; LLM rows make it measured | Shopify | `buyer_prompts` |
+| D03-W05 SERP position watch | generic ≤6 | **Search Console** ranking data | — | — |
+| D03-W06 Competitor gap watch | content_gap ≤8 | site profile + competitor domains | Search Console | `competitors` |
+| D04-W04 Follow-up cadence | outreach_draft ≤5 | HubSpot deals gone quiet, or a pasted list — never sends | HubSpot, Gmail | `stale_deals` |
+| D05-W04 Winback campaign prep | email ×3 | **a Shopify store** with lapsed customers (store only) | Klaviyo | `winback_note` |
+
+The remaining 13 routines mutate (budget moves, flow edits, CRM writes). Each has a skill file for the inspector; the chain is still check → decide → gate → execute. Dry-run previews a Would-card. Live execute stays founder-gated (`LIVE_MODE_ENABLED = false`).
 
 The `check` for each lives in its skill file and is unit-tested on fixture accounts
 (`src/lib/runtime/__tests__/skills.test.ts`).
@@ -99,7 +113,7 @@ The `check` for each lives in its skill file and is unit-tested on fixture accou
   `betterWith` feed the "Better with Gorgias, LinkedIn connected" hint on the row and the detail.
   D01-W01 is `ready` with nothing connected.
 - Calendar has no connector yet; Meeting brief asks for HubSpot or the founder's note until it does.
-- Wave-2 routines keep their check → decide chains (they mutate; the produce step is not theirs yet).
+- Wave-2 **mutating** routines keep their check → decide chains (they mutate; produce is the inspector file until n8n/apply). Wave-2 **draft-only** routines now produce like wave 1.
 
 ## Running the proof
 

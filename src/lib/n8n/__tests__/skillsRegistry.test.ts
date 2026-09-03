@@ -62,11 +62,11 @@ describe("registry (lib)", () => {
     expect(skillSourceFor(rows, ACCT, "D01-W01")).toBe("n8n"); // paused own row → the global one serves
     expect(skillSourceFor(rows, ACCT, "D01-W03")).toBe("n8n");
     expect(skillSourceFor(rows, ACCT, "D01-W05")).toBe("builtin");
-    expect(skillSourceFor(rows, ACCT, "D02-W04")).toBe("none");
+    expect(skillSourceFor(rows, ACCT, "D02-W04")).toBe("builtin");
     const all = skillRows(rows, ACCT);
     expect(all).toHaveLength(35);
     expect(all.find((r) => r.routineId === "D01-W01")).toMatchObject({ source: "n8n", builtIn: true, produces: true, workflow: { id: "g", global: true }, workflows: [{ id: "g" }, { id: "o" }] });
-    expect(all.find((r) => r.routineId === "D02-W04")).toMatchObject({ source: "none", builtIn: false, produces: false, workflow: null, workflows: [] });
+    expect(all.find((r) => r.routineId === "D02-W04")).toMatchObject({ source: "builtin", builtIn: true, produces: false, workflow: null, workflows: [] });
     expect(isAdminEmail("Tom@getjunction.ai", { UNC_ADMIN_EMAILS: "tom@getjunction.ai" })).toBe(true);
     expect(isAdminEmail("founder@example.test", { UNC_ADMIN_EMAILS: "tom@getjunction.ai" })).toBe(false);
     expect(isAdminEmail(null)).toBe(false);

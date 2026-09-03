@@ -9,6 +9,18 @@ export const abandonedCart: Skill = {
   maxItems: 3,
   purpose: "The abandoned-cart recovery emails, rewritten from what people actually leave in their carts",
   inputs: ["abandoned checkouts (Shopify — required)", "the current Abandoned Cart flow and its numbers (Klaviyo, when connected)", "site profile (voice, products)"],
+  file: {
+    goal: "Three recovery emails grounded in this week's abandoned carts",
+    owns: ["the three-message email artifact"],
+    reads: ["Shopify abandoned checkouts (required)", "Klaviyo flow numbers when connected", "site voice"],
+    decides: ["the angle of each delay (1h / 24h / 72h)", "which abandoned products to name"],
+    writes: ["an email artifact of three messages"],
+    never: ["invent a discount code", "send the flow", "run for a non-store"],
+    apply: "Drafts. Klaviyo send stays yours until we graduate this routine.",
+    examples: [
+      { when: "12 checkouts left Marine Collagen", does: "name that product in the 1h reminder; 24h handles shipping; 72h a true reason, no invented % off" },
+    ],
+  },
   minimum: minimum("a Shopify store with abandoned checkouts this week — this routine is for stores", ["shopify"], [], ["klaviyo"]),
   domain: "email",
   prompt: `CRAFT — cart recovery emails:
