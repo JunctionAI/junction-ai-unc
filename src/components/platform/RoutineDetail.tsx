@@ -9,6 +9,7 @@ import { readPlatforms, requiredPlatforms } from "@/lib/runtime/availability";
 import type { Node } from "@/lib/runtime/types";
 import RunNowPanel, { type RunNowProps } from "./RunNowPanel";
 import DraftCard, { type ArtifactView } from "./DraftCard";
+import RoutineInspector, { type ParamsView } from "./RoutineInspector";
 import { agoLabel, runStatusLabel, type RoutinesLive, type RoutineStateView } from "./useRoutinesState";
 
 const contractCard: React.CSSProperties = { background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "17px 19px" };
@@ -78,7 +79,7 @@ export function specNodes(routineId: string): { tag: string; name: string; desc:
   });
 }
 
-export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals; run: Omit<RunNowProps, "routineId">; live?: RoutinesLive | null }) {
+export default function RoutineDetail({ V, run, live = null, inspectorInitial }: { V: PlatformVals; run: Omit<RunNowProps, "routineId">; live?: RoutinesLive | null; /** Accounts mode, server render / tests: the params view in hand (undefined = fetch). */ inspectorInitial?: ParamsView | null }) {
   const routineId = V.selId ?? "";
   const accounts = !!live;
   const mine = live?.data?.routines.find((r) => r.routineId === routineId) ?? null;
@@ -239,6 +240,8 @@ export default function RoutineDetail({ V, run, live = null }: { V: PlatformVals
                 ))}
           </div>
         </div>
+        {/* Accounts mode: the one-screen "Adjust this routine" panel (industry presets + optional steps → routine_params + a draft version). */}
+        {accounts && routineId && <RoutineInspector routineId={routineId} currency={run.account.currency} initial={inspectorInitial} onSaved={refresh} />}
         {!accounts && (
           <div style={{ marginTop: 12, background: "white", border: "1px solid var(--card-border)", borderRadius: 14, padding: "18px 22px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

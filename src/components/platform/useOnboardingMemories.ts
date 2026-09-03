@@ -3,7 +3,9 @@
 /* Client Brain — when the founder clicks "Agree the plan" (derive.ts obFinish flips
    `onboarded`), post the onboarding answers to /api/unc/onboarding so they become memories.
    Accounts mode only, and only for a transition observed while already in accounts mode —
-   hydrating an already-onboarded account never fires it. The route dedupes anyway. */
+   hydrating an already-onboarded account never fires it. The route dedupes anyway. The same
+   moment fires POST /api/unc/niche-brief with the scan's profile (the market read that sets the
+   routine presets — src/lib/brain/nicheBrief.ts). */
 
 import { useEffect, useRef } from "react";
 import type { OnboardingAnswers } from "@/lib/brain/onboarding";
@@ -51,6 +53,13 @@ export function useOnboardingMemories(S: PlatformState, enabled: boolean): void 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answers: onboardingAnswersFromState(stateRef.current) }),
+    }).catch(() => {});
+    // The niche brief ("How I read your market", docs/PRESETS.md): one model call over the scan's profile;
+    // its band steers every routine's industry preset. Fire-and-forget, never blocking the plan.
+    fetch("/api/unc/niche-brief", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile: stateRef.current.scan.profile }),
     }).catch(() => {});
   }, [S.onboarded, enabled]);
 }
