@@ -30,6 +30,7 @@ import type { DbClient } from "@/lib/db/types";
 import { BUDGET_EXHAUSTED_LINE, isBudgetExceeded } from "@/lib/llm/budget";
 import { complete, resolveModel } from "@/lib/llm/router";
 import type { LlmMessage } from "@/lib/llm/types";
+import { getMetrics, renderCertifiedMetrics } from "@/lib/metrics/catalog";
 import { enforceConcision } from "@/lib/unc/concision";
 import { attachBrain, buildUncContext, type BrainContext } from "@/lib/unc/context";
 import { buildUncSystemPrompt, recallPlaybookNotes, type UncSurface } from "@/lib/unc/prompt";
@@ -63,6 +64,17 @@ export function windowHistory(all: LlmMessage[]): LlmMessage[] | null {
   return recent;
 }
 
+/** Certified catalog snapshots for the prompt. Never throws; null in demo (no db). An empty
+    catalog still renders the honest "no metrics on file" line so a missing key cannot be 0. */
+export async function certifiedMetricsFor(account: RespondAccount | null): Promise<string | null> {
+  if (!account?.db) return null;
+  try {
+    return renderCertifiedMetrics(await getMetrics(account.db, account.accountId));
+  } catch {
+    return renderCertifiedMetrics([]);
+  }
+}
+
 /** What Unc remembers, for the prompt. Never throws; null when there is no account (demo). */
 export async function brainFor(account: RespondAccount | null, query: string): Promise<BrainContext | null> {
   if (!account?.db) return null;
@@ -84,8 +96,15 @@ export async function respondAsUnc(input: RespondInput): Promise<RespondResult> 
     const question = messages[messages.length - 1].content;
     // Playbook notes ride beside the brain: ≤ 3 of Junction's method cards for this question,
     // env-gated (no database → none; no embeddings → keyword recall). Never a source of numbers.
-    const [brain, notes] = await Promise.all([brainFor(account, question), recallPlaybookNotes(question, input.context, account?.db ? { db: account.db } : {})]);
-    const withNotes: BrainContext | null = notes ? { memories: brain?.memories ?? [], profile: brain?.profile ?? "", playbooks: notes } : brain;
+    const [brain, notes, certified] = await Promise.all([
+      brainFor(account, question),
+      recallPlaybookNotes(question, input.context, account?.db ? { db: account.db } : {}),
+      certifiedMetricsFor(account),
+    ]);
+    const withNotes: BrainContext | null =
+      notes || certified || brain
+        ? { memories: brain?.memories ?? [], profile: brain?.profile ?? "", ...(notes ? { playbooks: notes } : {}), ...(certified ? { certifiedMetrics: certified } : {}) }
+        : null;
     const system = buildUncSystemPrompt(attachBrain(input.context, withNotes), surface);
     const llmCtx = { accountId: account?.accountId ?? null, db: account?.db };
     const response = await complete("chat", { system, messages, maxTokens: MAX_REPLY_TOKENS, effort: "low" }, llmCtx);

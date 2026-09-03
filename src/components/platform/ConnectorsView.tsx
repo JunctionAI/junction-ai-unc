@@ -8,6 +8,7 @@ import { isDbConfigured } from "@/lib/db/client";
 import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
 import type { PlatformVals } from "@/lib/platform/derive";
 import { knownPlatformSlugs, SUGGESTION_COPY } from "@/lib/setup/channels";
+import { connectorHasRealSync } from "@/lib/connectors/sync";
 import { isReading, useConnectorsState, type ConnectorsStateListing, type ConnectorStateView } from "./useConnectorsState";
 
 /* Connect / Reconnect: in demo mode (no Supabase configured) the button does exactly what the
@@ -65,7 +66,13 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   const googleOn = !!live.data?.google.configured;
   const googleChildren = new Set(live.data?.google.children ?? []);
   const googleCards = V.connectors.filter((c) => googleChildren.has(CONNECTOR_PLATFORMS[c.name] ?? ""));
-  const googleAllOk = googleCards.length > 0 && googleCards.every((c) => c.ok);
+  const cardSynced = (name: string, fallbackOk: boolean): boolean => {
+    if (!live.active) return fallbackOk;
+    const row = liveBy[name];
+    if (!row) return false;
+    return connectorHasRealSync(row.status, row.lastSyncResult);
+  };
+  const googleAllOk = googleCards.length > 0 && googleCards.every((c) => cardSynced(c.name, c.ok));
   const googleAnyExpired = googleCards.some((c) => c.expired);
 
   // Accounts mode: the founder's own platforms (known_platforms) and what the scan spotted carry a quiet chip — the rest are just the library.
@@ -429,7 +436,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                   </button>
                 )}
               </div>
-              {cn.ok && (
+              {cardSynced(cn.name, cn.ok) && (
                 <span style={{ flex: "none", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--cyan-text)", fontWeight: 600 }}>
                   {pickers[cn.name] && pickers[cn.name].externalRef === null ? (
                     <span style={{ background: "var(--cyan-wash)", borderRadius: 999, padding: "4px 11px" }}>{CONNECT_COPY.chooseLabel}</span>
@@ -473,6 +480,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
               )}
               {cn.off &&
                 !viaGoogle &&
+                !(lc && isReading(lc)) &&
                 (tokenPath && !oauthOn ? (
                   <button data-testid="token-primary" onClick={() => openToken(cn.name)} disabled={busy === cn.name} className="hov-border-cyanlink" style={{ flex: "none", border: "1px solid var(--card-border-2)", background: "white", color: "var(--ink)", borderRadius: 999, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                     {MANUAL_COPY.link}

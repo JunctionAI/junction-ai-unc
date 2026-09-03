@@ -26,7 +26,7 @@ const acctRun = { accountId: ACCT, account: { currency: "NZD", budgetMonthly: 30
 async function listing(): Promise<RoutinesStateListing> {
   const db = new FakeSupabase();
   db.seed("accounts", [{ id: ACCT, name: "Example", currency: "NZD" }]);
-  db.seed("connectors", [{ account_id: ACCT, platform: "shopify", status: "connected" }]);
+  db.seed("connectors", [{ account_id: ACCT, platform: "shopify", status: "connected", last_sync_result: "ok" }]);
   db.seed("plans", [{ account_id: ACCT, title: "Brand-led organic", phases: [{ n: "1", routines: ["Abandoned cart recovery", "Campaign calendar prep"] }] }]);
   const store = new MemoryStore();
   await store.putRoutineState({ accountId: ACCT, routineId: "D05-W07", enabled: true, version: 3, draftSpec: null, liveSpec: null, updatedAt: "2026-09-02T00:00:00.000Z" });
@@ -58,8 +58,9 @@ describe("RoutinesView — accounts mode reads the database, demo mode is the pr
     expect(html).toContain('data-testid="better-with"');
     expect(html).toContain(ROUTINES_COPY.betterWith("Klaviyo"));
     expect(html).not.toContain("v3 · needs Klaviyo connected");
-    // a wave-2 chain with plain (required) reads is still honestly blocked
-    expect(html).toContain("Winback campaign prep · v1 · needs Klaviyo connected");
+    // a mutating email chain still honestly blocked on Klaviyo; winback drafts once Shopify is in
+    expect(html).toContain("Welcome flow tuning · v1 · needs Klaviyo connected");
+    expect(html).toContain("Winback campaign prep · v1 · draft-only for now");
     expect(html).toContain("Last run");
     expect(html).toContain(ROUTINES_COPY.draftReady);
     // recommended-first (plan phase 1, wave 1) — off, chipped; Shopify (required) is in, Klaviyo only helps

@@ -85,8 +85,8 @@ Stance (how I disagree):
 Product guardrails (absolute):
 - You propose; the founder approves. Nothing publishes, sends, or spends without their explicit okay. If they ask you to just do something consequential, stage it as a proposal awaiting their approval instead.
 - Creative drafts obey the same truth rule. When you write hooks, headlines, ad or email copy, do not invent facts, statistics, history, awards, customer counts or quotes. Use only what the ACCOUNT CONTEXT, the founder's memories, or the scanned business profile support. If a strong hook needs a claim you can't source, write the placeholder [needs a real fact: what would make this true] instead of the claim, and say the founder can supply it.
-- Connector state governs everything behind it. If a platform's connector in the ACCOUNT CONTEXT is "needs_reconnect", "expired", "disconnected", "off" or "error", then every routine that reads or writes that platform is blocked — no results from it are current, nothing there has run or changed since it broke. Say that first, name the platform, and point the founder to Connectors → Reconnect before discussing that work. Never describe a blocked platform's activity as live.
-- No invented numbers. The ONLY numbers you may state are ones present in the ACCOUNT CONTEXT below or in the "What I know about this founder" section (numbers the founder stated to you count as context; you may do simple arithmetic on them and say so). If neither contains a number the founder asks for, say plainly that you don't have that number yet — never estimate or make one up.
+- Connector state governs everything behind it. If a platform's connector in the ACCOUNT CONTEXT is "needs_reconnect", "expired", "disconnected", "off", "error", "connecting" or anything other than "connected" after a real sync, then every routine that reads or writes that platform is blocked — no results from it are current, nothing there has run or changed since it broke. Say that first, name the platform, and point the founder to Connectors before discussing that work. Never describe a blocked platform's activity as live. Never call a connector "connected" if its status is "connecting".
+- No invented numbers. The ONLY numbers you may state are: (1) CERTIFIED METRICS below (catalog snapshots — a missing key is absent, never 0), (2) goal and resource numbers in ACCOUNT CONTEXT, (3) numbers the founder stated to you (you may do simple arithmetic on those and say so). Never cite an ad-hoc read, a playbook, or a guess. If a number is not in those three places, say you don't have it yet.
 - Playbooks are Junction's methods, not facts about the founder's business. When a JUNCTION PLAYBOOK NOTES section is present, draw on it to shape the recommendation — name the method in plain words — but never present a playbook line as something that happened in this account, and never take a number from it.
 - Ground answers in the account context: their goal, pace, plan phases, pending approvals, routines and connectors. Point to the specific routine or approval when relevant.
 - ${APPROVAL_ASK_RULE}
@@ -108,6 +108,10 @@ export const PLAYBOOK_RULE = `Playbook rule: these are Junction's methods, not f
 
 export const PLAYBOOK_NOTES_HEADER = "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):";
 
+export const CERTIFIED_METRICS_HEADER = "CERTIFIED METRICS (catalog snapshots via getMetric — the only live numbers I may cite besides goal/resources and what the founder stated). A missing key is not 0:";
+
+export const CERTIFIED_METRICS_RULE = `Certified-metrics rule: these are locked catalog snapshots. Quote a line only if it is listed. Never treat a missing key as 0. Never mix in a number from ACCOUNT CONTEXT signals, playbooks, or an ad-hoc platform read.`;
+
 export function renderMemorySection(memories: string[]): string {
   if (!memories.length) return "";
   return `WHAT I KNOW ABOUT THIS FOUNDER (from what they have told me and decided — their truth):\n${memories.map((m) => `- ${m}`).join("\n")}\n\n${MEMORY_RULE}`;
@@ -124,8 +128,13 @@ export function renderPlaybookSection(notes: string | undefined): string {
   return n ? `${n}\n\n${PLAYBOOK_RULE}` : "";
 }
 
-/** `context` may carry `memories` (string lines), `profile` (text) and `playbooks` (the rendered
-    notes) from attachBrain — they are rendered as their own sections, above the JSON account state. */
+export function renderCertifiedMetricsSection(block: string | undefined): string {
+  const n = (block ?? "").trim();
+  return n ? `${CERTIFIED_METRICS_HEADER}\n${n}\n\n${CERTIFIED_METRICS_RULE}` : "";
+}
+
+/** `context` may carry `memories` (string lines), `profile` (text), `playbooks` and `certifiedMetrics`
+    from attachBrain — they are rendered as their own sections, above the JSON account state. */
 export function buildUncSystemPrompt(context: unknown, surface: UncSurface): string {
   const note = SURFACE_NOTES[surface] ?? SURFACE_NOTES.corner;
   const { context: base, brain } = splitBrain(context);
@@ -134,11 +143,13 @@ export function buildUncSystemPrompt(context: unknown, surface: UncSurface): str
     const mem = renderMemorySection(brain.memories);
     const prof = renderProfileSection(brain.profile);
     const play = renderPlaybookSection(brain.playbooks);
+    const metrics = renderCertifiedMetricsSection(brain.certifiedMetrics);
     if (mem) sections.push(mem);
     if (prof) sections.push(prof);
     if (play) sections.push(play);
+    if (metrics) sections.push(metrics);
   }
-  sections.push(`ACCOUNT CONTEXT (the founder's live account state — your only source of numbers besides the memories above):\n${JSON.stringify(base, null, 0)}`);
+  sections.push(`ACCOUNT CONTEXT (the founder's live account state — goal, plan, connectors, approvals. Live KPI numbers live in CERTIFIED METRICS, not here):\n${JSON.stringify(base, null, 0)}`);
   return sections.join("\n\n");
 }
 

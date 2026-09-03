@@ -78,6 +78,17 @@ export async function getMetric(db: DbClient, accountId: string, key: string): P
   };
 }
 
+/** One line Unc (and tests) can quote — never a missing key, never a guessed unit. */
+export function formatCertifiedMetric(m: CertifiedMetric): string {
+  const amount = m.money ? `${m.currency ? `${m.currency} ` : ""}${m.value}` : m.unit === "%" ? `${m.value}%` : m.unit === "×" ? `${m.value}×` : `${m.value}${m.unit ? ` ${m.unit}` : ""}`;
+  return `${m.label}: ${amount} (${m.windowStart.slice(0, 10)}–${m.windowEnd.slice(0, 10)}, ${m.platform}, ${m.provenance})`;
+}
+
+export function renderCertifiedMetrics(metrics: CertifiedMetric[]): string {
+  if (!metrics.length) return "No certified catalog metrics on file. Missing keys are absent, not zero — I don't have that number yet.";
+  return metrics.map((m) => `- ${formatCertifiedMetric(m)}`).join("\n");
+}
+
 /** Every catalog key that currently has a certified row. Missing keys are absent, not zero. */
 export async function getMetrics(db: DbClient, accountId: string, keys?: readonly string[]): Promise<CertifiedMetric[]> {
   const want = keys && keys.length ? keys.filter(isMetricKey) : METRIC_CATALOG.map((m) => m.key);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FakeSupabase } from "../../db/__tests__/fakeSupabase";
 import { KPI_METRICS } from "../../brain/kpi";
-import { getMetric, getMetricDef, getMetrics, isMetricKey, METRIC_CATALOG } from "../catalog";
+import { formatCertifiedMetric, getMetric, getMetricDef, getMetrics, isMetricKey, METRIC_CATALOG, renderCertifiedMetrics } from "../catalog";
 
 const ACCT = "00000000-0000-4000-8000-00000000acc1";
 
@@ -26,5 +26,25 @@ describe("metric catalog", () => {
     expect(await getMetric(db, ACCT, "roas_7d")).toBeNull();
     expect(await getMetric(db, ACCT, "not_a_key")).toBeNull();
     expect(await getMetrics(db, ACCT)).toEqual([m]);
+  });
+
+  it("renders catalog lines Unc can quote, and an empty catalog is not a zero", () => {
+    expect(renderCertifiedMetrics([])).toMatch(/absent, not zero/);
+    const line = formatCertifiedMetric({
+      key: "revenue_7d",
+      label: "Revenue (7d)",
+      value: 12640,
+      unit: "",
+      money: true,
+      currency: "NZD",
+      windowStart: "2026-08-27",
+      windowEnd: "2026-09-03",
+      platform: "shopify",
+      provenance: "live",
+      capturedAt: "2026-09-03T01:30:00.000Z",
+      definition: METRIC_CATALOG.find((m) => m.key === "revenue_7d")!,
+    });
+    expect(line).toBe("Revenue (7d): NZD 12640 (2026-08-27–2026-09-03, shopify, live)");
+    expect(renderCertifiedMetrics([])).not.toMatch(/\b0\b/);
   });
 });

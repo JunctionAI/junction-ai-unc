@@ -39,10 +39,10 @@ Next.js app (Vercel)  ── API routes (all wrapped in withErrorCapture) ──
    │ Client Brain: memories (extract→retrieve), account_profiles, playbooks (39, embedded), kpi_snapshots, daily_briefs
    ▼
 Routines runtime (src/lib/runtime): spec = TRIGGER → READ* → CHECK → DECIDE → PRODUCE (skill | n8n) → GATE → EXECUTE (actions) → RECEIPT
-   • 35 catalog specs; wave 1 (10) draft-only; skills in src/lib/runtime/skills; artifacts table + Drafts UI (edit/approve/hold/why)
+   • 35 catalog specs, each with a skill file (goal/owns/reads/decides/writes/never/apply); wave 1 (10) plus the other non-mutating chains draft via produce; mutating chains still gate → execute. Artifacts table + Drafts UI (edit/approve/hold/why)
    • waiting_input when a skill lacks its minimum; presets (7 industry bands) + one-screen inspector; versioning draft→dry-run→promote
    • Store: MemoryStore (demo) | SupabaseStore (service role) via src/lib/runtime/store/index.ts
-Worker (Fly, pending): runs due routines dry-run, telemetry jobs, channel pushes; adapters = readers (Shopify/Klaviyo/GA4/Meta/HubSpot; Google Ads fixture),
+Worker (Fly, pending): runs due routines dry-run, telemetry jobs, channel pushes; adapters = readers (Shopify/Klaviyo/GA4/Meta/HubSpot; Google Ads live = honest "couldn't ask", never fixture rows on a live credential),
    LlmProducer, LlmDecisionProvider (+ taste patterns + presets), ActionExecutor (being built; dry-run only), credentials = ConnectorCredentialProvider | NoCredentialsProvider (never fixtures with a DB)
 Connectors: own OAuth apps (Shopify/Klaviyo/Meta/GA4/Google Ads/Search Console/HubSpot + unified "Connect Google"), owner token-paste, AES-256-GCM secret store,
    post-connect pickers, read-now on connect, revoke + tenant purge, Shopify GDPR webhooks, optional Composio/Nango adapters (flag-gated; verdict: Nango self-hosted for long tail only)
@@ -52,7 +52,7 @@ Billing: Stripe (checkout/webhook/portal/paywall) env-gated, not configured for 
 ```
 
 ## 4. State of the build (facts)
-- **138 test files, 1,729 unit tests green** at PR #6 merge. Live chat evals: judge mean 9.4–9.8/10 (25 scenarios; `design-reference/evals/`).
+- **142 test files, 1,745 unit tests green** on `build/overnight-graphed`. Live chat evals: judge mean 9.4–9.8/10 (25 scenarios; `design-reference/evals/`).
 - **main** = PR #6 squash-merged 2026-09-03 (auth providers + presets + Meta action library). Production redeployed: https://junction-unc.vercel.app.
 - Migrations applied to the live DB: **0001–0015** (`account_presets`, `routine_params` verified 2026-09-03).
 - Vercel env present: Supabase URL/anon/service, ANTHROPIC/OPENAI/GEMINI/RESEND keys, APP_URLs, TELEGRAM_BOT_TOKEN/USERNAME/WEBHOOK_SECRET, N8N_SIGNING_SECRET, UNC_ADMIN_EMAILS. **Missing: CONNECTOR_SECRET_KEY** (Tom pastes; `openssl rand -base64 32`), STRIPE_*, connector client ids, NANGO_*.
@@ -77,7 +77,7 @@ npx tsc -p tsconfig.worker.json && node dist/worker/worker/main.js --once|--prob
 
 ## 6. Open items — in priority order
 **A. Land the action-library branch.** DONE 2026-09-03. PR #6 squash-merged; production at https://junction-unc.vercel.app; 0015 on the live DB. AVGAR Graph v23 proof: 3 ad sets, NZ$307.25 last_7d (Junction env token, not copied into Unc). Unc-side Meta reads still need `CONNECTOR_SECRET_KEY` in Vercel.
-**B. Adopt the three Graphed lessons** (in flight on `build/graphed-lessons`): (1) verified metric catalog `getMetric` over locked `KPI_METRICS` / `kpi_snapshots`; (2) shadow-mode agreement gate — ≥80% approve over 10 decisions in 28 days unlocks `apply` (live execute still founder-gated); (3) skill-file template `goal/owns/reads/decides/writes/never/apply/examples` on every wave-1 `Skill`, rendered in the inspector.
+**B. Adopt the three Graphed lessons** (on `build/overnight-graphed`, PR #12): (1) verified metric catalog `getMetric` over locked `KPI_METRICS` / `kpi_snapshots` — Unc's chat prompt now attaches CERTIFIED METRICS (missing keys absent, never 0); (2) shadow-mode agreement gate — ≥80% approve over 10 decisions in 28 days unlocks `apply` (live execute still founder-gated); (3) skill-file template `goal/owns/reads/decides/writes/never/apply/examples` on **every** catalog `Skill` (all 35), rendered in the inspector. Draft-only wave-2 chains now PRODUCE through those skills (n8n can replace later). A connector with no real sync (`last_sync_result` null/error) does not look connected and does not unlock routines. Google Ads on a live credential is an honest "couldn't ask", never fixture rows.
 **C. Beta go-live (Tom-gated, see `docs/LAUNCH-CHECKLIST.md`)**: CONNECTOR_SECRET_KEY → token-paste AVGAR's Shopify/Klaviyo/Meta → real numbers; Fly login → deploy worker (`fly launch` with `deploy/worker/`, secrets pasted by Tom); Meta app + Google consent screen in testing mode (~1 h, drive the dashboards with Tom in Chrome; texts in `legal-and-oauth/OAUTH-PREP-PACK.md`); six founder emails → `beta_invites` rows (`scripts/beta/seed-beta.sql` has commented inserts) → invites (`docs/BETA.md` drafts); beta domain decision.
 **D. n8n skills with Nguyen**: he converts the AVGAR shadow workflow per `MESSAGE-TO-NGUYEN-n8n-integration.md` (webhook + HMAC, `/api/n8n/context`, `/api/n8n/reads`, `{artifact, actions}`/`{needs}`, split into D02-W01 + D02-W03), registers on the Skills page. Use his policy as the oracle for `rules/meta.ts`.
 **E. Quality levers**: judgement dipped slightly with the concision cap (1.56→1.48) — next lever is "reason in the first sentence"; `rambling-focus`/`plan-rationale-gate` scenarios at 8/14; `source:'unc'` preset adjustments from self-review (column exists, nothing writes it); account-wide presets screen; `app/uninstalled` Shopify webhook; GA4/Ads/Meta pickers verified live; India MoR decision; Nango self-host for the long tail.

@@ -24,9 +24,9 @@ const NOW = new Date("2026-09-02T09:00:00.000Z");
 const facts = (over: Partial<AccountFacts> = {}): AccountFacts => ({
   accountId: "acct-1",
   connectors: [
-    { platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: null },
-    { platform: "ga4", name: "Google Analytics 4", status: "connected", lastSyncAt: null },
-    { platform: "klaviyo", name: "Klaviyo", status: "needs_reconnect", lastSyncAt: null },
+    { platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: "2026-09-01T20:00:00.000Z", lastSyncResult: "ok" },
+    { platform: "ga4", name: "Google Analytics 4", status: "connected", lastSyncAt: "2026-09-01T20:00:00.000Z", lastSyncResult: "ok" },
+    { platform: "klaviyo", name: "Klaviyo", status: "needs_reconnect", lastSyncAt: null, lastSyncResult: "error:token_expired" },
   ],
   routineStates: [
     { routineId: "D01-W01", name: "Founder content engine", enabled: true },

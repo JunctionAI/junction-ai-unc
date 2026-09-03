@@ -2,8 +2,8 @@
    /api/skills/n8n, the "Skills" settings; docs/N8N-ROUTINES.md).
 
      source per routine   "n8n"      an active n8n_workflows row (the account's own wins, then a global one)
-                          "builtin"  the wave-1 skill card + LlmProducer (src/lib/runtime/skills)
-                          "none"     nothing produces yet (wave-2 chains without a produce node)
+                          "builtin"  the skill card + LlmProducer (src/lib/runtime/skills)
+                          "none"     no skill card and no produce node (should not happen — all 35 have cards)
      register             owner only; `global` (account_id null = every account) is admin only
                           (UNC_ADMIN_EMAILS — a comma list; Tom)
      test                 POST the same signed payload the engine sends, built from fixture reads,

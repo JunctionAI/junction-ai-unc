@@ -188,8 +188,8 @@ describe("manual trigger (the API's path)", () => {
     const { store, deps } = harness();
     const res = await triggerRun(deps, { accountId: "acct-1", routineId: "D01-W02", vars: { hashtags: "#golf" } }); // weekly, never enabled
     expect(res.mode).toBe("dry_run");
-    expect(res.status).toBe("skipped"); // tiktok/instagram have no reader → empty fixture → check fails quietly
-    expect(res.summary).toContain("Fewer than 10 breakout videos");
+    expect(res.status).toBe("done"); // optional reads + produce: a hook library even without TikTok
+    expect(res.artifact).toBeDefined();
     expect((await store.listRuns("acct-1"))[0]).toMatchObject({ routineId: "D01-W02", mode: "dry_run" });
 
     await expect(triggerRun(deps, { accountId: "nobody", routineId: "D01-W01" })).rejects.toMatchObject({ code: "unknown_account" });

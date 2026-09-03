@@ -156,7 +156,7 @@ describe("context", () => {
     const auth = await authenticate(deps, req("/x", token({ routineId: "D02-W04", runId: "test:2" })));
     if (!auth.ok) throw new Error("auth failed");
     const out = await contextForToken(deps, auth);
-    expect(out.routine).toMatchObject({ id: "D02-W04", name: "Ad fatigue watch", kind: "generic", builtIn: false });
+    expect(out.routine).toMatchObject({ id: "D02-W04", name: "Ad fatigue watch", kind: "generic", builtIn: true });
     expect(out.memories).toEqual([]);
     expect(out.business).toBeNull();
     expect(out.run).toMatchObject({ status: "test" });

@@ -104,7 +104,7 @@ describe("GET — the view", () => {
     expect(c.steps.every((s) => s.included)).toBe(true);
     expect(c.skillFile).toMatchObject({ goal: expect.stringContaining("founder-voice") });
     expect(c.agreement).toMatchObject({ decided: 0, applyUnlocked: false });
-    expect(v.skillFile).toBeNull();
+    expect(v.skillFile).toMatchObject({ goal: expect.stringContaining("verdict") });
     expect(v.agreement).toMatchObject({ decided: 0, applyUnlocked: false, line: expect.stringContaining("keep asking") });
   });
 });

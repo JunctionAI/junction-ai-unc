@@ -11,11 +11,13 @@
    for a source (web, llm_search, calendar) the read is a research read and
    the routine stays draft-only.
 
-   Wave-1 chains PRODUCE: trigger → optional reads → produce (the skill card in
-   ./skills) → gate → receipt. Their reads are `optional` — a founder with only
-   a site profile still gets a draft; the skill's `minimum` (copied onto the spec)
-   says what it truly needs, and a run that lacks it ends waiting_input with an
-   honest ask instead of "Nothing worth drafting today". */
+   Every non-mutating chain PRODUCE: trigger → optional reads → produce (the skill
+   card in ./skills) → gate → receipt. Reads are `optional` unless they define the
+   routine (Abandoned cart / Winback → Shopify). A founder with only a site profile
+   still gets a draft; the skill's `minimum` (copied onto the spec) says what it
+   truly needs, and a run that lacks it ends waiting_input with an honest ask
+   instead of "Nothing worth drafting today". Mutating chains keep check → decide
+   → gate → execute; they still carry a skill file for the inspector. */
 
 import { ALL_SYSTEMS } from "../platform/catalog";
 import { SKILL_BY_ID } from "./skills";
@@ -91,17 +93,6 @@ const execute = (platform: Platform, action: string, opts: { target?: Record<str
 });
 
 const receipt = (summary: string, measurementWindowDays = 14): ReceiptNode => ({ kind: "receipt", id: "receipt", summary, measurementWindowDays });
-
-/** Common draft decision: proceed with the draft or, when nothing qualifies, stop. */
-const draftOrNothing = (question: string, proceedLabel: string, metric: string, minimum: number): DecideNode =>
-  decide(
-    question,
-    [
-      { id: "draft", label: proceedLabel },
-      { id: "nothing", label: "Nothing worth drafting today", terminal: true },
-    ],
-    { kind: "threshold", metric, op: "gte", value: minimum, ifTrue: "draft", ifFalse: "nothing" },
-  );
 
 const NAME_BY_ID = new Map(ALL_SYSTEMS.map((s) => [s.id, s.name]));
 
@@ -212,15 +203,14 @@ const D01: RoutineSpec[] = [
     }),
     receipt("Founder content engine: {{artifact.title}} handed over."),
   ]),
-  // Viral hook mining — wave 2, draft (research only)
+  // Viral hook mining — wave 2, draft
   spec("D01-W02", 2, [
     trigger(CADENCE.WEEKLY_MON),
-    read("niche", "tiktok", "videos", { window: "7d", filter: { niche: "{{vars.niche}}", minViews: 100000 }, fields: ["caption", "views", "likes", "hook_transcript"], limit: 100 }),
-    read("ig", "instagram", "hashtag_search", { window: "7d", filter: { hashtags: "{{vars.hashtags}}" }, fields: ["caption", "plays", "likes"], limit: 100 }),
-    check("enough_signal", { metric: "reads.niche.count", op: "gte", value: 10 }, "Fewer than 10 breakout videos found this week — no hook library update."),
-    draftOrNothing("Which hooks from this week's breakouts fit the brand?", "Add the top hooks to the library", "reads.niche.count", 10),
-    gate("{{reads.niche.count}} niche breakouts mined — hook shortlist ready", { detail: "Hook patterns with view counts, ready to adapt.", after: "Hook library updated with this week's winners" }),
-    receipt("Viral hook mining: shortlist delivered."),
+    optRead("niche", "tiktok", "videos", { window: "7d", filter: { niche: "{{vars.niche}}", minViews: 100000 }, fields: ["caption", "views", "likes", "hook_transcript"], limit: 100 }),
+    optRead("ig", "instagram", "hashtag_search", { window: "7d", filter: { hashtags: "{{vars.hashtags}}" }, fields: ["caption", "plays", "likes"], limit: 100 }),
+    produce("D01-W02", 8),
+    gate("{{artifact.title}}", { detail: "Hook skeletons from this week's breakouts — or hypotheses from the niche when I couldn't watch it. Nothing publishes.", after: "Hook library in your queue" }),
+    receipt("Viral hook mining: {{artifact.title}} drafted."),
   ]),
   // Customer-question mining — wave 1, draft
   spec("D01-W03", 1, [
@@ -235,12 +225,11 @@ const D01: RoutineSpec[] = [
   // UGC creator pipeline — wave 2, draft (outreach never sent by Unc)
   spec("D01-W04", 2, [
     trigger(CADENCE.WEEKLY_MON),
-    read("creators", "instagram", "hashtag_search", { window: "28d", filter: { hashtags: "{{vars.hashtags}}", minFollowers: 2000, maxFollowers: 50000 }, fields: ["username", "followers", "engagement_rate"], limit: 100 }),
-    read("customers", "shopify", "customers", { window: "90d", filter: { ordersCount: { gte: 2 } }, fields: ["email", "orders_count"], limit: 200 }),
-    check("has_candidates", { metric: "reads.creators.count", op: "gte", value: 5 }, "Not enough creator candidates found."),
-    draftOrNothing("Which creators fit the brand well enough to brief?", "Shortlist creators and draft outreach", "reads.creators.count", 5),
-    gate("{{reads.creators.count}} creator candidates shortlisted — outreach drafts ready", { detail: "Scored on fit and engagement. Drafts are for you to send.", after: "Creator shortlist + outreach drafts in your queue" }),
-    receipt("UGC creator pipeline: shortlist drafted."),
+    optRead("creators", "instagram", "hashtag_search", { window: "28d", filter: { hashtags: "{{vars.hashtags}}", minFollowers: 2000, maxFollowers: 50000 }, fields: ["username", "followers", "engagement_rate"], limit: 100 }),
+    optRead("customers", "shopify", "customers", { window: "90d", filter: { ordersCount: { gte: 2 } }, fields: ["email", "orders_count"], limit: 200 }),
+    produce("D01-W04", 5),
+    gate("{{artifact.title}} — you send", { detail: "Creator brief plus outreach drafts. Unc never sends; handles come from Instagram rows or stay as placeholders.", after: "Creator shortlist + outreach drafts in your queue" }),
+    receipt("UGC creator pipeline: {{artifact.title}} drafted."),
   ]),
   // Social repurposing — wave 1, draft
   spec("D01-W05", 1, [
@@ -255,33 +244,30 @@ const D01: RoutineSpec[] = [
   // Winning elements library — wave 2, draft
   spec("D01-W06", 2, [
     trigger(CADENCE.WEEKLY_MON),
-    read("ads", "meta_ads", "insights", { window: "28d", filter: { level: "ad" }, fields: ["ad_name", "spend", "purchases", "ctr", "thumbstop"], limit: 200 }),
-    read("organic", "instagram", "media", { window: "28d", fields: ["caption", "media_type", "plays", "saves"], limit: 100 }),
-    check("has_data", { metric: "reads.ads.count", op: "gte", value: 5 }, "Fewer than 5 ads with data in the window."),
-    draftOrNothing("Which hooks, formats and offers are consistently winning?", "Update the winning elements library", "reads.ads.count", 5),
-    gate("Winning elements updated from {{reads.ads.count}} ads", { detail: "Hooks, formats and offers that beat account average, with the numbers.", after: "Library entries added — reusable in briefs" }),
-    receipt("Winning elements library: entries drafted."),
+    optRead("ads", "meta_ads", "insights", { window: "28d", filter: { level: "ad" }, fields: ["ad_name", "spend", "purchases", "ctr", "thumbstop"], limit: 200 }),
+    optRead("organic", "instagram", "media", { window: "28d", fields: ["caption", "media_type", "plays", "saves"], limit: 100 }),
+    produce("D01-W06", 8),
+    gate("{{artifact.title}}", { detail: "Hooks, formats and offers that beat account average when I have ads — the library schema when I don't.", after: "Library entries in your queue" }),
+    receipt("Winning elements library: {{artifact.title}} drafted."),
   ]),
   // Trend watch — wave 2, draft
   spec("D01-W07", 2, [
     trigger(CADENCE.DAILY_0700),
-    read("trends", "tiktok", "trends", { window: "24h", filter: { region: "{{vars.region}}", category: "{{vars.niche}}" }, fields: ["name", "growth_rate", "video_count"], limit: 50 }),
-    read("sounds", "tiktok", "trends", { window: "24h", filter: { type: "sound" }, fields: ["name", "growth_rate"], limit: 20 }),
-    check("rising", { metric: "reads.trends.count", op: "gte", value: 1 }, "No rising trends in your category today."),
-    draftOrNothing("Which rising trends can the brand ride credibly?", "Draft trend-jack post ideas", "reads.trends.count", 1),
-    gate("{{reads.trends.count}} rising trends — post ideas drafted", { detail: "Only trends still rising, with a brand angle for each.", after: "Trend ideas in your queue", expiryHours: 24 }),
-    receipt("Trend watch: ideas drafted.", 7),
+    optRead("trends", "tiktok", "trends", { window: "24h", filter: { region: "{{vars.region}}", category: "{{vars.niche}}" }, fields: ["name", "growth_rate", "video_count"], limit: 50 }),
+    optRead("sounds", "tiktok", "trends", { window: "24h", filter: { type: "sound" }, fields: ["name", "growth_rate"], limit: 20 }),
+    produce("D01-W07", 3),
+    gate("{{artifact.title}}", { detail: "Only trends still rising, with a brand angle — or hypothetical angles labelled as such. 24h life.", after: "Trend ideas in your queue", expiryHours: 24 }),
+    receipt("Trend watch: {{artifact.title}} drafted.", 7),
   ]),
   // Content performance learning — wave 2, draft
   spec("D01-W08", 2, [
     trigger(CADENCE.WEEKLY_MON),
-    read("ig", "instagram", "insights", { window: "28d", fields: ["reach", "plays", "saves", "follows"], limit: 100 }),
-    read("li", "linkedin", "posts", { window: "28d", fields: ["impressions", "reactions", "comments"] }),
-    read("ga", "ga4", "report", { window: "28d", fields: ["sessions", "conversions"], groupBy: ["sessionSource", "sessionMedium"], filter: { sessionMedium: "social" } }),
-    check("has_posts", { metric: "reads.ig.count", op: "gte", value: 4 }, "Fewer than 4 posts in the window — not enough to learn from."),
-    draftOrNothing("What should we double down on next week?", "Write the weekly content learning note", "reads.ig.count", 4),
-    gate("Weekly content learning: what to double down on", { detail: "Formats and topics that moved reach and saves, and what to drop.", after: "Next week's content plan adjusted" }),
-    receipt("Content performance learning: note delivered."),
+    optRead("ig", "instagram", "insights", { window: "28d", fields: ["reach", "plays", "saves", "follows"], limit: 100 }),
+    optRead("li", "linkedin", "posts", { window: "28d", fields: ["impressions", "reactions", "comments"] }),
+    optRead("ga", "ga4", "report", { window: "28d", fields: ["sessions", "conversions"], groupBy: ["sessionSource", "sessionMedium"], filter: { sessionMedium: "social" } }),
+    produce("D01-W08", 4),
+    gate("{{artifact.title}}", { detail: "Formats and topics that moved reach and saves when I have them — what I'd measure when I don't.", after: "Next week's content plan in your queue" }),
+    receipt("Content performance learning: {{artifact.title}} drafted."),
   ]),
 ];
 
@@ -389,28 +375,26 @@ const D02: RoutineSpec[] = [
   // Creator whitelisting — wave 2, draft (needs the creator's permission — outside Unc's hands)
   spec("D02-W05", 2, [
     trigger(CADENCE.WEEKLY_MON),
-    read("creators", "instagram", "media", { window: "28d", filter: { tagged: true }, fields: ["username", "plays", "saves", "permalink"], limit: 50 }),
-    read("ads", "meta_ads", "insights", { window: "28d", filter: { level: "ad", creative_type: "partnership" }, fields: ["ad_name", "cpa", "ctr"], limit: 50 }),
-    check("has_creator_content", { metric: "reads.creators.count", op: "gte", value: 1 }, "No creator content tagged the brand this month."),
-    draftOrNothing("Which creator posts are worth running as whitelisted ads?", "Draft whitelisting requests for the top creator posts", "reads.creators.count", 1),
-    gate("{{reads.creators.count}} creator posts worth whitelisting — permission requests drafted", { detail: "Partnership-ad permission requests written for you to send. Ads only run after the creator accepts.", after: "Requests in your queue" }),
-    receipt("Creator whitelisting: requests drafted."),
+    optRead("creators", "instagram", "media", { window: "28d", filter: { tagged: true }, fields: ["username", "plays", "saves", "permalink"], limit: 50 }),
+    optRead("ads", "meta_ads", "insights", { window: "28d", filter: { level: "ad", creative_type: "partnership" }, fields: ["ad_name", "cpa", "ctr"], limit: 50 }),
+    produce("D02-W05", 3),
+    gate("{{artifact.title}} — you send", { detail: "Partnership-ad permission requests written for you to send. Ads only run after the creator accepts.", after: "Requests in your queue" }),
+    receipt("Creator whitelisting: {{artifact.title}} drafted."),
   ]),
   // Creative test planner — wave 2, draft
   spec("D02-W06", 2, [
     trigger(CADENCE.WEEKLY_MON),
-    read("ads", "meta_ads", "insights", { window: "28d", filter: { level: "ad" }, fields: ["ad_name", "hook", "format", "offer", "cpa", "spend"], limit: 200 }),
-    read("library", "instagram", "media", { window: "28d", fields: ["caption", "media_type", "saves"], limit: 50 }),
-    check("has_history", { metric: "reads.ads.count", op: "gte", value: 5 }, "Fewer than 5 ads with results to plan from."),
-    draftOrNothing("What should next month's test matrix look like?", "Draft the test matrix (hooks × formats × offers)", "reads.ads.count", 5),
-    gate("Next test matrix drafted: {{reads.ads.count}} results analysed", { detail: "Untested combinations ranked by expected lift. Briefs attached per cell.", after: "Test plan ready for the content engine" }),
-    receipt("Creative test planner: matrix drafted."),
+    optRead("ads", "meta_ads", "insights", { window: "28d", filter: { level: "ad" }, fields: ["ad_name", "hook", "format", "offer", "cpa", "spend"], limit: 200 }),
+    optRead("library", "instagram", "media", { window: "28d", fields: ["caption", "media_type", "saves"], limit: 50 }),
+    produce("D02-W06", 8),
+    gate("{{artifact.title}}", { detail: "Untested combinations ranked when I have results; a hypothesis matrix from the brand when I don't. No invented lift %.", after: "Test plan ready for the content engine" }),
+    receipt("Creative test planner: {{artifact.title}} drafted."),
   ]),
   // Budget pacing guard — wave 2, MUTATES (cut budget when pacing over cap)
   spec("D02-W07", 2, [
     trigger(CADENCE.EVERY_6H),
     read("meta", "meta_ads", "insights", { window: "1d", filter: { level: "account" }, fields: ["spend", "daily_budget_total"] }, 60),
-    read("google", "google_ads", "campaigns", { window: "1d", fields: ["campaign_id", "cost", "budget_amount", "status"] }, 60),
+    optRead("google", "google_ads", "campaigns", { window: "1d", fields: ["campaign_id", "cost", "budget_amount", "status"] }),
     read("mtd", "meta_ads", "insights", { window: "28d", filter: { level: "account" }, fields: ["spend"] }, 60),
     read("adsets", "meta_ads", "adsets", { fields: ["id", "name", "status", "effective_status", "daily_budget"], limit: 200 }),
     check("over_pace", { any: [{ metric: "reads.meta.projected_daily_spend", op: "gt", value: { ref: "caps.perDay" } }, { metric: "reads.google.projected_daily_spend", op: "gt", value: { ref: "caps.perDay" } }] }, "Pacing inside the {{account.currency}} {{caps.perDay}}/day cap."),
@@ -474,12 +458,11 @@ const D03: RoutineSpec[] = [
   // AI search visibility — wave 2, draft (research read; no connector)
   spec("D03-W03", 2, [
     trigger(CADENCE.WEEKLY_MON),
-    read("llm", "llm_search", "prompts", { filter: { prompts: "{{vars.buyerPrompts}}", engines: ["chatgpt", "perplexity", "gemini"] }, fields: ["prompt", "engine", "mentioned", "cited_url", "competitors_mentioned"], limit: 100 }),
-    read("pages", "shopify", "pages", { fields: ["handle", "title"], limit: 200 }),
-    check("has_prompts", { metric: "reads.llm.count", op: "gte", value: 5 }, "Fewer than 5 buyer prompts tested."),
-    draftOrNothing("Where are AI assistants recommending competitors instead of you?", "Draft the AI visibility fixes", "reads.llm.count", 5),
-    gate("AI search: mentioned in {{reads.llm.mentioned_pct}}% of buyer prompts — fixes drafted", { detail: "Which prompts name competitors, which pages need entity and FAQ structure.", after: "Fix list in your queue" }),
-    receipt("AI search visibility: fixes drafted.", 28),
+    optRead("llm", "llm_search", "prompts", { filter: { prompts: "{{vars.buyerPrompts}}", engines: ["chatgpt", "perplexity", "gemini"] }, fields: ["prompt", "engine", "mentioned", "cited_url", "competitors_mentioned"], limit: 100 }),
+    optRead("pages", "shopify", "pages", { fields: ["handle", "title"], limit: 200 }),
+    produce("D03-W03", 8),
+    gate("{{artifact.title}}", { detail: "Which prompts name competitors, which pages need entity and FAQ structure. Untested prompts stay labelled as such.", after: "Fix list in your queue" }),
+    receipt("AI search visibility: {{artifact.title}} drafted.", 28),
   ]),
   // On-page SEO fixes — wave 2, MUTATES (updates page meta on Shopify)
   spec("D03-W04", 2, [
@@ -502,21 +485,19 @@ const D03: RoutineSpec[] = [
   // SERP position watch — wave 2, draft (notify only)
   spec("D03-W05", 2, [
     trigger(CADENCE.DAILY_0700),
-    read("gsc", "search_console", "search_analytics", { window: "7d", groupBy: ["query"], fields: ["position", "position_change_7d", "clicks"], filter: { tracked: true }, limit: 200 }),
-    check("movement", { any: [{ metric: "reads.gsc.biggest_drop", op: "lte", value: -3 }, { metric: "reads.gsc.biggest_gain", op: "gte", value: 3 }] }, "No tracked keyword moved more than 3 positions."),
-    draftOrNothing("Which ranking moves need a response?", "Draft the ranking-movement note", "reads.gsc.count", 1),
-    gate("Rankings moved: {{reads.gsc.movers_count}} tracked keywords shifted 3+ positions", { detail: "Biggest drop {{reads.gsc.biggest_drop}}, biggest gain {{reads.gsc.biggest_gain}}. Suggested responses attached.", after: "Movement note in your queue", expiryHours: 24 }),
-    receipt("SERP position watch: note delivered.", 7),
+    optRead("gsc", "search_console", "search_analytics", { window: "7d", groupBy: ["query"], fields: ["position", "position_change_7d", "clicks"], filter: { tracked: true }, limit: 200 }),
+    produce("D03-W05", 6),
+    gate("{{artifact.title}}", { detail: "Tracked keywords that moved 3+ positions, with a suggested response. I don't invent a ranking I didn't read.", after: "Movement note in your queue", expiryHours: 24 }),
+    receipt("SERP position watch: {{artifact.title}} drafted.", 7),
   ]),
   // Competitor gap watch — wave 2, draft
   spec("D03-W06", 2, [
     trigger(CADENCE.WEEKLY_MON),
-    read("competitors", "web", "crawl", { window: "7d", filter: { domains: "{{vars.competitorDomains}}", changedOnly: true }, fields: ["url", "title", "published_at", "topic"], limit: 100 }),
-    read("gsc", "search_console", "search_analytics", { window: "28d", groupBy: ["query"], fields: ["position", "position_change_28d"], limit: 300 }),
-    check("moves_seen", { metric: "reads.competitors.count", op: "gte", value: 1 }, "No new competitor pages this week."),
-    draftOrNothing("Which competitor moves threaten a ranking you hold?", "Draft the competitor move report", "reads.competitors.count", 1),
-    gate("{{reads.competitors.count}} new competitor pages this week — threats ranked", { detail: "Which of your rankings each new page targets, and the counter-move.", after: "Report in your queue" }),
-    receipt("Competitor gap watch: report delivered.", 28),
+    optRead("competitors", "web", "crawl", { window: "7d", filter: { domains: "{{vars.competitorDomains}}", changedOnly: true }, fields: ["url", "title", "published_at", "topic"], limit: 100 }),
+    optRead("gsc", "search_console", "search_analytics", { window: "28d", groupBy: ["query"], fields: ["position", "position_change_28d"], limit: 300 }),
+    produce("D03-W06", 8),
+    gate("{{artifact.title}}", { detail: "Which of your rankings each new competitor page targets, and the counter-move. Hypotheses labelled when I haven't crawled.", after: "Report in your queue" }),
+    receipt("Competitor gap watch: {{artifact.title}} drafted.", 28),
   ]),
 ];
 
@@ -553,12 +534,11 @@ const D04: RoutineSpec[] = [
   // Follow-up cadence — wave 2, draft (drafts, never sends)
   spec("D04-W04", 2, [
     trigger(CADENCE.DAILY_0700),
-    read("deals", "hubspot", "deals", { filter: { stage: "open", lastActivityOlderThanDays: 5 }, fields: ["id", "name", "contact_email", "stage", "last_activity"], limit: 50 }),
-    read("threads", "gmail", "threads", { window: "28d", filter: { with: "{{reads.deals.contact_emails}}" }, fields: ["subject", "snippet", "date", "replied"], limit: 100 }),
-    check("stale_deals", { metric: "reads.deals.count", op: "gte", value: 1 }, "Every open deal has activity in the last 5 days."),
-    draftOrNothing("Which deals need a nudge?", "Draft follow-ups for stale deals", "reads.deals.count", 1),
-    gate("{{reads.deals.count}} deals gone quiet — follow-ups drafted", { detail: "Each draft picks up the last thread. Nothing sends without you.", after: "Follow-up drafts in Gmail", expiryHours: 24 }),
-    receipt("Follow-up cadence: drafts handed over.", 7),
+    optRead("deals", "hubspot", "deals", { filter: { stage: "open", lastActivityOlderThanDays: 5 }, fields: ["id", "name", "contact_email", "stage", "last_activity"], limit: 50 }),
+    optRead("threads", "gmail", "threads", { window: "28d", filter: { with: "{{reads.deals.contact_emails}}" }, fields: ["subject", "snippet", "date", "replied"], limit: 100 }),
+    produce("D04-W04", 5),
+    gate("{{artifact.title}} — you send", { detail: "Each draft picks up the last thread. Nothing sends without you.", after: "Follow-up drafts in your queue", expiryHours: 24 }),
+    receipt("Follow-up cadence: {{artifact.title}} handed over.", 7),
   ]),
   // Win/loss capture — wave 2, MUTATES (writes the reason to the CRM deal)
   spec("D04-W05", 2, [
@@ -651,11 +631,10 @@ const D05: RoutineSpec[] = [
   spec("D05-W04", 2, [
     trigger(CADENCE.WEEKLY_MON),
     read("lapsed", "shopify", "customers", { window: "365d", filter: { lastOrderOlderThanDays: 90, ordersCount: { gte: 1 } }, fields: ["id", "email", "orders_count", "total_spent", "last_order_at"], limit: 5000 }),
-    read("history", "klaviyo", "campaigns", { window: "180d", filter: { tag: "winback" }, fields: ["id", "subject", "sends", "clicks", "revenue"] }),
-    check("lapsed_present", { metric: "reads.lapsed.count", op: "gte", value: 50 }, "Fewer than 50 lapsed customers — not worth a campaign yet."),
-    draftOrNothing("What offer and angle brings lapsed customers back?", "Draft the winback campaign", "reads.lapsed.count", 50),
-    gate("Winback campaign drafted for {{reads.lapsed.count}} lapsed customers", { detail: "Segment, subject lines, body and the offer rule. Nothing schedules until you approve it in Klaviyo.", after: "Campaign draft in your queue" }),
-    receipt("Winback campaign prep: draft handed over.", 28),
+    optRead("history", "klaviyo", "campaigns", { window: "180d", filter: { tag: "winback" }, fields: ["id", "subject", "sends", "clicks", "revenue"] }),
+    produce("D05-W04", 3),
+    gate("{{artifact.title}}", { detail: "Segment, subject lines, body and the offer rule. Nothing schedules until you approve it in Klaviyo. No invented % off.", after: "Campaign draft in your queue" }),
+    receipt("Winback campaign prep: {{artifact.title}} handed over.", 28),
   ]),
   // Post-purchase education — wave 2, MUTATES (adds/updates a flow message)
   spec("D05-W05", 2, [
