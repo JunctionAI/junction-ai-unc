@@ -16,6 +16,7 @@
 import { compactReads } from "../../lib/artifacts/material";
 import { sign, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "../../lib/artifacts/signing";
 import { isArtifactKind, validateArtifactObject } from "../../lib/artifacts/validate";
+import { DATA_ENDPOINTS, dataBaseUrl, issueDataToken, scopesForRoutine } from "../../lib/n8n/dataToken";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
 import type { N8nBridge, N8nCallResult, N8nNode, N8nWorkflow, ProduceNeed, ProduceNode, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
@@ -37,10 +38,25 @@ export interface N8nPayload {
   reads: ReturnType<typeof compactReads>;
   /** Where an async workflow posts the artifact, with the same HMAC scheme. */
   callback: { path: string; signatureHeader: string; timestampHeader: string };
+  /** Run-scoped bearer token for /api/n8n/reads, /context, /actions (src/lib/n8n/dataToken.ts);
+      null when the bridge was built without a secret (tests) — the workflow then has no data access. */
+  dataToken: string | null;
+  /** Base URL the token is good against (N8N_DATA_BASE_URL / APP_URL); null = unknown to the app. */
+  dataBaseUrl: string | null;
+  data: { scopes: string[]; expiresAt: string | null; endpoints: typeof DATA_ENDPOINTS };
 }
 
-export function buildN8nPayload(node: ProduceNode | N8nNode, ctx: RunContext): N8nPayload {
+export interface PayloadOptions {
+  /** Signing secret; when present a data token is minted for the run. */
+  secret?: string | null;
+  env?: Record<string, string | undefined>;
+  now?: () => Date;
+}
+
+export function buildN8nPayload(node: ProduceNode | N8nNode, ctx: RunContext, opts: PayloadOptions = {}): N8nPayload {
   const skillId = node.kind === "produce" ? (node.skill ?? ctx.routineId) : ctx.routineId;
+  const scopes = scopesForRoutine(ctx.routineId);
+  const minted = opts.secret ? issueDataToken(opts.secret, { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, scopes }, { now: opts.now }) : null;
   return {
     accountId: ctx.account.accountId,
     runId: ctx.runId,
@@ -54,6 +70,9 @@ export function buildN8nPayload(node: ProduceNode | N8nNode, ctx: RunContext): N
     vars: ctx.vars,
     reads: compactReads(ctx.reads),
     callback: { path: "/api/routines/artifacts", signatureHeader: SIGNATURE_HEADER, timestampHeader: TIMESTAMP_HEADER },
+    dataToken: minted?.token ?? null,
+    dataBaseUrl: dataBaseUrl(opts.env ?? {}),
+    data: { scopes, expiresAt: minted ? new Date(minted.claims.exp).toISOString() : null, endpoints: DATA_ENDPOINTS },
   };
 }
 
@@ -108,7 +127,7 @@ export class HttpN8nBridge implements N8nBridge {
     if (!url) throw new Error("no n8n webhook is registered for this routine");
     const secret = (this.env[N8N_SECRET_ENV] ?? "").trim();
     if (!secret) throw new Error(`${N8N_SECRET_ENV} is not set — refusing to call n8n unsigned`);
-    const payload = buildN8nPayload(node, ctx);
+    const payload = buildN8nPayload(node, ctx, { secret, env: this.env, now: this.now });
     const body = JSON.stringify(payload);
     const ts = String(this.now().getTime());
     const f = this.opts.fetch ?? fetch;

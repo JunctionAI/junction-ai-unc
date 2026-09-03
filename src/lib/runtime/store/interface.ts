@@ -318,4 +318,7 @@ export interface Store {
       (account_id null); null when none is registered. */
   findN8nWorkflow(accountId: string, routineId: RoutineId): Promise<N8nWorkflow | null>;
   putN8nWorkflow(workflow: N8nWorkflow): Promise<N8nWorkflow>;
+  /** Every row that applies to this account — its own (any state) and the global ones
+      (account_id null) — for the skills registry (GET /api/skills/n8n). */
+  listN8nWorkflows(accountId: string): Promise<N8nWorkflow[]>;
 }

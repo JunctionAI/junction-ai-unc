@@ -241,4 +241,7 @@ export class MemoryStore implements Store {
     this.n8nWorkflows.set(workflow.id, clone(workflow));
     return clone(workflow);
   }
+  async listN8nWorkflows(accountId: string) {
+    return clone([...this.n8nWorkflows.values()].filter((w) => w.accountId === accountId || w.accountId === null));
+  }
 }
