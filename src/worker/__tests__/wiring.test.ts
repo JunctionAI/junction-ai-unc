@@ -61,6 +61,11 @@ describe("credential provider selection", () => {
     expect(defaultCredentialProvider()).toBeInstanceOf(ConnectorCredentialProvider);
     expect(defaultAccountsSource()).toBeInstanceOf(DbAccountsSource);
   });
+  it("from the real environment: URL + service role is enough — the anon key is a browser concern", () => {
+    withEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://fake.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "service", CONNECTOR_SECRET_KEY: Buffer.alloc(32, 1).toString("base64") });
+    expect(describeWiring()).toEqual({ credentials: "connectors", accounts: "db" });
+    expect(defaultAccountsSource()).toBeInstanceOf(DbAccountsSource);
+  });
 });
 
 describe("accounts source", () => {

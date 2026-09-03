@@ -21,7 +21,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist/worker ./dist/worker
 # The heartbeat lives on the container's writable layer; the health check reads it.
-RUN mkdir -p /app/.unc-worker
+# Created as root, then handed to `node` — otherwise writeHeartbeatFile EACCES and
+# Fly's HTTP check stays 503 even while the loop is ticking.
+RUN mkdir -p /app/.unc-worker && chown node:node /app/.unc-worker
 USER node
 EXPOSE 8080
 CMD ["node", "dist/worker/worker/main.js", "--interval", "60", "--heartbeat", "/app/.unc-worker/heartbeat.json", "--health-port", "8080"]

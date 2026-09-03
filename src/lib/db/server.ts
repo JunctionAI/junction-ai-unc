@@ -8,7 +8,8 @@
 
    getServiceSupabase(): service-role client for trusted server work (the runtime worker,
      later). Bypasses RLS — never expose it to a route that acts on behalf of a browser
-     without checking the session first. Key comes from SUPABASE_SERVICE_ROLE_KEY only. */
+     without checking the session first. Needs NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
+     (the anon key is a browser concern and is not required here). */
 
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -33,13 +34,21 @@ export async function getServerSupabase(): Promise<SupabaseClient | null> {
   });
 }
 
+/** URL + service-role key. The anon key is a browser concern — the worker (and every
+    service-role client) only needs the project URL and SUPABASE_SERVICE_ROLE_KEY. */
+export function serviceRoleEnv(): { url: string; serviceKey: string } | null {
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (!url || !serviceKey) return null;
+  return { url, serviceKey };
+}
+
 export function isServiceRoleConfigured(): boolean {
-  return !!publicSupabaseEnv() && !!(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  return serviceRoleEnv() !== null;
 }
 
 export function getServiceSupabase(): SupabaseClient {
-  const env = publicSupabaseEnv();
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-  if (!env || !key) throw new Error("Supabase service role is not configured (SUPABASE_SERVICE_ROLE_KEY)");
-  return createClient(env.url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const env = serviceRoleEnv();
+  if (!env) throw new Error("Supabase service role is not configured (SUPABASE_SERVICE_ROLE_KEY)");
+  return createClient(env.url, env.serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 }
