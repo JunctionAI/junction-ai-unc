@@ -28,6 +28,9 @@ import { revokeToken, type RevokeResult } from "./revoke";
 import { insertSystemReceipt } from "@/lib/db/receipts";
 import { accountForUser, consumeOauthState, deleteSecret, getConnector, getSecret, insertOauthState, isMember, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
 import { getAccessTokenFor } from "./tokens";
+import { authProviderMode } from "./registry";
+import { clearProviderRef, providerLabel, revokeViaProvider, startViaProvider } from "./providers/connect";
+import { providerRefOf } from "./providers/interface";
 import type { Platform } from "@/lib/runtime/types";
 
 export interface ConnectorConfig {
@@ -73,7 +76,7 @@ function fireConnected(deps: HandlerDeps, info: { accountId: string; platform: P
 
 export type FallbackReason = "unknown_platform" | "platform_not_configured" | "secret_store_not_configured" | "accounts_not_configured" | "developer_token_not_configured";
 
-export type StartResult = { status: 200; body: { url: string } } | { status: 200; body: { fallback: true; reason: FallbackReason } } | { status: 400 | 401 | 403 | 404; body: { error: string } };
+export type StartResult = { status: 200; body: { url: string; provider?: "composio" | "nango" } } | { status: 200; body: { fallback: true; reason: FallbackReason } } | { status: 400 | 401 | 403 | 404 | 502; body: { error: string } };
 
 const fallback = (reason: FallbackReason): StartResult => ({ status: 200, body: { fallback: true, reason } });
 const err = (status: 400 | 401 | 403 | 404, error: string): StartResult => ({ status, body: { error } });
@@ -82,6 +85,9 @@ export async function handleStart(deps: HandlerDeps, platform: string, body: unk
   const entry = connectorEntry(platform);
   if (!entry) return err(404, "unknown platform");
   if (entry.flow === "none") return fallback("platform_not_configured");
+  // Hosted auth provider (PROTOTYPE, env-gated): only when our own app is NOT configured and
+  // CONNECTOR_AUTH_PROVIDER[_<PLATFORM>] names one. The UI follows { url } exactly as before.
+  if (authProviderMode(entry.id, deps.config.env) !== "own") return startViaProvider(deps, entry.id, body);
   const creds = platformCredentials(platform, deps.config.env);
   if (!creds) return fallback("platform_not_configured");
   if (!deps.config.keyring) return fallback("secret_store_not_configured");
@@ -246,16 +252,27 @@ export async function handleDisconnect(deps: HandlerDeps, platform: string): Pro
   const db = deps.db;
   const now = deps.now().toISOString();
 
-  // 1. platform-side revoke, while the token is still ours to present
-  const revoke = await revokeSealed(deps, entry, row);
+  // 1. platform-side revoke, while the token is still ours to present — or, for a row a
+  //    hosted provider holds (PROTOTYPE), ask the provider to forget the connection instead.
+  const providerRef = providerRefOf(row);
+  const revoke: RevokeResult = providerRef
+    ? await revokeViaProvider(deps, entry, row, providerRef).then((r) => (r.ok ? { ok: true, endpoint: `${r.provider}:connection` } : { ok: false, code: "not_configured" as const, endpoint: `${r.provider}:${r.code}` }))
+    : await revokeSealed(deps, entry, row);
   // 2. warehouse sync teardown
   const purge = await purgeSync(deps, accountId, entry.id);
-  // 3. forget the secret
+  // 3. forget the secret (a provider row has none here) and the provider pointer
   await deleteSecret(db, row.id);
+  if (providerRef) await clearProviderRef(db, { ...row, sync_ref: row.sync_ref });
   await updateConnector(db, row.id, { status: "disconnected", last_sync_result: null });
 
   // 4. receipts
-  const revokeLine = revoke.ok ? `access revoked on ${entry.name}’s side and the token deleted from the secret store` : `token deleted from the secret store`;
+  const revokeLine = providerRef
+    ? revoke.ok
+      ? `the connection deleted at ${providerLabel(providerRef.provider)} (their vault drops the token)`
+      : `the ${providerLabel(providerRef.provider)} pointer removed here (their side did not confirm — delete it in their dashboard too)`
+    : revoke.ok
+      ? `access revoked on ${entry.name}’s side and the token deleted from the secret store`
+      : `token deleted from the secret store`;
   await insertSystemReceipt(db, {
     accountId,
     kind: "notification",
