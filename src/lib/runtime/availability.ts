@@ -5,7 +5,9 @@
      not_for_business_type     the routine is built around a store (cart, orders, post-purchase
                                flows) and this business has none — hidden from "Recommended",
                                shown in the library with the honest line
-     wave_2                    the chain mutates (execute node): every executor refuses today
+     approval_gated            the chain mutates (execute node): runnable when required reads
+                               are connected. Dry-run shapes the exact request; live apply still
+                               waits on an approval (and LIVE_MODE_ENABLED).
      needs_connector:<p>       a REQUIRED read platform (or one the skill's stated minimum
                                names) with a connector card is not connected
      ready                     launch wave (wave 1), every required read answerable — drafts only
@@ -23,7 +25,7 @@ import { CONNECTOR_PLATFORMS } from "../db/mapping";
 import { hasStore, modelUnknown, type BusinessModel } from "../unc/businessType";
 import type { Platform, RoutineSpec } from "./types";
 
-export type Availability = "ready" | "draft_only" | "wave_2" | "not_for_business_type" | `needs_connector:${string}`;
+export type Availability = "ready" | "draft_only" | "approval_gated" | "not_for_business_type" | `needs_connector:${string}`;
 
 const CARD_PLATFORMS = new Set(Object.values(CONNECTOR_PLATFORMS));
 
@@ -79,10 +81,10 @@ export function helpfulPlatforms(spec: RoutineSpec): Platform[] {
 
 export function routineAvailability(spec: RoutineSpec, connected: Iterable<string>, model?: BusinessModel | null): Availability {
   if (!fitsBusiness(spec, model)) return "not_for_business_type";
-  if (spec.mutates) return "wave_2";
   const have = new Set(connected);
   const missing = requiredPlatforms(spec).find((p) => !have.has(p));
   if (missing) return `needs_connector:${missing}`;
+  if (spec.mutates) return "approval_gated";
   return spec.wave === 1 ? "ready" : "draft_only";
 }
 
@@ -109,8 +111,8 @@ export function availabilityCopy(a: Availability): string {
       return "drafts only — nothing goes out without you";
     case "draft_only":
       return "draft-only for now";
-    case "wave_2":
-      return "changes things on a platform — coming in wave 2, off until then";
+    case "approval_gated":
+      return "I'll prepare the exact change and wait for you";
     case "not_for_business_type":
       return NOT_FOR_STORE_LESS_COPY;
     default:
@@ -119,7 +121,7 @@ export function availabilityCopy(a: Availability): string {
 }
 
 export function canEnable(a: Availability): boolean {
-  return a === "ready" || a === "draft_only";
+  return a === "ready" || a === "draft_only" || a === "approval_gated";
 }
 
 /** The hint line for helpful-but-missing platforms (the copy floor in docs/PRODUCT-EXPERIENCE.md);
