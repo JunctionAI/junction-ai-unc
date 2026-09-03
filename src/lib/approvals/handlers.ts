@@ -17,9 +17,29 @@
 
 import { afterApprovalDecision } from "@/lib/brain/hooks";
 import { ALL_SYSTEMS } from "@/lib/platform/catalog";
-import type { Store } from "@/lib/runtime/store/interface";
+import { newId } from "@/lib/runtime/context";
+import type { RunRecord, Store } from "@/lib/runtime/store/interface";
 import type { ApprovalRecord, Receipt, ReceiptKind, RunResult } from "@/lib/runtime/types";
 import { resumeApproval, type ServiceDeps } from "@/worker/service";
+
+/** Record-only decision for a proposal whose run is already finished (nothing to resume). */
+async function recordDecision(deps: ServiceDeps, approval: ApprovalRecord, run: RunRecord, input: { decision: "approved" | "held"; decidedBy?: string }): Promise<{ approval: ApprovalRecord; run: RunResult }> {
+  const nowIso = (deps.now ?? (() => new Date()))().toISOString();
+  const decided = await deps.store.updateApproval(approval.id, { status: input.decision, decidedAt: nowIso, decidedBy: input.decidedBy });
+  await deps.store.appendTasteEvent({ id: newId(), accountId: approval.accountId, approvalId: approval.id, routineId: approval.routineId, action: input.decision, context: { runId: run.id, title: approval.title, decidedBy: input.decidedBy ?? null, proposal: true }, createdAt: nowIso });
+  const receipt: Receipt = {
+    id: newId(),
+    accountId: approval.accountId,
+    runId: run.id,
+    approvalId: approval.id,
+    kind: "notification",
+    description: input.decision === "approved" ? `Approved (recorded): ${approval.title} — nothing ran; executing approved proposals arrives with wave 2.` : `Held: ${approval.title} — nothing was changed.`,
+    payload: { approvalId: approval.id, recordOnly: true, decision: input.decision },
+    createdAt: nowIso,
+  };
+  await deps.store.appendReceipt(receipt);
+  return { approval: decided, run: { runId: run.id, routineId: run.routineId, version: run.version, mode: run.mode, status: run.status, summary: run.summary ?? "", receipts: [receipt], approval: decided } };
+}
 
 export interface ApprovalView {
   id: string;
@@ -194,6 +214,15 @@ export async function decideApproval(deps: ServiceDeps, input: DecideInput): Pro
   if (!approval || (input.accountId && approval.accountId !== input.accountId)) throw new DecideError("not_found", `approval ${input.approvalId} not found`);
   if (approval.status !== "pending") throw new DecideError("already_decided", `approval ${approval.id} already ${approval.status}`);
   if (!approval.runId) throw new DecideError("not_resumable", `approval ${approval.id} has no run to resume`);
+  // A pending approval on a run that already finished is a PROPOSAL (POST /api/n8n/actions):
+  // there is nothing to resume, so the decision is recorded — taste event + receipt — and
+  // nothing runs. Executing approved proposals arrives with wave 2.
+  const runRecord = await deps.store.getRun(approval.runId);
+  if (runRecord && runRecord.status !== "waiting_approval" && runRecord.status !== "running") {
+    const recorded = await recordDecision(deps, approval, runRecord, input);
+    void afterApprovalDecision({ id: recorded.approval.id, accountId: recorded.approval.accountId, routineId: recorded.approval.routineId, title: recorded.approval.title, detail: recorded.approval.detail }, input.decision, { store: deps.store }).catch(() => {});
+    return { approval: approvalView(recorded.approval), run: recorded.run, receipts: recorded.run.receipts.map(receiptView) };
+  }
   let run: RunResult;
   try {
     run = await resumeApproval(deps, { runId: approval.runId, decision: input.decision, decidedBy: input.decidedBy });
