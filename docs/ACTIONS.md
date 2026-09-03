@@ -219,3 +219,11 @@ actions, so the two can be run on the same rows and diffed; and the flow's "undo
 * The streak / age / measurement-clean / product-price fields are read when a row carries them
   (`age_hours`, `streak_days`, `measurement_clean`, `product_price`); the worker's Meta reader does not
   compute them yet, so today those gates pass through as "not measured" and the rules say so.
+
+## Landed (2026-09-03)
+
+- Four gates green on `build/action-library`: 1,729 unit tests, app + worker typecheck, `next build`.
+- Migration **0015** applied on `junction-ai-unc` (`account_presets`, `routine_params`, RLS `member_all`).
+- AVGAR Graph v23 proof (Junction env token — **not** copied into Unc): `GET act_{id}/insights` last_7d
+  adset-level, same field list as `meta.campaign.read_performance` → **3 ad sets, NZ$307.25 spend**.
+  Unc still cannot read this on its own until `CONNECTOR_SECRET_KEY` + a Meta token are in Vercel.

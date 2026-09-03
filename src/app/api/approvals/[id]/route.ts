@@ -7,8 +7,8 @@
 
    Same code path as the worker (src/worker/service.ts resumeApproval → engine resumeRun): the
    engine re-checks status + expiry, writes the taste_event, and continues or ends the run.
-   With the shipped RefusingExecutor an approved mutating run ends failed-closed — the
-   response says so honestly (run.status / run.error) and nothing is changed.
+   With ActionExecutor (LIVE_MODE_ENABLED = false) an approved mutating run ends
+   failed-closed — the response says so honestly (run.status / run.error) and nothing is changed.
 
    DB configured → session-bound (the approval must belong to the caller's account; decided_by
    = the caller). Demo mode → MemoryStore, unbound (nothing survives a restart). */

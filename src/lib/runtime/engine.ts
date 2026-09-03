@@ -1,9 +1,10 @@
 /* The routines engine.
 
    runRoutine(spec, input, adapters, { mode })
-     Executes the node chain in order. dry_run never calls the Executor and
-     records what WOULD happen as kind:'draft' receipts (the gate becomes a
-     draft approval preview, the execute a draft mutation). live pauses at
+     Executes the node chain in order. dry_run never calls Executor.execute:
+     it records what WOULD happen as kind:'draft' receipts (the gate becomes a
+     draft approval preview, the execute a draft mutation — shaped through
+     Executor.dryRun when the mutation names a typed action). live pauses at
      the gate with status 'waiting_approval' and returns.
 
    resumeRun(runId, 'approved' | 'held', adapters)

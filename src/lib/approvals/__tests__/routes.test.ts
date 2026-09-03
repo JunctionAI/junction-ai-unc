@@ -34,8 +34,13 @@ const OTHER = "00000000-0000-4000-8000-00000000acc2";
 const post = (id: string, body: unknown) =>
   decide(new Request(`http://unc.test/api/approvals/${id}`, { method: "POST", headers: { "content-type": "application/json" }, body: typeof body === "string" ? body : JSON.stringify(body) }), { params: Promise.resolve({ id }) });
 
+/** Frozen at beforeEach so the engine clock and FakeSupabase timestamps match. The API
+    listing uses wall-clock `new Date()`, so this must stay close to now — a fixed 2026-09-02
+    plus the spec's 24h gate made every pending row look expired the next day. */
+let NOW: Date;
+
 async function seedPaused(store: Store, accountId: string) {
-  const clk = clock();
+  const clk = clock(NOW.toISOString());
   const adapters = { ...buildAdapters({ store, accounts: new StaticAccountsSource(), now: clk.now }), reader: new StaticReader(SPEND_FIXTURE, clk.now) };
   const r = await runRoutine(budgetMoveSpec(), input({ account: { accountId, currency: "NZD", budgetMonthly: 3000 }, triggeredBy: "manual" }), adapters, { mode: "live" });
   expect(r.status).toBe("waiting_approval");
@@ -45,8 +50,9 @@ async function seedPaused(store: Store, accountId: string) {
 beforeEach(() => {
   setFakeEnv();
   serviceRole = true;
+  NOW = new Date();
   db = new FakeSupabase();
-  db.now = () => "2026-09-02T09:00:00.000Z";
+  db.now = () => NOW.toISOString();
   db.userId = USER;
   user = { id: USER, email: "founder@example.test" };
   db.seed("accounts", [

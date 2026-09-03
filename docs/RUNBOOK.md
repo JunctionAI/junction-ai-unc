@@ -37,6 +37,6 @@ Everything below is env-gated: with none of these variables set, the app runs in
 ## Hard product rules encoded in code
 - No external mutation without an approved, unexpired gate belonging to the run (`src/lib/runtime/engine.ts`).
 - Spend caps from the founder's budget fail closed (per-day and per-month).
-- `LIVE_MODE_ENABLED = false` in `src/worker/service.ts` — flipping it is a founder decision (Wave 2).
+- `LIVE_MODE_ENABLED = false` in `src/worker/service.ts` — flipping it is a founder decision (Wave 2). Typed actions (`docs/ACTIONS.md`) dry-run the exact request and refuse live unless `UNC_LIVE_ACTION_RISKS` enables every risk the action carries.
 - Unc may only say numbers that exist in the context he was given (`src/lib/unc/prompt.ts`, `narrative.ts` validator).
 - Every read, draft, decision and mutation writes a receipt.

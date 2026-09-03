@@ -110,7 +110,7 @@ describe("catalog specs", () => {
     };
     const fixtures = Object.fromEntries(
       ["shopify", "ga4", "meta_ads", "google_ads", "klaviyo", "instagram", "tiktok", "linkedin", "youtube", "search_console", "hubspot", "gmail", "gorgias", "web", "llm_search", "calendar"].flatMap((p) =>
-        ["orders", "products", "customers", "checkouts", "pages", "report", "insights", "ads", "campaigns", "flows", "metrics", "segments", "media", "hashtag_search", "videos", "trends", "posts", "search_analytics", "contacts", "deals", "threads", "tickets", "crawl", "scan", "prompts", "events"].map((r) => [`${p}:${r}`, { rows, metrics }]),
+        ["orders", "products", "customers", "checkouts", "pages", "report", "insights", "ads", "adsets", "campaigns", "flows", "metrics", "segments", "media", "hashtag_search", "videos", "trends", "posts", "search_analytics", "contacts", "deals", "threads", "tickets", "crawl", "scan", "prompts", "events"].map((r) => [`${p}:${r}`, { rows, metrics }]),
       ),
     );
     for (const spec of CATALOG_SPECS) {
