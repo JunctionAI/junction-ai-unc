@@ -9,7 +9,7 @@
 
 import { startHealthServer } from "./health";
 import { createLogger } from "./log";
-import { readHeartbeatFile, Worker } from "./loop";
+import { Worker } from "./loop";
 import { createLlmClient, describeLlmClient } from "./providers/llmDecision";
 import { createTextClient } from "../lib/llm/router";
 import { SELF_REVIEW_EFFORT, SELF_REVIEW_MAX_TOKENS } from "../lib/telemetry/selfReview";
@@ -91,7 +91,9 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   }
 
   if (args.healthPort) {
-    await startHealthServer(args.healthPort, () => readHeartbeatFile(args.heartbeatPath), { maxAgeMs: args.intervalSec * 1000 * 3 });
+    // In-memory heartbeat, not the file: a permission miss on the heartbeat path
+    // must not 503 Fly's check while the loop is still ticking.
+    await startHealthServer(args.healthPort, () => worker.heartbeat(), { maxAgeMs: args.intervalSec * 1000 * 3 });
     log.info("health.listening", { port: args.healthPort });
   }
   worker.start();
