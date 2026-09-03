@@ -61,6 +61,24 @@ export interface SkillContext {
 
 export type SkillCheck = { ok: true; using: string[] } | { ok: false; needs: ProduceNeed[]; note?: string };
 
+export interface SkillExample {
+  when: string;
+  does: string;
+}
+
+/** Graphed-style skill file: what this routine is allowed to own, read, decide, write and never do.
+    Rendered in the inspector. `apply` is the graduate line — Unc keeps asking until agreement unlocks it. */
+export interface SkillFile {
+  goal: string;
+  owns: string[];
+  reads: string[];
+  decides: string[];
+  writes: string[];
+  never: string[];
+  apply: string;
+  examples: SkillExample[];
+}
+
 export interface Skill {
   id: string;
   routineId: string;
@@ -71,6 +89,7 @@ export interface Skill {
   purpose: string;
   /** What the skill can draw on, in plain words (UI + docs). */
   inputs: string[];
+  file: SkillFile;
   minimum: SpecMinimum;
   /** The playbook domain to recall method cards from. */
   domain: "email" | "paid" | "seo" | "content" | "sales" | "strategy" | "analytics";

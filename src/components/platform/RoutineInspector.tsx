@@ -13,6 +13,8 @@
 import { useEffect, useState } from "react";
 import { formatValue, industryLine } from "@/lib/runtime/presets/industry";
 import type { PresetField, PresetValue } from "@/lib/runtime/presets/types";
+import type { SkillFile } from "@/lib/runtime/skills/types";
+import type { AgreementScore } from "@/lib/runtime/agreement";
 
 export interface ParamsField extends PresetField {
   relevant: boolean;
@@ -28,6 +30,8 @@ export interface ParamsView {
   steps: { id: string; label: string; kind: string; included: boolean }[];
   version: { live: number; draft: number | null };
   canPromote: boolean;
+  skillFile?: SkillFile | null;
+  agreement?: Pick<AgreementScore, "decided" | "approved" | "held" | "rate" | "applyUnlocked" | "line"> | null;
 }
 
 type Body = Partial<ParamsView> & { error?: string; issues?: { key: string; message: string }[]; fallback?: boolean; run?: { runId: string; status: string; summary: string }; passed?: boolean };
@@ -142,6 +146,27 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
       {!view && !error && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10 }}>Reading the settings…</div>}
       {view && (
         <>
+          {view.agreement && (
+            <div data-testid="inspector-agreement" style={{ fontSize: 12.5, color: view.agreement.applyUnlocked ? "oklch(0.4 0.1 150)" : "oklch(0.35 0.05 262)", marginTop: 10, lineHeight: 1.5 }}>
+              {view.agreement.line}
+            </div>
+          )}
+          {view.skillFile && (
+            <div data-testid="inspector-skill-file" style={{ marginTop: 14, border: "1px solid var(--card-border)", borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ ...label, marginBottom: 6 }}>This skill</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "oklch(0.3 0.05 262)", marginBottom: 8 }}>{view.skillFile.goal}</div>
+              {(["owns", "reads", "decides", "writes", "never"] as const).map((k) => (
+                <div key={k} data-testid={`skill-${k}`} style={{ fontSize: 12, lineHeight: 1.45, marginTop: 4 }}>
+                  <span style={{ fontWeight: 600, textTransform: "capitalize", color: "var(--muted)", letterSpacing: "0.04em" }}>{k}: </span>
+                  {view.skillFile![k].join(" · ")}
+                </div>
+              ))}
+              <div data-testid="skill-apply" style={{ fontSize: 12, lineHeight: 1.45, marginTop: 8, color: "oklch(0.4 0.08 70)" }}>
+                <span style={{ fontWeight: 600 }}>Apply: </span>
+                {view.skillFile.apply}
+              </div>
+            </div>
+          )}
           <div data-testid="inspector-band" style={{ fontSize: 12.5, color: "oklch(0.35 0.05 262)", marginTop: 10, lineHeight: 1.5 }}>
             {view.band ? (
               <>

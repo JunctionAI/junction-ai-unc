@@ -26,6 +26,12 @@ describe("skill cards", () => {
       expect(s.minimum.summary.length).toBeGreaterThan(10);
       expect(s.maxItems).toBeGreaterThan(0);
       expect(CATALOG_SPEC_BY_ID[s.id].minimum).toEqual(s.minimum);
+      const f = s.file;
+      expect(f.goal.length, s.id).toBeGreaterThan(10);
+      for (const k of ["owns", "reads", "decides", "writes", "never"] as const) expect(f[k].length, `${s.id}.${k}`).toBeGreaterThan(0);
+      expect(f.apply.toLowerCase(), s.id).toMatch(/draft|ask|graduate|send|yours/);
+      expect(f.examples.length, s.id).toBeGreaterThan(0);
+      expect(f.never.some((n) => /invent|scrape|publish|send|join the call/i.test(n)), s.id).toBe(true);
     }
   });
 
