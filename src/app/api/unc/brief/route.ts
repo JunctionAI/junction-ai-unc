@@ -16,6 +16,7 @@ import { BRIEF_EFFORT, BRIEF_MAX_TOKENS, generateDailyBrief, getDailyBrief, loca
 import { createTextClient } from "@/lib/llm/router";
 import { requireAccountSession, type AccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ function briefLlm(accountId: string, db: AccountSession["service"]): BriefLlm | 
   return createTextClient("daily_brief", { maxTokens: BRIEF_MAX_TOKENS, effort: BRIEF_EFFORT, jsonMode: true }, { accountId, db });
 }
 
-export async function GET() {
+async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -37,7 +38,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   let force = false;
@@ -55,3 +56,6 @@ export async function POST(req: Request) {
     return Response.json({ error: err instanceof Error && !/api[_ ]?key|anthropic/i.test(err.message) ? err.message : "brief generation failed" }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture("api/unc/brief", handleGET);
+export const POST = withErrorCapture("api/unc/brief", handlePOST);

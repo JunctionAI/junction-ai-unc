@@ -17,6 +17,7 @@ import { parseN8nReply, N8N_SECRET_ENV } from "@/worker/providers/n8n";
 import { completeExternal, type ServiceDeps } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun } from "../shared";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ function deps(): ServiceDeps {
   return { store: getStore(), accounts: defaultAccountsSource() };
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const secret = (process.env[N8N_SECRET_ENV] ?? "").trim();
   if (!secret) return Response.json({ error: `${N8N_SECRET_ENV} is not configured` }, { status: 503 });
   const raw = await req.text();
@@ -64,3 +65,5 @@ export async function POST(req: Request) {
     return Response.json({ error: message }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture("api/routines/artifacts", handlePOST);

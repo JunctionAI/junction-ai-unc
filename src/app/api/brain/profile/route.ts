@@ -7,6 +7,7 @@
 
 import { requireAccountSession } from "@/lib/db/session";
 import { unwrap } from "@/lib/db/types";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ interface ProfileRow {
   channels: Record<string, unknown>;
 }
 
-export async function GET() {
+async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -32,7 +33,7 @@ export async function GET() {
   }
 }
 
-export async function PATCH(req: Request) {
+async function handlePATCH(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   let body: { founderNotes?: unknown };
@@ -50,3 +51,6 @@ export async function PATCH(req: Request) {
     return json({ error: err instanceof Error ? err.message : "profile write failed" }, 500);
   }
 }
+
+export const GET = withErrorCapture("api/brain/profile", handleGET);
+export const PATCH = withErrorCapture("api/brain/profile", handlePATCH);

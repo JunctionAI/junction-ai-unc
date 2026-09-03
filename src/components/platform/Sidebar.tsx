@@ -52,7 +52,7 @@ export function accountConnectorLine(facts: Parameters<typeof connectorSummary>[
     `billing` is null unless billing is configured; then it adds the plan/trial line.
     `onModels` (DB mode only) opens the "Models" settings — which brain for which job.
     `onWhatUncKnows` (DB mode only) opens "What Unc knows" — the founder's view of his memory. */
-export default function Sidebar({ V, account = null, billing = null, onModels, onWhatUncKnows }: { V: PlatformVals; account?: Persistence | null; billing?: Entitlement | null; onModels?: () => void; onWhatUncKnows?: () => void }) {
+export default function Sidebar({ V, account = null, billing = null, onModels, onSkills, onWhatUncKnows }: { V: PlatformVals; account?: Persistence | null; billing?: Entitlement | null; onModels?: () => void; onSkills?: () => void; onWhatUncKnows?: () => void }) {
   const plan = billing ? planLine(billing) : null;
   const accountMode = account?.mode ?? null;
   const accountId = account?.accountId ?? null;
@@ -137,6 +137,14 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
                 <>
                   <button type="button" onClick={onModels} className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "var(--faint-on-navy)" }}>
                     Models
+                  </button>
+                  <span>·</span>
+                </>
+              )}
+              {onSkills && (
+                <>
+                  <button type="button" onClick={onSkills} data-testid="sidebar-skills" className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "var(--faint-on-navy)" }}>
+                    Skills
                   </button>
                   <span>·</span>
                 </>

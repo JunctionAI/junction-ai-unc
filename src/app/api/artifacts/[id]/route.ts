@@ -19,6 +19,7 @@ import { isDbConfigured } from "@/lib/db/client";
 import { requireAccountSession } from "@/lib/db/session";
 import type { DbClient } from "@/lib/db/types";
 import { getStore } from "@/lib/runtime/store";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ async function bind(): Promise<{ accountId: string | null; decidedBy?: string; d
   return { accountId: session.accountId, decidedBy: session.userId, db: session.service };
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handleGET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const b = await bind();
   if (b instanceof Response) return b;
@@ -42,7 +43,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return Response.json({ artifact }, { headers: { "cache-control": "no-store" } });
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const artifactId = (id || "").trim().slice(0, 128);
   if (!artifactId) return Response.json({ error: "artifact id is required" }, { status: 400 });
@@ -83,3 +84,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return Response.json({ error: err instanceof Error ? err.message : "decision failed" }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture("api/artifacts/[id]", handleGET);
+export const POST = withErrorCapture("api/artifacts/[id]", handlePOST);

@@ -11,6 +11,7 @@
 import { requireAccountSession, type AccountSession } from "@/lib/db/session";
 import { unwrap } from "@/lib/db/types";
 import { createIntakeKey, listIntakeKeys, revokeIntakeKey } from "@/lib/intake/keys";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ async function isOwner(session: AccountSession): Promise<boolean> {
   return row?.role === "owner";
 }
 
-export async function GET() {
+async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -32,7 +33,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   let body: { label?: unknown } = {};
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+async function handleDELETE(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   let body: { id?: unknown };
@@ -71,3 +72,7 @@ export async function DELETE(req: Request) {
     return json({ error: err instanceof Error ? err.message : "revoke failed" }, 500);
   }
 }
+
+export const GET = withErrorCapture("api/intake/keys", handleGET);
+export const POST = withErrorCapture("api/intake/keys", handlePOST);
+export const DELETE = withErrorCapture("api/intake/keys", handleDELETE);

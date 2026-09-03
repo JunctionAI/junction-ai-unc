@@ -9,10 +9,11 @@ import { getServiceSupabase, isServiceRoleConfigured } from "@/lib/db/server";
 import { billingEnv, getStripe } from "@/lib/billing/config";
 import { handleStripeEvent } from "@/lib/billing/sync";
 import type Stripe from "stripe";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const env = billingEnv();
   if (!env) return Response.json({ error: "billing is not configured" }, { status: 503 });
   const signature = req.headers.get("stripe-signature");
@@ -35,3 +36,5 @@ export async function POST(req: Request) {
     return Response.json({ error: "could not record event" }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture("api/billing/webhook", handlePOST);

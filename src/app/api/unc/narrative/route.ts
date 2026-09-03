@@ -14,6 +14,7 @@
 import { optionalAccountContext } from "@/lib/llm/accountContext";
 import { complete, resolveModel } from "@/lib/llm/router";
 import { NARRATIVE_EFFORT, NARRATIVE_MAX_TOKENS, NARRATIVE_SYSTEM, buildNarrativeUserMessage, coerceNarrativeRequest, extractJsonObject, parseNarrative } from "@/lib/unc/narrative";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ const MAX_BODY_CHARS = 40_000;
 
 const fallback = () => Response.json({ fallback: true });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!resolveModel("plan_narrative")) return fallback();
 
   let raw: unknown;
@@ -52,3 +53,5 @@ export async function POST(req: Request) {
     return fallback();
   }
 }
+
+export const POST = withErrorCapture("api/unc/narrative", handlePOST);

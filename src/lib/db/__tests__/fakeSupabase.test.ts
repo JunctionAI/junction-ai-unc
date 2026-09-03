@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeSupabase, migrationSchema } from "./fakeSupabase";
 
 describe("the fake is schema-checked against supabase/migrations", () => {
-  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012/0013 columns and keys", () => {
+  it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012/0013/0014 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
       "account_members",
@@ -10,6 +10,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "account_profiles",
       "account_state_meta",
       "accounts",
+      "app_errors",
       "approvals",
       "artifacts",
       "benchmark_optins",
@@ -44,7 +45,12 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "taste_events",
       "team_members",
       "waitlist",
+      "worker_heartbeats",
     ]);
+    // 0014 launch hardening
+    expect(s.accounts.columns.has("monthly_llm_cap_usd")).toBe(true);
+    expect([...s.app_errors.columns]).toEqual(expect.arrayContaining(["scope", "message", "stack", "account_id", "context"]));
+    expect(s.worker_heartbeats.primaryKey).toEqual(["worker"]);
     // 0006 telemetry
     expect(s.routine_outcomes.uniques).toContainEqual({ columns: ["account_id", "routine_id", "kpi_key", "window_end"] });
     expect(s.routine_outcomes.enums.kpi_op).toEqual(new Set(["gte", "lte"]));

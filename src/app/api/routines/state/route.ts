@@ -18,11 +18,12 @@ import { requireAccountSession } from "@/lib/db/session";
 import { routinesStateForAccount, setRoutineEnabled } from "@/lib/runtime/routinesState";
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   const routineId = new URL(req.url).searchParams.get("routineId") ?? undefined;
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: { routineId?: unknown; enabled?: unknown };
   try {
     body = await req.json();
@@ -55,3 +56,6 @@ export async function POST(req: Request) {
     return Response.json({ error: message }, { status: /not in the catalog/.test(message) ? 404 : 500 });
   }
 }
+
+export const GET = withErrorCapture("api/routines/state", handleGET);
+export const POST = withErrorCapture("api/routines/state", handlePOST);

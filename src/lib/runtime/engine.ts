@@ -362,15 +362,28 @@ class RunSession {
 
   private async produce(node: ProduceNode, index: number): Promise<RunResult | undefined> {
     // A registered n8n workflow for this routine takes the step over (Tom's workflows as skills).
+    // When the workflow cannot answer (unreachable, timeout, a rejected artifact) and a producer
+    // exists, the built-in skill drafts instead — with a receipt saying so. An explicit n8n node
+    // (the n8n() step) never falls back: the spec asked for that workflow by name.
+    let fallbackFrom: string | null = null;
     if (this.adapters.n8n) {
       const workflow = await this.store.findN8nWorkflow(this.ctx.account.accountId, this.ctx.routineId);
-      if (workflow) return this.callN8n(node, index, workflow);
+      if (workflow) {
+        try {
+          return await this.callN8n(node, index, workflow);
+        } catch (err) {
+          if (!this.adapters.producer) throw err;
+          const reason = err instanceof Error ? err.message : String(err);
+          fallbackFrom = workflow.id;
+          await this.receipt("notification", `Your n8n workflow couldn’t answer (${reason}) — drafting with my built-in skill instead.`, { node: node.id, workflowId: workflow.id, fallback: "producer", reason });
+        }
+      }
     }
     const producer = this.adapters.producer;
     if (!producer) return this.fail(node.id, "no producer is configured — nothing was drafted", { node: node.id });
     const out = await producer.produce(node, this.ctx);
     if ("needs" in out) return this.waitForInput(node, index, out.needs, out.note);
-    await this.storeArtifact(node, out.artifact, "producer");
+    await this.storeArtifact(node, fallbackFrom ? { ...out.artifact, meta: { ...(out.artifact.meta ?? {}), fallbackFrom: "n8n", workflowId: fallbackFrom } } : out.artifact, "producer");
     return undefined;
   }
 

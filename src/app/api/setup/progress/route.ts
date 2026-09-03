@@ -10,11 +10,12 @@
 
 import { requireAccountSession } from "@/lib/db/session";
 import { setupProgress } from "@/lib/setup/progress";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -23,3 +24,5 @@ export async function GET() {
     return Response.json({ error: err instanceof Error ? err.message : "setup progress failed" }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture("api/setup/progress", handleGET);

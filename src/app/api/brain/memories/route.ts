@@ -9,6 +9,7 @@
 
 import { requireAccountSession } from "@/lib/db/session";
 import { addFounderMemory, forgetMemory, isMemoryKind, listActiveMemories, reviseMemory, type MemoryRow } from "@/lib/intake/memoryWriter";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ async function readBody<T extends object>(req: Request): Promise<T | null> {
 const MAX_TEXT = 1000;
 const cleanText = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim().slice(0, MAX_TEXT) : null);
 
-export async function GET() {
+async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -50,7 +51,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   const body = await readBody<{ text?: unknown; kind?: unknown }>(req);
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PATCH(req: Request) {
+async function handlePATCH(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   const body = await readBody<{ id?: unknown; text?: unknown }>(req);
@@ -84,7 +85,7 @@ export async function PATCH(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+async function handleDELETE(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   const body = await readBody<{ id?: unknown }>(req);
@@ -97,3 +98,8 @@ export async function DELETE(req: Request) {
     return json({ error: err instanceof Error ? err.message : "forget failed" }, 500);
   }
 }
+
+export const GET = withErrorCapture("api/brain/memories", handleGET);
+export const POST = withErrorCapture("api/brain/memories", handlePOST);
+export const PATCH = withErrorCapture("api/brain/memories", handlePATCH);
+export const DELETE = withErrorCapture("api/brain/memories", handleDELETE);

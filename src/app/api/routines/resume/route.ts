@@ -23,6 +23,7 @@ import { getStore } from "@/lib/runtime/store";
 import { resumeApproval, type ServiceDeps } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun } from "../shared";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ function deps(): ServiceDeps {
   return { store: getStore(), accounts: defaultAccountsSource() };
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: { runId?: unknown; decision?: unknown; decidedBy?: unknown };
   try {
     body = await req.json();
@@ -60,3 +61,5 @@ export async function POST(req: Request) {
     return Response.json({ error: message }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture("api/routines/resume", handlePOST);

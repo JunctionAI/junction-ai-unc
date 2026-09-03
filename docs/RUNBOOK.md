@@ -20,6 +20,8 @@ Everything below is env-gated: with none of these variables set, the app runs in
 | Billing | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` |
 | Connectors | `SHOPIFY_CLIENT_ID/SECRET`, `KLAVIYO_CLIENT_ID/SECRET`, `META_APP_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID` |
 | Sync | `AIRBYTE_API_KEY`, `AIRBYTE_WORKSPACE_ID`, `AIRBYTE_DESTINATION_ID` (or `WAREHOUSE_PG_*`), `AIRBYTE_SYNC_CRON`, `AIRBYTE_START_DATE` |
+| n8n skills | `N8N_SIGNING_SECRET` (app + worker + n8n), `N8N_DATA_BASE_URL` (optional; defaults to `APP_URL`), `UNC_ADMIN_EMAILS` (comma list), `N8N_ALLOW_HTTP` (dev only) — `docs/N8N-ROUTINES.md` |
+| Launch rails | `UNC_ACCOUNT_MONTHLY_USD_CAP` (default 15; per-account override `accounts.monthly_llm_cap_usd`), `UNC_WORKER_INTERVAL_SEC` (the app's worker-freshness window on `/api/health`; default 60), `VERCEL_GIT_COMMIT_SHA` (set by Vercel) — `docs/LAUNCH-CHECKLIST.md` |
 
 ## Commands
 | | |
@@ -27,7 +29,8 @@ Everything below is env-gated: with none of these variables set, the app runs in
 | Dev server (with Junction env) | `PORT=3400 ./scripts/dev.sh` |
 | Unit tests | `npm test` |
 | E2E + visual parity | `npm run e2e` · `npm run e2e:parity` (report: `design-reference/parity/REPORT.md`) |
-| Typecheck / build | `npx tsc --noEmit` · `npm run build` |
+| Typecheck / build | `npx tsc --noEmit` · `npx tsc -p tsconfig.worker.json` · `npm run build` |
+| Health | `GET /api/health` — build sha, database reachable, worker last seen (`worker_heartbeats`) |
 | Worker (local, once) | `npx tsc -p tsconfig.worker.json && node dist/worker/worker/main.js --once` |
 | Improvement loops (worker one-shots) | `node dist/worker/worker/main.js --measure` (daily) · `--self-review` (weekly) · `--benchmarks` (weekly) — `docs/IMPROVEMENT-LOOP.md` |
 

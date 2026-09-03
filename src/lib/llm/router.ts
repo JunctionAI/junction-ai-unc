@@ -17,6 +17,7 @@
 import { asDb } from "../db/client";
 import { getServiceSupabase, isServiceRoleConfigured } from "../db/server";
 import type { DbClient } from "../db/types";
+import { budgetExceededResult, checkBudget } from "./budget";
 import { readModelPref } from "./prefs";
 import { defaultProviderFactory, type ProviderFactory } from "./providers";
 import { CATALOGUE, configuredProviders, isProviderConfigured, parseModelId, PROVIDER_FALLBACK_ORDER, TIER_EQUIVALENTS, type Env } from "./registry";
@@ -131,12 +132,21 @@ async function run(task: LlmTask | "ping", resolved: ResolvedModel, req: LlmRequ
   return result;
 }
 
-/** Resolve the model for this task (+ account), call it, write the ledger. null = nothing configured. */
+/** Resolve the model for this task (+ account), call it, write the ledger. null = nothing configured.
+    An account over its monthly cap (src/lib/llm/budget.ts) gets errorCode "budget_exceeded" and
+    no provider call. */
 export async function complete(task: LlmTask, req: LlmRequest, ctx: CompleteContext = {}): Promise<LlmResult | null> {
   const log = ctx.log ?? defaultLlmLog;
   const db = ctxDb(ctx);
   const resolved = resolveModel(task, { accountOverride: await accountPref(task, ctx, db, log), env: ctx.env });
   if (!resolved) return null;
+  if (ctx.accountId && db) {
+    const budget = await checkBudget(db, ctx.accountId, { env: ctx.env, now: ctx.now, log });
+    if (!budget.ok) {
+      log("llm.budget_exceeded", { accountId: ctx.accountId, task, spentUsd: budget.spentUsd, capUsd: budget.capUsd });
+      return budgetExceededResult(resolved, budget);
+    }
+  }
   return run(task, resolved, req, ctx, db, log);
 }
 

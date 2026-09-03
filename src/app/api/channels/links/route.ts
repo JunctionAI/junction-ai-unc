@@ -17,6 +17,7 @@ import { getLink, issueLinkCode, listLinks, normalisePrefs, unlink, updatePrefs 
 import { deleteChannelSecret } from "@/lib/channels/secrets";
 import { channelAvailability } from "@/lib/channels/server";
 import { requireAccountSession } from "@/lib/db/session";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ export function instructionFor(channel: Channel, code: string, avail: ReturnType
   }
 }
 
-export async function GET() {
+async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -73,7 +74,7 @@ async function readBody<T extends object>(req: Request): Promise<T | null> {
   }
 }
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   const body = await readBody<{ channel?: unknown }>(req);
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PATCH(req: Request) {
+async function handlePATCH(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   const body = await readBody<{ linkId?: unknown; prefs?: unknown }>(req);
@@ -107,7 +108,7 @@ export async function PATCH(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+async function handleDELETE(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   const body = await readBody<{ linkId?: unknown }>(req);
@@ -125,3 +126,8 @@ export async function DELETE(req: Request) {
     return json({ error: err instanceof Error ? err.message : "unlink failed" }, 500);
   }
 }
+
+export const GET = withErrorCapture("api/channels/links", handleGET);
+export const POST = withErrorCapture("api/channels/links", handlePOST);
+export const PATCH = withErrorCapture("api/channels/links", handlePATCH);
+export const DELETE = withErrorCapture("api/channels/links", handleDELETE);

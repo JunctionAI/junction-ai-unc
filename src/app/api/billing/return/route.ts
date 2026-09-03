@@ -7,10 +7,11 @@ import type Stripe from "stripe";
 import { billingEnv, getStripe } from "@/lib/billing/config";
 import { requireBillingSession } from "@/lib/billing/server";
 import { applySubscription } from "@/lib/billing/sync";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const url = new URL(req.url);
   const env = billingEnv();
   const home = new URL("/app", env?.appUrl || url.origin);
@@ -31,3 +32,5 @@ export async function GET(req: Request) {
   }
   return Response.redirect(home, 303);
 }
+
+export const GET = withErrorCapture("api/billing/return", handleGET);

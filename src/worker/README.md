@@ -31,11 +31,12 @@ dry-run-only**:
 | `telemetry.ts` | `runMeasure` / `runSelfReview` / `runBenchmarks` / `runKpiSnapshot` / `runDailyBrief` — what the jobs and the one-shot flags call (docs/IMPROVEMENT-LOOP.md, docs/PROACTIVE.md). |
 | `main.ts` | CLI entry (flags below). |
 | `probe.ts` | `--probe`: one read for one account through the real credentials, printed with redaction (`runProbe`, `formatProbe`). |
-| `health.ts` | Optional `GET /health` (200 while the heartbeat is fresh, 503 otherwise). |
+| `health.ts` | Optional `GET /health` (200 while the heartbeat is fresh, 503 otherwise). The same heartbeat is upserted into `worker_heartbeats` (migration 0014) every tick when the DB is configured, so the app's `GET /api/health` can say "worker last seen …". |
 | `accounts.ts` | `AccountsSource` interface + `StaticAccountsSource` (one `demo` account) + `DbAccountsSource` (accounts with ≥ 1 enabled routine, from the DB). |
 | `credentials.ts` | `CredentialProvider` interface + `FixtureCredentialProvider`. The live one is `src/lib/connectors/tokens.ts` `ConnectorCredentialProvider`. |
 | `wiring.ts` | Environment → which credentials / accounts source the worker and the API routes get. |
 | `log.ts` | JSON-lines logger with unconditional secret redaction (key names and token-shaped values). |
+| `../lib/llm/budget.ts` | Per-account monthly model-spend cap: the loop skips an over-cap account's produce routines for the tick (`report.budgetSkipped`), the router refuses the call, chat / produce answer the honest line. |
 | `providers/connectorReader.ts` | `WorkerConnectorReader` — resolves credentials, dispatches by platform, maps reader answers onto the engine's `ReadResult`. |
 | `providers/executor.ts` | `RefusingExecutor`. |
 | `providers/llmDecision.ts` | `LlmDecisionProvider` for `rule: { kind: "llm" }` decide nodes (env-gated), strict `{optionId, reasoning}` validation, deterministic fallback on any failure; the FOUNDER block (tone / decision style / taste lines) in the prompt and the taste-derived spend ceiling applied after every decision (docs/PROACTIVE.md). |

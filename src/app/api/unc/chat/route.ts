@@ -23,6 +23,7 @@ import { optionalAccountContext } from "@/lib/llm/accountContext";
 import type { LlmMessage } from "@/lib/llm/types";
 import type { UncSurface } from "@/lib/unc/prompt";
 import { MAX_TURN_CHARS, respondAsUnc } from "@/lib/unc/respond";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 
@@ -44,7 +45,7 @@ function sanitizeMessages(raw: unknown): LlmMessage[] | null {
 
 const fallback = () => Response.json({ fallback: true });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   let body: { messages?: unknown; context?: unknown; surface?: unknown };
   try {
     body = await req.json();
@@ -61,3 +62,5 @@ export async function POST(req: Request) {
   if (!result.ok) return result.reason === "invalid_history" ? Response.json({ error: "invalid messages" }, { status: 400 }) : fallback();
   return Response.json({ reply: result.reply });
 }
+
+export const POST = withErrorCapture("api/unc/chat", handlePOST);

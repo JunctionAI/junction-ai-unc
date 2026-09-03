@@ -19,13 +19,14 @@ import { applyIntake } from "@/lib/intake/apply";
 import { authenticateIntakeKey, bearerFromHeader, hashIntakeKey, touchIntakeKey } from "@/lib/intake/keys";
 import { checkRateLimit } from "@/lib/intake/rateLimit";
 import { MAX_BODY_BYTES, parseIntakePayload } from "@/lib/intake/schema";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const json = (body: unknown, status: number, headers?: Record<string, string>) => Response.json(body, { status, headers });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   if (!isDbConfigured() || !isServiceRoleConfigured()) return json({ error: "intake is not configured on this deployment" }, 503);
 
   const presented = bearerFromHeader(req.headers.get("authorization"));
@@ -71,3 +72,5 @@ export async function POST(req: Request) {
     return json({ error: err instanceof Error ? err.message : "intake failed" }, 500);
   }
 }
+
+export const POST = withErrorCapture("api/intake", handlePOST);

@@ -54,6 +54,7 @@ export type LlmErrorCode =
   | "timeout" // connect or total timeout
   | "network" // DNS / TLS / connection reset
   | "bad_response" // 2xx but the body wasn't what the API promises
+  | "budget_exceeded" // the account is over its monthly cap (src/lib/llm/budget.ts) — no provider was called
   | "unknown";
 
 export interface LlmUsage {

@@ -13,11 +13,12 @@ import { isDbConfigured } from "@/lib/db/client";
 import { requireAccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   const url = new URL(req.url);
   const routineId = url.searchParams.get("routineId") ?? undefined;
   if (routineId && !ROUTINE_ID_RE.test(routineId)) return Response.json({ error: "routineId must look like D0x-W0y" }, { status: 400 });
@@ -43,3 +44,5 @@ export async function GET(req: Request) {
     return Response.json({ error: err instanceof Error ? err.message : "listing failed" }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture("api/artifacts", handleGET);

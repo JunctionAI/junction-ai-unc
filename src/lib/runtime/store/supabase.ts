@@ -547,4 +547,11 @@ export class SupabaseStore implements Store {
     );
     return rowToWorkflow(row);
   }
+  async listN8nWorkflows(accountId: string) {
+    const [own, global] = await Promise.all([
+      unwrap<Row[]>("n8n_workflows.select", this.db.from("n8n_workflows").select("*").eq("account_id", accountId)),
+      unwrap<Row[]>("n8n_workflows.select", this.db.from("n8n_workflows").select("*").is("account_id", null)),
+    ]);
+    return [...own, ...global].map(rowToWorkflow);
+  }
 }

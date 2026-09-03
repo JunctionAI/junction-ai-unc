@@ -10,11 +10,12 @@ import { billingEnv, getStripe, priceIdFor } from "@/lib/billing/config";
 import { createCheckoutSession } from "@/lib/billing/checkout";
 import { requireBillingSession } from "@/lib/billing/server";
 import { resolveLocaleFromRequest } from "@/lib/locale/resolve";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 
 /** `request` is optional so the unit tests can call POST() bare (→ default locale, base price). */
-export async function POST(request?: Request) {
+async function handlePOST(request?: Request) {
   const env = billingEnv();
   if (!env) return Response.json({ fallback: true });
   const session = await requireBillingSession();
@@ -35,3 +36,5 @@ export async function POST(request?: Request) {
     return Response.json({ error: "could not start checkout" }, { status: 502 });
   }
 }
+
+export const POST = withErrorCapture("api/billing/checkout", handlePOST);

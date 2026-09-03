@@ -12,14 +12,17 @@
 
 import { handleOptions } from "@/lib/connectors/handlers";
 import { handlerDeps } from "@/lib/connectors/server";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request, ctx: { params: Promise<{ platform: string }> }) {
+async function handleGET(req: Request, ctx: { params: Promise<{ platform: string }> }) {
   const { platform } = await ctx.params;
   const refresh = new URL(req.url).searchParams.get("refresh") === "1";
   const deps = await handlerDeps(req);
   const result = await handleOptions(deps, platform, { refresh });
   return Response.json(result.body, { status: result.status });
 }
+
+export const GET = withErrorCapture("api/connectors/[platform]/options", handleGET);

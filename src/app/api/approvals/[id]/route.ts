@@ -19,11 +19,12 @@ import { requireAccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun } from "../../routines/shared";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const approvalId = (id || "").trim().slice(0, 128);
   if (!approvalId) return Response.json({ error: "approval id is required" }, { status: 400 });
@@ -53,3 +54,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return Response.json({ error: err instanceof Error ? err.message : "decision failed" }, { status: 500 });
   }
 }
+
+export const POST = withErrorCapture("api/approvals/[id]", handlePOST);

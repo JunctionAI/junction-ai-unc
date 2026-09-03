@@ -25,6 +25,8 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { sweepOauthStates } from "../lib/connectors/store";
 import type { DbClient } from "../lib/db/types";
+import { BUDGET_EXHAUSTED_LINE, checkBudget } from "../lib/llm/budget";
+import { CATALOG_SPEC_BY_ID } from "../lib/runtime/catalog-specs";
 import type { RunStatus } from "../lib/runtime/types";
 import type { Heartbeat } from "./health";
 import { DEFAULT_JOB_LOOKBACK_MS, dueBriefs, dueJobs, sanitiseBriefMarkers, sanitiseMarkers, type BriefCandidate, type BriefMarkers, type JobId, type JobMarkers } from "./jobs";
@@ -92,6 +94,8 @@ export interface TickReport {
   started: TickRunReport[];
   /** Due routines not started because the tick budget ran out. */
   deferred: number;
+  /** Due produce routines skipped because their account is over its monthly model-spend cap. */
+  budgetSkipped: number;
   /** Scheduled telemetry jobs this tick ran (jobs.ts), in order. */
   jobs: JobId[];
   /** Accounts whose daily brief this tick served (account-local 06:30). */
@@ -145,7 +149,7 @@ export class Worker {
   /** Run one scheduling pass. Safe to call directly (tests, --once). */
   async tick(now: Date = this.now()): Promise<TickReport> {
     const t0 = Date.now();
-    const report: TickReport = { at: now.toISOString(), accounts: 0, candidates: 0, due: 0, started: [], deferred: 0, jobs: [], briefs: [], swept: false, ms: 0 };
+    const report: TickReport = { at: now.toISOString(), accounts: 0, candidates: 0, due: 0, started: [], deferred: 0, budgetSkipped: 0, jobs: [], briefs: [], swept: false, ms: 0 };
     try {
       const accounts = await this.deps.accounts.listAccounts();
       report.accounts = accounts.length;
@@ -158,6 +162,9 @@ export class Worker {
       report.due = due.length;
       this.log.info("tick.start", { at: report.at, accounts: report.accounts, candidates: report.candidates, due: report.due });
 
+      // Accounts over their monthly model-spend cap (src/lib/llm/budget.ts): their produce
+      // routines wait; everything deterministic still runs.
+      const overCap = await this.overCapAccounts(due, now);
       for (let i = 0; i < due.length; i++) {
         if (this.stopping) {
           report.deferred = due.length - i;
@@ -169,7 +176,14 @@ export class Worker {
           this.log.warn("tick.budget_exhausted", { budgetMs: this.tickBudgetMs, deferred: report.deferred });
           break;
         }
-        report.started.push(await this.runOne(due[i]));
+        const d = due[i];
+        if (overCap.has(d.accountId) && routineProduces(d.routineId)) {
+          report.budgetSkipped += 1;
+          this.log.info("run.budget_skipped", { accountId: d.accountId, routineId: d.routineId, slot: d.slot.toISOString() });
+          report.started.push({ accountId: d.accountId, routineId: d.routineId, slot: d.slot.toISOString(), status: "skipped", summary: BUDGET_EXHAUSTED_LINE });
+          continue;
+        }
+        report.started.push(await this.runOne(d));
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -194,6 +208,22 @@ export class Worker {
     this.log.info("tick.end", { at: report.at, started: report.started.length, deferred: report.deferred, ms: report.ms });
     this.writeHeartbeat();
     return report;
+  }
+
+  /** Which of the due accounts are over their cap this month (needs deps.db; else none). */
+  private async overCapAccounts(due: DueRoutine[], now: Date): Promise<Set<string>> {
+    const out = new Set<string>();
+    const db = this.deps.db;
+    if (!db) return out;
+    for (const accountId of new Set(due.map((d) => d.accountId))) {
+      try {
+        const b = await checkBudget(db, accountId, { now: () => now, log: (event, fields) => this.log.warn(event, fields) });
+        if (!b.ok) out.add(accountId);
+      } catch (err) {
+        this.log.warn("budget.check_failed", { accountId, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    return out;
   }
 
   private async runOne(d: DueRoutine): Promise<TickRunReport> {
@@ -390,14 +420,37 @@ export class Worker {
   }
 
   writeHeartbeat(): void {
+    const hb = this.heartbeat();
+    void this.upsertHeartbeatRow(hb);
     const path = this.opts.heartbeatPath;
     if (!path) return;
     try {
-      writeHeartbeatFile(path, this.heartbeat());
+      writeHeartbeatFile(path, hb);
     } catch (err) {
       this.log.warn("heartbeat.write_failed", { path, error: err instanceof Error ? err.message : String(err) });
     }
   }
+
+  /** worker_heartbeats (migration 0014): the same heartbeat, one row, so GET /api/health can
+      say "worker last seen …". Best effort; never blocks a tick. */
+  private async upsertHeartbeatRow(hb: Heartbeat): Promise<void> {
+    const db = this.deps.db;
+    if (!db) return;
+    try {
+      const { error } = await db
+        .from("worker_heartbeats")
+        .upsert({ worker: WORKER_HEARTBEAT_NAME, pid: hb.pid, started_at: hb.startedAt, last_tick_at: hb.lastTickAt, last_tick_ms: hb.lastTickMs, ticks: hb.ticks, runs_started: hb.runsStarted, stopping: hb.stopping, last_error: hb.lastError ?? null, updated_at: this.now().toISOString() }, { onConflict: "worker" });
+      if (error) this.log.warn("heartbeat.row_failed", { error: error.message });
+    } catch (err) {
+      this.log.warn("heartbeat.row_failed", { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+}
+
+export const WORKER_HEARTBEAT_NAME = "unc";
+
+function routineProduces(routineId: string): boolean {
+  return !!CATALOG_SPEC_BY_ID[routineId]?.nodes.some((n) => n.kind === "produce" || n.kind === "n8n");
 }
 
 // ---------- heartbeat file helpers ----------

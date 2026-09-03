@@ -11,11 +11,12 @@ import { requireAccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { homeTelemetryForAccount } from "@/lib/telemetry/home";
 import { segmentsForAccount } from "@/lib/telemetry/segments";
+import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
   try {
@@ -30,3 +31,5 @@ export async function GET() {
     return Response.json({ error: err instanceof Error ? err.message : "telemetry failed" }, { status: 500 });
   }
 }
+
+export const GET = withErrorCapture("api/telemetry/home", handleGET);

@@ -27,6 +27,7 @@ import { getProfile, renderProfileForPrompt } from "@/lib/brain/profile";
 import { recallForContext } from "@/lib/brain/retrieve";
 import { loadAccountState } from "@/lib/db/accountState";
 import type { DbClient } from "@/lib/db/types";
+import { BUDGET_EXHAUSTED_LINE, isBudgetExceeded } from "@/lib/llm/budget";
 import { complete, resolveModel } from "@/lib/llm/router";
 import type { LlmMessage } from "@/lib/llm/types";
 import { enforceConcision } from "@/lib/unc/concision";
@@ -89,6 +90,8 @@ export async function respondAsUnc(input: RespondInput): Promise<RespondResult> 
     const llmCtx = { accountId: account?.accountId ?? null, db: account?.db };
     const response = await complete("chat", { system, messages, maxTokens: MAX_REPLY_TOKENS, effort: "low" }, llmCtx);
     if (!response) return { ok: false, reason: "error" };
+    // Over the month's cap (src/lib/llm/budget.ts): one honest line, no canned fallback, no learning hook.
+    if (isBudgetExceeded(response)) return { ok: true, reply: BUDGET_EXHAUSTED_LINE };
     if (response.stopReason === "refusal") return { ok: false, reason: "refusal" };
     if (response.stopReason === "error") return { ok: false, reason: "error" };
     const first = response.text.trim();
