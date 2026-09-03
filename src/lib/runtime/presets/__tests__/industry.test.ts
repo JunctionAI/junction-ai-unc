@@ -183,7 +183,7 @@ describe("routines — domains, relevant fields, optional steps, bindings", () =
     const steps = optionalSteps(catalogSpec("D01-W01"));
     expect(steps.map((s) => s.id)).toEqual(["read_questions", "read_posts", "read_products"]);
     expect(steps[0].label).toBe("gorgias tickets · 7d");
-    expect(optionalSteps(catalogSpec("D02-W01"))).toEqual([]);
+    expect(optionalSteps(catalogSpec("D02-W01"))).toEqual([{ id: "read_ga", kind: "read", label: "ga4 report · 7d" }]);
   });
 
   it("D02-W01: ROAS floor lands on the decide threshold, the scale step on the option's spend + params", () => {

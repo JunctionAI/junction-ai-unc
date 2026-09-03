@@ -35,8 +35,9 @@ describe("availability", () => {
   });
 
   it("approval_gated for a connected mutator, needs_connector for a missing REQUIRED platform, ready / draft_only otherwise; optional reads surface as 'Better with …'", () => {
-    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads", "shopify"])).toBe("needs_connector:ga4");
-    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads", "shopify", "ga4"])).toBe("approval_gated");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads"])).toBe("needs_connector:shopify");
+    expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads", "shopify"])).toBe("approval_gated");
+    expect(betterWith(CATALOG_SPEC_BY_ID["D02-W01"], ["meta_ads", "shopify"])).toEqual(["ga4"]);
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W04"], ["meta_ads"])).toBe("approval_gated");
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D02-W04"], [])).toBe("needs_connector:meta_ads");
     expect(routineAvailability(CATALOG_SPEC_BY_ID["D05-W02"], [])).toBe("needs_connector:shopify");
