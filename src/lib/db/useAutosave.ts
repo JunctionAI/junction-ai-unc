@@ -4,6 +4,7 @@
    pagehide as a best effort. Off entirely when `enabled` is false — demo mode costs nothing. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createAutosaveQueue } from "./autosaveQueue";
 
 export const AUTOSAVE_DELAY_MS = 800;
 
@@ -28,8 +29,7 @@ export function useAutosave<T>(
   const latest = useRef(value);
   const lastSaved = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inFlight = useRef<Promise<void> | null>(null);
-  const dirtyDuringSave = useRef(false);
+  const queue = useRef(createAutosaveQueue());
   const saveRef = useRef(save);
   const projRef = useRef(projection);
   // Refs track the latest props/value outside render (same pattern as useUncChat).
@@ -41,19 +41,12 @@ export function useAutosave<T>(
 
   /* One save loop at a time: if the value changes while a save is in flight, the loop
      goes round once more with the newest snapshot instead of starting a second save. */
-  const run = useCallback(async (): Promise<void> => {
-    if (inFlight.current) {
-      dirtyDuringSave.current = true;
-      return inFlight.current;
-    }
-    const loop = (async () => {
-      do {
-        dirtyDuringSave.current = false;
+  const run = useCallback((): Promise<void> => queue.current(async () => {
         const snapshot = latest.current;
         const proj = projRef.current(snapshot);
         if (proj === lastSaved.current) {
           setStatus((s) => (s === "pending" ? "saved" : s));
-          continue;
+          return;
         }
         setStatus("saving");
         try {
@@ -65,12 +58,7 @@ export function useAutosave<T>(
           setError(e instanceof Error ? e.message : String(e));
           setStatus("error");
         }
-      } while (dirtyDuringSave.current);
-      inFlight.current = null;
-    })();
-    inFlight.current = loop;
-    await loop;
-  }, []);
+  }), []);
 
   useEffect(() => {
     if (!enabled) return;

@@ -1,4 +1,4 @@
-# Fly.io sketch for the Unc worker (dry-run scheduler). Not yet deployed.
+# Existing Fly.io Unc worker (dry-run scheduler). One-machine release only.
 #
 #   fly launch --no-deploy --copy-config --name unc-worker   (once)
 #   fly secrets set ANTHROPIC_API_KEY=…                       (optional; llm-rule decisions)
@@ -33,6 +33,11 @@ primary_region = "syd"
 
 [env]
   NODE_ENV = "production"
+  UNC_COMMANDS_ENABLED = "false"
+  UNC_MESSAGING_ENABLED = "false"
+  LIVE_MODE_ENABLED = "false"
+  TNZ_SMS_ENABLED = "false"
+  APPLE_MESSAGES_ENABLED = "false"
 
 [http_service]
   internal_port = 8080
