@@ -120,8 +120,8 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
   const setupData = setup.data;
   const setPlanAgreedAt = V.setPlanAgreedAt;
   useEffect(() => {
-    if (setupData) setPlanAgreedAt(setupData.agreedAt);
-  }, [setupData, setPlanAgreedAt]);
+    if (setupData && S.planAgreedAt !== setupData.agreedAt) setPlanAgreedAt(setupData.agreedAt);
+  }, [setupData, S.planAgreedAt, setPlanAgreedAt]);
   /* "Agree the plan →" for real: plans.agreed_at. Fires once per session when an onboarded
      account has no agreed_at yet — the fresh agreement, or a backfill for an account that
      agreed before the column was written. */
