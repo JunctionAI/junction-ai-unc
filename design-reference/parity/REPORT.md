@@ -1,20 +1,20 @@
 # Visual parity — React port vs original prototypes
 
-*Generated 2026-09-02T08:14:02.294Z by `npx playwright test tests/e2e/parity.spec.ts` (scripts/parity/capture.ts).*
+*Generated 2026-09-03T21:47:12.948Z by `npx playwright test tests/e2e/parity.spec.ts` (scripts/parity/capture.ts).*
 
 **Method.** Both sources are driven to the same state with the same clicks (Skip → nav items → role card → Tutorial), every CSS animation/transition is frozen at its 0% frame (jfloat, jpulse, toggle knobs, phase dots), web fonts and images are awaited, then a full-page screenshot is taken at a 1280×900 viewport (DPR 1), clipped to the 1280px viewport width. Pixels are compared with a pixelmatch-style YIQ colour delta (threshold 0.1) over the union canvas; a page that is taller in one source counts the extra rows as differences (`diff %`), while `overlap %` restricts the comparison to the shared region so layout drift is visible separately from height drift. `<screen>-diff.png` paints differing pixels red (orange = present in only one source). Visible copy (`document.body.innerText`) is also diffed line by line with quotes/whitespace normalised (`copy Δ`).
 
-**Pass threshold.** ≤ 3% on layout-equal screens. Result: **6 of 7 screens pass.**
+**Pass threshold.** ≤ 3% on layout-equal screens. Result: **1 of 7 screens pass.**
 
 | Screen | id | proto / port size | diff % | overlap % | copy Δ | verdict | notes |
 |---|---|---|---|---|---|---|---|
 | Landing page | `landing` | 1280×3744 / 1280×3861 | **4.70%** | 1.72% | 22 lines | ⚠️ over |  |
 | Onboarding · step 0 (welcome) | `onboarding-0` | 1280×900 / 1280×900 | **0.14%** | 0.14% | none | ✅ pass |  |
-| Control centre · Home (demo data) | `home` | 1280×2474 / 1280×2474 | **0.24%** | 0.24% | none | ✅ pass |  |
-| Strategy | `strategy` | 1280×1032 / 1280×1032 | **0.09%** | 0.09% | none | ✅ pass |  |
-| Routines · role cards | `routines` | 1280×900 / 1280×900 | **0.08%** | 0.08% | none | ✅ pass |  |
-| Routine detail · Founder content engine (D01-W01) | `routine-detail` | 1280×900 / 1280×900 | **0.33%** | 0.33% | 1 line | ✅ pass |  |
-| Connectors | `connectors` | 1280×1035 / 1280×1035 | **0.07%** | 0.07% | none | ✅ pass |  |
+| Control centre · Home (demo data) | `home` | 1280×2474 / 1280×2518 | **10.13%** | 8.53% | 2 lines | ⚠️ over |  |
+| Strategy | `strategy` | 1280×1032 / 1280×1154 | **23.26%** | 14.18% | 6 lines | ⚠️ over |  |
+| Routines · role cards | `routines` | 1280×900 / 1280×944 | **7.86%** | 3.35% | 2 lines | ⚠️ over |  |
+| Routine detail · Founder content engine (D01-W01) | `routine-detail` | 1280×900 / 1280×944 | **11.97%** | 7.66% | 4 lines | ⚠️ over |  |
+| Connectors | `connectors` | 1280×1035 / 1280×1079 | **13.84%** | 10.18% | 2 lines | ⚠️ over |  |
 
 Files: `design-reference/parity/<id>-proto.png`, `<id>-port.png`, `<id>-diff.png`, `<id>-{proto,port}.txt`.
 
@@ -45,9 +45,36 @@ Only in the port:
 - `·`
 - `support@getjunction.ai`
 
+### `home`
+Only in the port:
+- `Demo data — nothing here is yours. Sign in to start for real.`
+- `Sign in`
+
+### `strategy`
+Only in the port:
+- `Why this order · What flips it · The risk`
+- `Why this order · What flips it · The risk`
+- `Why this order · What flips it · The risk`
+- `Why this order · What flips it · The risk`
+- `Demo data — nothing here is yours. Sign in to start for real.`
+- `Sign in`
+
+### `routines`
+Only in the port:
+- `Demo data — nothing here is yours. Sign in to start for real.`
+- `Sign in`
+
 ### `routine-detail`
 Only in the port:
 - `Run now (dry run)`
+- `Every step here is inspectable. Nothing runs outside these bounds.`
+- `Demo data — nothing here is yours. Sign in to start for real.`
+- `Sign in`
+
+### `connectors`
+Only in the port:
+- `Demo data — nothing here is yours. Sign in to start for real.`
+- `Sign in`
 
 
 ## Known, accepted sources of difference
@@ -65,3 +92,8 @@ Only in the port:
 - **Prototype quirk carried over (product call, not a port bug):** on Home, reconnecting Klaviyo clears the blocked card and the needs-you count, but the “Setting up next → Review request timing” proposal keeps its “Needs Klaviyo reconnect” pill — `propStatus` is independent of `connState` in `platform-v2-logic.js` and in `src/lib/platform/derive.ts` alike.
 - **Home text runs are 1–2px off horizontally** (setup strip labels, before → after lines, the hire line) — pure font-file metrics (Google Fonts vs `next/font` build of Space Grotesk); markup and spacing are identical. No action.
 - `landing` is at 4.70% (overlap 1.72%): sizes proto 1280×3744 vs port 1280×3861 — open `landing-diff.png` to see where.
+- `home` is at 10.13% (overlap 8.53%): sizes proto 1280×2474 vs port 1280×2518 — open `home-diff.png` to see where.
+- `strategy` is at 23.26% (overlap 14.18%): sizes proto 1280×1032 vs port 1280×1154 — open `strategy-diff.png` to see where.
+- `routines` is at 7.86% (overlap 3.35%): sizes proto 1280×900 vs port 1280×944 — open `routines-diff.png` to see where.
+- `routine-detail` is at 11.97% (overlap 7.66%): sizes proto 1280×900 vs port 1280×944 — open `routine-detail-diff.png` to see where.
+- `connectors` is at 13.84% (overlap 10.18%): sizes proto 1280×1035 vs port 1280×1079 — open `connectors-diff.png` to see where.

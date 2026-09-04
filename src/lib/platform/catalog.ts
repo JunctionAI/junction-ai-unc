@@ -46,7 +46,7 @@ export const BENEFITS: Record<string, string> = {
   "Content performance learning": "Double down on what works",
   "Daily paid decisioning": "Budget moves to winners every morning",
   "Creative test planner": "Find winning ads faster",
-  "Budget pacing guard": "Never overspend",
+  "Budget pacing guard": "Catch pacing before it crosses your cap",
   "Organic-to-paid promotion": "Turn proven posts into ads",
   "Keyword opportunity scan": "Find searches you can win",
   "Content gap analysis": "Know exactly what to write next",

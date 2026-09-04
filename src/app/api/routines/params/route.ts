@@ -15,16 +15,19 @@
           promote:  promoteDraft (refused with 409 { error } until a dry run of exactly this draft passed)
           discard:  drops the draft
 
-   Session-bound (src/lib/db/session.ts): always the caller's own account. Store = getStore(). */
+   Session-bound (src/lib/db/session.ts): always the caller's own account. GET and validate
+   are member-readable; changing parameters, promoting or discarding is owner-only. */
 
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession, requireAccountSession } from "@/lib/db/session";
 import { withErrorCapture } from "@/lib/observability/errors";
 import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
-import { accountResolveInput, changesSpec, getRoutinePreset, nodesFor, PresetValidationError, setRoutineParams, type RoutinePresetView } from "@/lib/runtime/presets";
+import { accountResolveInput, getRoutinePreset, nodesFor, PresetValidationError, setRoutineParams, type RoutinePresetView } from "@/lib/runtime/presets";
 import { getStore } from "@/lib/runtime/store";
 import type { Store } from "@/lib/runtime/store/interface";
 import type { DbClient } from "@/lib/db/types";
 import type { RoutineSpec } from "@/lib/runtime/types";
+import { scoreAgreement } from "@/lib/runtime/agreement";
+import { skillFor } from "@/lib/runtime/skills";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import { discardDraft, effectiveSpec, getOrInitState, latestDryRunFor, dryRunPassed, PromoteRefusedError, promoteDraft, saveDraft, validateDraft } from "@/lib/runtime/versioning";
 import { buildAdapters, resolveAccount, WorkerError } from "@/worker/service";
@@ -51,7 +54,7 @@ function routineIdOf(v: unknown): string | null {
 }
 
 /** The response shape: fields flagged relevant / bound, the steps, the version pair. */
-export async function shapeView(store: Store, accountId: string, catalog: RoutineSpec, view: RoutinePresetView) {
+async function shapeView(store: Store, accountId: string, catalog: RoutineSpec, view: RoutinePresetView) {
   const state = await getOrInitState({ store }, accountId, catalog.id);
   const draft = state.draftSpec;
   let canPromote = false;
@@ -70,6 +73,8 @@ export async function shapeView(store: Store, accountId: string, catalog: Routin
     steps: view.steps,
     version: { live: state.version, draft: draft?.version ?? null },
     canPromote,
+    skillFile: skillFor(catalog.id)?.file ?? null,
+    agreement: await scoreAgreement(store, accountId, catalog.id),
   };
 }
 
@@ -111,7 +116,7 @@ async function handlePATCH(req: Request) {
       steps[k] = v;
     }
   }
-  const session = await requireAccountSession();
+  const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   const store = getStore();
   const catalog = CATALOG_SPEC_BY_ID[routineId];
@@ -122,9 +127,10 @@ async function handlePATCH(req: Request) {
     const input = await accountResolveInput(session.service, session.accountId);
     const view = await getRoutinePreset(session.service, session.accountId, spec, { input });
     if (!view) return bad(`routine ${routineId} has no preset domain`, 500);
-    const values = Object.fromEntries(view.set.fields.map((f) => [f.key, f.value]));
-    // The founder's numbers live in the spec too: a new draft version, promoted through the existing flow.
-    if (changesSpec(spec, values, view.own?.disabledSteps ?? [])) await saveDraft({ store }, session.accountId, catalog, nodesFor(spec, view));
+    const nodes = nodesFor(spec, view);
+    // The founder's rule policy lives in the spec too: a new draft version, promoted through
+    // the existing flow. The unversioned routine_params row is never runtime authority.
+    if (JSON.stringify(nodes) !== JSON.stringify(spec.nodes)) await saveDraft({ store }, session.accountId, catalog, nodes);
     return Response.json(await shapeView(store, session.accountId, catalog, view));
   } catch (err) {
     if (err instanceof PresetValidationError) return bad(err.message, 400, { issues: err.issues });
@@ -139,7 +145,7 @@ async function handlePOST(req: Request) {
   if (!routineId) return bad("routineId must be a catalog routine (D0x-W0y)");
   const action = body.action;
   if (action !== "validate" && action !== "promote" && action !== "discard") return bad("action must be validate, promote or discard");
-  const session = await requireAccountSession();
+  const session = action === "validate" ? await requireAccountSession() : await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   const store = getStore();
   const catalog = CATALOG_SPEC_BY_ID[routineId];

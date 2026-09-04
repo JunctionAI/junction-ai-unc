@@ -1,5 +1,5 @@
-/* account_model_prefs — the founder's per-task model choice (migration 0008).
-   Read with whatever client the caller has (member RLS or service role). */
+/* account_model_prefs — the founder's per-task model choice (migration 0008 + owner hardening).
+   Members can read under RLS. Writes are service-route only after an owner session check. */
 
 import type { DbClient } from "../db/types";
 import { unwrap } from "../db/types";

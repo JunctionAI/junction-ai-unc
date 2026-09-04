@@ -7,18 +7,18 @@
    or    { fallback: true }               demo mode (no database) — nothing to remember into
    or    400 | 401 | 403 | 503 { error }
 
-   Session-bound; writes with the service role (embeddings + the ledger need it). */
+   Owner-only and session-bound; writes with the service role (embeddings + the ledger need it). */
 
 import { afterOnboarding } from "@/lib/brain/hooks";
 import { coerceOnboardingAnswers } from "@/lib/brain/onboarding";
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession } from "@/lib/db/session";
 import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
 
   let body: { answers?: unknown };

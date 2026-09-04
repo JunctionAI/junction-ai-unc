@@ -17,11 +17,11 @@
 import { asDb } from "../db/client";
 import { getServiceSupabase, isServiceRoleConfigured } from "../db/server";
 import type { DbClient } from "../db/types";
-import { budgetExceededResult, checkBudget } from "./budget";
+import { budgetExceededResult, budgetUnavailableResult, checkBudget, releaseLlmSpendReservation, reserveLlmSpend, type SpendReservation } from "./budget";
 import { readModelPref } from "./prefs";
 import { defaultProviderFactory, type ProviderFactory } from "./providers";
-import { CATALOGUE, configuredProviders, isProviderConfigured, parseModelId, PROVIDER_FALLBACK_ORDER, TIER_EQUIVALENTS, type Env } from "./registry";
-import { defaultLlmLog, recordUsage, usageRecord, type LlmLog } from "./telemetry";
+import { CATALOGUE, configuredProviders, estimateCostUsd, isProviderConfigured, parseModelId, PROVIDER_FALLBACK_ORDER, TIER_EQUIVALENTS, type Env } from "./registry";
+import { defaultLlmLog, providerUsageIsDefinitive, recordUsage, usageRecord, type LlmLog } from "./telemetry";
 import type { LlmRequest, LlmResult, LlmTask, ModelTier, ResolvedModel } from "./types";
 
 export const TASK_DEFAULTS: Record<LlmTask, { id: string } | { tier: ModelTier }> = {
@@ -82,7 +82,8 @@ export function resolveModel(task: LlmTask, opts: ResolveOptions = {}): Resolved
 
 export interface CompleteContext {
   accountId?: string | null;
-  /** Service-role (or member) client for prefs + the ledger. undefined = use the service role when configured; null = none. */
+  /** Service-role client for prefs, atomic spend admission and the ledger. undefined = use
+      the service role when configured; null = none. A member client fails admission closed. */
   db?: DbClient | null;
   log?: LlmLog;
   env?: Env;
@@ -110,6 +111,37 @@ function ctxDb(ctx: CompleteContext): DbClient | null {
   return ctx.db === undefined ? dbResolver() : ctx.db;
 }
 
+/** Conservative admission estimate: UTF-8 bytes upper-bound byte-fallback tokenisation, 256
+    tokens cover provider framing, and output may use the full cap. This is a spend guard, not
+    billing telemetry; the durable ledger still records provider-reported usage. */
+function requestCostCeiling(resolved: ResolvedModel, req: LlmRequest): number | null {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(req.system).byteLength + req.messages.reduce((sum, message) => sum + encoder.encode(message.content).byteLength, 0);
+  return estimateCostUsd(resolved, { input: bytes + 256, output: Math.max(0, req.maxTokens) });
+}
+
+function unpricedModelResult(resolved: ResolvedModel): LlmResult {
+  return { text: "", stopReason: "error", errorCode: "unpriced_model", errorMessage: "hosted model has no trusted price for the account spend rail", usage: { input: 0, output: 0 }, provider: resolved.provider, model: resolved.model, latencyMs: 0 };
+}
+
+// Prevent two calls in this process from both admitting against the same stale spend total.
+// The database ledger remains the durable source of truth; this closes the common app/worker race.
+const accountTails = new Map<string, Promise<void>>();
+async function serialiseAccount<T>(accountId: string, job: () => Promise<T>): Promise<T> {
+  const previous = accountTails.get(accountId) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const tail = previous.catch(() => {}).then(() => gate);
+  accountTails.set(accountId, tail);
+  await previous.catch(() => {});
+  try {
+    return await job();
+  } finally {
+    release();
+    if (accountTails.get(accountId) === tail) accountTails.delete(accountId);
+  }
+}
+
 async function accountPref(task: LlmTask, ctx: CompleteContext, db: DbClient | null, log: LlmLog): Promise<string | null> {
   if (!ctx.accountId || !db) return null;
   try {
@@ -120,7 +152,15 @@ async function accountPref(task: LlmTask, ctx: CompleteContext, db: DbClient | n
   }
 }
 
-async function run(task: LlmTask | "ping", resolved: ResolvedModel, req: LlmRequest, ctx: CompleteContext, db: DbClient | null, log: LlmLog): Promise<LlmResult> {
+async function run(
+  task: LlmTask | "ping",
+  resolved: ResolvedModel,
+  req: LlmRequest,
+  ctx: CompleteContext,
+  db: DbClient | null,
+  log: LlmLog,
+  reservation: SpendReservation | null = null,
+): Promise<LlmResult> {
   const env = ctx.env ?? process.env;
   const now = ctx.now ?? (() => new Date());
   const provider = providerFactory(resolved.provider, env);
@@ -128,9 +168,79 @@ async function run(task: LlmTask | "ping", resolved: ResolvedModel, req: LlmRequ
   const result: LlmResult = provider
     ? await provider.complete({ ...req, effort: resolved.supportsEffort ? req.effort : undefined, model: resolved.model })
     : { text: "", stopReason: "error", errorCode: "not_configured", errorMessage: `${resolved.provider} is not configured`, usage: { input: 0, output: 0 }, provider: resolved.provider, model: resolved.model, latencyMs: Date.now() - t0 };
-  await recordUsage(usageRecord(task, ctx.accountId ?? null, resolved, result, now()), db, log);
-  if (result.stopReason === "error") log("llm.error", { task, provider: result.provider, model: result.model, code: result.errorCode, message: result.errorMessage });
+  const ledgered = await recordUsage(usageRecord(task, ctx.accountId ?? null, resolved, result, now()), db, log);
+  if (reservation) {
+    if (!ledgered) {
+      log("llm.budget_reservation_retained", { accountId: reservation.accountId, task, reason: "usage_not_durable" });
+    } else if (!providerUsageIsDefinitive(result)) {
+      log("llm.budget_reservation_retained", { accountId: reservation.accountId, task, reason: "provider_usage_unconfirmed" });
+    } else if (!(await releaseLlmSpendReservation(db!, reservation))) {
+      log("llm.budget_reservation_retained", { accountId: reservation.accountId, task, reason: "release_failed" });
+    }
+  }
+  // Provider messages are deliberately excluded from logs. Adapters sanitise them for
+  // diagnostics, but a stable code is all an operational log needs.
+  if (result.stopReason === "error") log("llm.error", { task, provider: result.provider, model: result.model, code: result.errorCode });
   return result;
+}
+
+async function runWithSpendAdmission(
+  task: LlmTask | "ping",
+  resolved: ResolvedModel,
+  req: LlmRequest,
+  ctx: CompleteContext,
+  db: DbClient | null,
+  log: LlmLog,
+): Promise<LlmResult> {
+  const accountId = ctx.accountId;
+  if (!accountId) return run(task, resolved, req, ctx, db, log);
+  if (!db) {
+    log("llm.budget_reservation_failed", { accountId, task, reason: "database_unavailable" });
+    return budgetUnavailableResult(resolved);
+  }
+  return serialiseAccount(accountId, async () => {
+    const ceiling = requestCostCeiling(resolved, req);
+    // An unpriced/zero-priced custom endpoint is an operator-trusted self-hosted exception with
+    // no variable provider charge. If the operator supplies positive prices, it uses the same
+    // atomic durable reservation as every hosted model.
+    if (resolved.provider === "custom" && (ceiling === null || ceiling === 0)) {
+      const operatorDeclaredNoVariableCost =
+        (resolved.inputPer1M === null && resolved.outputPer1M === null) ||
+        (resolved.inputPer1M === 0 && resolved.outputPer1M === 0);
+      if (!operatorDeclaredNoVariableCost) {
+        log("llm.unpriced_model_blocked", { accountId, task, provider: resolved.provider, model: resolved.model });
+        return unpricedModelResult(resolved);
+      }
+      const budget = await checkBudget(db, accountId, { env: ctx.env, now: ctx.now, log, cached: false });
+      if (budget.checkFailed) return budgetUnavailableResult(resolved);
+      if (!budget.ok) {
+        log("llm.budget_exceeded", { accountId, task, spentUsd: budget.spentUsd, capUsd: budget.capUsd, requestCeilingUsd: ceiling });
+        return budgetExceededResult(resolved, budget);
+      }
+      return run(task, resolved, req, ctx, db, log);
+    }
+    if (ceiling === null) {
+      log("llm.unpriced_model_blocked", { accountId, task, provider: resolved.provider, model: resolved.model });
+      return unpricedModelResult(resolved);
+    }
+    const admission = await reserveLlmSpend(db, accountId, ceiling, { env: ctx.env, now: ctx.now });
+    if (!admission.ok) {
+      if (admission.reason === "unavailable") {
+        log("llm.budget_reservation_failed", { accountId, task });
+        return budgetUnavailableResult(resolved);
+      }
+      log("llm.budget_exceeded", {
+        accountId,
+        task,
+        spentUsd: admission.status.spentUsd,
+        reservedUsd: admission.reservedUsd,
+        capUsd: admission.status.capUsd,
+        requestCeilingUsd: ceiling,
+      });
+      return budgetExceededResult(resolved, admission.status);
+    }
+    return run(task, resolved, req, ctx, db, log, admission.reservation);
+  });
 }
 
 /** Resolve the model for this task (+ account), call it, write the ledger. null = nothing configured.
@@ -141,14 +251,7 @@ export async function complete(task: LlmTask, req: LlmRequest, ctx: CompleteCont
   const db = ctxDb(ctx);
   const resolved = resolveModel(task, { accountOverride: await accountPref(task, ctx, db, log), env: ctx.env });
   if (!resolved) return null;
-  if (ctx.accountId && db) {
-    const budget = await checkBudget(db, ctx.accountId, { env: ctx.env, now: ctx.now, log });
-    if (!budget.ok) {
-      log("llm.budget_exceeded", { accountId: ctx.accountId, task, spentUsd: budget.spentUsd, capUsd: budget.capUsd });
-      return budgetExceededResult(resolved, budget);
-    }
-  }
-  return run(task, resolved, req, ctx, db, log);
+  return runWithSpendAdmission(task, resolved, req, ctx, db, log);
 }
 
 /** Call a named catalogue / "<provider>:<model>" id directly (the dev ping route). */
@@ -160,7 +263,7 @@ export async function completeModel(modelId: string, req: LlmRequest, ctx: Compl
   if (!isProviderConfigured(entry.provider, env)) {
     return { text: "", stopReason: "error", errorCode: "not_configured", errorMessage: `${entry.provider} is not configured`, usage: { input: 0, output: 0 }, provider: entry.provider, model: entry.model, latencyMs: 0 };
   }
-  return run("ping", resolved, req, ctx, ctxDb(ctx), ctx.log ?? defaultLlmLog);
+  return runWithSpendAdmission("ping", resolved, req, ctx, ctxDb(ctx), ctx.log ?? defaultLlmLog);
 }
 
 /* ------------------------------------------------------------------ */

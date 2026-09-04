@@ -464,7 +464,7 @@ export async function seedBeta(db: DbClient, accounts: BetaAccount[] = BETA_ACCO
     }
     const accountId = existing?.id ?? (await insertAccount(db, a.name, a.currency));
     const rows = betaRows(a, accountId, now);
-    await saveAccountRows(db, rows);
+    await saveAccountRows(db, rows, { trustedRuntimeSeed: true });
     // baseline_date has no home in PlatformState; set it on the governing goal directly.
     await unwrap("goals.update", db.from("goals").update({ baseline_date: a.baseline?.asOf ?? null }).eq("account_id", accountId).eq("tier", "governing"));
     log(`${existing ? "updated" : "created"} ${a.slug} "${a.name}" (${accountId}) — goal "${a.goal.title}", baseline ${a.baseline ? a.baseline.value : "unknown (NULL)"}`);

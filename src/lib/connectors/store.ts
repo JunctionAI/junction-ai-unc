@@ -38,7 +38,8 @@ export interface OauthStateRow {
 
 const CONNECTOR_COLS = "id, account_id, platform, status, external_ref, last_sync_at, last_sync_result, sync_ref";
 
-/** First account the user belongs to (owner first). null = signed in but no account yet. */
+/** Canonical account selection: oldest owned account first, otherwise oldest membership.
+    Keep this in lockstep with db/accountState.listMemberships (session/UI selection). */
 export async function accountForUser(db: DbClient, userId: string): Promise<string | null> {
   const rows = await unwrap<{ account_id: string; role: string }[]>(
     "account_members.select",

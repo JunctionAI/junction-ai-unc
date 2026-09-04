@@ -17,14 +17,18 @@ import { compactReads } from "../../lib/artifacts/material";
 import { sign, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "../../lib/artifacts/signing";
 import { isArtifactKind, validateArtifactObject } from "../../lib/artifacts/validate";
 import { DATA_ENDPOINTS, dataBaseUrl, issueDataToken, scopesForRoutine } from "../../lib/n8n/dataToken";
+import { checkWebhookTarget, type HostLookup } from "../../lib/n8n/urlSecurity";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
+import { assertShadowRequest, validateShadowReceipt, type KeywordShadowContract } from "../../lib/n8n/shadowContract";
 import type { N8nBridge, N8nCallResult, N8nNode, N8nWorkflow, ProduceNeed, ProduceNode, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
+import { pinnedWebhookFetch, type WebhookFetch, type WebhookResponse } from "./pinnedWebhookFetch";
 
 export const N8N_DEFAULT_TIMEOUT_MS = 60_000;
 export const N8N_SECRET_ENV = "N8N_SIGNING_SECRET";
 
 export interface N8nPayload {
+  shadow?: KeywordShadowContract;
   accountId: string;
   runId: string;
   routineId: string;
@@ -58,6 +62,7 @@ export function buildN8nPayload(node: ProduceNode | N8nNode, ctx: RunContext, op
   const scopes = scopesForRoutine(ctx.routineId);
   const minted = opts.secret ? issueDataToken(opts.secret, { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, scopes }, { now: opts.now }) : null;
   return {
+    ...(node.kind === "n8n" && node.shadowContract ? { shadow: node.shadowContract } : {}),
     accountId: ctx.account.accountId,
     runId: ctx.runId,
     routineId: ctx.routineId,
@@ -90,8 +95,8 @@ export function parseN8nReply(parsed: unknown, expectedKind: string, maxItems?: 
   }
   if (o.artifact && typeof o.artifact === "object") {
     const a = o.artifact as { kind?: unknown };
-    const kind = isArtifactKind(a.kind) ? a.kind : isArtifactKind(expectedKind) ? expectedKind : "generic";
-    const v = validateArtifactObject({ ...a, kind }, { kind, maxItems, allowedNumbers: null });
+    const kind = isArtifactKind(expectedKind) ? expectedKind : "generic";
+    const v = validateArtifactObject(a, { kind, maxItems, allowedNumbers: null });
     if (!v.ok) throw new Error(`n8n artifact rejected: ${v.reason}`);
     return { kind: "artifact", artifact: v.artifact };
   }
@@ -100,10 +105,13 @@ export function parseN8nReply(parsed: unknown, expectedKind: string, maxItems?: 
 
 export interface HttpN8nBridgeOptions {
   env?: Record<string, string | undefined>;
-  fetch?: typeof fetch;
+  /** Injectable transport for tests; production defaults to the DNS-pinned Node transport. */
+  fetch?: WebhookFetch;
   now?: () => Date;
   log?: Logger;
   timeoutMs?: number;
+  /** Test seam for request-time DNS validation. */
+  lookup?: HostLookup;
 }
 
 export class HttpN8nBridge implements N8nBridge {
@@ -123,23 +131,45 @@ export class HttpN8nBridge implements N8nBridge {
   }
 
   async call(node: ProduceNode | N8nNode, ctx: RunContext, workflow: N8nWorkflow | null): Promise<N8nCallResult> {
+    const shadow = node.kind === "n8n" ? node.shadowContract : undefined;
+    const identity = { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, mode: ctx.mode, startedAt: ctx.startedAt };
+    if (shadow) {
+      assertShadowRequest(shadow, identity);
+      if (workflow && (workflow.accountId !== shadow.accountId || workflow.routineId !== shadow.routineId || !workflow.active))
+        throw new Error("shadow integration requires an active account-specific workflow registration");
+    }
     const url = this.resolveUrl(node, workflow);
     if (!url) throw new Error("no n8n webhook is registered for this routine");
+    const target = await checkWebhookTarget(url, this.env, { maxLength: 2000, lookup: this.opts.lookup });
+    if (!target.ok) throw new Error(`n8n webhook refused: ${target.reason}`);
     const secret = (this.env[N8N_SECRET_ENV] ?? "").trim();
     if (!secret) throw new Error(`${N8N_SECRET_ENV} is not set — refusing to call n8n unsigned`);
+    const receiverHeaders: Record<string, string> = {};
+    if (shadow) {
+      // Separate receiver credential, pinned to this exact URL. Never send it to an
+      // owner-edited/global webhook, and never share the root data-token signing key.
+      const receiverUrl = (this.env.N8N_SHADOW_RECEIVER_URL ?? "").trim();
+      const receiverToken = (this.env.N8N_SHADOW_RECEIVER_TOKEN ?? "").trim();
+      if (receiverUrl !== target.url.toString()) throw new Error("shadow receiver URL is not pinned in server configuration");
+      if (receiverToken.length < 24 || /\s/.test(receiverToken) || receiverToken === secret)
+        throw new Error("shadow receiver requires a separate scoped authentication credential");
+      receiverHeaders.authorization = `Bearer ${receiverToken}`;
+    }
     const payload = buildN8nPayload(node, ctx, { secret, env: this.env, now: this.now });
     const body = JSON.stringify(payload);
     const ts = String(this.now().getTime());
-    const f = this.opts.fetch ?? fetch;
+    const f = this.opts.fetch ?? pinnedWebhookFetch;
     const timeoutMs = node.kind === "n8n" && node.timeoutMs ? node.timeoutMs : (this.opts.timeoutMs ?? N8N_DEFAULT_TIMEOUT_MS);
-    let res: Response;
+    let res: WebhookResponse;
     try {
-      res = await f(url, { method: "POST", headers: { "content-type": "application/json", [SIGNATURE_HEADER]: sign(secret, body, ts), [TIMESTAMP_HEADER]: ts }, body, signal: AbortSignal.timeout(timeoutMs) });
+      res = await f(target.url.toString(), { method: "POST", redirect: "manual", headers: { "content-type": "application/json", [SIGNATURE_HEADER]: sign(secret, body, ts), [TIMESTAMP_HEADER]: ts, ...receiverHeaders }, body, signal: AbortSignal.timeout(timeoutMs) }, target.pin);
     } catch (err) {
       this.opts.log?.warn("n8n.call_failed", { runId: ctx.runId, routineId: ctx.routineId, error: err instanceof Error ? err.name : "unknown" });
       throw new Error(`n8n webhook unreachable (${err instanceof Error ? err.name : "error"})`);
     }
+    if (res.status >= 300 && res.status < 400) throw new Error(`n8n webhook redirect refused (${res.status})`);
     if (res.status === 202) {
+      if (shadow) throw new Error("shadow integration requires a synchronous result and execution receipt");
       this.opts.log?.info("n8n.accepted", { runId: ctx.runId, routineId: ctx.routineId });
       return { kind: "accepted" };
     }
@@ -150,7 +180,13 @@ export class HttpN8nBridge implements N8nBridge {
     } catch {
       throw new Error("n8n webhook answered with a body that is not JSON");
     }
-    const out = parseN8nReply(parsed, payload.kind, node.kind === "produce" ? node.maxItems : undefined);
+    const out = parseN8nReply(parsed, payload.kind, node.kind === "produce" ? node.maxItems : SKILL_BY_ID[ctx.routineId]?.maxItems);
+    if (shadow && out.kind === "artifact") {
+      const receipt = validateShadowReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now());
+      const ref = `https://junctionai8.app.n8n.cloud/workflow/${shadow.workflowId}/executions/${receipt.executionId}`;
+      out.artifact.meta = { executionReceipt: receipt, approval_status: "pending_approval", executed_action: "none" };
+      out.artifact.evidence = [...(out.artifact.evidence ?? []), { source: "n8n_execution", ref }];
+    }
     this.opts.log?.info("n8n.replied", { runId: ctx.runId, routineId: ctx.routineId, kind: out.kind });
     return out;
   }

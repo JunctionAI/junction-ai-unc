@@ -68,10 +68,6 @@ describe("POST /api/settings/models", () => {
     expect(db.rows("account_model_prefs")).toMatchObject([{ account_id: ACCT, task: "self_review", model_id: "claude-opus-5", updated_at: expect.stringMatching(/^2026-/) }]);
     expect(db.lastCall("account_model_prefs", "upsert").onConflict).toBe("account_id,task");
 
-    out = await (await post({ task: "self_review", modelId: "openrouter:deepseek/deepseek-chat" })).json();
-    expect(out.prefs).toEqual({ self_review: "openrouter:deepseek/deepseek-chat" });
-    expect(out.resolved.self_review).toMatchObject({ source: "fallback", fallbackFrom: "openrouter:deepseek/deepseek-chat", id: "claude-sonnet-5" });
-
     out = await (await post({ task: "self_review", modelId: null })).json();
     expect(out.prefs).toEqual({});
     expect(db.rows("account_model_prefs")).toEqual([]);
@@ -80,10 +76,19 @@ describe("POST /api/settings/models", () => {
   it("rejects unknown tasks and model ids, bad JSON; 401 without a session", async () => {
     expect((await post({ task: "poetry", modelId: "gpt-5" })).status).toBe(400);
     expect((await post({ task: "chat", modelId: "gpt-99" })).status).toBe(400);
+    expect((await post({ task: "chat", modelId: "openrouter:deepseek/deepseek-chat" })).status).toBe(400);
     expect((await post({ task: "chat", modelId: 42 })).status).toBe(400);
     expect((await post("{")).status).toBe(400);
     expect(db.rows("account_model_prefs")).toEqual([]);
     user = null;
     expect((await post({ task: "chat", modelId: "gpt-5" })).status).toBe(401);
+  });
+
+  it("is owner-only", async () => {
+    db.rows("account_members")[0].role = "member";
+    const res = await post({ task: "chat", modelId: "gpt-5-mini" });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "owner_only" });
+    expect(db.rows("account_model_prefs")).toEqual([]);
   });
 });

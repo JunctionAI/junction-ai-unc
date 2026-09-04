@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { derive } from "@/lib/platform/derive";
 import { useUncChat } from "@/lib/unc/useUncChat";
-import { useAccountPersistence } from "@/lib/db/useAccountPersistence";
+import { useAccountPersistence, type Persistence } from "@/lib/db/useAccountPersistence";
+import type { PlatformState, Setter } from "@/lib/platform/state";
 import { useAccountFacts } from "@/lib/unc/accountFacts";
 import { usePlatformState } from "./usePlatformState";
 import { useLiveApprovals } from "./useLiveApprovals";
@@ -38,11 +39,66 @@ import type { BillingProps } from "@/lib/billing/server";
     configured=false ⇒ demo — no paywall, no plan line, exactly as before Phase 6. */
 export default function Platform({ billing = null }: { billing?: BillingProps | null }) {
   const { S, set } = usePlatformState();
-  const gated = billing?.configured ? billing.entitlement : null;
-  const uncSend = useUncChat(S, set);
   /* Phase 2: a no-op in demo mode (no Supabase env); with an account it hydrates on mount
      and autosaves every change (debounced). */
   const persistence = useAccountPersistence(S, set);
+
+  // A configured account must never fall through to the prototype's demo state when hydration
+  // or saving fails. Keep the real/demo application tree unmounted until persistence is known.
+  if (persistence.mode === "connecting") {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--cream)", color: "var(--muted)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif", fontSize: 14 }}>
+        Fetching your account…
+      </div>
+    );
+  }
+  if (persistence.mode === "error" || persistence.error) {
+    return <AccountPersistenceFailure kind={persistence.mode === "account" ? "save" : "load"} error={persistence.error} email={persistence.userEmail} onRetry={persistence.retry} />;
+  }
+
+  return <PlatformReady S={S} set={set} persistence={persistence} billing={billing} />;
+}
+
+/** Blocking, non-demo recovery surface for a signed-in account whose real state could not be
+    loaded or saved. POST sign-out remains available even when client-side recovery cannot work. */
+export function AccountPersistenceFailure({ kind, error, email, onRetry }: { kind: "load" | "save"; error: string | null; email: string | null; onRetry: () => void }) {
+  const saving = kind === "save";
+  return (
+    <main
+      data-testid="account-persistence-error"
+      style={{
+        minHeight: "100vh",
+        background: "var(--cream)",
+        color: "var(--ink)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
+      }}
+    >
+      <section style={{ width: "100%", maxWidth: 520, background: "white", border: "1px solid var(--line)", borderRadius: 20, padding: "34px 36px", boxShadow: "0 18px 50px oklch(0.27 0.055 262 / 0.1)" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--amber-text)" }}>Account paused safely</div>
+        <h1 style={{ margin: "10px 0 8px", fontSize: 25, letterSpacing: "-0.025em" }}>{saving ? "I couldn’t save your latest account state." : "I couldn’t load your real account."}</h1>
+        <p style={{ margin: 0, color: "var(--ink-soft)", fontSize: 14, lineHeight: 1.55 }}>
+          {saving ? "I’ve paused the controls so an unsaved view can’t be mistaken for durable account state. No outward action was taken because of this error." : "I’ve stopped here so demo information can’t be mistaken for your business data. Nothing was sent, spent, or changed."}
+        </p>
+        {error && <p data-testid="account-persistence-error-detail" style={{ margin: "16px 0 0", padding: "10px 12px", borderRadius: 10, background: "var(--amber-wash)", color: "var(--amber-text)", fontSize: 12.5, lineHeight: 1.5 }}>{error}</p>}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 22 }}>
+          <button type="button" className="btn-navy" onClick={onRetry} style={{ padding: "11px 20px", fontSize: 13.5 }}>Try again</button>
+          <form action="/auth/signout" method="post">
+            <button type="submit" className="hov-fg-ink" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>Sign out</button>
+          </form>
+        </div>
+        {email && <div style={{ marginTop: 16, color: "var(--muted)", fontSize: 11.5 }}>{email}</div>}
+      </section>
+    </main>
+  );
+}
+
+function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set: Setter; persistence: Persistence; billing: BillingProps | null }) {
+  const gated = billing?.configured ? billing.entitlement : null;
+  const uncSend = useUncChat(S, set);
   const inAccount = persistence.mode === "account" && !!persistence.accountId;
   /* The account's own rows (receipts, approvals, connector + routine states) — derive reads them in
      accounts mode so nothing a real account never touched can fall back to the catalog's demo defaults. */
@@ -64,8 +120,8 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
   const setupData = setup.data;
   const setPlanAgreedAt = V.setPlanAgreedAt;
   useEffect(() => {
-    if (setupData) setPlanAgreedAt(setupData.agreedAt);
-  }, [setupData, setPlanAgreedAt]);
+    if (setupData && S.planAgreedAt !== setupData.agreedAt) setPlanAgreedAt(setupData.agreedAt);
+  }, [setupData, S.planAgreedAt, setPlanAgreedAt]);
   /* "Agree the plan →" for real: plans.agreed_at. Fires once per session when an onboarded
      account has no agreed_at yet — the fresh agreement, or a backfill for an account that
      agreed before the column was written. */
@@ -171,20 +227,13 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
     return () => clearTimeout(t);
   }, [msgN, S.chatOpen, S.chatMode]);
 
-  if (persistence.mode === "connecting") {
-    return (
-      <div style={{ minHeight: "100vh", background: "var(--cream)", color: "var(--muted)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif", fontSize: 14 }}>
-        Fetching your account…
-      </div>
-    );
-  }
-
   if (gated && !isOpen(gated)) {
     return <Paywall state={gated.state === "canceled" ? "canceled" : "none"} email={persistence.mode === "account" ? persistence.userEmail : null} pricing={billing?.pricing} />;
   }
 
   return (
     <div
+      className="unc-platform"
       style={{
         display: "flex",
         minHeight: "100vh",
@@ -196,6 +245,7 @@ export default function Platform({ billing = null }: { billing?: BillingProps | 
     >
       {V.notOnboarding && !showGuided && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} billing={gated} onModels={inAccount ? () => setModelsOpen(true) : undefined} onSkills={inAccount ? () => setSkillsOpen(true) : undefined} onWhatUncKnows={inAccount ? () => setKnowsOpen(true) : undefined} />}
       <main style={{ flex: 1, minWidth: 0 }}>
+        {process.env.NEXT_PUBLIC_READINESS_PREVIEW === "true" && <aside role="note" style={{ padding: "12px 16px", background: "#082B45", color: "white", fontSize: 13 }}>Demo-only preview — sample data and replies. No AVGAR connections, real workflow execution, or Apple Messages delivery.</aside>}
         {gated?.state === "past_due" && <BillingBanner />}
         {V.isOnboarding && <Onboarding V={V} />}
         {showGuided && S.setupFlow === "connect" && (

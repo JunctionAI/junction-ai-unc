@@ -8,6 +8,8 @@ import { isDbConfigured } from "@/lib/db/client";
 import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
 import type { PlatformVals } from "@/lib/platform/derive";
 import { knownPlatformSlugs, SUGGESTION_COPY } from "@/lib/setup/channels";
+import { connectorHasRealSync } from "@/lib/connectors/sync";
+import { connectorEvidence } from "@/lib/connectors/readiness";
 import { isReading, useConnectorsState, type ConnectorsStateListing, type ConnectorStateView } from "./useConnectorsState";
 
 /* Connect / Reconnect: in demo mode (no Supabase configured) the button does exactly what the
@@ -56,21 +58,31 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   const [shop, setShop] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [pickers, setPickers] = useState<Record<string, Picker>>({});
-  // Accounts mode only: the demo cards have no token to forget.
-  const canDisconnect = isDbConfigured();
-  const live = useConnectorsState(canDisconnect, initialLive);
+  // In accounts mode the server's membership role is authoritative. Demo controls stay
+  // interactive, while a member can inspect status but cannot connect, select or disconnect.
+  const dbConfigured = isDbConfigured();
+  const accountsMode = dbConfigured || initialLive !== null;
+  const live = useConnectorsState(dbConfigured, initialLive);
   const liveBy: Record<string, ConnectorStateView> = Object.fromEntries((live.data?.connectors ?? []).map((c) => [c.name, c]));
   const owner = live.data?.role === "owner";
+  const canManage = !accountsMode || owner;
+  const canDisconnect = accountsMode && owner;
   // "Connect Google": one consent for GA4 + Ads + Search Console; the three cards then show status only.
   const googleOn = !!live.data?.google.configured;
   const googleChildren = new Set(live.data?.google.children ?? []);
   const googleCards = V.connectors.filter((c) => googleChildren.has(CONNECTOR_PLATFORMS[c.name] ?? ""));
-  const googleAllOk = googleCards.length > 0 && googleCards.every((c) => c.ok);
+  const cardSynced = (name: string, fallbackOk: boolean): boolean => {
+    if (!live.active) return accountsMode ? false : fallbackOk;
+    const row = liveBy[name];
+    if (!row) return false;
+    return connectorHasRealSync(row.status, row.lastSyncResult);
+  };
+  const googleAllOk = googleCards.length > 0 && googleCards.every((c) => cardSynced(c.name, c.ok));
   const googleAnyExpired = googleCards.some((c) => c.expired);
 
   // Accounts mode: the founder's own platforms (known_platforms) and what the scan spotted carry a quiet chip — the rest are just the library.
-  const pickedSlugs = new Set(canDisconnect ? knownPlatformSlugs(V.obNarrativeRequest.resources.platforms) : []);
-  const spottedBy: Record<string, string> = canDisconnect ? Object.fromEntries((V.obScan.profile?.platformsSpotted ?? []).map((s) => [s.platform, s.evidence])) : {};
+  const pickedSlugs = new Set(accountsMode ? knownPlatformSlugs(V.obNarrativeRequest.resources.platforms) : []);
+  const spottedBy: Record<string, string> = accountsMode ? Object.fromEntries((V.obScan.profile?.platformsSpotted ?? []).map((s) => [s.platform, s.evidence])) : {};
 
   // token path (owner): which card's form is open + its field values
   const [tokenFor, setTokenFor] = useState<string | null>(null);
@@ -82,7 +94,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   useEffect(() => {
     const r = peekConnectReturn();
     const platform = r && r.kind === "connected" ? (r.platform === "google" ? "ga4" : CONNECTOR_PLATFORMS[r.name]) : null;
-    if (platform && canDisconnect) live.watch(platform);
+    if (platform && accountsMode) live.watch(platform);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -107,7 +119,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   const note = (name: string, text: string) => setNotes((n) => ({ ...n, [name]: text }));
 
   // Which Connected cards may still need an account chosen (accounts mode only).
-  const pickerKey = canDisconnect
+  const pickerKey = accountsMode && owner
     ? V.connectors
         .filter((c) => c.ok && (PICKER_PLATFORMS as string[]).includes(CONNECTOR_PLATFORMS[c.name] ?? ""))
         .map((c) => c.name)
@@ -234,7 +246,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
       const res = await fetch(`/api/connectors/${platform}/manual`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const data = (await res.json().catch(() => ({}))) as ManualResponse;
       if (res.ok && data.ok) {
-        demoConnect(); // client state → Connected (the persistence layer autosaves it)
+        demoConnect(); // immediate card feedback; the server API already owns persistence
         setTokenFor(null);
         setTokenVals({});
         note(name, MANUAL_COPY.connected);
@@ -265,7 +277,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
       </div>
       {live.error && (
         <div data-testid="connectors-live-error" style={{ fontSize: 12.5, color: "var(--amber-text)", marginTop: 10, lineHeight: 1.5 }}>
-          Couldn’t reach the connector state just now ({live.error}) — the cards below are your last saved state.
+          Couldn’t verify connector status ({live.error}). <button onClick={live.refresh} className="hov-underline" style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer" }}>try again</button>
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 26 }}>
@@ -282,6 +294,10 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
             {googleAllOk ? (
               <span style={{ flex: "none", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--cyan-text)", fontWeight: 600 }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan)" }}></span>Connected
+              </span>
+            ) : !canManage ? (
+              <span data-testid="connector-owner-only" style={{ flex: "none", fontSize: 11.5, color: "var(--muted)", fontWeight: 500 }}>
+                Owner managed
               </span>
             ) : googleAnyExpired ? (
               <button data-testid="google-reconnect" onClick={() => void startGoogle()} disabled={busy === GOOGLE_UMBRELLA_NAME} style={{ flex: "none", border: "1px solid oklch(0.8 0.09 75)", background: "var(--amber-wash)", color: "var(--amber-text)", borderRadius: 999, padding: "7px 15px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
@@ -301,6 +317,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
           const oauthOn = !!lc?.oauthConfigured;
           const viaGoogle = googleOn && googleChildren.has(platform ?? "");
           const rl = live.active && lc ? readLine(lc) : null;
+          const evidence = lc ? connectorEvidence(lc) : null;
           const form = tokenFor === cn.name && platform ? MANUAL_FORMS[platform] : null;
           return (
             <div key={cn.name} data-testid={`connector-${platform ?? cn.name}`} style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "16px 19px", display: "flex", alignItems: "center", gap: 16 }}>
@@ -322,18 +339,20 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
                   {cn.note} · unlocks {cn.unlocks} routines
                 </div>
+                {evidence && <div data-testid="connector-evidence" style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, overflowWrap: "anywhere" }}>{evidence.identity}<br />{evidence.read}</div>}
+                {accountsMode && !lc && <div role="status" style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>connection status is unverified.</div>}
                 {rl && (
                   <div data-testid="read-line" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginTop: 6, color: rl.tone === "cyan" ? "var(--cyan-text)" : rl.tone === "amber" ? "var(--amber-text)" : "var(--muted)", fontWeight: 500 }}>
                     {isReading(lc!) && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan-link)", animation: "jpulse 1.6s infinite", flex: "none" }}></span>}
                     <span>{rl.text}</span>
-                    {rl.reconnect && (
+                    {rl.reconnect && canManage && (
                       <button onClick={() => (tokenPath && !oauthOn ? openToken(cn.name) : void start(cn.name, cn.connect))} disabled={busy === cn.name} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--amber-text)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
                         — {MANUAL_COPY.reconnect}
                       </button>
                     )}
                   </div>
                 )}
-                {shopFor === cn.name && (
+                {canManage && shopFor === cn.name && (
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
@@ -353,7 +372,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                     </button>
                   </form>
                 )}
-                {form && platform && (
+                {owner && form && platform && (
                   <form
                     data-testid="token-form"
                     onSubmit={(e) => {
@@ -394,7 +413,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                     </div>
                   </form>
                 )}
-                {cn.ok && pickers[cn.name] && pickers[cn.name].externalRef === null && (
+                {owner && cn.ok && pickers[cn.name] && pickers[cn.name].externalRef === null && (
                   <div style={{ marginTop: 8 }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--cyan-text)", fontWeight: 500 }}>
                       <span>{CONNECT_COPY.choosePrompt}</span>
@@ -429,7 +448,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                   </button>
                 )}
               </div>
-              {cn.ok && (
+              {cardSynced(cn.name, cn.ok) && (
                 <span style={{ flex: "none", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--cyan-text)", fontWeight: 600 }}>
                   {pickers[cn.name] && pickers[cn.name].externalRef === null ? (
                     <span style={{ background: "var(--cyan-wash)", borderRadius: 999, padding: "4px 11px" }}>{CONNECT_COPY.chooseLabel}</span>
@@ -450,7 +469,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                   )}
                 </span>
               )}
-              {cn.expired && (
+              {cn.expired && canManage && (
                 <span style={{ flex: "none", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
                   <button
                     onClick={() => (viaGoogle ? void startGoogle() : tokenPath && !oauthOn ? openToken(cn.name) : void start(cn.name, cn.connect))}
@@ -466,13 +485,20 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                   )}
                 </span>
               )}
+              {cn.expired && !canManage && (
+                <span data-testid="connector-owner-only" style={{ flex: "none", fontSize: 11.5, color: "var(--muted)", fontWeight: 500 }}>
+                  Owner managed
+                </span>
+              )}
               {cn.off && viaGoogle && (
                 <span data-testid="via-google" style={{ flex: "none", fontSize: 11.5, color: "var(--muted)", fontWeight: 500 }}>
-                  via Connect Google ↑
+                  {canManage ? "via Connect Google ↑" : "Managed through Google"}
                 </span>
               )}
               {cn.off &&
                 !viaGoogle &&
+                canManage &&
+                !(lc && isReading(lc)) &&
                 (tokenPath && !oauthOn ? (
                   <button data-testid="token-primary" onClick={() => openToken(cn.name)} disabled={busy === cn.name} className="hov-border-cyanlink" style={{ flex: "none", border: "1px solid var(--card-border-2)", background: "white", color: "var(--ink)", borderRadius: 999, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                     {MANUAL_COPY.link}
@@ -482,6 +508,11 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                     Connect
                   </button>
                 ))}
+              {cn.off && !viaGoogle && !canManage && (
+                <span data-testid="connector-owner-only" style={{ flex: "none", fontSize: 11.5, color: "var(--muted)", fontWeight: 500 }}>
+                  Owner managed
+                </span>
+              )}
             </div>
           );
         })}

@@ -353,7 +353,7 @@ describe("derive(mode: account) — no catalog demo status, no catalog 'Active',
 
   it("the account's rows fill what the client state never touched (facts): Klaviyo really needing a reconnect, a pending decision, receipts, an enabled routine", () => {
     const f = factsFor({
-      connectors: [{ platform: "klaviyo", name: "Klaviyo", status: "needs_reconnect", lastSyncAt: null }, { platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: null }],
+      connectors: [{ platform: "klaviyo", name: "Klaviyo", status: "needs_reconnect", lastSyncAt: null, lastSyncResult: "error:token_expired" }, { platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: "2026-09-01T20:00:00.000Z", lastSyncResult: "ok" }],
       routineStates: [{ routineId: "D01-W01", name: "Founder content engine", enabled: true }],
       approvals: [{ id: "ap-1", routineId: null, title: "t", detail: "", before: "", after: "", reasoning: "", status: "pending", expiresAt: null, decidedAt: null }],
       receipts: [{ id: "abcdef12-0000-4000-8000-000000000000", kind: "draft", text: "Drafts handed over.", createdAt: NOW.toISOString() }],
@@ -470,7 +470,7 @@ describe("Routines in accounts mode — no demo constant can render", () => {
 
 /* ---------------- Connectors view ---------------- */
 
-const connListing = (over: Partial<ConnectorsStateListing> = {}): ConnectorsStateListing => ({ role: "member", connectors: [], google: { configured: false, children: [] }, ...over });
+const connListing = (over: Partial<ConnectorsStateListing> = {}): ConnectorsStateListing => ({ role: "owner", connectors: [], google: { configured: false, children: [] }, ...over });
 
 describe("Connectors in accounts mode — untouched platforms are disconnected, never the catalog's demo status", () => {
   it("demo: Shopify/GA4/Meta/Instagram/Slack read Connected and Klaviyo asks for a Reconnect (the guard is real)", () => {
@@ -490,14 +490,37 @@ describe("Connectors in accounts mode — untouched platforms are disconnected, 
   });
 
   it("accounts, one real row: only that card is Connected; Klaviyo only asks for a reconnect when its row says so", () => {
-    const V1 = dv({ ...base, view: "connectors", connState: { Shopify: "ok" } }, ACCOUNT);
-    const html = renderToStaticMarkup(createElement(ConnectorsView, { V: V1, initialLive: connListing() }));
+    const shopifyLive = connListing({
+      connectors: [{ platform: "shopify", name: "Shopify", status: "connected", externalRef: "acme.myshopify.com", lastSyncAt: "2026-09-02T09:00:00.000Z", lastSyncResult: "ok", lastReadMetrics: 4, oauthConfigured: true, tokenPath: true }],
+    });
+    const V1 = dv({ ...base, view: "connectors" }, { ...ACCOUNT, facts: factsFor({ connectors: [{ platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: "2026-09-02T09:00:00.000Z", lastSyncResult: "ok" }] }) });
+    const html = renderToStaticMarkup(createElement(ConnectorsView, { V: V1, initialLive: shopifyLive }));
     expectNoDemo(html);
     expect((html.match(/>Connected</g) ?? []).length).toBe(1);
     expect(html).toContain("1 connected");
     expect(html).not.toContain(">Reconnect<");
-    const V2 = dv({ ...base, view: "connectors", connState: { Klaviyo: "expired" } }, ACCOUNT);
+    const V2 = dv({ ...base, view: "connectors" }, { ...ACCOUNT, facts: factsFor({ connectors: [{ platform: "klaviyo", name: "Klaviyo", status: "needs_reconnect", lastSyncAt: null, lastSyncResult: "error:token_expired" }] }) });
     expect(renderToStaticMarkup(createElement(ConnectorsView, { V: V2, initialLive: connListing() }))).toContain(">Reconnect<");
+  });
+
+  it("accounts, sealed but never synced: the card does not read Connected", () => {
+    const live = connListing({
+      connectors: [{ platform: "shopify", name: "Shopify", status: "connected", externalRef: "acme.myshopify.com", lastSyncAt: null, lastSyncResult: null, lastReadMetrics: null, oauthConfigured: true, tokenPath: true }],
+    });
+    const V = dv({ ...base, view: "connectors" }, { ...ACCOUNT, facts: factsFor({ connectors: [{ platform: "shopify", name: "Shopify", status: "connected", lastSyncAt: null, lastSyncResult: null }] }) });
+    const html = renderToStaticMarkup(createElement(ConnectorsView, { V, initialLive: live }));
+    expect(html).not.toContain(">Connected<");
+    expect(html).toContain("Nothing connected yet");
+  });
+
+  it("members can inspect connector status but never see connect, select, reconnect or disconnect controls", () => {
+    const S: PlatformState = { ...base, view: "connectors", connState: { Shopify: "ok", Klaviyo: "expired" } };
+    const html = renderToStaticMarkup(createElement(ConnectorsView, { V: dv(S, ACCOUNT), initialLive: connListing({ role: "member" }) }));
+    expect(html).toContain("Owner managed");
+    expect(html).not.toContain(">Connect<");
+    expect(html).not.toContain(">Reconnect<");
+    expect(html).not.toContain("Disconnect");
+    expect(html).not.toContain("<select");
   });
 });
 

@@ -17,18 +17,22 @@ import type { PlatformState } from "@/lib/platform/state";
 import { rowsToState, stateToRows, type AccountRows, type LoadedRows } from "./mapping";
 import { unwrap, type DbClient } from "./types";
 
+export type MembershipRole = "owner" | "member";
+
 export interface Membership {
   accountId: string;
-  role: "owner" | "member";
+  role: MembershipRole;
 }
 
-/** The accounts the signed-in user belongs to (RLS returns only their own rows). */
-export async function listMemberships(db: DbClient): Promise<Membership[]> {
+/** The accounts this exact signed-in user belongs to, in the canonical server selection order:
+    owned accounts first, then oldest membership. The explicit user filter is required because
+    account_members RLS also lets members see peers on the same account. */
+export async function listMemberships(db: DbClient, userId: string): Promise<Membership[]> {
   const rows = await unwrap<{ account_id: string; role: "owner" | "member" }[]>(
     "account_members.select",
-    db.from("account_members").select("account_id, role").order("created_at", { ascending: true }),
+    db.from("account_members").select("account_id, role").eq("user_id", userId).order("created_at", { ascending: true }),
   );
-  return rows.map((r) => ({ accountId: r.account_id, role: r.role }));
+  return rows.map((r) => ({ accountId: r.account_id, role: r.role })).sort((a, b) => (a.role === b.role ? 0 : a.role === "owner" ? -1 : 1));
 }
 
 /** Create an account + owner membership for the signed-in user via the 0003 RPC. */
@@ -112,7 +116,7 @@ export async function ensureAccountName(db: DbClient, accountId: string): Promis
   return name;
 }
 
-export async function saveAccountRows(db: DbClient, rows: AccountRows): Promise<void> {
+export async function saveAccountRows(db: DbClient, rows: AccountRows, opts: { trustedRuntimeSeed?: boolean } = {}): Promise<void> {
   const accountId = rows.account.id;
   const acct = (table: string) => db.from(table);
 
@@ -142,12 +146,17 @@ export async function saveAccountRows(db: DbClient, rows: AccountRows): Promise<
 
   await unwrap("business_profiles.upsert", acct("business_profiles").upsert(rows.businessProfile as unknown as Record<string, unknown>, { onConflict: "account_id" }));
 
-  // routine_states: only `enabled` — version / draft_spec / live_spec belong to the runtime
-  if (rows.routineStates.length)
-    await unwrap("routine_states.upsert", acct("routine_states").upsert(rows.routineStates as unknown as Record<string, unknown>[], { onConflict: "account_id,routine_id" }));
-
-  if (rows.connectors.length)
-    await unwrap("connectors.upsert", acct("connectors").upsert(rows.connectors as unknown as Record<string, unknown>[], { onConflict: "account_id,platform" }));
+  // `routine_states` and `connectors` are deliberately absent here. They are runtime and
+  // credential-control tables, written only by their session-bound server APIs with the
+  // service role. Client autosave must never be an alternate mutation path for either.
+  // The offline beta seeder runs with the service role and may create initial, disconnected
+  // rows explicitly; this option is never exposed by saveAccountState/client autosave.
+  if (opts.trustedRuntimeSeed) {
+    if (rows.routineStates.length)
+      await unwrap("routine_states.upsert", acct("routine_states").upsert(rows.routineStates as unknown as Record<string, unknown>[], { onConflict: "account_id,routine_id" }));
+    if (rows.connectors.length)
+      await unwrap("connectors.upsert", acct("connectors").upsert(rows.connectors as unknown as Record<string, unknown>[], { onConflict: "account_id,platform" }));
+  }
 
   if (rows.chatMessages.length)
     await unwrap("chat_messages.upsert", acct("chat_messages").upsert(rows.chatMessages as unknown as Record<string, unknown>[], { onConflict: "account_id,thread,position" }));
@@ -181,29 +190,33 @@ export async function acceptBetaInvites(db: DbClient): Promise<string[]> {
   }
 }
 
-/** First sign-in bootstrap: accept any beta invite, then find the user's account or create one
-    and seed it with whatever the client already holds (the onboarding answers), so nothing
-    typed before sign-in is lost. Order matters: an invited founder must land in the seeded
+/** First sign-in bootstrap: accept any beta invite, then find the user's account. Product
+    callers never self-provision; `allowCreate` is retained only for local/legacy tests and
+    the production migration revokes the RPC from client roles. An invited founder lands in the seeded
     account (found=true → hydrated from its rows, the client seed is NOT written over it),
     never in a fresh empty one. */
 export async function ensureAccount(
   db: DbClient,
   seed: PlatformState,
-  opts: { userId?: string } = {},
-): Promise<{ accountId: string; created: boolean; state: PlatformState; name: string }> {
+  opts: { userId: string; allowCreate?: boolean },
+): Promise<{ accountId: string; created: boolean; state: PlatformState; name: string; role: MembershipRole }> {
   await acceptBetaInvites(db);
-  const memberships = await listMemberships(db);
+  const memberships = await listMemberships(db, opts.userId);
   if (memberships.length) {
-    const accountId = memberships[0].accountId;
+    const membership = memberships[0];
+    const accountId = membership.accountId;
     const { state, found, name } = await loadAccountState(db, accountId, seed);
-    if (!found) {
+    // A member may read the account through RLS but cannot seed or autosave it. Hydrate the
+    // honest partial rows over the empty account seed and leave first-write bootstrap to an owner.
+    if (!found && membership.role === "owner") {
       await saveAccountState(db, accountId, seed, opts);
-      return { accountId, created: false, state: seed, name };
+      return { accountId, created: false, state: seed, name, role: membership.role };
     }
-    return { accountId, created: false, state, name };
+    return { accountId, created: false, state, name, role: membership.role };
   }
+  if (!opts.allowCreate) throw new Error("This address has not been invited to the Unc private beta.");
   const name = accountDisplayName({ profileName: seed.scan.profile?.name ?? null, website: seed.website, goalTitle: seed.goalTitle });
   const accountId = await createAccount(db, { name, currency: seed.currency });
   await saveAccountState(db, accountId, seed, opts);
-  return { accountId, created: true, state: seed, name };
+  return { accountId, created: true, state: seed, name, role: "owner" };
 }

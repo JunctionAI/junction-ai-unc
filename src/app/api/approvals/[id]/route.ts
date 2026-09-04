@@ -10,12 +10,13 @@
    With ActionExecutor (LIVE_MODE_ENABLED = false) an approved mutating run ends
    failed-closed — the response says so honestly (run.status / run.error) and nothing is changed.
 
-   DB configured → session-bound (the approval must belong to the caller's account; decided_by
-   = the caller). Demo mode → MemoryStore, unbound (nothing survives a restart). */
+   DB configured → owner-only and session-bound (the approval must belong to the caller's
+   account; decided_by = the caller). Demo mode → MemoryStore, unbound (nothing survives a
+   restart). */
 
 import { decideApproval, DecideError, decideErrorStatus } from "@/lib/approvals/handlers";
 import { isDbConfigured } from "@/lib/db/client";
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun } from "../../routines/shared";
@@ -40,7 +41,7 @@ async function handlePOST(req: Request, ctx: { params: Promise<{ id: string }> }
   let accountId: string | null = null;
   let decidedBy: string | undefined;
   if (isDbConfigured()) {
-    const session = await requireAccountSession();
+    const session = await requireAccountOwnerSession();
     if (session instanceof Response) return session;
     accountId = session.accountId;
     decidedBy = session.userId;

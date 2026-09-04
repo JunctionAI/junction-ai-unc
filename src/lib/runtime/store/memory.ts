@@ -1,7 +1,7 @@
 /* In-memory Store. Reference implementation + test double; the Supabase
    adapter implements the same interface (see interface.ts for the mapping). */
 
-import type { ApprovalRecord, ApprovalStatus, Artifact, N8nWorkflow, Receipt, RoutineId, TasteEvent } from "../types";
+import type { ApprovalRecord, ApprovalStatus, Artifact, ArtifactStatus, N8nWorkflow, Receipt, RoutineId, TasteEvent } from "../types";
 import type {
   BenchmarkOptin,
   BenchmarkRecord,
@@ -90,9 +90,10 @@ export class MemoryStore implements Store {
     const a = this.approvals.get(approvalId);
     return a ? clone(a) : null;
   }
-  async updateApproval(approvalId: string, patch: Partial<Pick<ApprovalRecord, "status" | "decidedAt" | "decidedBy">>) {
+  async updateApproval(approvalId: string, patch: Partial<Pick<ApprovalRecord, "status" | "decidedAt" | "decidedBy">>, expectedStatus?: ApprovalStatus) {
     const a = this.approvals.get(approvalId);
     if (!a) throw new Error(`approval ${approvalId} not found`);
+    if (expectedStatus && a.status !== expectedStatus) throw new Error(`approval ${approvalId} already ${a.status}`);
     const next = { ...a, ...clone(patch) };
     this.approvals.set(approvalId, next);
     return clone(next);
@@ -211,9 +212,10 @@ export class MemoryStore implements Store {
     const a = this.artifacts.get(artifactId);
     return a ? clone(a) : null;
   }
-  async updateArtifact(artifactId: string, patch: Partial<Pick<Artifact, "status" | "editedBody">>) {
+  async updateArtifact(artifactId: string, patch: Partial<Pick<Artifact, "status" | "editedBody">>, expectedStatus?: ArtifactStatus) {
     const a = this.artifacts.get(artifactId);
     if (!a) throw new Error(`artifact ${artifactId} not found`);
+    if (expectedStatus && a.status !== expectedStatus) throw new Error(`artifact ${artifactId} changed from ${expectedStatus} to ${a.status}`);
     const next = { ...a, ...clone(patch) };
     for (const k of Object.keys(patch) as (keyof typeof patch)[]) if (patch[k] === undefined) delete next[k];
     this.artifacts.set(artifactId, next);

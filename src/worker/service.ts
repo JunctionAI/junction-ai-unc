@@ -70,9 +70,9 @@ export interface ServiceDeps {
   producer?: Producer | null;
   /** The n8n bridge. undefined = HttpN8nBridge on process.env; null = none. */
   n8n?: N8nBridge | null;
-  /** Decision presets for the rule-bound routines + the Meta guards. undefined = presetSource(db)
-      (src/lib/runtime/presets/store.ts: account_presets / routine_params → MetaPreset; defaults
-      without a database); null = the library defaults. */
+  /** Account defaults for rule-bound routines + the Meta guards. undefined = presetSource(db)
+      (src/lib/runtime/presets/store.ts: account_presets → MetaPreset; a promoted decide node may
+      overlay its versioned routine policy); null = the library defaults. */
   presets?: PresetSource | null;
   now?: () => Date;
   log?: Logger;
@@ -164,6 +164,7 @@ export async function triggerRun(deps: ServiceDeps, input: TriggerRunInput, adap
   const acct = await resolveAccount(deps, input.accountId, input.accountFallback);
   const catalog = catalogSpecOrThrow(input.routineId);
   const state = await getOrInitState({ store: deps.store, now: deps.now }, acct.account.accountId, catalog.id);
+  if (input.triggeredBy === "schedule" && !state.enabled) throw new WorkerError("invalid_request", "routine was switched off before the scheduled run started");
   const spec = effectiveSpec(state, catalog);
   deps.log?.info("run.start", { accountId: acct.account.accountId, routineId: spec.id, version: spec.version, mode, triggeredBy: input.triggeredBy ?? "manual" });
   const result = await runRoutine(spec, { account: acct.account, triggeredBy: input.triggeredBy ?? "manual", vars: { ...(acct.vars ?? {}), ...(input.vars ?? {}) } }, adapters, { mode });

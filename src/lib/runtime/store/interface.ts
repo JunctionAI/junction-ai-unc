@@ -270,6 +270,7 @@ export interface Store {
   updateApproval(
     approvalId: string,
     patch: Partial<Pick<ApprovalRecord, "status" | "decidedAt" | "decidedBy">>,
+    expectedStatus?: ApprovalStatus,
   ): Promise<ApprovalRecord>;
   listApprovals(accountId: string, status?: ApprovalStatus): Promise<ApprovalRecord[]>;
 
@@ -309,7 +310,7 @@ export interface Store {
   // ----- artifacts (migration 0013) -----
   putArtifact(artifact: Artifact): Promise<Artifact>;
   getArtifact(artifactId: string): Promise<Artifact | null>;
-  updateArtifact(artifactId: string, patch: Partial<Pick<Artifact, "status" | "editedBody">>): Promise<Artifact>;
+  updateArtifact(artifactId: string, patch: Partial<Pick<Artifact, "status" | "editedBody">>, expectedStatus?: ArtifactStatus): Promise<Artifact>;
   /** Newest first. */
   listArtifacts(accountId: string, opts?: ListArtifactsOptions): Promise<Artifact[]>;
 

@@ -13,7 +13,7 @@ const routerMock = vi.hoisted(() => ({ complete: vi.fn(), resolveModel: vi.fn() 
 const accountMock = vi.hoisted(() => ({ current: null as { accountId: string; db: unknown } | null }));
 const hooksMock = vi.hoisted(() => ({ afterChatReply: vi.fn() }));
 vi.mock("@/lib/llm/router", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/llm/router")>()), complete: routerMock.complete, resolveModel: routerMock.resolveModel }));
-vi.mock("@/lib/llm/accountContext", () => ({ optionalAccountContext: async () => accountMock.current }));
+vi.mock("@/lib/llm/accountContext", () => ({ requireModelAccountContext: async () => accountMock.current }));
 vi.mock("@/lib/brain/hooks", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/brain/hooks")>()), afterChatReply: hooksMock.afterChatReply }));
 
 import { POST } from "@/app/api/unc/chat/route";

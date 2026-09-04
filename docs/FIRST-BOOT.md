@@ -1,9 +1,8 @@
 # Unc — first boot with a real Supabase project
 
-Phase 2 (accounts + persistence) is built and unit-tested against a schema-checked fake, but
-no Supabase project existed when it was written. This is the exact sequence for the day one
-does. Until then the app runs in **demo mode** (client-side state, `/app` open to anyone,
-`/login` says accounts aren't switched on yet) — nothing here is required for that.
+Accounts, persistence and the governed runtime are tested against a schema-checked fake. This
+is the exact sequence for a new Unc project. Until then a local development build can run in
+demo mode; a production build without account storage fails closed at cost-bearing endpoints.
 
 ## 0. What is env-gated
 
@@ -31,22 +30,27 @@ Either with the CLI:
 cd ~/junction-unc
 npx supabase login
 npx supabase link --project-ref <ref>
-npx supabase db push          # applies supabase/migrations/0001, 0002, 0003 in order
+npx supabase db push          # applies every pending file in supabase/migrations/ in order
 ```
 
-or by pasting each file into the SQL editor in this order:
+If the SQL editor is unavoidable, paste **every** `.sql` file in lexical filename order. Do
+not stop at a numbered migration: the dated migrations revoke unsafe legacy grants and are
+part of the release boundary.
 
-1. `supabase/migrations/0001_init.sql` — tenancy, onboarding tables, routines, approvals, receipts, chat, RLS
-2. `supabase/migrations/0002_runtime_columns.sql` — `routine_runs` approval/dedup/spec_hash/snapshot + spend index
-3. `supabase/migrations/0003_account_state.sql` — `account_state_meta`, ordered-list keys, `approvals.client_key`, `create_account()` RPC
-
-Verify: Table editor shows 15 tables; Database → Functions shows `is_account_member` and
-`create_account`; every table has RLS enabled.
+Verify `supabase migration list` shows no pending local migrations. Confirm every application
+table has RLS enabled; similarity RPCs and governed runtime/model/artifact tables reject
+anon/authenticated writes; owner-editable configuration rejects a `member`; the browser cannot
+update `accounts.monthly_llm_cap_usd`; `create_account(text,text)` is not executable by client roles; only `service_role` can
+call the n8n data and `reserve_llm_spend` / `release_llm_spend_reservation` functions introduced
+by the hardening migrations. Exercise one reservation and release under the service role, then
+confirm the same RPCs are denied as anon and authenticated.
 
 ## 3. Auth provider
 
-Authentication → Providers → **Email**: enabled, *Confirm email* on, magic link on
-(passwords are never used — `LoginForm` calls `signInWithOtp`).
+Authentication → Providers → **Email**: enabled, *Confirm email* on, magic link on, and
+**public user sign-ups disabled**. Passwords are never used. For each beta founder, create or
+invite the exact address from Auth Admin before sending Tom's invite; `LoginForm` calls
+`signInWithOtp` with `shouldCreateUser:false`.
 
 Authentication → URL configuration:
 
@@ -82,33 +86,41 @@ Run through in a fresh browser profile.
 
 1. **Gate** — `GET /app` with no session redirects to `/login`; `/login` renders the cream sign-in
    card with the mascot ("Tell me your email and I'll send a link…"). The landing page `/` is untouched.
-2. **Magic link** — enter an email → "Link's on its way…" → open the link → lands on `/app`
-   (via `/auth/callback?code=…&next=/app`). `auth.users` has the user; `accounts` and
-   `account_members` each have one row (created by `create_account()`); `account_state_meta`
-   has the seeded row.
-3. **Onboard** — go through all seven steps (goal, resources, team, website/socials, strengths,
-   platforms, plan). Watch the sidebar footer: "Saving…" → "Saved" within ~1 s of each change.
+2. **Invite + magic link** — seed the account and `beta_invites` row, pre-create/invite the
+   exact Auth address, enter it, open the link, and land on `/app` through the callback.
+   `accept_beta_invites()` attaches that identity to the seeded account. An unknown address
+   creates neither an Auth user nor an account and account APIs answer `403 invite_required`.
+3. **Seeded state** — confirm the invited founder lands on Home with the pre-seeded goal, plan,
+   resource profile, team, and disconnected connector cards. Edit one non-sensitive profile field
+   and watch the sidebar footer move "Saving…" → "Saved"; an uninvited identity must never receive
+   an empty auto-created tenant.
 4. **Refresh** — F5. `/app` shows "Fetching your account…" briefly, then the control centre
    with the same goal line, deadline, budget, team, strengths and plan. (`onboarded` and the
    step come from `account_state_meta.client_state`.)
 5. **Routine toggle** — Routines → toggle any routine on/off → refresh → it holds.
    `routine_states` has a row with `enabled` set and `version = 1`, `live_spec` null.
-6. **Approval** — Home → Approve one card, Hold another → refresh → both hold. `approvals` has
-   the three `demo-ap-*` rows with `status`, `decided_at`, `decided_by = auth.uid()`.
+6. **Artifact taste gate** — dry-run one supported routine, then approve one generated artifact
+   and hold another with a reason. Refresh and confirm `artifacts.status` plus matching
+   `taste_events`; there are no persisted demo approval cards. Separately verify a `member` can
+   read drafts but receives `403 owner_only` when attempting a taste decision.
 7. **Chat** — send a message in the corner chat → refresh → the thread is back
    (`chat_messages.thread = 'corner'`, ordered by `position`).
 8. **Sign out** — sidebar "Sign out" → `/login`; `/app` redirects again.
 9. **Second device / browser** — sign in with the same email → the same account hydrates
    (no second account is created).
 10. **RLS** — in the SQL editor as the anon role (`set role anon; select * from accounts;`)
-    returns nothing; as the service role it returns everything.
+    returns nothing; as a seeded `member`, reads stay inside the account while writes to the
+    model, routine, artifact, approval, connector, account-cap, and plan boundaries are denied;
+    as the owner, only the intended configuration fields are writable; as the service role the
+    governed server paths work.
 
 ## 6. Things that can only be verified against the live project
 
 - The magic-link email → callback → cookie session loop (PKCE code exchange, cookie names,
   the proxy refreshing tokens). Unit tests cover the redirect logic, not Supabase Auth itself.
-- `create_account()` runs as `security definer` with `auth.uid()` — the fake asserts the call
-  shape and the RLS consequence, not plpgsql.
+- `accept_beta_invites()` confirmed-email lookup and row locking, plus the client-role revoke
+  on legacy `create_account()`, require a real-role probe; static migration tests do not prove
+  the target project has applied them.
 - Postgres-specific behaviour the fake approximates: `numeric` columns arriving as strings
   (handled), `timestamptz` formatting (normalised on read in `SupabaseStore`), `uuid` type
   checks on `approvals.decided_by` (the runtime must pass a real `auth.users.id` or leave it

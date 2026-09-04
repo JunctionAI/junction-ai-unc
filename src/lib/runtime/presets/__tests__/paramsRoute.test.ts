@@ -40,6 +40,8 @@ interface View {
   steps: { id: string; included: boolean; label: string }[];
   version: { live: number; draft: number | null };
   canPromote: boolean;
+  skillFile?: { goal: string } | null;
+  agreement?: { decided: number; applyUnlocked: boolean; line: string };
   error?: string;
   issues?: { key: string; message: string }[];
   run?: { status: string; summary: string };
@@ -100,6 +102,10 @@ describe("GET — the view", () => {
     expect(c.domain).toBe("content");
     expect(c.steps.map((s) => s.id)).toEqual(["read_questions", "read_posts", "read_products"]);
     expect(c.steps.every((s) => s.included)).toBe(true);
+    expect(c.skillFile).toMatchObject({ goal: expect.stringContaining("founder-voice") });
+    expect(c.agreement).toMatchObject({ decided: 0, applyUnlocked: false });
+    expect(v.skillFile).toMatchObject({ goal: expect.stringContaining("verdict"), never: expect.arrayContaining([expect.stringMatching(/invent.*ROAS/)]) });
+    expect(v.agreement).toMatchObject({ decided: 0, applyUnlocked: false, line: expect.stringContaining("keep asking") });
   });
 });
 
@@ -128,7 +134,17 @@ describe("PATCH — save creates routine_params + a draft version; refusals writ
     expect(draft.version).toBe(2);
     const decide = draft.nodes.find((n) => n.kind === "decide") as DecideNode;
     expect((decide.rule as { value: unknown }).value).toBe(3.2);
+    expect(decide.policy).toEqual({ kind: "meta.adset", preset: { roasFloor: 3.2 } });
     expect(state.live_spec).toBeNull();
+  });
+
+  it("an unbound D02-W01 rule input still creates only a versioned draft policy", async () => {
+    const res = await patch({ routineId: "D02-W01", params: { targetCpa: 45, dailyBudgetCap: 80 } });
+    expect(res.status).toBe(200);
+    const state = db.rows("routine_states")[0];
+    const draft = state.draft_spec as RoutineSpec;
+    expect((draft.nodes.find((n) => n.kind === "decide") as DecideNode).policy).toEqual({ kind: "meta.adset", preset: { targetCpa: 45 }, dailyBudgetCap: 80 });
+    expect(state).toMatchObject({ version: 1, live_spec: null });
   });
 
   it("a value that only steers the skill saves without a draft; switching a step off makes one", async () => {
@@ -165,5 +181,16 @@ describe("POST — validate then promote (the existing versioning, unchanged)", 
     const d = (await (await post({ routineId: "D02-W01", action: "discard" })).json()) as View;
     expect(d.version).toEqual({ live: 1, draft: null });
     expect((await post({ routineId: "D02-W01", action: "discard" })).status).toBe(200);
+  });
+
+  it("members may read and validate, but cannot configure, promote or discard", async () => {
+    await patch({ routineId: "D01-W01", steps: { read_posts: false } });
+    db.rows("account_members")[0].role = "member";
+    expect((await get("?routineId=D01-W01")).status).toBe(200);
+    expect((await patch({ routineId: "D01-W01", params: { postsPerWeek: 4 } })).status).toBe(403);
+    expect((await post({ routineId: "D01-W01", action: "validate" })).status).toBe(200);
+    expect((await post({ routineId: "D01-W01", action: "promote" })).status).toBe(403);
+    expect((await post({ routineId: "D01-W01", action: "discard" })).status).toBe(403);
+    expect((db.rows("routine_states")[0].draft_spec as RoutineSpec | null)?.version).toBe(2);
   });
 });

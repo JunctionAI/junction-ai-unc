@@ -26,7 +26,7 @@ const acctRun = { accountId: ACCT, account: { currency: "NZD", budgetMonthly: 30
 async function listing(): Promise<RoutinesStateListing> {
   const db = new FakeSupabase();
   db.seed("accounts", [{ id: ACCT, name: "Example", currency: "NZD" }]);
-  db.seed("connectors", [{ account_id: ACCT, platform: "shopify", status: "connected" }]);
+  db.seed("connectors", [{ account_id: ACCT, platform: "shopify", status: "connected", last_sync_result: "ok" }]);
   db.seed("plans", [{ account_id: ACCT, title: "Brand-led organic", phases: [{ n: "1", routines: ["Abandoned cart recovery", "Campaign calendar prep"] }] }]);
   const store = new MemoryStore();
   await store.putRoutineState({ accountId: ACCT, routineId: "D05-W07", enabled: true, version: 3, draftSpec: null, liveSpec: null, updatedAt: "2026-09-02T00:00:00.000Z" });
@@ -58,8 +58,9 @@ describe("RoutinesView — accounts mode reads the database, demo mode is the pr
     expect(html).toContain('data-testid="better-with"');
     expect(html).toContain(ROUTINES_COPY.betterWith("Klaviyo"));
     expect(html).not.toContain("v3 · needs Klaviyo connected");
-    // a wave-2 chain with plain (required) reads is still honestly blocked
-    expect(html).toContain("Winback campaign prep · v1 · needs Klaviyo connected");
+    // a mutating email chain still honestly blocked on Klaviyo; winback drafts once Shopify is in
+    expect(html).toContain("Welcome flow tuning · v1 · needs Klaviyo connected");
+    expect(html).toContain("Winback campaign prep · v1 · draft-only for now");
     expect(html).toContain("Last run");
     expect(html).toContain(ROUTINES_COPY.draftReady);
     // recommended-first (plan phase 1, wave 1) — off, chipped; Shopify (required) is in, Klaviyo only helps
@@ -103,6 +104,11 @@ describe("RoutineDetail — accounts mode shows the real routine", () => {
     expect(html).toContain("v3 · active");
     expect(html).toContain('data-testid="spec-node"');
     expect(html).toContain("Schedule");
+    expect(html).toContain('data-testid="contract-cadence"');
+    expect(html).toContain("Mondays 08:00");
+    expect(html).toContain("Draft only — produces inspectable work and never changes the destination.");
+    expect(html).toContain("Campaign calendars delivered — target at least 1 calendars / 28d, measured over 28 days.");
+    expect(html).not.toContain("Reconciled accuracy");
     expect(html).toContain('data-testid="source-shopify" data-ok="1"');
     expect(html).toContain('data-testid="source-klaviyo" data-ok="0"');
     expect(html).toContain("Open Connectors");
@@ -151,6 +157,10 @@ describe("ConnectorsView — the owner's token path and the first-read line", ()
     expect(hubspot).not.toContain(">Connect<");
     const member = render(state("member", [{ platform: "klaviyo", oauthConfigured: true }]));
     expect(member).not.toContain("Connect with a token");
+    expect(member).not.toContain(">Connect<");
+    expect(member).not.toContain(">Reconnect<");
+    expect(member).not.toContain("Disconnect");
+    expect(member).toContain("Owner managed");
   });
 
   it("connected cards say Reading… → Read ✓ · N metrics → the honest failure with Reconnect", () => {

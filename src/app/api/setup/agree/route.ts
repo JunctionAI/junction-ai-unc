@@ -4,9 +4,9 @@
    or { fallback: true }      demo mode (no database)
    or 401 | 403 | 503 { error }
 
-   Session-bound; written through the founder's own client (plans has a member_all policy). */
+   Owner-bound; written through the founder's own client after a server-side role check. */
 
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession } from "@/lib/db/session";
 import { agreePlan } from "@/lib/setup/progress";
 import { withErrorCapture } from "@/lib/observability/errors";
 
@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function handlePOST() {
-  const session = await requireAccountSession();
+  const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   try {
     return Response.json(await agreePlan(session.db, session.accountId));

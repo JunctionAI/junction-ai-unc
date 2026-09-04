@@ -34,6 +34,10 @@ function run(over: Partial<RunRecord> = {}): RunRecord {
 function token(over: Partial<{ accountId: string; runId: string; routineId: string; scopes: string[] }> = {}, now = NOW) {
   return issueDataToken(SECRET, { accountId: ACCT, runId: "run-1", routineId: "D01-W03", scopes: scopesForRoutine("D01-W03"), ...over }, { now: () => now }).token;
 }
+async function storedToken(routineId: string, runId: string, scopes = scopesForRoutine(routineId)) {
+  await store.createRun(run({ id: runId, routineId, version: 1 }));
+  return token({ runId, routineId, scopes });
+}
 const req = (url: string, tok: string | null, init: RequestInit = {}) => new Request(`http://unc.test${url}`, { ...init, headers: { ...(init.headers as Record<string, string>), ...(tok ? { authorization: `Bearer ${tok}` } : {}) } });
 
 beforeEach(async () => {
@@ -46,23 +50,24 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("authenticate", () => {
-  it("503 without a secret, 401 without / with a bad or expired token, 404 for another account's run, 409 once the run is closed, 429 over the limit", async () => {
+  it("binds every token to a stored run's account, routine and spec scopes, then enforces status and rate limit", async () => {
     expect(await authenticate({ ...deps, secret: "" }, req("/x", token()))).toMatchObject({ ok: false, status: 503 });
     expect(await authenticate(deps, req("/x", null))).toMatchObject({ ok: false, status: 401, error: expect.stringContaining("Bearer") });
     expect(await authenticate(deps, req("/x", "unc_dt.bad.mac"))).toMatchObject({ ok: false, status: 401, error: "data token mismatch" });
     expect(await authenticate(deps, req("/x", token({}, new Date(NOW.getTime() - 16 * 60_000))))).toMatchObject({ ok: false, status: 401, error: "data token expired" });
     expect(await authenticate(deps, req("/x", token({ accountId: "someone-else" })))).toMatchObject({ ok: false, status: 404 });
     expect(await authenticate(deps, req("/x", token({ runId: "missing" })))).toMatchObject({ ok: false, status: 404 });
-    await store.updateRun("run-1", { status: "done" });
-    expect(await authenticate(deps, req("/x", token()))).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("no longer valid") });
-    // a test token needs no run
-    expect(await authenticate(deps, req("/x", token({ runId: "test:abc" })))).toMatchObject({ ok: true, run: null });
-    // rate limit is per token
+    expect(await authenticate(deps, req("/x", token({ routineId: "D02-W04", scopes: scopesForRoutine("D02-W04") })))).toMatchObject({ ok: false, status: 404 });
+    expect(await authenticate(deps, req("/x", token({ scopes: [...scopesForRoutine("D01-W03"), "meta_ads:insights"] })))).toMatchObject({ ok: false, status: 403, error: expect.stringContaining("outside") });
+    expect(await authenticate(deps, req("/x", token({ runId: "test:public-bypass" })))).toMatchObject({ ok: false, status: 404 });
+    // rate limit is per valid, stored-run token
     const tight = { ...deps, limiter: new RateLimiter(2, 60_000, () => NOW) };
-    const t = token({ runId: "test:rl" });
+    const t = token();
     expect((await authenticate(tight, req("/x", t))).ok).toBe(true);
     expect((await authenticate(tight, req("/x", t))).ok).toBe(true);
     expect(await authenticate(tight, req("/x", t))).toMatchObject({ ok: false, status: 429 });
+    await store.updateRun("run-1", { status: "done" });
+    expect(await authenticate(deps, req("/x", token()))).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("no longer valid") });
   });
 });
 
@@ -91,12 +96,13 @@ describe("reads", () => {
   });
 
   it("scope: a founder-content token cannot read Meta insights (403), and platform / resource pairs are exact", async () => {
-    const auth = await authenticate(deps, req("/x", token({ routineId: "D01-W01", scopes: scopesForRoutine("D01-W01") })));
+    const founderToken = await storedToken("D01-W01", "run-content");
+    const auth = await authenticate(deps, req("/x", founderToken));
     if (!auth.ok) throw new Error("auth failed");
     expect(await readForToken(deps, auth, { platform: "meta_ads", resource: "insights" })).toMatchObject({ ok: false, code: "forbidden", status: 403 });
     expect((await readForToken(deps, auth, { platform: "shopify", resource: "products" })).ok).toBe(true);
     // an exact platform:resource scope does not widen to the platform's other resources
-    const exact = await authenticate(deps, req("/x", token({ runId: "test:exact", scopes: ["shopify:products"] })));
+    const exact = await authenticate(deps, req("/x", token({ runId: "run-content", routineId: "D01-W01", scopes: ["shopify:products"] })));
     if (!exact.ok) throw new Error("auth failed");
     expect(await readForToken(deps, exact, { platform: "shopify", resource: "orders" })).toMatchObject({ ok: false, code: "forbidden" });
     expect((await readForToken(deps, exact, { platform: "shopify", resource: "products" })).ok).toBe(true);
@@ -116,12 +122,13 @@ describe("reads", () => {
     for (const r of receipts) expect(r).toMatchObject({ kind: "notification", platform: "shopify", description: expect.stringContaining("couldn’t ask"), payload: { via: "n8n", provenance: "unavailable" } });
   });
 
-  it("a test token reads (fixtures here) but writes no receipt — there is no run", async () => {
-    const auth = await authenticate(deps, req("/x", token({ runId: "test:1" })));
+  it("a persisted n8n test run reads and leaves the same audit receipt as every other run", async () => {
+    const testToken = await storedToken("D01-W03", "n8n-test:1");
+    const auth = await authenticate(deps, req("/x", testToken));
     if (!auth.ok) throw new Error("auth failed");
     const out = await readForToken(deps, auth, { platform: "shopify", resource: "products" });
-    expect(out).toMatchObject({ ok: true, provenance: { receiptId: null } });
-    expect(await store.listReceipts(ACCT)).toHaveLength(0);
+    expect(out).toMatchObject({ ok: true, provenance: { receiptId: "id-1" } });
+    expect(await store.listReceipts(ACCT)).toHaveLength(1);
   });
 });
 
@@ -152,14 +159,15 @@ describe("context", () => {
     expect(out.scopes).toEqual(scopesForRoutine("D01-W03"));
   });
 
-  it("an unknown routine gets a stub card; no database → run context only", async () => {
-    const auth = await authenticate(deps, req("/x", token({ routineId: "D02-W04", runId: "test:2" })));
+  it("a wave-2 routine carries its built-in contract; no database → run context only", async () => {
+    const wave2Token = await storedToken("D02-W04", "n8n-test:2");
+    const auth = await authenticate(deps, req("/x", wave2Token));
     if (!auth.ok) throw new Error("auth failed");
     const out = await contextForToken(deps, auth);
-    expect(out.routine).toMatchObject({ id: "D02-W04", name: "Ad fatigue watch", kind: "generic", builtIn: false });
+    expect(out.routine).toMatchObject({ id: "D02-W04", name: "Ad fatigue watch", kind: "generic", builtIn: true });
     expect(out.memories).toEqual([]);
     expect(out.business).toBeNull();
-    expect(out.run).toMatchObject({ status: "test" });
+    expect(out.run).toMatchObject({ id: "n8n-test:2", status: "running" });
   });
 });
 
@@ -169,27 +177,28 @@ describe("actions (wave-2 shape, record only)", () => {
     expect(parseAction({ platform: "meta_ads", action: "Update Budget" })).toMatchObject({ ok: false });
     expect(parseAction({ platform: "nope", action: "update_adset_budget" })).toMatchObject({ ok: false });
     expect(parseAction({ platform: "meta_ads", action: "update_adset_budget", params: [] })).toMatchObject({ ok: false });
-    expect(parseAction({ platform: "meta_ads", action: "update_adset_budget", params: { increase: 20 }, why: "ROAS 3.1", title: "Scale prospecting" })).toMatchObject({ ok: true, action: { platform: "meta_ads", action: "update_adset_budget", params: { increase: 20 }, why: "ROAS 3.1" } });
+    expect(parseAction({ platform: "meta_ads", action: "meta.ad.rotate", params: { increase: 20 }, why: "ROAS 3.1", title: "Rotate creative" })).toMatchObject({ ok: true, action: { platform: "meta_ads", action: "meta.ad.rotate", params: { increase: 20 }, why: "ROAS 3.1" } });
   });
 
   it("records a pending approval + a draft receipt on the run and never executes", async () => {
-    const auth = await authenticate(deps, req("/x", token()));
+    const actionToken = await storedToken("D02-W03", "run-action");
+    const auth = await authenticate(deps, req("/x", actionToken));
     if (!auth.ok) throw new Error("auth failed");
-    const out = await proposeAction(deps, auth, { platform: "meta_ads", action: "update_adset_budget", params: { adsetId: "as-1", increase: 20 }, why: "ROAS 3.1 over 7d" });
+    const out = await proposeAction(deps, auth, { platform: "meta_ads", action: "meta.ad.rotate", params: { pauseAdId: "ad-1", resumeAdId: "ad-2" }, why: "frequency 3.1 over 7d" });
     expect(out).toMatchObject({ queued: true, approvalId: "id-1", receiptId: "id-2", executed: false, executes: "wave_2" });
     const approvals = await store.listApprovals(ACCT, "pending");
     expect(approvals).toHaveLength(1);
-    expect(approvals[0]).toMatchObject({ runId: "run-1", routineId: "D01-W03", title: "Proposed by your n8n workflow: update_adset_budget on meta_ads", reasoning: "ROAS 3.1 over 7d", status: "pending" });
+    expect(approvals[0]).toMatchObject({ runId: "run-action", routineId: "D02-W03", title: "Proposed by your n8n workflow: meta.ad.rotate on meta_ads", reasoning: "frequency 3.1 over 7d", status: "pending" });
     expect(approvals[0].detail).toContain("Nothing was executed");
-    const receipts = await store.listReceipts(ACCT, { runId: "run-1" });
+    const receipts = await store.listReceipts(ACCT, { runId: "run-action" });
     expect(receipts).toHaveLength(1);
-    expect(receipts[0]).toMatchObject({ kind: "draft", platform: "meta_ads", approvalId: "id-1", description: expect.stringContaining("Proposed (not executed)"), payload: { via: "n8n", proposal: true, executed: false, executes: "wave_2", mutation: { action: "update_adset_budget", params: { adsetId: "as-1", increase: 20 } } } });
+    expect(receipts[0]).toMatchObject({ kind: "draft", platform: "meta_ads", approvalId: "id-1", description: expect.stringContaining("Proposed (not executed)"), payload: { via: "n8n", proposal: true, executed: false, executes: "wave_2", mutation: { action: "meta.ad.rotate", params: { pauseAdId: "ad-1", resumeAdId: "ad-2" } } } });
     expect(receipts.some((r) => r.kind === "mutation")).toBe(false);
-    expect((await store.getRun("run-1"))!.status).toBe("running");
+    expect((await store.getRun("run-action"))!.status).toBe("running");
   });
 
-  it("a test token gets the shape back but nothing is stored", async () => {
-    const auth = await authenticate(deps, req("/x", token({ runId: "test:9" })));
+  it("a non-mutating routine cannot use its token to propose an unrelated platform action", async () => {
+    const auth = await authenticate(deps, req("/x", token()));
     if (!auth.ok) throw new Error("auth failed");
     expect(await proposeAction(deps, auth, { platform: "klaviyo", action: "send_campaign", params: {} })).toMatchObject({ queued: false, executed: false });
     expect(await store.listApprovals(ACCT)).toHaveLength(0);
@@ -216,7 +225,8 @@ describe("the routes", () => {
     expect(await ctx.json()).toMatchObject({ ok: true, routine: { id: "D01-W03" } });
     expect((await actionsPOST(req("/api/n8n/actions", token(), { method: "POST", body: "{" }))).status).toBe(400);
     expect((await actionsPOST(req("/api/n8n/actions", token(), { method: "POST", body: JSON.stringify({ platform: "meta_ads" }) }))).status).toBe(400);
-    const res = await actionsPOST(req("/api/n8n/actions", token(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ platform: "meta_ads", action: "pause_ad", params: { adId: "1" } }) }));
+    const actionToken = await storedToken("D02-W04", "run-route-action");
+    const res = await actionsPOST(req("/api/n8n/actions", actionToken, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ platform: "meta_ads", action: "meta.ad.pause", params: { adId: "1" } }) }));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ queued: true, executed: false, executes: "wave_2" });
     expect(await store.listApprovals(ACCT, "pending")).toHaveLength(1);

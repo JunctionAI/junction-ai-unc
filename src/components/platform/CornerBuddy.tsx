@@ -12,8 +12,8 @@ import { mergeThread, useChannelThread, viaLabel, type ThreadRow } from "./useCh
    thread opens with Unc's one line. The human lane has no live desk behind it yet, so it says so
    and points at support@ instead of faking a reply. Demo mode renders the prototype verbatim. */
 
-export const FIRST_UNC_LINE = "I’m in your corner. Ask me anything about your numbers or your plan.";
-export const HUMAN_LANE_NOTE = "A real person reads this lane — email support@getjunction.ai and the team replies within a few hours. This thread stays here as the record.";
+export const FIRST_UNC_LINE = "hey, i’m unc 👋 ask me about your business, or tell me what you want to work on.";
+export const HUMAN_LANE_NOTE = "human support isn’t connected to this chat yet. email support@getjunction.ai to contact the team. no one has been assigned through this thread.";
 
 const DEMO_CORNER_SEED = initialState.messages.map((m) => m.text);
 const DEMO_HUMAN_SEED = initialState.humanThread.map((m) => m.text);
@@ -61,12 +61,15 @@ export default function CornerBuddy({ V, initialThread = null }: { V: PlatformVa
   const bubbleText = acct ? accountBubble(V, facts) : V.buddyText;
   const showBubble = V.hasBuddyText && !!bubbleText;
   return (
-    <div style={{ position: "fixed", right: 26, bottom: 24, zIndex: 50, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+    <div className="unc-corner" style={{ position: "fixed", right: 26, bottom: 24, zIndex: 50, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
       {V.chatOpen && (
         <div
+          className="unc-chat-panel" role="region" aria-label="Chat with Unc"
           style={{
             width: 372,
+            maxWidth: "calc(100vw - 32px)",
             height: 480,
+            maxHeight: "calc(100dvh - 110px)",
             background: "white",
             border: "1px solid var(--card-border-2)",
             borderRadius: 18,
@@ -88,7 +91,7 @@ export default function CornerBuddy({ V, initialThread = null }: { V: PlatformVa
                 <div style={{ fontSize: 13.5, fontWeight: 600 }}>{V.chatTitle}</div>
                 <div style={{ fontSize: 10.5, color: "var(--on-navy-dim)" }}>{humanOffline ? "Real people who know your setup · by email for now" : V.chatSub}</div>
               </div>
-              <button onClick={V.toggleChat} style={{ border: "none", background: "transparent", color: "var(--on-navy-dim)", fontSize: 17, cursor: "pointer", padding: "4px 6px", lineHeight: 1 }}>
+              <button aria-label="Close chat" onClick={V.toggleChat} style={{ border: "none", background: "transparent", color: "var(--on-navy-dim)", fontSize: 17, cursor: "pointer", padding: "4px 6px", lineHeight: 1 }}>
                 ×
               </button>
             </div>
@@ -158,7 +161,7 @@ export default function CornerBuddy({ V, initialThread = null }: { V: PlatformVa
               onKeyDown={V.onKey}
               disabled={humanOffline}
               placeholder={humanOffline ? "Email support@getjunction.ai — this lane is by email for now" : V.chatPlaceholder}
-              style={{ flex: 1, border: "none", outline: "none", fontSize: 12.5, background: "transparent", color: "var(--ink)", padding: "6px 8px" }}
+              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", fontSize: 16, background: "transparent", color: "var(--ink)", padding: "6px 8px" }}
             />
             <button onClick={V.send} disabled={humanOffline} className="btn-cyan" style={{ padding: "8px 16px", fontSize: 12, fontWeight: 700, opacity: humanOffline ? 0.5 : 1 }}>
               Send
@@ -166,7 +169,7 @@ export default function CornerBuddy({ V, initialThread = null }: { V: PlatformVa
           </div>
         </div>
       )}
-      {showBubble && (
+      {showBubble && !V.chatOpen && (
         <div
           data-testid="buddy-bubble"
           style={{

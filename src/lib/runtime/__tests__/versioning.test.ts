@@ -3,7 +3,7 @@ import { catalogSpec } from "../catalog-specs";
 import { PromoteRefusedError, discardDraft, effectiveSpec, getOrInitState, promoteDraft, saveDraft, setEnabled, validateDraft } from "../versioning";
 import { FailingReader } from "../providers";
 import { SPEND_FIXTURE, adapters, budgetMoveSpec, input } from "./helpers";
-import type { Node } from "../types";
+import type { DecideNode, Node } from "../types";
 
 const ACCT = "acct-1";
 
@@ -60,6 +60,19 @@ describe("draft → validate → promote", () => {
     const next = await saveDraft({ store }, ACCT, base, { nodes: edited });
     expect(next.draftSpec?.version).toBe(3);
     expect(next.liveSpec?.version).toBe(2);
+  });
+
+  it("keeps decide policy out of the effective spec until its exact draft is promoted", async () => {
+    const { adapters: a, store } = adapters({ fixtures: SPEND_FIXTURE });
+    const base = budgetMoveSpec();
+    const edited: Node[] = base.nodes.map((node) =>
+      node.kind === "decide" ? { ...node, policy: { kind: "meta.adset" as const, preset: { targetCpa: 55 }, dailyBudgetCap: 90 } } : node,
+    );
+    const pending = await saveDraft({ store }, ACCT, base, edited);
+    expect((effectiveSpec(pending, base).nodes.find((node) => node.kind === "decide") as DecideNode).policy).toBeUndefined();
+    await validateDraft({ store }, a, ACCT, "D02-W01", input());
+    const promoted = await promoteDraft({ store }, ACCT, "D02-W01");
+    expect((effectiveSpec(promoted, base).nodes.find((node) => node.kind === "decide") as DecideNode).policy).toEqual({ kind: "meta.adset", preset: { targetCpa: 55 }, dailyBudgetCap: 90 });
   });
 
   it("a dry run that skipped at a check still counts as passing", async () => {

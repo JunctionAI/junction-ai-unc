@@ -23,8 +23,10 @@ vi.mock("@/lib/channels/server", async (importOriginal) => ({
   processInbound: async (events: unknown[]) => void processed.events.push(...events),
 }));
 
-import { DELETE, GET, PATCH, POST, instructionFor } from "@/app/api/channels/links/route";
+import { DELETE, GET, PATCH, POST } from "@/app/api/channels/links/route";
+import { instructionFor } from "@/lib/channels/instructions";
 import { GET as THREAD } from "@/app/api/channels/thread/route";
+import { GET as SLACK_START } from "@/app/api/channels/slack/start/route";
 import { POST as TELEGRAM } from "@/app/api/webhooks/telegram/route";
 
 const CHANNEL_ENV = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "TELEGRAM_BOT_USERNAME", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM", "APP_URL"] as const;
@@ -53,6 +55,21 @@ afterEach(() => {
 });
 
 describe("/api/channels/links", () => {
+  it("keeps a different business out of the TNZ pilot and does not expose its account ID", async () => {
+    const values = { SMS_PROVIDER: "tnz", TNZ_SMS_ENABLED: "true", TNZ_AUTH_TOKEN: "fixture", TNZ_WEBHOOK_AUTHORIZATION: "Basic fixture-webhook-secret-012345", TNZ_SENDER: "unc@example.test", TNZ_FROM: "800123", TNZ_PILOT_PHONE: "+64210000001", TNZ_PILOT_ACCOUNT_ID: "00000000-0000-4000-8000-00000000acc2" };
+    try {
+      for (const [k, v] of Object.entries(values)) vi.stubEnv(k, v);
+      const data = await (await GET()).json();
+      expect(data.channels.find((c: { channel: string }) => c.channel === "sms")).toMatchObject({ configured: false, number: null });
+      expect(JSON.stringify(data)).not.toContain(values.TNZ_PILOT_ACCOUNT_ID);
+      expect((await POST(req("POST", { channel: "sms" }))).status).toBe(403);
+      expect(db.rows("channel_links")).toHaveLength(0);
+      vi.stubEnv("TNZ_PILOT_ACCOUNT_ID", ACCT);
+      const issued = await (await POST(req("POST", { channel: "sms" }))).json();
+      expect(issued.instruction.url).toBe(`sms:800123?&body=${issued.code}`);
+      expect(db.rows("channel_links")[0].account_id).toBe(ACCT);
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("demo mode → fallback; no session → 401", async () => {
     clearBillingEnv();
     expect(await (await GET()).json()).toEqual({ fallback: true });
@@ -71,6 +88,7 @@ describe("/api/channels/links", () => {
       ["slack", false],
       ["sms", true],
       ["email", false],
+      ["apple", false],
     ]);
     expect(JSON.stringify(listing)).not.toContain("tg-secret");
 
@@ -107,6 +125,17 @@ describe("/api/channels/links", () => {
     expect((await DELETE(req("DELETE", { linkId: theirs.id }))).status).toBe(404);
     expect(await (await DELETE(req("DELETE", { linkId: mine.id }))).json()).toEqual({ ok: true });
     expect(db.rows("channel_links").map((r) => r.id)).toEqual([theirs.id]);
+  });
+
+  it("lets members read channel state but not create, change, or remove account links", async () => {
+    const mine = seedLink(db, { channel: "telegram", external_id: "555" });
+    db.rows("account_members")[0].role = "member";
+    expect((await GET()).status).toBe(200);
+    expect((await POST(req("POST", { channel: "telegram" }))).status).toBe(403);
+    expect((await PATCH(req("PATCH", { linkId: mine.id, prefs: { brief: false } }))).status).toBe(403);
+    expect((await DELETE(req("DELETE", { linkId: mine.id }))).status).toBe(403);
+    expect((await SLACK_START(req("GET", undefined, "/api/channels/slack/start"))).status).toBe(403);
+    expect(db.rows("channel_links")).toHaveLength(1);
   });
 });
 

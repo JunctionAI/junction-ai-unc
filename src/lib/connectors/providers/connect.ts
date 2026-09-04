@@ -24,7 +24,7 @@ import type { FallbackReason, HandlerDeps } from "../handlers";
 import { callbackUri, newState, STATE_TTL_MS } from "../oauth";
 import { hasPicker } from "../options";
 import { connectorEntry, normaliseShopDomain, type ConnectorEntry } from "../registry";
-import { accountForUser, consumeOauthState, getConnector, insertOauthState, isMember, updateConnector, upsertConnector, type ConnectorRow } from "../store";
+import { accountForUser, consumeOauthState, getConnector, insertOauthState, memberRole, updateConnector, upsertConnector, type ConnectorRow } from "../store";
 import { authProviderFor } from "./index";
 import { AuthProviderError, providerRefOf, providerRefPatch, withoutProviderRef, type AuthProvider, type AuthProviderId, type ProviderRef } from "./interface";
 import type { Platform } from "@/lib/runtime/types";
@@ -56,6 +56,7 @@ export async function startViaProvider(deps: HandlerDeps, platform: string, body
   if (!deps.userId) return err(401, "sign in first");
   const accountId = await accountForUser(deps.db, deps.userId);
   if (!accountId) return err(403, "no account for this user");
+  if ((await memberRole(deps.db, deps.userId, accountId)) !== "owner") return err(403, "only the account owner can connect a platform");
 
   let shop: string | undefined;
   if (entry.flow === "shopify") {
@@ -129,7 +130,10 @@ export async function callbackViaProvider(deps: HandlerDeps, providerId: string,
     return errRedirect(entry.id);
   };
   if (new Date(stateRow.expires_at).getTime() < now.getTime()) return fail("state_expired");
-  if (!deps.userId || !(await isMember(db, deps.userId, accountId))) return fail("session_mismatch");
+  if (!deps.userId || (await memberRole(db, deps.userId, accountId)) !== "owner") {
+    deps.log?.(`connectors.provider.callback provider=${providerId} platform=${entry.id} account=${accountId} reason=session_mismatch`);
+    return errRedirect(entry.id);
+  }
   // Composio appends ?status=success&connected_account_id=…; anything else on `error`/`status` is a refusal.
   const cbStatus = (params.get("status") || "").toLowerCase();
   if (params.get("error") || (cbStatus && cbStatus !== "success")) return fail("provider_denied");

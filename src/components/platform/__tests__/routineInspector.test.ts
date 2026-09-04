@@ -85,6 +85,33 @@ describe("RoutineInspector", () => {
     const html = renderToStaticMarkup(createElement(RoutineInspector, { routineId: "D02-W01", currency: "NZD" }));
     expect(html).toContain("Reading the settings…");
   });
+
+  it("renders the skill-file card and the agreement line when the view carries them", () => {
+    const html = renderToStaticMarkup(
+      createElement(RoutineInspector, {
+        routineId: "D01-W01",
+        currency: "NZD",
+        initial: view("D01-W01", {
+          skillFile: {
+            goal: "Three founder-voice posts a week the founder can post as-is",
+            owns: ["the draft post set"],
+            reads: ["site profile"],
+            decides: ["which three angles"],
+            writes: ["a post_set artifact"],
+            never: ["invent numbers", "publish"],
+            apply: "I keep handing drafts until we agree.",
+            examples: [{ when: "a scanned site", does: "three posts from the profile" }],
+          },
+          agreement: { decided: 0, approved: 0, held: 0, rate: null, applyUnlocked: false, line: "No decisions on this routine yet — I keep asking." },
+        }),
+      }),
+    );
+    expect(html).toContain('data-testid="inspector-skill-file"');
+    expect(html).toContain("Three founder-voice posts a week");
+    expect(html).toContain("invent numbers");
+    expect(html).toContain('data-testid="inspector-agreement"');
+    expect(html).toContain("No decisions on this routine yet");
+  });
 });
 
 describe("RoutineDetail mounts it in accounts mode only", () => {

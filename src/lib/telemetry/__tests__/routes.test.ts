@@ -85,6 +85,16 @@ describe("GET /api/telemetry/home", () => {
 });
 
 describe("self-review", () => {
+  it("lets members read but blocks generation before a review or model usage is written", async () => {
+    db.rows("account_members")[0].role = "member";
+    expect((await getReview()).status).toBe(200);
+    const res = await postReview();
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "owner_only" });
+    expect(db.rows("self_reviews")).toHaveLength(0);
+    expect(db.rows("llm_usage")).toHaveLength(0);
+  });
+
   it("GET is null before any review; POST generates this week's review (deterministic without a key) and GET returns it", async () => {
     expect(await (await getReview()).json()).toEqual({ review: null });
     const posted = await (await postReview()).json();

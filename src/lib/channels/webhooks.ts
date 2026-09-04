@@ -11,6 +11,7 @@ import { telegramConfig, verifyTelegramWebhook, parseTelegramUpdate } from "./ad
 import { formToRecord, parseTwilioInbound, twilioConfig, verifyTwilioWebhook } from "./adapters/twilio";
 import { parseWhatsAppWebhook, verifyWhatsAppSubscription, verifyWhatsAppWebhook, whatsappConfig } from "./adapters/whatsapp";
 import type { Env, InboundEvent } from "./types";
+import { messagingDisabled } from "./releaseGate";
 
 export interface ReceiveDeps {
   env: Env;
@@ -40,6 +41,7 @@ const parseJson = (raw: string): unknown => {
 // ---------- Telegram ----------
 
 export function receiveTelegram(deps: ReceiveDeps, req: { secretToken: string | null; rawBody: string }): Received {
+  if (messagingDisabled(deps.env)) return bad(503, "messaging_disabled");
   const config = telegramConfig(deps.env);
   if (!config) return bad(503, "telegram is not configured");
   if (!verifyTelegramWebhook({ secretToken: req.secretToken }, config.webhookSecret)) return bad(401, "invalid signature");
@@ -51,6 +53,7 @@ export function receiveTelegram(deps: ReceiveDeps, req: { secretToken: string | 
 // ---------- WhatsApp ----------
 
 export function receiveWhatsAppVerify(deps: ReceiveDeps, query: URLSearchParams): Received {
+  if (messagingDisabled(deps.env)) return bad(503, "messaging_disabled");
   const config = whatsappConfig(deps.env);
   if (!config) return bad(503, "whatsapp is not configured");
   const challenge = verifyWhatsAppSubscription(query, config.verifyToken);
@@ -59,6 +62,7 @@ export function receiveWhatsAppVerify(deps: ReceiveDeps, query: URLSearchParams)
 }
 
 export function receiveWhatsApp(deps: ReceiveDeps, req: { signature: string | null; rawBody: string }): Received {
+  if (messagingDisabled(deps.env)) return bad(503, "messaging_disabled");
   const config = whatsappConfig(deps.env);
   if (!config) return bad(503, "whatsapp is not configured");
   if (!verifyWhatsAppWebhook(req.rawBody, req.signature, config.appSecret)) return bad(401, "invalid signature");
@@ -70,6 +74,7 @@ export function receiveWhatsApp(deps: ReceiveDeps, req: { signature: string | nu
 // ---------- Slack (Events API + Interactivity on one URL) ----------
 
 export function receiveSlack(deps: ReceiveDeps, req: { signature: string | null; timestamp: string | null; contentType: string | null; rawBody: string }): Received {
+  if (messagingDisabled(deps.env)) return bad(503, "messaging_disabled");
   const config = slackConfig(deps.env);
   if (!config) return bad(503, "slack is not configured");
   if (!verifySlackWebhook(req.rawBody, { signature: req.signature, timestamp: req.timestamp }, config.signingSecret, deps.now())) return bad(401, "invalid signature");
@@ -84,6 +89,8 @@ export const TWILIO_WEBHOOK_PATH = "/api/webhooks/twilio";
 export const EMPTY_TWIML = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>";
 
 export function receiveTwilio(deps: ReceiveDeps, req: { signature: string | null; rawBody: string; url?: string }): Received {
+  if (messagingDisabled(deps.env)) return bad(503, "messaging_disabled");
+  if (deps.env.SMS_PROVIDER && deps.env.SMS_PROVIDER !== "twilio") return bad(503, "Twilio is not the selected SMS provider");
   const config = twilioConfig(deps.env);
   if (!config) return bad(503, "sms is not configured");
   const params = formToRecord(req.rawBody);

@@ -19,6 +19,8 @@ import { complete, resolveModel } from "../llm/router";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { classifyBusiness, isBusinessType, isSells, isStorefront, type BusinessType, type BusinessTypeSource, type Classification, type PlatformEvidence, type Sells, type Storefront } from "./businessType";
+import { requestPinnedPage, type PinnedPageFetch } from "./pinnedPageFetch";
+import type { PinnedAddress } from "../http/pinnedRequest";
 
 export type Confidence = "low" | "medium" | "high";
 export type { BusinessType, Sells, Storefront, PlatformEvidence } from "./businessType";
@@ -99,6 +101,8 @@ const USER_AGENT = "Mozilla/5.0 (compatible; JunctionUnc/1.0; +https://getjuncti
 /* ------------------------------------------------------------------ */
 
 export type UrlCheck = { ok: true; url: URL } | { ok: false; reason: string };
+export type HostLookup = (hostname: string, options: { all: true }) => Promise<{ address: string; family: number }[]>;
+export type ResolvedUrlCheck = { ok: true; url: URL; pin: PinnedAddress } | { ok: false; reason: string };
 
 /** "avgarsport.com" → "https://avgarsport.com" (scheme added only when missing). */
 export function normalizeWebsite(raw: string): string {
@@ -165,78 +169,66 @@ export function checkUrlSyntax(raw: string): UrlCheck {
   return { ok: true, url };
 }
 
-/** Full guard: syntax + DNS resolution must land on public addresses only. */
-export async function isSafeUrl(raw: string): Promise<UrlCheck> {
+/** Full request-time guard. Every answer must be public; the selected answer is the socket pin. */
+export async function resolveSafeUrl(raw: string, lookupImpl: HostLookup = lookup as HostLookup): Promise<ResolvedUrlCheck> {
   const syn = checkUrlSyntax(raw);
   if (!syn.ok) return syn;
   try {
-    const addrs = await lookup(syn.url.hostname, { all: true });
+    const addrs = await lookupImpl(syn.url.hostname, { all: true });
     if (!addrs.length || addrs.some((a) => isPrivateAddress(a.address))) return { ok: false, reason: "I can only scan public websites." };
+    const address = addrs[0].address.split("%")[0];
+    const family = isIP(address);
+    if (family !== 4 && family !== 6) return { ok: false, reason: "I can only scan public websites." };
+    return { ...syn, pin: { address, family } };
   } catch {
     return { ok: false, reason: "I couldn't find that site — check the address." };
   }
-  return syn;
+}
+
+/** Public validation API used by the route before scanning; it deliberately does not expose the pin. */
+export async function isSafeUrl(raw: string): Promise<UrlCheck> {
+  const resolved = await resolveSafeUrl(raw);
+  return resolved.ok ? { ok: true, url: resolved.url } : resolved;
 }
 
 /* ------------------------------------------------------------------ */
 /* Fetching + HTML → text                                              */
 /* ------------------------------------------------------------------ */
 
-async function readCapped(res: Response, max: number): Promise<string> {
-  const reader = res.body?.getReader();
-  if (!reader) return "";
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.length;
-    if (received >= max) {
-      reader.cancel().catch(() => {});
-      break;
-    }
-  }
-  return Buffer.concat(chunks).subarray(0, max).toString("utf8");
-}
-
 export interface FetchedPage {
   url: string;
   html: string;
 }
 
-/** Fetch one page with the guard applied to every redirect hop. Returns null on any failure. */
-async function safeFetchPage(startUrl: string): Promise<FetchedPage | null> {
+export interface SafeFetchPageDeps {
+  lookup?: HostLookup;
+  request?: PinnedPageFetch;
+}
+
+/** Resolve, pin and fetch one page; every redirect is a new validated/pinned hop. */
+export async function safeFetchPage(startUrl: string, deps: SafeFetchPageDeps = {}): Promise<FetchedPage | null> {
   let current = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const check = await isSafeUrl(current);
+    const check = await resolveSafeUrl(current, deps.lookup);
     if (!check.ok) return null;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), PAGE_TIMEOUT_MS);
     try {
-      const res = await fetch(check.url.toString(), {
-        redirect: "manual",
+      const res = await (deps.request ?? requestPinnedPage)(check.url, check.pin, {
         signal: ctrl.signal,
-        headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5", "Accept-Language": "en" },
+        headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5", "Accept-Language": "en", "Accept-Encoding": "identity" },
+        maxBytes: PAGE_MAX_BYTES,
       });
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         const loc = res.headers.get("location");
-        res.body?.cancel().catch(() => {});
         if (!loc) return null;
         current = new URL(loc, check.url).toString();
         continue;
       }
-      if (res.status !== 200) {
-        res.body?.cancel().catch(() => {});
-        return null;
-      }
+      if (res.status !== 200) return null;
       const type = (res.headers.get("content-type") || "").toLowerCase();
-      if (!type.includes("text/html") && !type.includes("xhtml") && !type.includes("text/plain")) {
-        res.body?.cancel().catch(() => {});
-        return null;
-      }
-      const html = await readCapped(res, PAGE_MAX_BYTES);
-      return { url: check.url.toString(), html };
+      if (!type.includes("text/html") && !type.includes("xhtml") && !type.includes("text/plain")) return null;
+      return { url: check.url.toString(), html: res.body };
     } catch {
       return null;
     } finally {

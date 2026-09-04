@@ -20,7 +20,7 @@ import { unwrap, type DbClient, type Row } from "../../db/types";
 import { listMemories } from "../../brain/memory";
 import { modelFromProfile } from "../../unc/businessType";
 import { isBandId, resolvePreset, type BandId, type ResolveInput } from "./industry";
-import { applyParamsToSpec, domainOf, optionalSteps, relevantFields, boundFields, type OptionalStep } from "./routines";
+import { applyDecisionPolicy, applyParamsToSpec, domainOf, optionalSteps, relevantFields, boundFields, type OptionalStep } from "./routines";
 import { crossFieldIssues, isPresetSource, validateParams, type ParamIssue, type PresetDomain, type PresetParams, type PresetSet, type PresetSource, type PresetValue } from "./types";
 import type { RoutineSpec } from "../types";
 import type { MetaPreset as ActionsMetaPreset, PresetSource as ActionsPresetSource } from "../../actions/presets";
@@ -200,7 +200,8 @@ export async function getRoutinePreset(db: DbClient, accountId: string, spec: Ro
 /** The node chain a saved routine should run: the resolved values bound in, disabled steps out. */
 export function nodesFor(spec: RoutineSpec, view: RoutinePresetView) {
   const values: PresetParams = Object.fromEntries(view.set.fields.map((f) => [f.key, f.value]));
-  return applyParamsToSpec(spec, values, view.own?.disabledSteps ?? []);
+  const nodes = applyParamsToSpec(spec, values, view.own?.disabledSteps ?? []);
+  return applyDecisionPolicy(spec, nodes, view.own?.params ?? {});
 }
 
 // ---------- the actions library's PresetSource ----------
@@ -289,8 +290,9 @@ export function setPresetDbForTests(f: (() => DbClient | null) | undefined): voi
   dbResolver = f ?? (() => (isServiceRoleConfigured() ? asDb(getServiceSupabase()) : null));
 }
 
-/** The account's paid preset in the actions library's shape. No database (demo) → null, so their
-    default stands; a read failure → null too (resolveMetaPreset treats a throw the same way). */
+/** The account's paid preset in the actions library's shape. This intentionally does not read
+    routine_params: those are unversioned editor state, while live routine overrides come only
+    from a promoted decide.policy snapshot. No database/read failure → null, so defaults stand. */
 export async function getMetaPreset(accountId: string, db?: DbClient | null): Promise<Partial<ActionsMetaPreset> | null> {
   const client = db === undefined ? dbResolver() : db;
   if (!client) return null;

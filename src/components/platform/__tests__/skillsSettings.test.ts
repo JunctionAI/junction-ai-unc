@@ -36,7 +36,7 @@ describe("SkillsSettings", () => {
     for (const s of ALL_SYSTEMS) expect(html).toContain(`data-testid="skill-${s.id}"`);
     expect(html).toContain('data-testid="skill-D01-W01" data-source="n8n"');
     expect(html).toContain('data-testid="skill-D01-W03" data-source="builtin"'); // the global row is paused → built-in serves
-    expect(html).toContain('data-testid="skill-D02-W04" data-source="none"');
+    expect(html).toContain('data-testid="skill-D02-W04" data-source="builtin"');
     expect(html).toContain("https://n8n.example/webhook/founder");
     expect(html).toContain("this account");
     expect(html).toContain("every account");

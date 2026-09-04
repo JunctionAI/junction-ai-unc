@@ -58,6 +58,7 @@ import type {
   ExecuteNode,
   Executor,
   GateNode,
+  Mutation,
   N8nBridge,
   N8nNode,
   Node,
@@ -78,6 +79,39 @@ import type {
 } from "./types";
 import { assertValidSpec } from "./validate";
 
+const UNSAFE_PROPOSAL_STATUSES = new Set(["BLOCKED", "HOLD", "PARTIAL"]);
+
+function unsafeStatus(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const status = value.trim().toUpperCase();
+  return UNSAFE_PROPOSAL_STATUSES.has(status) ? status : null;
+}
+
+/** Only explicit machine-readable (or leading STATUS line) refusal signals count here.
+    Generic artifacts stay compatible; the engine does not try to judge their prose. */
+function proposalBlocker(artifact: Artifact, expectedAction: string): string | null {
+  const bodyStatus = artifact.body.match(/^\s*(?:#{1,6}\s*)?(?:\*\*)?STATUS(?:\*\*)?\s*:\s*(?:\*\*)?(BLOCKED|HOLD|PARTIAL)\b/im)?.[1];
+  const rootStatus = unsafeStatus(artifact.meta.status) ?? unsafeStatus(bodyStatus);
+  if (rootStatus) return `artifact status is ${rootStatus}`;
+  if (artifact.meta.apply_ready === false) return "artifact explicitly says apply_ready is false";
+
+  const rootAction = artifact.meta.action_id;
+  if (typeof rootAction === "string" && rootAction.trim() && rootAction.trim() !== expectedAction) {
+    return `artifact action_id ${rootAction.trim()} does not match ${expectedAction}`;
+  }
+
+  for (const [index, item] of artifact.items.entries()) {
+    const itemStatus = unsafeStatus(item.meta?.status);
+    if (itemStatus) return `artifact item ${index + 1} status is ${itemStatus}`;
+    if (item.meta?.apply_ready === false) return `artifact item ${index + 1} explicitly says apply_ready is false`;
+    const itemAction = item.meta?.action_id;
+    if (typeof itemAction === "string" && itemAction.trim() && itemAction.trim() !== expectedAction) {
+      return `artifact item ${index + 1} action_id ${itemAction.trim()} does not match ${expectedAction}`;
+    }
+  }
+  return null;
+}
+
 export interface Adapters {
   reader: ConnectorReader;
   decider: DecisionProvider;
@@ -95,6 +129,8 @@ export interface Adapters {
 
 export interface RunOptions {
   mode: RunMode;
+  /** Trusted queue-assigned identity; never accepted from an unauthenticated request. */
+  runId?: string;
 }
 
 export interface ResumeOptions {
@@ -347,6 +383,8 @@ class RunSession {
       items: n,
       evidence: artifact.evidence.length,
       via,
+      ...(via === "n8n" && node.kind === "n8n" && node.shadowContract
+        ? { externalExecution: artifact.meta.executionReceipt } : {}),
     });
     return artifact;
   }
@@ -433,6 +471,13 @@ class RunSession {
     };
   }
 
+  /** Shared by approval preflight and execute so the founder reviews exactly the
+      mutation the executor will receive after approval. */
+  private mutationFor(node: ExecuteNode): Mutation {
+    const action = renderTemplate(node.mutation.action, this.ctx) || node.mutation.action;
+    return { action, target: renderParams(node.mutation.target, this.ctx), params: renderParams(node.mutation.params, this.ctx) };
+  }
+
   private async gate(node: GateNode, index: number) {
     const draft = this.approvalDraft(node);
     const art = this.ctx.artifact;
@@ -443,6 +488,37 @@ class RunSession {
         approvalPreview: { ...draft, expiryHours: node.expiryHours, ...artifactPreview },
       });
       return undefined;
+    }
+
+    const executeNode = this.spec.nodes.slice(index + 1).find((candidate): candidate is ExecuteNode => candidate.kind === "execute");
+    // Proposal preflight applies to the production contract introduced by a ProduceNode.
+    // Legacy/test specs without an artifact retain the existing approval lifecycle.
+    if (executeNode && art) {
+      const mutation = this.mutationFor(executeNode);
+      if (this.spec.mutates) {
+        const blocked = proposalBlocker(art, mutation.action);
+        if (blocked) {
+          const summary = `Held before approval: ${blocked}. Nothing was changed.`;
+          await this.receipt("notification", summary, { node: node.id, executeNode: executeNode.id, artifactId: art.id, mutation, blocked });
+          return this.finish("skipped", summary);
+        }
+      }
+
+      // A capable executor can prove that the exact live request is supportable before
+      // we ask a human to approve it. Legacy adapters without dryRun retain their flow.
+      if (this.adapters.executor.dryRun) {
+        const shaped = await this.adapters.executor.dryRun(executeNode, mutation, this.ctx);
+        if (shaped?.blocked) {
+          const summary = `Held before approval: ${shaped.blocked}. Nothing was changed.`;
+          await this.receipt(
+            "notification",
+            summary,
+            { node: node.id, executeNode: executeNode.id, platform: executeNode.platform, mutation, preview: shaped.preview, action: shaped.payload, blocked: shaped.blocked },
+            { platform: executeNode.platform },
+          );
+          return this.finish("skipped", summary);
+        }
+      }
     }
     const createdAt = this.nowIso();
     const approval: ApprovalRecord = { ...draft, id: this.idGen(), status: "pending", createdAt, expiresAt: addHours(createdAt, node.expiryHours) };
@@ -488,8 +564,7 @@ class RunSession {
   private async execute(node: ExecuteNode) {
     // The action may be a template ("{{decision.params.actionId}}") so one execute node can
     // carry whichever action the decision proposed; a plain verb renders to itself.
-    const action = renderTemplate(node.mutation.action, this.ctx) || node.mutation.action;
-    const mutation = { action, target: renderParams(node.mutation.target, this.ctx), params: renderParams(node.mutation.params, this.ctx) };
+    const mutation = this.mutationFor(node);
     const spend = this.ctx.decision?.spend ?? resolveSpend(node.spend, this.ctx);
     const base = { node: node.id, platform: node.platform, mutation, spend: spend ?? null };
 
@@ -554,7 +629,7 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
   const idGen = adapters.idGen ?? newId;
   const startedAt = now().toISOString();
   const ctx: RunContext = {
-    runId: idGen(),
+    runId: opts.runId ?? idGen(),
     routineId: spec.id,
     version: spec.version,
     mode: opts.mode,
@@ -597,14 +672,14 @@ export async function resumeRun(runId: string, decision: "approved" | "held", ad
   const session = new RunSession(spec, ctx, run, adapters);
 
   if (approval.expiresAt < nowIso) {
-    const expired = await store.updateApproval(approval.id, { status: "expired" });
+    const expired = await store.updateApproval(approval.id, { status: "expired" }, "pending");
     ctx.approval = expired;
     await session.receipt("notification", `Approval expired at ${approval.expiresAt} — nothing was changed.`, { approvalId: approval.id }, { approvalId: approval.id });
     await store.updateRun(run.id, { status: "skipped", summary: "Approval expired.", finishedAt: nowIso, snapshot: undefined });
     return { runId: run.id, routineId: run.routineId, version: run.version, mode: run.mode, status: "skipped", summary: "Approval expired.", receipts: session.receipts, approval: expired };
   }
 
-  const decided = await store.updateApproval(approval.id, { status: decision, decidedAt: nowIso, decidedBy: opts.decidedBy });
+  const decided = await store.updateApproval(approval.id, { status: decision, decidedAt: nowIso, decidedBy: opts.decidedBy }, "pending");
   ctx.approval = decided;
   await store.appendTasteEvent({
     id: idGen(),

@@ -58,4 +58,13 @@ describe("respondAsUnc — playbook notes", () => {
     await respondAsUnc({ history: [{ role: "user", content: "Am I on track?" }], context: { ...CTX, playbooks: "spoofed notes" }, surface: "corner", account: null });
     expect(routerMock.complete.mock.calls[0][1].system).not.toContain("spoofed notes");
   });
+
+  it("passes the SMS voice to the model without changing exact tokens in its reply", async () => {
+    playbooksMock.recallPlaybooks.mockResolvedValue([]);
+    const reply = "open https://example.com/DraftAbC and use UNC-AB12CD 👋";
+    routerMock.complete.mockResolvedValue(ok(reply));
+    const result = await respondAsUnc({ history: [{ role: "user", content: "hello" }], context: CTX, surface: "corner", account: null, voice: "sms" });
+    expect(result).toEqual({ ok: true, reply });
+    expect(routerMock.complete.mock.calls[0][1].system).toContain("SMS voice:");
+  });
 });

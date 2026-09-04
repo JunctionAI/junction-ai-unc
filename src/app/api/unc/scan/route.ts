@@ -11,7 +11,7 @@
    src/lib/llm/router.ts (fast tier by default). Keys never reach the client. */
 
 import { afterScan } from "@/lib/brain/hooks";
-import { optionalAccountContext } from "@/lib/llm/accountContext";
+import { requireModelAccountContext } from "@/lib/llm/accountContext";
 import { resolveModel } from "@/lib/llm/router";
 import { isSafeUrl, scanBusiness } from "@/lib/unc/scan";
 import { withErrorCapture } from "@/lib/observability/errors";
@@ -20,15 +20,20 @@ export const runtime = "nodejs";
 
 const MAX_WEBSITE_CHARS = 2048;
 const MAX_SOCIALS_CHARS = 1000;
+const MAX_BODY_CHARS = 8_000;
 
 const fallback = () => Response.json({ fallback: true });
 
 async function handlePOST(req: Request) {
   if (!resolveModel("business_scan")) return fallback();
+  const account = await requireModelAccountContext();
+  if (account instanceof Response) return account;
 
   let body: { website?: unknown; socials?: unknown };
   try {
-    body = await req.json();
+    const text = await req.text();
+    if (text.length > MAX_BODY_CHARS) return Response.json({ error: "body too large" }, { status: 413 });
+    body = JSON.parse(text);
   } catch {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
@@ -43,7 +48,6 @@ async function handlePOST(req: Request) {
   }
 
   try {
-    const account = await optionalAccountContext();
     const profile = await scanBusiness({ website, socials, accountId: account?.accountId ?? null });
     if (account?.db && profile.confidence !== "low") {
       // Client Brain: the profile's facts become memories (source "scan"); fire-and-forget, accounts mode only.

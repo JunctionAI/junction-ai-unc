@@ -9,6 +9,18 @@ export const meetingBrief: Skill = {
   maxItems: 5,
   purpose: "A one-page brief per external meeting: who they are, where the deal sits, the last threads, the question to open with",
   inputs: ["today's external meetings (calendar, when connected)", "the attendees' HubSpot records (when connected)", "recent threads with them (Gmail, when connected)", "a meeting the founder describes"],
+  file: {
+    goal: "One page per meeting: who, where the deal sits, last threads, the opening question",
+    owns: ["the meeting_brief artifact"],
+    reads: ["calendar", "HubSpot", "Gmail threads", "a meeting the founder describes"],
+    decides: ["which meetings are external", "the one question that moves the deal"],
+    writes: ["a meeting_brief artifact"],
+    never: ["invent who they are", "join the call", "write a brief from an empty calendar without asking"],
+    apply: "Drafts. I keep the same opener when you keep using it.",
+    examples: [
+      { when: "founder says 'coffee with Sam from Harbour'", does: "one brief from that note, Who = what they told me, Open with one question" },
+    ],
+  },
   minimum: minimum("today's meetings from a calendar or HubSpot, or tell me who you're meeting", [], ["meeting"], ["hubspot", "gmail"]),
   domain: "sales",
   prompt: `CRAFT — meeting brief:

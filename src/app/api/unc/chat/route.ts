@@ -19,19 +19,23 @@
    client autosave (src/lib/db/accountState.ts), not here — persisting them twice would
    duplicate them. Channel turns are written by src/lib/channels/thread.ts. */
 
-import { optionalAccountContext } from "@/lib/llm/accountContext";
+import { requireModelAccountContext } from "@/lib/llm/accountContext";
 import type { LlmMessage } from "@/lib/llm/types";
 import type { UncSurface } from "@/lib/unc/prompt";
 import { MAX_TURN_CHARS, respondAsUnc } from "@/lib/unc/respond";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { routeCommand } from "@/lib/commands/message";
+import { getStore } from "@/lib/runtime/store";
 
 export const runtime = "nodejs";
 
 type WireMsg = { role: "user" | "assistant"; content: string };
+const MAX_BODY_CHARS = 64_000;
+const MAX_MESSAGES = 50;
 
 /** Shape-check the wire thread (the window + first-user rule are applied in respond.ts). */
 function sanitizeMessages(raw: unknown): LlmMessage[] | null {
-  if (!Array.isArray(raw) || raw.length === 0) return null;
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_MESSAGES) return null;
   const msgs: WireMsg[] = [];
   for (const m of raw) {
     if (!m || typeof m !== "object") return null;
@@ -46,18 +50,28 @@ function sanitizeMessages(raw: unknown): LlmMessage[] | null {
 const fallback = () => Response.json({ fallback: true });
 
 async function handlePOST(req: Request) {
-  let body: { messages?: unknown; context?: unknown; surface?: unknown };
+  const account = await requireModelAccountContext();
+  if (account instanceof Response) return account;
+
+  let body: { messages?: unknown; context?: unknown; surface?: unknown; requestId?: unknown };
   try {
-    body = await req.json();
+    const text = await req.text();
+    if (text.length > MAX_BODY_CHARS) return Response.json({ error: "body too large" }, { status: 413 });
+    body = JSON.parse(text);
   } catch {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
   const history = sanitizeMessages(body.messages);
   if (!history) return Response.json({ error: "invalid messages" }, { status: 400 });
+  if (history[history.length - 1].role !== "user") return Response.json({ error: "last message must be from the user" }, { status: 400 });
   const surface: UncSurface = body.surface === "onboarding" ? "onboarding" : "corner";
 
-  const account = await optionalAccountContext();
+  if (account && surface === "corner") {
+    const command = await routeCommand(account.db, getStore(), { accountId: account.accountId, userId: account.userId ?? "", channel: "app", requestId: typeof body.requestId === "string" ? body.requestId : "" }, history[history.length - 1].content);
+    if (command) return Response.json(command);
+  }
+
   const result = await respondAsUnc({ history, context: body.context, surface, account });
   if (!result.ok) return result.reason === "invalid_history" ? Response.json({ error: "invalid messages" }, { status: 400 }) : fallback();
   return Response.json({ reply: result.reply });

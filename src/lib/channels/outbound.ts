@@ -57,6 +57,7 @@ export function inQuietHours(quiet: QuietHours | null | undefined, now: Date, ti
 
 /** Which pref governs a kind. Replies and link handshakes always go. */
 export function prefAllows(link: ChannelLink, kind: OutboundKind): boolean {
+  if (link.channel === "apple" && kind !== "reply" && kind !== "link" && kind !== "system") return false;
   switch (kind) {
     case "brief":
       return link.prefs.brief;
@@ -148,6 +149,8 @@ export interface SendOnLinkOptions {
 }
 
 export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: OutboundKind, payload: OutboundPayload, opts: SendOnLinkOptions = {}): Promise<SendOutcome> {
+  // No proactive Apple messages or automation during human handoff in the initial pilot.
+  if (link.channel === "apple" && ((!prefAllows(link, kind)) || (link.meta.human_support_requested && kind !== "system"))) return { status: "skipped", reason: "pref_off" };
   if (!link.verifiedAt || !link.externalId) return { status: "skipped", reason: "unverified" };
   const adapter = deps.adapters[link.channel];
   if (!adapter) return { status: "skipped", reason: "no_adapter" };

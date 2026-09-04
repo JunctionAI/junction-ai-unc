@@ -34,7 +34,7 @@ describe("catalog specs", () => {
     expect(validateSpec(spec)).toEqual([]);
   });
 
-  it("node order is trigger → read → check → decide → produce → gate → (execute) → receipt for every spec", () => {
+  it("node order is trigger → read → check → decide → produce/n8n → gate → (execute) → receipt for every spec", () => {
     const order = ["trigger", "read", "check", "decide", "produce", "gate", "execute", "receipt"];
     for (const spec of CATALOG_SPECS) {
       const kinds = spec.nodes.map((n) => n.kind);
@@ -44,6 +44,17 @@ describe("catalog specs", () => {
       for (let i = 1; i < ranks.length; i++) expect(ranks[i], `${spec.id} ${kinds[i]} after ${kinds[i - 1]}`).toBeGreaterThanOrEqual(ranks[i - 1]);
       expect(kinds.filter((k) => k === "read").length, `${spec.id} has reads`).toBeGreaterThanOrEqual(1);
       expect(kinds).toContain("gate");
+    }
+  });
+
+  it("every switch has one built-in production contract before its gate", () => {
+    for (const spec of CATALOG_SPECS) {
+      const produceNodes = spec.nodes.filter((n) => n.kind === "produce");
+      expect(produceNodes, `${spec.id} produce nodes`).toHaveLength(1);
+      expect(produceNodes[0].kind === "produce" && produceNodes[0].skill, `${spec.id} skill`).toBe(spec.id);
+      expect(spec.nodes.indexOf(produceNodes[0]), `${spec.id} produce before gate`).toBeLessThan(spec.nodes.findIndex((n) => n.kind === "gate"));
+      expect(spec.minimum, `${spec.id} states its minimum`).toBeDefined();
+      expect(spec.minimum!.summary.length, `${spec.id} minimum`).toBeGreaterThan(10);
     }
   });
 
@@ -120,11 +131,9 @@ describe("catalog specs", () => {
       expect(executor.calls).toHaveLength(0);
       const gate = res.receipts.find((r) => r.description.startsWith("Would ask"));
       expect(gate, `${spec.id} reached its gate`).toBeDefined();
-      if (spec.wave === 1) {
-        expect(res.artifact, `${spec.id} produced an artifact`).toBeDefined();
-        expect(res.receipts.some((r) => r.kind === "draft" && r.payload.artifactId === res.artifact!.id), `${spec.id} draft receipt links the artifact`).toBe(true);
-        expect((gate!.payload.approvalPreview as { artifactId?: string }).artifactId).toBe(res.artifact!.id);
-      }
+      expect(res.artifact, `${spec.id} produced an artifact`).toBeDefined();
+      expect(res.receipts.some((r) => r.kind === "draft" && r.payload.artifactId === res.artifact!.id), `${spec.id} draft receipt links the artifact`).toBe(true);
+      expect((gate!.payload.approvalPreview as { artifactId?: string }).artifactId).toBe(res.artifact!.id);
       if (spec.mutates) expect(res.receipts.some((r) => r.description.startsWith("Would ")), `${spec.id} previewed its mutation`).toBe(true);
     }
   });

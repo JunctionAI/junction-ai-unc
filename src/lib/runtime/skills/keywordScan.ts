@@ -9,6 +9,19 @@ export const keywordScan: Skill = {
   maxItems: 15,
   purpose: "Searches the business can plausibly win with pages it already has — a hypothesis list to validate in Search Console",
   inputs: ["site profile (category, products, region)", "Search Console striking-distance queries (when connected)", "site pages (Shopify, when connected)"],
+  file: {
+    goal: "A keyword list the founder can validate in Search Console, not a ranking claim",
+    owns: ["the hypothesis list", "measured vs hypothesized labels"],
+    reads: ["site profile", "Search Console when connected", "Shopify pages when connected"],
+    decides: ["which queries the existing pages can plausibly win", "which are measured vs hypothesized"],
+    writes: ["a keyword_list artifact"],
+    never: ["invent search volumes", "claim a ranking Unc did not read"],
+    apply: "Drafts. Search Console rows graduate a line from hypothesized to measured — I don't buy ads from this list.",
+    examples: [
+      { when: "only a site profile", does: "hypothesis list titled to-validate, every item status hypothesized" },
+      { when: "GSC shows position 12 for 'physio auckland'", does: "that query first, status measured" },
+    ],
+  },
   minimum: minimum("the website's category and products (from the scan); Search Console makes it real", [], ["about_the_business"], ["search_console", "shopify"]),
   domain: "seo",
   prompt: `CRAFT — keyword opportunities:

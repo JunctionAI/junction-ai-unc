@@ -68,6 +68,16 @@ describe("demo mode + auth", () => {
 });
 
 describe("the brief", () => {
+  it("lets members read but blocks generation before any brief or model usage is written", async () => {
+    db.rows("account_members")[0].role = "member";
+    expect((await GET()).status).toBe(200);
+    const res = await post({ force: true });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "owner_only" });
+    expect(db.rows("daily_briefs")).toHaveLength(0);
+    expect(db.rows("llm_usage")).toHaveLength(0);
+  });
+
   it("GET is null before any brief (with the account-local day); POST writes today's (deterministic without a key); GET returns it; idempotent; force rewrites", async () => {
     vi.useFakeTimers({ now: new Date("2026-09-02T18:31:00.000Z"), toFake: ["Date"] });
     try {

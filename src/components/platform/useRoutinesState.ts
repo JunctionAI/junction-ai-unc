@@ -28,20 +28,20 @@ export function useRoutinesState(enabled: boolean, initial: RoutinesStateListing
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
     (async () => {
       try {
         const res = await fetch("/api/routines/state", { cache: "no-store" });
         const body = (await res.json().catch(() => ({}))) as Partial<RoutinesStateListing> & { fallback?: boolean; error?: string };
         if (cancelled) return;
         if (!res.ok || body.fallback || !Array.isArray(body.routines)) {
-          setError(body.error ?? (body.fallback ? null : `couldn’t load routines (${res.status})`));
+          setData(null);
+          setError(body.error ?? (body.fallback ? "routine state is unavailable — nothing is verified as running." : res.status === 401 ? "your session expired — sign in again." : `couldn’t load routines (${res.status})`));
         } else {
           setData(body as RoutinesStateListing);
           setError(null);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) { setData(null); setError(e instanceof Error ? e.message : String(e)); }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -55,7 +55,12 @@ export function useRoutinesState(enabled: boolean, initial: RoutinesStateListing
     setData((d) => (d ? { ...d, routines: d.routines.map((r) => (r.routineId === routine.routineId ? routine : r)) } : d));
   }, []);
 
-  return { active: data !== null, loading, data, error, refresh: () => setTick((n) => n + 1), patch };
+  const refresh = useCallback(() => {
+    setLoading(true);
+    setTick((n) => n + 1);
+  }, []);
+
+  return { active: data !== null, loading: loading || (enabled && data === null && error === null), data, error, refresh, patch };
 }
 
 /** "2h ago" · "just now" · "3d ago" — for the last-run line. */

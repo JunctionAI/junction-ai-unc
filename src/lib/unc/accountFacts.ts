@@ -15,12 +15,13 @@
    shows its honest empty state, never a demo number. Nothing here is imported by the server. */
 
 import { useSyncExternalStore } from "react";
-import { listMemberships } from "@/lib/db/accountState";
-import { asDb, getBrowserSupabase, isDbConfigured } from "@/lib/db/client";
-import type { PlanPhaseJson } from "@/lib/db/mapping";
-import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
-import { unwrap, type DbClient } from "@/lib/db/types";
-import { ALL_SYSTEMS } from "@/lib/platform/catalog";
+import { connectorHasRealSync } from "../connectors/sync";
+import { listMemberships } from "../db/accountState";
+import { asDb, getBrowserSupabase, isDbConfigured } from "../db/client";
+import type { PlanPhaseJson } from "../db/mapping";
+import { CONNECTOR_PLATFORMS } from "../db/mapping";
+import { unwrap, type DbClient } from "../db/types";
+import { ALL_SYSTEMS } from "../platform/catalog";
 
 export type AccountMode = "unknown" | "demo" | "account";
 
@@ -32,6 +33,8 @@ export interface ConnectorFact {
   name: string;
   status: ConnectorStatus;
   lastSyncAt: string | null;
+  /** ok | empty | error:<code> | null (never read). Null is in-flight — not connected. */
+  lastSyncResult: string | null;
 }
 
 export interface RoutineStateFact {
@@ -147,7 +150,7 @@ async function resolveMode(): Promise<void> {
     // being created by the app); the id fills in when it can.
     let accountId: string | null = null;
     try {
-      const memberships = await listMemberships(db());
+      const memberships = await listMemberships(db(), data.session.user.id);
       accountId = memberships[0]?.accountId ?? null;
     } catch {
       accountId = null;
@@ -169,7 +172,7 @@ function ensureResolved(): void {
 async function readFacts(accountId: string): Promise<AccountFacts> {
   const client = db();
   const by = (table: string, columns: string) => client.from(table).select(columns).eq("account_id", accountId);
-  type ConnRow = { platform: string; status: ConnectorStatus; last_sync_at: string | null };
+  type ConnRow = { platform: string; status: ConnectorStatus; last_sync_at: string | null; last_sync_result: string | null };
   type RsRow = { routine_id: string; enabled: boolean };
   type PlanRow = { title: string; phases: PlanPhaseJson[]; agreed_at: string | null } | null;
   type RpRow = { budget_monthly: number | string; hours_weekly: number | string; skills: string[] | null; postures: string[] | null } | null;
@@ -177,7 +180,7 @@ async function readFacts(accountId: string): Promise<AccountFacts> {
   type RunRow = { id: string; routine_id: string; mode: "live" | "dry_run"; status: string; started_at: string };
   type RcRow = { id: string; kind: string; description: string; created_at: string };
   const [conns, rs, plan, rp, aps, runs, rcs] = await Promise.all([
-    unwrap<ConnRow[]>("connectors.select", by("connectors", "platform, status, last_sync_at")),
+    unwrap<ConnRow[]>("connectors.select", by("connectors", "platform, status, last_sync_at, last_sync_result")),
     unwrap<RsRow[]>("routine_states.select", by("routine_states", "routine_id, enabled")),
     unwrap<PlanRow>("plans.select", by("plans", "title, phases, agreed_at").order("created_at", { ascending: false }).limit(1).maybeSingle()),
     unwrap<RpRow>("resource_profiles.select", by("resource_profiles", "budget_monthly, hours_weekly, skills, postures").maybeSingle()),
@@ -199,7 +202,7 @@ async function readFacts(accountId: string): Promise<AccountFacts> {
   }));
   return {
     accountId,
-    connectors: (conns ?? []).map((c) => ({ platform: c.platform, name: NAME_BY_PLATFORM[c.platform] ?? c.platform, status: c.status, lastSyncAt: c.last_sync_at })),
+    connectors: (conns ?? []).map((c) => ({ platform: c.platform, name: NAME_BY_PLATFORM[c.platform] ?? c.platform, status: c.status, lastSyncAt: c.last_sync_at, lastSyncResult: c.last_sync_result })),
     routineStates: (rs ?? []).map((r) => ({ routineId: r.routine_id, name: NAME_BY_ROUTINE[r.routine_id] ?? r.routine_id, enabled: !!r.enabled })),
     plan: plan ? { title: plan.title, phases: Array.isArray(plan.phases) ? plan.phases : [], agreedAt: plan.agreed_at } : null,
     resources: rp ? { budgetMonthly: Number(rp.budget_monthly), hoursWeekly: Number(rp.hours_weekly), skills: rp.skills ?? [], postures: rp.postures ?? [] } : null,
@@ -276,7 +279,7 @@ export function __setAccountFactsForTests(next: AccountFactsState | null): void 
 /** "2 connected · Klaviyo needs attention" / "1 connected" / "Nothing connected yet". */
 export function connectorSummary(facts: Pick<AccountFacts, "connectors"> | null): string {
   if (!facts) return "Nothing connected yet";
-  const ok = facts.connectors.filter((c) => c.status === "connected");
+  const ok = facts.connectors.filter((c) => connectorHasRealSync(c.status, c.lastSyncResult));
   const attention = facts.connectors.filter((c) => c.status === "needs_reconnect" || c.status === "error");
   if (!ok.length && !attention.length) return "Nothing connected yet";
   const parts: string[] = [];

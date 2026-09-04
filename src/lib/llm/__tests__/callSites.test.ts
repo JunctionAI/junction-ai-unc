@@ -6,12 +6,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { LookupAddress } from "node:dns";
 import { lookup } from "node:dns/promises";
+import { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
 import type { LlmResult } from "../types";
 
 const routerMock = vi.hoisted(() => ({ complete: vi.fn(), resolveModel: vi.fn() }));
+const scanTransportMock = vi.hoisted(() => ({ requestPinnedPage: vi.fn() }));
 vi.mock("@/lib/llm/router", async (importOriginal) => ({ ...(await importOriginal<typeof import("../router")>()), complete: routerMock.complete, resolveModel: routerMock.resolveModel }));
-vi.mock("@/lib/llm/accountContext", () => ({ optionalAccountContext: async () => ({ accountId: "acct-1", db: null }) }));
+vi.mock("@/lib/llm/accountContext", () => ({ requireModelAccountContext: async () => ({ accountId: "acct-1", db: null }) }));
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
+// Production keeps the DNS-pinned Node transport. These call-site fixtures inject only its
+// bounded response shape so they remain network-free and continue testing the model seam.
+vi.mock("@/lib/unc/pinnedPageFetch", () => ({ requestPinnedPage: scanTransportMock.requestPinnedPage }));
 
 import { POST as chat } from "@/app/api/unc/chat/route";
 import { POST as narrative } from "@/app/api/unc/narrative/route";
@@ -56,6 +61,11 @@ describe("POST /api/unc/chat", () => {
     expect((await post(chat, "{nope")).status).toBe(400);
     expect((await post(chat, { messages: [{ role: "assistant", content: "x" }] })).status).toBe(400);
   });
+  it("caps the request body and thread before model work", async () => {
+    expect((await post(chat, { messages: Array.from({ length: 51 }, () => ({ role: "user", content: "x" })) })).status).toBe(400);
+    expect((await post(chat, { messages: [{ role: "user", content: "x".repeat(70_000) }] })).status).toBe(413);
+    expect(routerMock.complete).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/unc/narrative", () => {
@@ -82,13 +92,21 @@ describe("POST /api/unc/narrative", () => {
     expect(await (await post(narrative, body)).json()).toEqual({ fallback: true });
     expect(routerMock.complete).toHaveBeenCalledTimes(4);
   });
+  it("rejects oversized narrative bodies before model work", async () => {
+    expect((await post(narrative, "x".repeat(40_001))).status).toBe(413);
+    expect(routerMock.complete).not.toHaveBeenCalled();
+  });
 });
 
 describe("business scan", () => {
   const html = "<html><head><title>Acme Candles</title><meta name='description' content='Hand-poured soy candles'></head><body><h1>Acme Candles</h1><p>Hand-poured soy candles made in Wellington for people who like a quiet evening. Shop the Winter range.</p></body></html>";
   beforeEach(() => {
     (lookup as Mock).mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as LookupAddress[]);
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => (String(input).endsWith("/") || String(input).endsWith("acme.example") ? new Response(html, { status: 200, headers: { "content-type": "text/html" } }) : new Response("nope", { status: 404 })));
+    scanTransportMock.requestPinnedPage.mockReset().mockImplementation(async (url: URL) =>
+      url.pathname === "/"
+        ? { status: 200, headers: new Headers({ "content-type": "text/html" }), body: html }
+        : { status: 404, headers: new Headers({ "content-type": "text/plain" }), body: "" },
+    );
   });
   it("asks the business_scan task (4000 tokens, low effort, JSON) and returns the coerced profile with the account attached", async () => {
     routerMock.complete.mockResolvedValue(ok(JSON.stringify({ name: "Acme Candles", oneLiner: "Hand-poured soy candles", category: "candles", products: ["Winter range"], audience: null, voice: { tone: "quiet", phrases: ["quiet evening"] }, market: { region: "Wellington", competitorsMentioned: [] }, signals: [], confidence: "medium" })));
@@ -123,16 +141,23 @@ describe("business scan", () => {
     routerMock.resolveModel.mockReturnValue(null);
     expect(await (await post(scanRoute, { website: "acme.example", socials: "" })).json()).toEqual({ fallback: true });
   });
+  it("rejects oversized scan bodies before model work", async () => {
+    expect((await post(scanRoute, "x".repeat(8_001))).status).toBe(413);
+    expect(routerMock.complete).not.toHaveBeenCalled();
+  });
 });
 
 describe("worker routine decisions (real router, fake provider — createTextClient binds the router internally)", () => {
   const calls: { model: string; maxTokens: number; effort?: string; jsonMode?: boolean; system: string; user: string; accountId: string | null }[] = [];
+  let db: FakeSupabase;
   let reply: LlmResult;
   beforeEach(() => {
     calls.length = 0;
     reply = ok('{"optionId":"hold","reasoning":"Spend is 420 against a 3000 cap; I hold."}', { model: "claude-haiku-4-5" });
     clearLlmEnv({ ANTHROPIC_API_KEY: "fake" });
-    setLlmDbForTests(() => null);
+    db = new FakeSupabase();
+    db.seed("accounts", [{ id: "acct-9", name: "Test Nine" }, { id: "acct-7", name: "Test Seven" }]);
+    setLlmDbForTests(() => db);
     setProviderFactoryForTests((id) => ({
       id,
       async complete(req) {
@@ -157,9 +182,10 @@ describe("worker routine decisions (real router, fake provider — createTextCli
     const log = vi.fn();
     const client = createLlmClient({ log })!;
     expect(await client.complete({ system: "s", user: "u", accountId: "acct-9" })).toContain("hold");
-    // the router resolved the fast tier (Haiku) and stripped effort for it; the ledger line went to the log (no db)
-    const usage = log.mock.calls.find((c) => c[0] === "llm.usage")?.[1] as Record<string, unknown>;
+    // The router resolved the fast tier (Haiku), stripped unsupported effort, and durably recorded usage.
+    const usage = db.rows("llm_usage")[0] as Record<string, unknown>;
     expect(usage).toMatchObject({ task: "routine_decision", provider: "anthropic", model: "claude-haiku-4-5", account_id: "acct-9", input_tokens: 10, output_tokens: 5 });
+    expect(log).not.toHaveBeenCalledWith("llm.usage", expect.anything());
     expect(LLM_MAX_TOKENS).toBe(4000);
   });
   it("the provider passes the run's account id and a refusal takes the declared fallback", async () => {
@@ -171,6 +197,6 @@ describe("worker routine decisions (real router, fake provider — createTextCli
     const d = await provider.decide(node, ctx);
     expect(d.optionId).toBe("hold");
     expect(d.reasoning).toContain("deterministic fallback");
-    expect((log.mock.calls.find((c) => c[0] === "llm.usage")?.[1] as Record<string, unknown>)).toMatchObject({ account_id: "acct-7", stop_reason: "refusal" });
+    expect(db.rows("llm_usage").find((row) => row.account_id === "acct-7")).toMatchObject({ account_id: "acct-7", stop_reason: "refusal" });
   });
 });

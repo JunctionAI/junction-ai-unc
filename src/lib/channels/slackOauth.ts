@@ -5,7 +5,7 @@
    State rides on the existing oauth_states table (platform 'slack_channel' so it never
    collides with the Slack *connector*), single-use, 10-minute TTL. */
 
-import { consumeOauthState, insertOauthState } from "../connectors/store";
+import { consumeOauthState, insertOauthState, memberRole } from "../connectors/store";
 import type { Keyring } from "../connectors/crypto";
 import { newState, STATE_TTL_MS } from "../connectors/oauth";
 import type { DbClient } from "../db/types";
@@ -35,7 +35,7 @@ export async function startSlackInstall(deps: { db: DbClient; config: SlackConfi
   return { url: slackAuthorizeUrl(deps.config, slackCallbackUri(deps.appUrl), state), state };
 }
 
-export type FinishResult = { ok: true; link: ChannelLink; redirectTo: string } | { ok: false; reason: "bad_state" | "denied" | "exchange_failed" | "no_keyring"; redirectTo: string };
+export type FinishResult = { ok: true; link: ChannelLink; redirectTo: string } | { ok: false; reason: "bad_state" | "session_mismatch" | "denied" | "exchange_failed" | "no_keyring"; redirectTo: string };
 
 export async function finishSlackInstall(
   deps: { db: DbClient; keyring: Keyring | null; config: SlackConfig; fetch: FetchLike; appUrl: string; now: Date; userId: string | null; adapters?: AdapterRegistry; log?: (event: string, fields: Record<string, unknown>) => void },
@@ -45,6 +45,9 @@ export async function finishSlackInstall(
   const row = state ? await consumeOauthState(deps.db, state) : null;
   if (!row || row.platform !== SLACK_STATE_PLATFORM || new Date(row.expires_at).getTime() < deps.now.getTime()) return { ok: false, reason: "bad_state", redirectTo: "/app" };
   const redirectTo = safeRedirect(row.redirect_to);
+  if (!deps.userId || (await memberRole(deps.db, deps.userId, row.account_id)) !== "owner") {
+    return { ok: false, reason: "session_mismatch", redirectTo };
+  }
   if (query.get("error") || !query.get("code")) return { ok: false, reason: "denied", redirectTo };
   if (!deps.keyring) return { ok: false, reason: "no_keyring", redirectTo };
   const install = await slackExchangeCode(deps.fetch, deps.config, query.get("code")!, slackCallbackUri(deps.appUrl));

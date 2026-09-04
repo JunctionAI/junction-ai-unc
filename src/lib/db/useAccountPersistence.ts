@@ -1,21 +1,20 @@
 "use client";
-/* Wires the platform state to the founder's account when — and only when — Supabase is
-   configured AND a session exists. Otherwise it is a no-op and the app stays in demo mode
-   (client-side state, exactly as before Phase 2).
+/* Wires the platform state to the signed-in account when — and only when — Supabase is
+   configured AND a verified session exists. Only a build without Supabase stays in demo mode;
+   a configured build with no valid session fails closed on the account-recovery surface.
 
    Sequence on mount (configured):
-     1. getUser()            no user → demo mode (the proxy normally redirects /app first)
-     2. ensureAccount()      existing account → hydrate state from rows (over the empty account seed,
+     1. getUser()            no verified user → blocking account recovery
+     2. ensureAccount()      invited account → hydrate state from rows (over the empty account seed,
                              so a partially populated account keeps honest blanks, never demo numbers)
-                             none / never saved → create + seed from the EMPTY account state
-                             (accountInitialState — never the prototype's founder), currency from
-                             the unc_country cookie / browser language
-     3. autosave             every change after that persists, debounced 800 ms */
+                             no invite/membership → fail closed; private beta never self-provisions
+     3. owner autosave       every owner change after that persists, debounced 800 ms;
+                             members stay on the hydrated account in explicit read-only mode */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { COUNTRY_COOKIE, cookieValue } from "@/lib/locale/resolve";
 import { accountInitialState, currencyForLocale, type PlatformState, type Setter } from "@/lib/platform/state";
-import { ensureAccount, saveAccountState } from "./accountState";
+import { ensureAccount, saveAccountState, type MembershipRole } from "./accountState";
 import { asDb, getBrowserSupabase, isDbConfigured } from "./client";
 import { persistedProjection } from "./mapping";
 import { useAutosave, type AutosaveStatus } from "./useAutosave";
@@ -25,6 +24,8 @@ export type PersistenceMode = "demo" | "connecting" | "account" | "error";
 export interface Persistence {
   mode: PersistenceMode;
   accountId: string | null;
+  /** Server-derived account membership. Members hydrate real rows but never use browser writes. */
+  role: MembershipRole | null;
   userEmail: string | null;
   /** accounts.name — '' until the plan is agreed (then the scan's business name / website host / goal text). */
   accountName: string;
@@ -32,6 +33,8 @@ export interface Persistence {
   setAccountName: (name: string) => void;
   autosave: AutosaveStatus;
   error: string | null;
+  /** Re-runs account hydration, or retries the current account save after an autosave error. */
+  retry: () => void;
 }
 
 /** The state a real account is created from / hydrated over: no goal, baseline, budget, hours or seeded chat
@@ -42,14 +45,29 @@ export function accountSeed(): PlatformState {
   return accountInitialState(currencyForLocale({ country: cookie, language }));
 }
 
+/** In a configured deployment, absence of a verified user is never permission to show demo
+    fixtures. The no-database build is the only demo path; session expiry/races fail closed. */
+export function accountAuthProblem(user: { id: string } | null | undefined, error: { message?: string } | null): string | null {
+  if (error) return `Couldn't verify your signed-in account: ${error.message || "authentication failed"}`;
+  if (!user) return "Your sign-in session is no longer available. Try again or sign out, then sign in again.";
+  return null;
+}
+
+/** Pure policy seam used by the hook and tests: only a hydrated owner account may autosave. */
+export function accountAutosaveEnabled(mode: PersistenceMode, accountId: string | null, role: MembershipRole | null): boolean {
+  return mode === "account" && !!accountId && role === "owner";
+}
+
 export function useAccountPersistence(S: PlatformState, set: Setter): Persistence {
   const configured = isDbConfigured();
   const [mode, setMode] = useState<PersistenceMode>(configured ? "connecting" : "demo");
   const [accountId, setAccountId] = useState<string | null>(null);
+  const [role, setRole] = useState<MembershipRole | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [accountName, setAccountName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!configured) return;
@@ -58,22 +76,26 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
       try {
         const supabase = getBrowserSupabase();
         const { data, error: authErr } = await supabase.auth.getUser();
-        if (authErr || !data.user) {
-          if (!cancelled) setMode("demo");
-          return;
+        const authProblem = accountAuthProblem(data.user, authErr);
+        if (authProblem) throw new Error(authProblem);
+        if (!data.user) return; // narrowed by accountAuthProblem; defensive for future client types
+        if (!cancelled) {
+          setUserId(data.user.id);
+          setUserEmail(data.user.email ?? null);
         }
         const db = asDb(supabase);
-        const res = await ensureAccount(db, accountSeed(), { userId: data.user.id });
+        const res = await ensureAccount(db, accountSeed(), { userId: data.user.id, allowCreate: false });
         if (cancelled) return;
-        setUserId(data.user.id);
-        setUserEmail(data.user.email ?? null);
         setAccountId(res.accountId);
+        setRole(res.role);
         setAccountName(res.name ?? "");
         // created → the empty seed; existing → the rows hydrated over that seed. Either way, never the demo state.
         set(() => res.state);
         setMode("account");
       } catch (e) {
         if (cancelled) return;
+        setAccountId(null);
+        setRole(null);
         setError(e instanceof Error ? e.message : String(e));
         setMode("error");
       }
@@ -81,9 +103,9 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
     return () => {
       cancelled = true;
     };
-  }, [configured, set]);
+  }, [attempt, configured, set]);
 
-  const enabled = mode === "account" && !!accountId;
+  const enabled = accountAutosaveEnabled(mode, accountId, role);
   const autosave = useAutosave(
     S,
     enabled,
@@ -94,5 +116,21 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
     persistedProjection,
   );
 
-  return { mode, accountId, userEmail, accountName, setAccountName, autosave: autosave.status, error: error ?? autosave.error };
+  const retry = useCallback(() => {
+    if (enabled && autosave.error) {
+      void autosave.flush();
+      return;
+    }
+    setError(null);
+    setAccountId(null);
+    setRole(null);
+    setMode(configured ? "connecting" : "demo");
+    if (configured) setAttempt((n) => n + 1);
+  }, [autosave, configured, enabled]);
+
+  // A stale owner save error must not block a user who subsequently hydrates as a read-only
+  // member. Member mode never reports a save status for work it is forbidden to persist.
+  const autosaveError = role === "owner" ? autosave.error : null;
+  const autosaveStatus: AutosaveStatus = role === "member" ? "idle" : autosave.status;
+  return { mode, accountId, role, userEmail, accountName, setAccountName, autosave: autosaveStatus, error: error ?? autosaveError, retry };
 }

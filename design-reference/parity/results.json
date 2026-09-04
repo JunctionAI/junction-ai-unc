@@ -73,117 +73,136 @@
     "id": "home",
     "title": "Control centre · Home (demo data)",
     "width": 1280,
-    "height": 2474,
+    "height": 2518,
     "protoSize": {
       "width": 1280,
       "height": 2474
     },
     "portSize": {
       "width": 1280,
-      "height": 2474
+      "height": 2518
     },
-    "totalPixels": 3166720,
-    "diffPixels": 7667,
-    "sizeOnlyPixels": 0,
-    "diffPct": 0.24211171180274857,
-    "overlapDiffPct": 0.24211171180274857,
-    "pass": true,
+    "totalPixels": 3223040,
+    "diffPixels": 326364,
+    "sizeOnlyPixels": 56320,
+    "diffPct": 10.125968030182685,
+    "overlapDiffPct": 8.527561641067098,
+    "pass": false,
     "note": "",
     "textOnlyProto": [],
-    "textOnlyPort": []
+    "textOnlyPort": [
+      "Demo data — nothing here is yours. Sign in to start for real.",
+      "Sign in"
+    ]
   },
   {
     "id": "strategy",
     "title": "Strategy",
     "width": 1280,
-    "height": 1032,
+    "height": 1154,
     "protoSize": {
       "width": 1280,
       "height": 1032
     },
     "portSize": {
       "width": 1280,
-      "height": 1032
+      "height": 1154
     },
-    "totalPixels": 1320960,
-    "diffPixels": 1182,
-    "sizeOnlyPixels": 0,
-    "diffPct": 0.08948037790697674,
-    "overlapDiffPct": 0.08948037790697674,
-    "pass": true,
+    "totalPixels": 1477120,
+    "diffPixels": 343537,
+    "sizeOnlyPixels": 156160,
+    "diffPct": 23.25721674610052,
+    "overlapDiffPct": 14.184910973837209,
+    "pass": false,
     "note": "",
     "textOnlyProto": [],
-    "textOnlyPort": []
+    "textOnlyPort": [
+      "Why this order · What flips it · The risk",
+      "Why this order · What flips it · The risk",
+      "Why this order · What flips it · The risk",
+      "Why this order · What flips it · The risk",
+      "Demo data — nothing here is yours. Sign in to start for real.",
+      "Sign in"
+    ]
   },
   {
     "id": "routines",
     "title": "Routines · role cards",
     "width": 1280,
-    "height": 900,
+    "height": 944,
     "protoSize": {
       "width": 1280,
       "height": 900
     },
     "portSize": {
       "width": 1280,
-      "height": 900
+      "height": 944
     },
-    "totalPixels": 1152000,
-    "diffPixels": 879,
-    "sizeOnlyPixels": 0,
-    "diffPct": 0.07630208333333333,
-    "overlapDiffPct": 0.07630208333333333,
-    "pass": true,
+    "totalPixels": 1208320,
+    "diffPixels": 94952,
+    "sizeOnlyPixels": 56320,
+    "diffPct": 7.858183262711864,
+    "overlapDiffPct": 3.3534722222222224,
+    "pass": false,
     "note": "",
     "textOnlyProto": [],
-    "textOnlyPort": []
+    "textOnlyPort": [
+      "Demo data — nothing here is yours. Sign in to start for real.",
+      "Sign in"
+    ]
   },
   {
     "id": "routine-detail",
     "title": "Routine detail · Founder content engine (D01-W01)",
     "width": 1280,
-    "height": 900,
+    "height": 944,
     "protoSize": {
       "width": 1280,
       "height": 900
     },
     "portSize": {
       "width": 1280,
-      "height": 900
+      "height": 944
     },
-    "totalPixels": 1152000,
-    "diffPixels": 3751,
-    "sizeOnlyPixels": 0,
-    "diffPct": 0.3256076388888889,
-    "overlapDiffPct": 0.3256076388888889,
-    "pass": true,
+    "totalPixels": 1208320,
+    "diffPixels": 144618,
+    "sizeOnlyPixels": 56320,
+    "diffPct": 11.968518273305085,
+    "overlapDiffPct": 7.664756944444444,
+    "pass": false,
     "note": "",
     "textOnlyProto": [],
     "textOnlyPort": [
-      "Run now (dry run)"
+      "Run now (dry run)",
+      "Every step here is inspectable. Nothing runs outside these bounds.",
+      "Demo data — nothing here is yours. Sign in to start for real.",
+      "Sign in"
     ]
   },
   {
     "id": "connectors",
     "title": "Connectors",
     "width": 1280,
-    "height": 1035,
+    "height": 1079,
     "protoSize": {
       "width": 1280,
       "height": 1035
     },
     "portSize": {
       "width": 1280,
-      "height": 1035
+      "height": 1079
     },
-    "totalPixels": 1324800,
-    "diffPixels": 879,
-    "sizeOnlyPixels": 0,
-    "diffPct": 0.06634963768115941,
-    "overlapDiffPct": 0.06634963768115941,
-    "pass": true,
+    "totalPixels": 1381120,
+    "diffPixels": 191173,
+    "sizeOnlyPixels": 56320,
+    "diffPct": 13.841881950880444,
+    "overlapDiffPct": 10.179121376811594,
+    "pass": false,
     "note": "",
     "textOnlyProto": [],
-    "textOnlyPort": []
+    "textOnlyPort": [
+      "Demo data — nothing here is yours. Sign in to start for real.",
+      "Sign in"
+    ]
   }
 ]

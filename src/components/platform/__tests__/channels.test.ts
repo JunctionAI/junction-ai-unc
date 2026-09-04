@@ -13,6 +13,7 @@ const channels: LinksListing["channels"] = [
   { channel: "slack", configured: true },
   { channel: "sms", configured: false },
   { channel: "email", configured: false },
+  { channel: "apple", configured: false, setupNote: "Apple Messages is awaiting provider setup." },
 ];
 const tg: WireLink = { id: "l1", channel: "telegram", label: "Telegram", verified: true, handle: "tomh", displayName: "Tom", verifiedAt: "2026-09-02T09:00:00.000Z", codeExpiresAt: null, prefs: { brief: true, approvals: true, drafts: false, quiet_hours: { start: "22:00", end: "07:00" } }, lastInboundAt: null, workspace: null };
 
@@ -25,6 +26,8 @@ describe("ConnectChannelStep", () => {
     expect(html).toContain(APP_ONLY_LABEL);
     expect(html).toContain('data-testid="choice-telegram" data-configured="1"');
     expect(html).toContain('data-testid="choice-whatsapp" data-configured="0"');
+    expect(html).toContain('data-testid="choice-apple" data-configured="0"');
+    expect(html).toContain("Apple Messages is awaiting provider setup.");
     expect((html.match(new RegExp(NOT_ON_LINE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length).toBe(2); // whatsapp + sms
     expect(html).not.toContain("Linked");
     expect(html).not.toContain("!");

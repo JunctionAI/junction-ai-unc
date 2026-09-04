@@ -7,6 +7,7 @@
    ANTHROPIC_API_KEY itself; this module never touches or logs the value. */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { sanitiseProviderError } from "../errors";
 import type { LlmErrorCode, LlmProvider, LlmResult, ProviderRequest } from "../types";
 
 /** The slice of the SDK the adapter uses — tests inject a fake. */
@@ -19,8 +20,7 @@ export interface AnthropicProviderOptions {
   now?: () => number;
 }
 
-const KEY_SHAPE = /sk-ant-[A-Za-z0-9_-]{8,}/g;
-const sanitise = (s: string) => s.replace(KEY_SHAPE, "sk-ant-…").slice(0, 200);
+const sanitise = (s: string) => sanitiseProviderError(s);
 
 export function mapAnthropicError(err: unknown): { code: LlmErrorCode; message: string } {
   if (err instanceof Anthropic.APIConnectionTimeoutError) return { code: "timeout", message: "request timed out" };

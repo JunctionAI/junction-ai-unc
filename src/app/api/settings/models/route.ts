@@ -8,9 +8,9 @@
 
    Writes go through the founder's own client (member RLS on account_model_prefs). */
 
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession, requireAccountSession } from "@/lib/db/session";
 import { isLlmTask, listModelPrefs, writeModelPref } from "@/lib/llm/prefs";
-import { CATALOGUE, isProviderConfigured, parseModelId, resolveModel } from "@/lib/llm/router";
+import { CATALOGUE, isProviderConfigured, resolveModel } from "@/lib/llm/router";
 import { LLM_TASKS, PROVIDER_IDS, type LlmTask, type ProviderId, type ResolvedModel } from "@/lib/llm/types";
 import { withErrorCapture } from "@/lib/observability/errors";
 
@@ -36,7 +36,7 @@ async function handleGET() {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   let body: { task?: unknown; modelId?: unknown };
   try {
@@ -46,10 +46,14 @@ async function handlePOST(req: Request) {
   }
   if (!isLlmTask(body.task)) return Response.json({ error: "unknown task" }, { status: 400 });
   const modelId = body.modelId === null || body.modelId === undefined || body.modelId === "" ? null : typeof body.modelId === "string" ? body.modelId.trim().slice(0, 240) : undefined;
-  if (modelId === undefined || (modelId !== null && !parseModelId(modelId))) return Response.json({ error: "unknown model id" }, { status: 400 });
+  // Account UI choices are maintained catalogue entries. `custom` is explicitly the
+  // operator-trusted self-hosted entry; every hosted entry has maintained pricing. Operators
+  // may still use an ad-hoc provider:model through env, but an account cannot persist an
+  // unpriced hosted model that would evade its dollar cap.
+  if (modelId === undefined || (modelId !== null && !CATALOGUE.some((entry) => entry.id === modelId))) return Response.json({ error: "unknown or unpriced model id" }, { status: 400 });
   try {
-    await writeModelPref(session.db, session.accountId, body.task, modelId);
-    const prefs = await listModelPrefs(session.db, session.accountId);
+    await writeModelPref(session.service, session.accountId, body.task, modelId);
+    const prefs = await listModelPrefs(session.service, session.accountId);
     return Response.json({ ok: true, prefs, resolved: resolvedFor(prefs) });
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : "settings write failed" }, { status: 500 });

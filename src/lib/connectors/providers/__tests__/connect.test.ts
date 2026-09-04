@@ -65,6 +65,16 @@ describe("POST …/start via a provider", () => {
     expect(db.rows("oauth_states")).toHaveLength(0);
   });
 
+  it("members cannot start a provider-hosted connection", async () => {
+    db.rows("account_members")[0].role = "member";
+    const d = live(COMPOSIO_ENV);
+    composioRoutes(d);
+    expect((await handleStart(d, "meta_ads", {})).status).toBe(403);
+    expect(d.calls).toHaveLength(0);
+    expect(db.rows("oauth_states")).toHaveLength(0);
+    expect(db.rows("connectors")).toHaveLength(0);
+  });
+
   it("Composio: returns the hosted link, records a state row + a 'connecting' row carrying the provider pointer (ids only)", async () => {
     const d = live(COMPOSIO_ENV);
     composioRoutes(d);
@@ -156,7 +166,7 @@ describe("GET /api/connectors/provider/<provider>/callback", () => {
     expect(db.rows("connectors")[0]).toMatchObject({ platform: "hubspot", status: "connected", sync_ref: { auth_provider: "nango", provider_connection_id: "nc_9", provider_integration: "hubspot-prod" } });
   });
 
-  it("failures: bad/expired/replayed state, session mismatch, provider refusal, pending or failed connection, wrong provider → connect_error + row in error", async () => {
+  it("failures: bad/expired/replayed state, session mismatch, provider refusal, pending or failed connection, wrong provider → connect_error", async () => {
     const { d, state } = await startedWith(COMPOSIO_ENV, "meta_ads", (dd) => composioRoutes(dd, { id: "ca_1", status: "INITIATED" }));
     expect(await callbackViaProvider(d, "composio", cb("composio", { state: "nope" }))).toEqual({ redirect: "/app?connect_error=meta_ads" });
     expect(await callbackViaProvider(d, "composio", cb("composio", { platform: "hubspot", state }))).toEqual({ redirect: "/app?connect_error=hubspot" }); // platform ≠ state's → bad_state, state consumed
@@ -165,7 +175,7 @@ describe("GET /api/connectors/provider/<provider>/callback", () => {
 
     const s2 = await startedWith(COMPOSIO_ENV, "meta_ads", (dd) => composioRoutes(dd, { id: "ca_1", status: "INITIATED" }));
     expect(await callbackViaProvider({ ...s2.d, userId: "stranger" }, "composio", cb("composio", { state: s2.state, status: "success" }))).toEqual({ redirect: "/app?connect_error=meta_ads" });
-    expect(db.rows("connectors")[0]).toMatchObject({ status: "error", last_sync_result: "error:oauth" });
+    expect(db.rows("connectors")[0]).toMatchObject({ status: "connecting" });
 
     const s3 = await startedWith(COMPOSIO_ENV, "meta_ads", (dd) => composioRoutes(dd, { id: "ca_1", status: "INITIATED" }));
     expect(await callbackViaProvider(s3.d, "composio", cb("composio", { state: s3.state, status: "failed" }))).toEqual({ redirect: "/app?connect_error=meta_ads" });
@@ -181,6 +191,16 @@ describe("GET /api/connectors/provider/<provider>/callback", () => {
     const s6 = await startedWith(COMPOSIO_ENV, "meta_ads", (dd) => composioRoutes(dd));
     const expired = { ...s6.d, now: () => new Date(NOW.getTime() + 11 * 60_000) };
     expect(await callbackViaProvider(expired, "composio", cb("composio", { state: s6.state }))).toEqual({ redirect: "/app?connect_error=meta_ads" });
+  });
+
+  it("a member cannot complete an owner's provider callback or contact the provider", async () => {
+    const { d, state } = await startedWith(COMPOSIO_ENV, "meta_ads", composioRoutes);
+    db.rows("account_members")[0].role = "member";
+    const callsBefore = d.calls.length;
+    expect(await callbackViaProvider(d, "composio", cb("composio", { state, status: "success" }))).toEqual({ redirect: "/app?connect_error=meta_ads" });
+    expect(d.calls).toHaveLength(callsBefore);
+    expect(db.rows("connectors")[0]).toMatchObject({ status: "connecting" });
+    expect(db.rows("receipts")).toHaveLength(0);
   });
 
   it("the own-app callback route refuses a provider state (platform mismatch on purpose: different route, same table)", async () => {

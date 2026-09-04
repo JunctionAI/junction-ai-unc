@@ -1,0 +1,65 @@
+import type { N8nWorkflow, RoutineSpec, RunResult } from "../runtime/types";
+import type { RunRecord } from "../runtime/store/interface";
+import { digest } from "./queue";
+import { eligible, workflowFingerprint, type DispatchDeps } from "./dispatch";
+import type { RoutineCommand, CommandStatus } from "./types";
+
+export interface ProcessorDeps extends DispatchDeps {
+  execute(command: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null): Promise<RunResult>;
+}
+
+/** No unchecked run summaries or model claims in completion messages. Artifacts stay in Unc. */
+export function commandResult(run: Pick<RunRecord, "status">): { status: CommandStatus; reply: string } {
+  if (run.status === "running") return { status: "waiting", reply: "The workflow is still running. No completed result has been received yet." };
+  if (run.status === "waiting_input") return { status: "waiting", reply: "This routine needs more information. Open its run in Unc to see the specific request; nothing was published or changed." };
+  if (run.status === "waiting_approval") return { status: "waiting", reply: "The routine has a proposal ready for review in Unc. Nothing was applied to your connected platforms." };
+  if (run.status === "done") return { status: "done", reply: "The draft-only run finished. Its result and source receipts are in Unc; no live changes were authorised." };
+  if (run.status === "skipped") return { status: "done", reply: "The routine finished without further work. Its reason and receipts are in Unc." };
+  return { status: "failed", reply: "The routine did not complete successfully. Check its run receipts in Unc before trying again." };
+}
+
+export async function processCommand(deps: ProcessorDeps, command: RoutineCommand): Promise<void> {
+  const now = () => (deps.now ?? (() => new Date()))().toISOString();
+  const claimed = await deps.queue.transition(command, "queued", { status: "running", runId: command.id, reply: "The worker has picked up your request. No completed result yet.", updatedAt: now() });
+  if (!claimed) return;
+  // Save the deterministic run ID BEFORE dispatch. Never replay a claimed request after a
+  // crash: its provider call may have happened even if the response was lost.
+  let started = false;
+  try {
+    const check = await eligible(deps, claimed.actor, claimed.routineId);
+    if (!check.ok) {
+      await deps.queue.transition(claimed, "running", { status: "blocked", reply: check.reply, updatedAt: now() });
+      return;
+    }
+    if (digest(check.spec) !== claimed.specHash || workflowFingerprint(check.workflow) !== claimed.workflowHash) {
+      await deps.queue.transition(claimed, "running", { status: "blocked", reply: "The routine or workflow changed while this request was queued. Please review its settings and send a new request.", updatedAt: now() });
+      return;
+    }
+    if (await deps.store.getRun(claimed.id)) {
+      await deps.queue.transition(claimed, "running", { status: "uncertain", reply: "This request already has a run record. I won’t dispatch it again; check the existing run in Unc.", updatedAt: now() });
+      return;
+    }
+    started = true;
+    const result = await deps.execute(claimed, check.spec, check.workflow);
+    if (result.runId !== claimed.id || result.mode !== "dry_run") throw new Error("Unexpected execution identity or mode");
+    await deps.queue.transition(claimed, "running", { ...commandResult(result), updatedAt: now() });
+  } catch {
+    await deps.queue.transition(claimed, "running", { status: started ? "uncertain" : "blocked", reply: started ? "I can’t confirm the execution outcome. I won’t automatically run it again; check its run in Unc first." : "I couldn’t verify the account, connections or budget. Nothing was started.", updatedAt: now() });
+  }
+}
+
+/** Reconcile callbacks and interrupted workers without repeating provider calls. */
+export async function reconcileCommand(deps: DispatchDeps, c: RoutineCommand): Promise<void> {
+  const now = (deps.now ?? (() => new Date()))();
+  const run = c.runId ? await deps.store.getRun(c.runId) : null;
+  if (run && (run.accountId !== c.actor.accountId || run.routineId !== c.routineId)) return;
+  if (run && run.status !== "running") {
+    const next = commandResult(run);
+    await deps.queue.transition(c, c.status, { ...next, updatedAt: now.toISOString() });
+  } else if (c.status === "running" && now.getTime() - new Date(c.updatedAt).getTime() > 10 * 60_000) {
+    await deps.queue.transition(c, "running", { status: "uncertain", reply: "The worker was interrupted or is taking longer than expected. I won’t repeat this request automatically; check its run in Unc.", updatedAt: now.toISOString() });
+  } else if (c.status !== "running") {
+    // Round-robin reconciliation: old waiting-input runs must not starve new callbacks.
+    await deps.queue.transition(c, c.status, { updatedAt: now.toISOString() });
+  }
+}

@@ -1,0 +1,11 @@
+**
+!package.json
+!package-lock.json
+!tsconfig.json
+!tsconfig.worker.json
+!src/
+!src/**
+!deploy/
+!deploy/worker/
+!deploy/worker/Dockerfile
+!deploy/worker/fly.toml

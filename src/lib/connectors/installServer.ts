@@ -17,10 +17,10 @@ export function installResponse(result: InstallResult, origin: string): NextResp
 
 export const installErrorResponse = (origin: string) => NextResponse.redirect(new URL(INSTALL_ERROR_REDIRECT, origin));
 
-/** A merchant who signed in straight from the magic link has no account yet (the client-side
-    bootstrap runs on /app, which they haven't reached). Same path the billing routes use:
-    accept any beta invite, else create the account, so handleStart finds a membership. */
+/** Accept a matching beta invite before the install handler resolves account membership.
+    Uninvited identities never receive a new account. */
 export async function ensureMerchantAccount(deps: HandlerDeps): Promise<void> {
   if (!deps.userId || !deps.db) return;
-  await requireAccountSession({ createAccount: true });
+  const session = await requireAccountSession();
+  if (session instanceof Response && session.status >= 400) throw new Error("private beta account required");
 }

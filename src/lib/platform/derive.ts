@@ -11,6 +11,7 @@ import { postureDefs } from "./postures";
 export { postureDefs };
 import type { ConnStatus, NarrativeState, PlatformState, ScanState, Setter } from "./state";
 import { DEFAULT_FOOTNOTE, type NarrativeRequest } from "../unc/narrative";
+import { connectorHasRealSync } from "../connectors/sync";
 import type { AccountFacts } from "../unc/accountFacts";
 import { paidInPlan, realPlanTimeline, realProposals } from "../setup/home";
 
@@ -146,11 +147,28 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
   const factConn = (name: string): ConnStatus | undefined => {
     const f = facts?.connectors.find((c) => c.name === name);
     if (!f) return undefined;
-    return f.status === "connected" ? "ok" : f.status === "needs_reconnect" || f.status === "error" ? "expired" : "off";
+    if (connectorHasRealSync(f.status, f.lastSyncResult)) return "ok";
+    if (f.status === "needs_reconnect" || f.status === "error") return "expired";
+    return "off";
   };
   const factOn = (name: string): boolean | undefined => facts?.routineStates.find((r) => r.name === name)?.enabled;
-  /** Connector card state: accounts → the row or disconnected; demo → the prototype's catalog default. */
-  const connOf = (name: string, demoDefault: ConnStatus): ConnStatus => (account ? (S.connState[name] ?? factConn(name) ?? "off") : S.connState[name] || demoDefault);
+  /** Connector card state: accounts → a real sync, or disconnected; demo → the prototype's catalog default.
+      A client "ok" with no facts row (OAuth return, first read not back) is not connected. A client
+      "ok" over a needs_reconnect row is the optimistic reconnect. */
+  const connOf = (name: string, demoDefault: ConnStatus): ConnStatus => {
+    if (!account) return S.connState[name] || demoDefault;
+    const fromFacts = factConn(name);
+    const fromState = S.connState[name];
+    if (fromState && fromState !== "ok") return fromState;
+    if (fromFacts === "ok") return "ok";
+    if (fromState === "ok") {
+      const f = facts?.connectors.find((c) => c.name === name);
+      if (!f) return "off";
+      if (f.status === "connected" && !connectorHasRealSync(f.status, f.lastSyncResult)) return "off";
+      return "ok";
+    }
+    return fromFacts ?? "off";
+  };
   /** Routine on-state: accounts → routine_states or off; demo → the catalog's "Active" default. */
   const isOn = (n: string): boolean => (account ? (S.routineOn[n] ?? factOn(n) ?? false) : (S.routineOn[n] ?? ALL_SYSTEMS.find((x) => x.name === n)?.state === "Active"));
   const klaviyoState = connOf("Klaviyo", "expired");

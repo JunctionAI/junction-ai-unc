@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { UncSend } from "@/lib/platform/derive";
 import { initialState, type Msg, type PlatformState, type Setter } from "@/lib/platform/state";
-import { stripDemoSeed, useAccountFacts } from "./accountFacts";
+import { refreshAccountFacts, stripDemoSeed, useAccountFacts } from "./accountFacts";
 import { buildUncContext } from "./context";
 
 const THREAD_KEY = { corner: "messages", onboarding: "obThread" } as const;
@@ -25,6 +25,12 @@ export function useUncChat(S: PlatformState, set: Setter): UncSend {
   // Accounts vs demo, and the account's rows: the context Unc reasons over must never carry demo furniture for a real account.
   const account = useAccountFacts();
   const accountRef = useRef(account);
+  const pendingPolls = useRef(new Set<AbortController>());
+  const sending = useRef(new Set<string>());
+  useEffect(() => () => {
+    for (const controller of pendingPolls.current) controller.abort();
+    pendingPolls.current.clear();
+  }, [account.accountId]);
   useEffect(() => {
     accountRef.current = account;
   }, [account]);
@@ -33,8 +39,11 @@ export function useUncChat(S: PlatformState, set: Setter): UncSend {
     ({ surface, text, canned }) => {
       const key = THREAD_KEY[surface];
       const s0 = stateRef.current;
-      if (s0[key].some((m) => m.typing)) return; // one in-flight reply per thread
+      if (sending.current.has(key) || s0[key].some((m) => m.typing)) return;
+      sending.current.add(key); // synchronous guard: rapid taps cannot create two command IDs
       const inAccount = accountRef.current.mode === "account";
+      const sendingAccountId = accountRef.current.accountId;
+      const requestId = crypto.randomUUID();
 
       // Optimistic user bubble + typing indicator.
       set((s) => ({ [key]: [...s[key], { from: "u", text }, { from: "j", text: "", typing: true }] }) as Partial<PlatformState>);
@@ -48,17 +57,64 @@ export function useUncChat(S: PlatformState, set: Setter): UncSend {
         set((s) => ({ [key]: s[key].map((m) => (m.typing ? { from: "j", text: reply } : m)) }) as Partial<PlatformState>);
 
       const context = inAccount ? buildUncContext(s0, { mode: "account", facts: accountRef.current.facts }) : buildUncContext(s0);
+      const requestController = new AbortController();
+      pendingPolls.current.add(requestController);
+      const requestTimeout = setTimeout(() => requestController.abort(), 60_000);
       fetch("/api/unc/chat", {
         method: "POST",
+        signal: requestController.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ surface, messages: history, context }),
+        body: JSON.stringify({ surface, messages: history, context, requestId }),
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .then((data: { reply?: string; fallback?: boolean }) => {
+        .then((data: { reply?: string; fallback?: boolean; commandId?: string }) => {
+          if (accountRef.current.accountId !== sendingAccountId) return;
           const reply = !data.fallback && typeof data.reply === "string" ? data.reply.trim() : "";
-          finish(reply || canned);
+          finish(reply || (inAccount ? "i couldn’t confirm a response. no completed work has been verified." : canned));
+          if (data.commandId) {
+            const controller = new AbortController();
+            pendingPolls.current.add(controller);
+            const poll = async () => {
+              let lastReply = reply;
+              try {
+                for (let i = 0; i < 120 && !controller.signal.aborted; i++) {
+                  await new Promise<void>((resolve) => {
+                    const done = () => { clearTimeout(timer); controller.signal.removeEventListener("abort", done); resolve(); };
+                    const timer = setTimeout(done, 3000);
+                    controller.signal.addEventListener("abort", done, { once: true });
+                  });
+                  if (controller.signal.aborted || accountRef.current.accountId !== sendingAccountId) return;
+                  const lookup = new AbortController();
+                  const abortLookup = () => lookup.abort();
+                  controller.signal.addEventListener("abort", abortLookup, { once: true });
+                  const lookupTimeout = setTimeout(abortLookup, 10_000);
+                  let result: { status: string; reply: string };
+                  try {
+                    const response = await fetch(`/api/unc/commands?id=${encodeURIComponent(data.commandId!)}`, { signal: lookup.signal, cache: "no-store" });
+                    if (!response.ok) throw new Error("status unavailable");
+                    result = await response.json() as { status: string; reply: string };
+                  } finally { clearTimeout(lookupTimeout); controller.signal.removeEventListener("abort", abortLookup); }
+                  if (controller.signal.aborted || accountRef.current.accountId !== sendingAccountId) return;
+                  if (typeof result.reply !== "string" || !["queued", "running", "waiting", "done", "blocked", "failed", "uncertain"].includes(result.status)) throw new Error("invalid status");
+                  if (!["queued", "running"].includes(result.status) && result.reply !== lastReply) {
+                    set((s) => ({ [key]: [...s[key], { from: "j", text: result.reply }] }) as Partial<PlatformState>);
+                    lastReply = result.reply;
+                    refreshAccountFacts(true);
+                  }
+                  if (["done", "blocked", "failed", "uncertain"].includes(result.status)) return;
+                }
+                if (!controller.signal.aborted) throw new Error("status wait expired");
+              } catch {
+                if (!controller.signal.aborted && accountRef.current.accountId === sendingAccountId) set((s) => ({ [key]: [...s[key], { from: "j", text: "i can’t confirm this run’s status right now. check Routines before requesting the same work again." }] }) as Partial<PlatformState>);
+              }
+              finally { pendingPolls.current.delete(controller); }
+            };
+            void poll();
+          }
         })
-        .catch(() => finish(canned));
+        .catch(() => {
+          if (accountRef.current.accountId === sendingAccountId) finish(inAccount ? "i couldn’t confirm whether your message was processed. check Unc before requesting the same work again." : canned);
+        }).finally(() => { clearTimeout(requestTimeout); pendingPolls.current.delete(requestController); sending.current.delete(key); });
     },
     [set],
   );

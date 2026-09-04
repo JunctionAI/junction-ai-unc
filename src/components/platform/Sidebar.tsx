@@ -67,6 +67,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
   const connLine = inAccount ? accountConnectorLine(facts, factsState.loading) : V.connSummary;
   return (
     <aside
+      className="unc-sidebar"
       style={{
         width: 236,
         flex: "none",
@@ -85,7 +86,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
         <img src="/brand/mascot-small.png" alt="Junction" style={{ width: 42, height: 45, objectFit: "contain" }} />
         <div style={{ minWidth: 0 }}>
           <div data-testid="sidebar-account-name" style={{ fontWeight: 700, fontSize: 16, letterSpacing: "0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={account?.accountName || undefined}>
-            {account?.accountName?.trim() || "Junction"}
+            {account?.accountName?.trim() || (inAccount ? "Business not named" : "Junction")}
           </div>
           <div style={{ fontSize: 10, color: "var(--on-navy-dim)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{account?.accountName?.trim() ? "Junction · Growth agent" : "Growth agent"}</div>
         </div>
@@ -123,7 +124,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
           <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid oklch(0.34 0.05 262)", fontSize: 10, lineHeight: 1.6, color: "var(--faint-on-navy)" }}>
             <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{account.userEmail ?? "Signed in"}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ color: account.autosave === "error" ? "var(--amber)" : "var(--faint-on-navy)" }}>{SAVE_LABEL[account.autosave]}</span>
+              <span data-testid="sidebar-persistence-state" style={{ color: account.autosave === "error" ? "var(--amber)" : "var(--faint-on-navy)" }}>{account.role === "member" ? "Read-only" : SAVE_LABEL[account.autosave]}</span>
               <span>·</span>
               {onWhatUncKnows && (
                 <>

@@ -17,7 +17,7 @@
    path once volume warrants it: a `sum_spend(account_id, since, until)` SQL function using
    (payload->'spend'->>'amount')::numeric over receipts_spend_idx, called via db.rpc. */
 
-import type { ApprovalRecord, ApprovalStatus, Artifact, N8nWorkflow, Receipt, RoutineId, SpendAmount, TasteEvent } from "../types";
+import type { ApprovalRecord, ApprovalStatus, Artifact, ArtifactStatus, N8nWorkflow, Receipt, RoutineId, SpendAmount, TasteEvent } from "../types";
 import type {
   BenchmarkOptin,
   BenchmarkRecord,
@@ -386,13 +386,21 @@ export class SupabaseStore implements Store {
     const row = await unwrap<Row | null>("approvals.select", this.db.from("approvals").select("*").eq("id", approvalId).maybeSingle());
     return row ? rowToApproval(row) : null;
   }
-  async updateApproval(approvalId: string, patch: Partial<Pick<ApprovalRecord, "status" | "decidedAt" | "decidedBy">>) {
+  async updateApproval(approvalId: string, patch: Partial<Pick<ApprovalRecord, "status" | "decidedAt" | "decidedBy">>, expectedStatus?: ApprovalStatus) {
     const row: Row = {};
     if ("status" in patch) row.status = nul(patch.status);
     if ("decidedAt" in patch) row.decided_at = nul(patch.decidedAt);
     if ("decidedBy" in patch) row.decided_by = nul(patch.decidedBy);
-    const out = await unwrap<Row>("approvals.update", this.db.from("approvals").update(row).eq("id", approvalId).select().single());
-    return rowToApproval(out);
+    let query = this.db.from("approvals").update(row).eq("id", approvalId);
+    if (expectedStatus) query = query.eq("status", expectedStatus);
+    try {
+      return rowToApproval(await unwrap<Row>("approvals.update", query.select().single()));
+    } catch (error) {
+      if (!expectedStatus) throw error;
+      const current = await this.getApproval(approvalId);
+      if (current) throw new Error(`approval ${approvalId} already ${current.status}`);
+      throw error;
+    }
   }
   async listApprovals(accountId: string, status?: ApprovalStatus) {
     let q = this.db.from("approvals").select("*").eq("account_id", accountId);
@@ -516,12 +524,20 @@ export class SupabaseStore implements Store {
     const row = await unwrap<Row | null>("artifacts.select", this.db.from("artifacts").select("*").eq("id", artifactId).maybeSingle());
     return row ? rowToArtifact(row) : null;
   }
-  async updateArtifact(artifactId: string, patch: Partial<Pick<Artifact, "status" | "editedBody">>) {
+  async updateArtifact(artifactId: string, patch: Partial<Pick<Artifact, "status" | "editedBody">>, expectedStatus?: ArtifactStatus) {
     const row: Row = {};
     if ("status" in patch) row.status = nul(patch.status);
     if ("editedBody" in patch) row.edited_body = nul(patch.editedBody);
-    const out = await unwrap<Row>("artifacts.update", this.db.from("artifacts").update(row).eq("id", artifactId).select().single());
-    return rowToArtifact(out);
+    let query = this.db.from("artifacts").update(row).eq("id", artifactId);
+    if (expectedStatus) query = query.eq("status", expectedStatus);
+    try {
+      return rowToArtifact(await unwrap<Row>("artifacts.update", query.select().single()));
+    } catch (error) {
+      if (!expectedStatus) throw error;
+      const current = await this.getArtifact(artifactId);
+      if (current) throw new Error(`artifact ${artifactId} changed from ${expectedStatus} to ${current.status}`);
+      throw error;
+    }
   }
   async listArtifacts(accountId: string, opts: ListArtifactsOptions = {}) {
     let q = this.db.from("artifacts").select("*").eq("account_id", accountId);

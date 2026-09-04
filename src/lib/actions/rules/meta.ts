@@ -6,8 +6,8 @@
    it may only WRITE the reasoning line from the numbers in `evidence`.
 
    Verdicts
-     not_enough_data  the evidence gates are not met (spend under the minimum, or the ad set
-                      is younger than minAgeHours) — nothing is judged
+     not_enough_data  the evidence gates are not met (spend under the minimum, or delivery age
+                      is missing / younger than minAgeHours) — nothing is judged
      turn_off         losing money past the cap — proposes meta.adset.pause
      hold             a blocking signal — no change, with a reason code and a next action
      scale            at/under the cap with a clean streak — proposes set_daily_budget
@@ -23,7 +23,7 @@
 
    Reason codes are shared with the n8n policy so the two can be compared on the same data:
      insufficient_or_initial_evidence · pending_3d_scale_streak · pending_product_price ·
-     soft_off_blocked_unclean_measurement · cpa_over_cap · no_results_over_cap ·
+     measurement_not_verified · soft_off_blocked_unclean_measurement · cpa_over_cap · no_results_over_cap ·
      roas_under_floor · fatigue_frequency · fatigue_ctr · learning_hold · budget_not_read ·
      account_daily_budget_ceiling · at_or_below_cap · in_band
    Next actions name what unblocks a hold: GATHER_EVIDENCE · REPAIR_MEASUREMENT ·
@@ -43,6 +43,7 @@ export type ReasonCode =
   | "insufficient_or_initial_evidence"
   | "pending_3d_scale_streak"
   | "pending_product_price"
+  | "measurement_not_verified"
   | "soft_off_blocked_unclean_measurement"
   | "cpa_over_cap"
   | "no_results_over_cap"
@@ -73,11 +74,11 @@ export interface AdsetMetrics {
   ctrBaseline?: number | null;
   /** Current daily budget (account currency); null = not read. */
   dailyBudget: number | null;
-  /** Days since the last budget/creative change; null = unknown. */
+  /** Days since the last budget/creative change; null = unknown and holds when holdDays is on. */
   daysSinceLastChange?: number | null;
-  /** Hours since the ad set started delivering; null = unknown (the age gate is skipped). */
+  /** Hours since the ad set started delivering; null = unknown and fails closed when the age policy is on. */
   ageHours?: number | null;
-  /** Consecutive days (ending today) with CPA at/under the cap; null = not measured. */
+  /** Consecutive days (ending today) with CPA at/under the cap; null holds scaling when the streak policy is on. */
   daysAtOrBelowCapStreak?: number | null;
   /** false = platform revenue and store revenue do not reconcile — an OFF becomes a hold. */
   measurementClean?: boolean | null;
@@ -157,6 +158,14 @@ export const META_ADSET_RULES: readonly Rule[] = [
     reason: (m, p) => `spend ${money(m.spend)} is under the ${money(p.minSpendBeforeJudging)} needed before judging`,
   },
   {
+    id: "age_not_read",
+    verdict: "not_enough_data",
+    reasonCode: "insufficient_or_initial_evidence",
+    nextAction: "GATHER_EVIDENCE",
+    when: (m, p) => p.minAgeHours > 0 && (m.ageHours === undefined || m.ageHours === null),
+    reason: (_m, p) => `delivery age was not read — the ${p.minAgeHours}h minimum cannot be verified`,
+  },
+  {
     id: "too_young",
     verdict: "not_enough_data",
     reasonCode: "insufficient_or_initial_evidence",
@@ -172,6 +181,14 @@ export const META_ADSET_RULES: readonly Rule[] = [
     when: (m, p) => p.cpaCapFromProductPricePct > 0 && m.productPrice === null,
     reason: (_m, p) => `the CPA cap is ${p.cpaCapFromProductPricePct}% of the product price and this ad set has no certified price mapped — holding until it does`,
   },
+  {
+    id: "learning_change_not_read",
+    verdict: "hold",
+    reasonCode: "learning_hold",
+    nextAction: "GATHER_EVIDENCE",
+    when: (m, p) => p.holdDays > 0 && (m.daysSinceLastChange === undefined || m.daysSinceLastChange === null),
+    reason: (_m, p) => `the last budget or creative change was not read — the ${p.holdDays}-day learning hold cannot be verified`,
+  },
   // ----- money protection -----
   {
     id: "soft_off_blocked",
@@ -180,6 +197,14 @@ export const META_ADSET_RULES: readonly Rule[] = [
     nextAction: "REPAIR_MEASUREMENT",
     when: (m, p, caps) => m.measurementClean === false && isOff(m, p, caps),
     reason: (m, _p, caps) => `${cpaStr(m)} reads over the ${money(caps.offLine)} cap, but platform and store revenue do not reconcile — not turning it off on a number I cannot trust`,
+  },
+  {
+    id: "measurement_not_verified",
+    verdict: "hold",
+    reasonCode: "measurement_not_verified",
+    nextAction: "REPAIR_MEASUREMENT",
+    when: (m) => m.measurementClean !== true,
+    reason: () => "platform and store outcomes are not certified as reconciled — no scale or pause until measurement is verified clean",
   },
   {
     id: "turn_off_no_results",
@@ -243,6 +268,14 @@ export const META_ADSET_RULES: readonly Rule[] = [
     nextAction: "GATHER_EVIDENCE",
     when: (m, p) => p.roasFloor > 0 && m.roas < p.roasFloor,
     reason: (m, p) => `${cpaStr(m)} is inside the cap but ROAS ${m.roas.toFixed(2)}× is under the ${p.roasFloor.toFixed(2)}× floor — mixed signal, no change`,
+  },
+  {
+    id: "scale_streak_not_read",
+    verdict: "hold",
+    reasonCode: "pending_3d_scale_streak",
+    nextAction: "GATHER_EVIDENCE",
+    when: (m, p, caps) => m.cpa !== null && m.cpa <= caps.scaleLine && p.scaleStreakDays > 0 && !streakKnown(m),
+    reason: (_m, p, caps) => `CPA is at/under the ${money(caps.scaleLine)} line but the required ${p.scaleStreakDays}-day scale streak was not measured — holding until it is`,
   },
   {
     id: "hold_pending_streak",

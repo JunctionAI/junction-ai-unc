@@ -1,4 +1,4 @@
-/* POST /api/unc/niche-brief — "How I read your market": one model call after the scan.
+/* POST /api/unc/niche-brief — owner-only "How I read your market": one model call after the scan.
 
    Body: { profile?: BusinessProfile }   the scan's profile (from the client's onboarding state);
                                          absent → business_profiles.profile for the account
@@ -13,7 +13,7 @@
    presets (src/lib/runtime/presets). Never blocking: a model failure still stores the band. */
 
 import { generateNicheBrief, readNicheBrief, type ProfileLike } from "@/lib/brain/nicheBrief";
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession, requireAccountSession } from "@/lib/db/session";
 import { unwrap } from "@/lib/db/types";
 import { withErrorCapture } from "@/lib/observability/errors";
 
@@ -55,7 +55,7 @@ async function handleGET() {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   let body: { profile?: unknown } = {};
   try {

@@ -15,17 +15,17 @@
    Store-agnostic: MemoryStore in demo mode, SupabaseStore with the service role otherwise.
    Nothing here reads process.env. */
 
-import { afterApprovalDecision } from "@/lib/brain/hooks";
-import { ALL_SYSTEMS } from "@/lib/platform/catalog";
-import { newId } from "@/lib/runtime/context";
-import type { RunRecord, Store } from "@/lib/runtime/store/interface";
-import type { ApprovalRecord, Receipt, ReceiptKind, RunResult } from "@/lib/runtime/types";
-import { resumeApproval, type ServiceDeps } from "@/worker/service";
+import { afterApprovalDecision } from "../brain/hooks";
+import { ALL_SYSTEMS } from "../platform/catalog";
+import { newId } from "../runtime/context";
+import type { RunRecord, Store } from "../runtime/store/interface";
+import type { ApprovalRecord, Receipt, ReceiptKind, RunResult } from "../runtime/types";
+import { resumeApproval, type ServiceDeps } from "../../worker/service";
 
 /** Record-only decision for a proposal whose run is already finished (nothing to resume). */
 async function recordDecision(deps: ServiceDeps, approval: ApprovalRecord, run: RunRecord, input: { decision: "approved" | "held"; decidedBy?: string }): Promise<{ approval: ApprovalRecord; run: RunResult }> {
   const nowIso = (deps.now ?? (() => new Date()))().toISOString();
-  const decided = await deps.store.updateApproval(approval.id, { status: input.decision, decidedAt: nowIso, decidedBy: input.decidedBy });
+  const decided = await deps.store.updateApproval(approval.id, { status: input.decision, decidedAt: nowIso, decidedBy: input.decidedBy }, "pending");
   await deps.store.appendTasteEvent({ id: newId(), accountId: approval.accountId, approvalId: approval.id, routineId: approval.routineId, action: input.decision, context: { runId: run.id, title: approval.title, decidedBy: input.decidedBy ?? null, proposal: true }, createdAt: nowIso });
   const receipt: Receipt = {
     id: newId(),

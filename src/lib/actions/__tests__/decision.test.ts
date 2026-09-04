@@ -18,8 +18,8 @@ const NODE: DecideNode = {
 };
 
 const ROWS = [
-  { adset_id: "120210000000001", adset_name: "Winner", spend: 420, purchases: 12, purchase_value: 1302, roas: 3.1, frequency: 1.8, ctr: 1.9 },
-  { adset_id: "120210000000002", adset_name: "Loser", spend: 260, purchases: 2, purchase_value: 180, roas: 0.69, frequency: 2.1, ctr: 1.1 },
+  { adset_id: "120210000000001", adset_name: "Winner", spend: 420, purchases: 12, purchase_value: 1302, roas: 3.1, frequency: 1.8, ctr: 1.9, age_hours: 96, days_since_change: 3, streak_days: 3, measurement_clean: true },
+  { adset_id: "120210000000002", adset_name: "Loser", spend: 260, purchases: 2, purchase_value: 180, roas: 0.69, frequency: 2.1, ctr: 1.1, age_hours: 96, days_since_change: 3, streak_days: 3, measurement_clean: true },
 ];
 const ADSETS = [
   { id: "120210000000001", name: "Winner", daily_budget: 60 },
@@ -80,6 +80,18 @@ describe("RulesDecisionProvider", () => {
     expect(d.params).toMatchObject({ actionId: "meta.adset.set_daily_budget", adsetId: "120210000000001", dailyBudget: 72, currentDailyBudget: 60 });
   });
 
+  it("fails closed on live-shaped Meta rows that do not carry reconciliation or learning evidence", async () => {
+    const c = ctx();
+    c.reads.spend.rows = [{ adset_id: "120210000000001", adset_name: "Winner", spend: 420, purchases: 12, purchase_value: 1302, roas: 3.1, frequency: 1.8, ctr: 1.9 }];
+    const d = await new RulesDecisionProvider(new Recording()).decide(NODE, c);
+    expect(d.optionId).toBe("hold");
+    expect(d.terminal).toBe(true);
+    expect(d.params).toMatchObject({ verdict: "keep", evaluated: 1 });
+    expect(d.params!.actionId).toBeUndefined();
+    const table = d.params!.table as { verdict: string; rule: string; reasonCode: string; nextAction: string }[];
+    expect(table[0]).toMatchObject({ verdict: "not_enough_data", rule: "age_not_read", reasonCode: "insufficient_or_initial_evidence", nextAction: "GATHER_EVIDENCE" });
+  });
+
   it("holds (terminal option) when nothing proposes an action, and says why", async () => {
     const c = ctx();
     c.reads.spend.rows = [{ ...ROWS[0], spend: 30 }];
@@ -99,6 +111,44 @@ describe("RulesDecisionProvider", () => {
     // Loser's CPA 130 is inside a 150–200 band (ROAS under floor → hold), so the winner scales.
     expect(d.optionId).toBe("scale");
     expect(d.params).toMatchObject({ actionId: "meta.adset.set_daily_budget", adsetId: "120210000000001" });
+  });
+
+  it("overlays only allowlisted finite nonnegative values from the promoted node policy", async () => {
+    const node: DecideNode = {
+      ...NODE,
+      policy: {
+        kind: "meta.adset",
+        preset: { targetCpa: 150, maxCpa: 100, scaleStepPct: 50 },
+      },
+    };
+    const c = ctx();
+    c.reads.spend.rows = [ROWS[0]];
+    const d = await new RulesDecisionProvider(new Recording(), { presets: staticPresetSource({ targetCpa: 40, maxCpa: 70 }) }).decide(node, c);
+    // target 150 / max 100 is repaired to a coherent 150 / 150 band. The 50% policy step is
+    // still bounded by the non-overridable account/default maxBudgetChangePct of 25%.
+    expect(d.optionId).toBe("scale");
+    expect(d.params).toMatchObject({ dailyBudget: 75 });
+    expect(d.label).toContain("(+25%)");
+
+    const malformed = {
+      ...NODE,
+      policy: { kind: "meta.adset", preset: { targetCpa: "150", maxCpa: -1, roasFloor: Number.POSITIVE_INFINITY, maxBudgetChangePct: 500 } },
+    } as unknown as DecideNode;
+    const rejected = await new RulesDecisionProvider(new Recording(), { presets: staticPresetSource({ targetCpa: 40, maxCpa: 70 }) }).decide(malformed, ctx());
+    expect(rejected.optionId).toBe("turn_off");
+  });
+
+  it("a policy dailyBudgetCap tightens but can never widen the account cap", async () => {
+    const c = ctx();
+    c.reads.spend.rows = [ROWS[0]]; // 60/day -> 72/day
+    const policyCap: DecideNode = { ...NODE, policy: { kind: "meta.adset", dailyBudgetCap: 70 } };
+    const byPolicy = await new RulesDecisionProvider(new Recording()).decide(policyCap, c);
+    expect(byPolicy.optionId).toBe("hold");
+    expect((byPolicy.params!.table as { reasonCode: string }[])[0].reasonCode).toBe("account_daily_budget_ceiling");
+
+    const widerPolicy: DecideNode = { ...NODE, policy: { kind: "meta.adset", dailyBudgetCap: 500 } };
+    const byAccount = await new RulesDecisionProvider(new Recording()).decide(widerPolicy, ctx({ caps: { currency: "NZD", perDay: 70, perMonth: 3000 }, reads: c.reads }));
+    expect(byAccount.optionId).toBe("hold");
   });
 
   it("caps.perDay is the account budget ceiling: a scale that breaks it becomes a hold", async () => {

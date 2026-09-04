@@ -480,7 +480,7 @@ function DemoHome({ V, live = null, telemetry = null, accountMode = false }: Hom
           <span style={sectionLabel}>The bar</span>
           <span style={{ fontSize: 12, color: "var(--muted)" }}>— what getting there actually takes, from businesses that did it</span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 10 }}>
           {!liveBar &&
             V.homeBar.map((hb) => (
               <div key={hb.what} style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "16px 18px" }}>
@@ -537,7 +537,7 @@ function DemoHome({ V, live = null, telemetry = null, accountMode = false }: Hom
           </div>
           <span style={{ flex: "none", fontSize: 13, fontWeight: 700, color: "var(--cyan-text)" }}>{V.gamRank}</span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 8 }}>
           {V.gamCats.map((gc3) => (
             <button key={gc3.name} onClick={gc3.open} className="hov-border-cyan" style={{ textAlign: "left", background: "white", border: "1px solid var(--card-border)", borderRadius: 12, padding: "13px 14px", cursor: "pointer" }}>
               <div style={{ fontSize: 12.5, fontWeight: 600 }}>{gc3.name}</div>
@@ -586,7 +586,7 @@ function DemoHome({ V, live = null, telemetry = null, accountMode = false }: Hom
         </div>
       </section>
 
-      <div data-buddy="Everything I do leaves a receipt. Check my work anytime." style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 44, marginTop: 44 }}>
+      <div data-buddy="Everything I do leaves a receipt. Check my work anytime." style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 44, marginTop: 44 }}>
         <section>
           <div style={{ fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 14, fontWeight: 600 }}>Completed today</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -936,7 +936,7 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
           <span style={sectionLabel}>The bar</span>
           <span style={{ fontSize: 12, color: "var(--muted)" }}>— what getting there actually takes, from businesses that did it</span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 10 }}>
           {liveBar.map((hb) => (
             <BarCard key={hb.what} hb={hb} onFix={() => V.openCategory(hb.fixCategory)} />
           ))}
@@ -956,7 +956,7 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
             </div>
             <span style={{ flex: "none", fontSize: 13, fontWeight: 700, color: "var(--cyan-text)" }}>{auto.pct}</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 8 }}>
             {auto.cats.map((gc) => (
               <button key={gc.name} onClick={() => V.openCategory(gc.name)} className="hov-border-cyan" style={{ textAlign: "left", background: "white", border: "1px solid var(--card-border)", borderRadius: 12, padding: "13px 14px", cursor: "pointer" }}>
                 <div style={{ fontSize: 12.5, fontWeight: 600 }}>{gc.name}</div>
@@ -1009,7 +1009,7 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
       </section>
 
       {/* ---- receipts + running ---- */}
-      <div data-buddy="Everything I do leaves a receipt. Check my work anytime." style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 44, marginTop: 44 }}>
+      <div data-buddy="Everything I do leaves a receipt. Check my work anytime." style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 44, marginTop: 44 }}>
         <section>
           <div style={{ fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 14, fontWeight: 600 }}>Completed</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

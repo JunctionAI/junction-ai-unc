@@ -1,6 +1,6 @@
 # Unc — the six-founder beta (Decision 11, 2026-09-02)
 
-Six businesses Junction already knows get a seeded Unc account before they sign up, so their
+Six businesses Junction already knows get a seeded Unc account before they first sign in, so their
 first login lands on a goal, a plan and a Connectors card that already names their platforms —
 not a blank onboarding. Everything here is built from the client files on Drive and Junction's
 own work history; **nothing numeric was invented** (an unknown baseline is NULL in the
@@ -12,7 +12,7 @@ database, never 0, and every proposed goal line says so).
 | The seed as SQL (committed, generated) | `scripts/beta/seed-beta.sql` — `--sql` output, for the Supabase SQL editor / Management SQL endpoint |
 | Standalone build config | `scripts/beta/tsconfig.json` |
 | Invite table + attach RPC | `supabase/migrations/0009_beta_invites.sql` — `beta_invites` (service-role only) + `accept_beta_invites()` |
-| The attach call | `src/lib/db/accountState.ts` `acceptBetaInvites()` — run by `ensureAccount()` before `create_account`, and by `requireAccountSession()` |
+| The attach call | `src/lib/db/accountState.ts` `acceptBetaInvites()` — run by `ensureAccount()` and `requireAccountSession()` before either refuses an uninvited identity |
 | Tests (schema-checked fake) | `src/lib/db/__tests__/seed-beta.test.ts`, `accountState.test.ts` (attach paths), `src/components/platform/__tests__/homeView.test.ts` |
 
 ## Running the seed
@@ -90,33 +90,33 @@ to confirm on the invite call. Deadlines are ~6 months out (2027-03-01) unless t
 
 ## Invite flow (built 2026-09-02)
 
-1. **Apply migration 0009** (`supabase/migrations/0009_beta_invites.sql`) with the rest of the
-   migrations — before the build that carries this doc is deployed. (A deployed app without
-   0009 still signs people in: `acceptBetaInvites()` reads PostgREST's "function not found" as
-   "no invites" and warns in the server/browser console; nothing else is blocked.)
-2. **Seed** (above) — node seeder or `scripts/beta/seed-beta.sql`. Accounts exist;
-   `account_members` is empty for them — there is no `auth.users` row until the founder signs up.
+1. **Apply every migration** through `20260903144000_private_beta_admission.sql` before this
+   build is deployed. Without 0009 the identity can authenticate but no invite can attach, so
+   the app correctly refuses account access rather than creating an empty tenant.
+2. **Seed** (above) — node seeder or `scripts/beta/seed-beta.sql`. Accounts exist and
+   `account_members` is empty for them.
 3. **Claim** — one `beta_invites` row per founder, `email` (lower-cased) → `account_id`,
    written by Tom with the service role. The insert per founder is at the end of each block in
    `scripts/beta/seed-beta.sql`, **commented out** with a `'[EMAIL: <founder>]'` placeholder:
    fill the address, uncomment, run. Emails are never stored in the repo.
-4. **Email** — Tom sends the invite (drafts below) pointing at `getjunction.ai/app`. Magic-link
-   sign-up with the same address.
+4. **Provision Auth, then email** — create/invite that exact address in Supabase Auth Admin
+   (and keep public sign-ups disabled), then Tom sends the invite pointing at
+   `getjunction.ai/app`. The login form sets `shouldCreateUser:false`; unknown addresses do
+   not create identities.
 5. **Attach on first login** — `ensureAccount()` (`src/lib/db/accountState.ts`, called from
    `useAccountPersistence` on /app mount) runs `acceptBetaInvites()` → `db.rpc("accept_beta_invites")`
-   **before** `listMemberships()` / `create_account()`. The RPC (security definer) reads the
+   **before** `listMemberships()`. The RPC (security definer) reads the
    signed-in user's address from `auth.users` — only once `email_confirmed_at` is set, which the
    magic link does — matches open invites, inserts the `account_members` row(s) under a row lock
    and marks them accepted. `listMemberships()` then finds the seeded account, `loadAccountState()`
    returns `found = true` (the seed writes `account_state_meta`), and the founder lands on Home
    with their goal, plan and Connectors card — the client's local state is **not** written over
-   the seed (`accountState.test.ts` + `seed-beta.test.ts` pin this end to end). The server-side
-   routes that create accounts on a race (`requireAccountSession({ createAccount: true })` —
-   billing, the Shopify install entry) accept invites first too.
-6. **Wrong-address sign-up** (they use a different mailbox): no invite matches → an empty
-   account is created as today. Recovery = add a second `beta_invites` row for that address,
-   delete the empty account (cascade removes the membership), have them sign in again — the
-   RPC is idempotent and runs on every sign-in.
+   the seed (`accountState.test.ts` + `seed-beta.test.ts` pin this end to end). Billing, connector,
+   model, and other session routes use the same membership boundary.
+6. **Wrong address:** no invite matches, so no account is created and cost-bearing APIs return
+   `403 invite_required`. Recovery = pre-create/invite the correct Auth address and add a
+   matching `beta_invites` row. `20260903144000_private_beta_admission.sql` revokes the old
+   `create_account` RPC from all client roles as the database backstop.
 
 ## Known gaps
 

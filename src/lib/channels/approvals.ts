@@ -80,6 +80,7 @@ export const unlinkedLine = (appName = "Junction") => `I don't know this number 
 export const linkFailedLine = (reason: "unknown" | "expired" | "channel_mismatch") =>
   reason === "expired" ? "That code has expired — open Junction → Channels and get a fresh one; they last 10 minutes." : reason === "channel_mismatch" ? "That code was issued for a different channel. Open Junction → Channels and pick this one." : "That code didn't match anything. Open Junction → Channels and copy the code it shows you.";
 export const NO_MODEL_LINE = "I've got your message — it's in our thread in the app. I can't answer live from here right now; open Junction and I'll pick it up there.";
+export const SMS_NO_MODEL_LINE = "your message is saved in our app thread. i can't answer right now — please try again shortly.";
 
 // ---------- proactive push copy ----------
 

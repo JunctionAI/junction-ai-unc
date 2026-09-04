@@ -1,7 +1,7 @@
 /* Unc's weekly self-review for the caller's account.
 
    GET  → { review: HomeReviewView | null }          the latest stored review
-   POST → { review: HomeReviewView, author, liveFields, rejected }   generate (or regenerate)
+   POST → { review: HomeReviewView, author, liveFields, rejected }   owner-only generate (or regenerate)
           this week's review now — session-bound, idempotent per ISO week (one row per
           account + week_start; a POST rewrites this week's row)
    or   { fallback: true }   demo mode (no database) — the UI keeps its demo bubble
@@ -14,7 +14,7 @@
    is stored instead. Keys never reach the client. */
 
 import { createTextClient } from "@/lib/llm/router";
-import { requireAccountSession, type AccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession, requireAccountSession, type AccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { homeTelemetryForAccount } from "@/lib/telemetry/home";
 import { afterSelfReview } from "@/lib/brain/hooks";
@@ -40,7 +40,7 @@ async function handleGET() {
 }
 
 async function handlePOST() {
-  const session = await requireAccountSession();
+  const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   try {
     const store = getStore();

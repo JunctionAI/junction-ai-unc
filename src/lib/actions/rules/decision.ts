@@ -13,7 +13,7 @@
 import { renderTemplate } from "../../runtime/context";
 import { isActionId } from "../registry";
 import type { DecideNode, Decision, DecisionProvider, RunContext } from "../../runtime/types";
-import { resolveMetaPreset, type PresetSource } from "../presets";
+import { resolveMetaPreset, withPresetDefaults, type MetaPreset, type PresetSource } from "../presets";
 import { redactId } from "../meta/graph";
 import { adsetMetricsFromRow, evaluateAdsets, type AccountEvaluation, type Verdict } from "./meta";
 
@@ -89,6 +89,35 @@ export interface RulesDecisionOptions {
   log?: (event: string, fields: Record<string, unknown>) => void;
 }
 
+const POLICY_PRESET_KEYS = ["targetCpa", "maxCpa", "roasFloor", "minSpendBeforeJudging", "fatigueFrequency", "fatigueCtrDrop", "scaleStepPct", "holdDays"] as const satisfies readonly (keyof MetaPreset)[];
+
+/** A promoted spec is still untrusted database JSON. Accept only the exact numeric policy
+    vocabulary this ruleset owns; strings, NaN/Infinity, negatives and surprise keys cannot
+    steer a decision. `withPresetDefaults` below re-applies cross-field coherence. */
+function policyPreset(node: DecideNode): Partial<MetaPreset> {
+  const policy = node.policy as unknown;
+  if (!policy || typeof policy !== "object" || (policy as { kind?: unknown }).kind !== "meta.adset") return {};
+  const raw = (policy as { preset?: unknown }).preset;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Partial<MetaPreset> = {};
+  for (const key of POLICY_PRESET_KEYS) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) out[key] = value;
+  }
+  return out;
+}
+
+/** A routine may make the account rail stricter, never wider. perDay <= 0 means the account
+    supplied no usable cap; a policy value of zero is deliberately the strictest possible cap. */
+function decisionDailyBudgetCap(node: DecideNode, accountCap: number): number | null {
+  const account = Number.isFinite(accountCap) && accountCap > 0 ? accountCap : null;
+  const policy = node.policy as unknown;
+  if (!policy || typeof policy !== "object" || (policy as { kind?: unknown }).kind !== "meta.adset") return account;
+  const value = (policy as { dailyBudgetCap?: unknown }).dailyBudgetCap;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return account;
+  return account === null ? value : Math.min(account, value);
+}
+
 export class RulesDecisionProvider implements DecisionProvider {
   private readonly bindings: readonly RuleBinding[];
   constructor(
@@ -116,9 +145,12 @@ export class RulesDecisionProvider implements DecisionProvider {
       }
     }
     const metrics = rows.map((r) => adsetMetricsFromRow(r, budgets.size ? budgets : undefined)).filter((m) => m.adsetId);
-    const preset = await resolveMetaPreset(ctx.account.accountId, this.opts.presets ?? null, ctx.routineId);
-    // The account's per-day cap is the daily budget ceiling: a scale step may not take the total over it.
-    const account = evaluateAdsets(metrics, preset, { accountDailyBudgetCap: ctx.caps.perDay > 0 ? ctx.caps.perDay : null });
+    const accountPreset = await resolveMetaPreset(ctx.account.accountId, this.opts.presets ?? null, ctx.routineId);
+    // Routine policy is read only from this effective decide node. Because the node lives in
+    // draft_spec/live_spec, a routine_params edit cannot steer a live run before promotion.
+    const preset = withPresetDefaults({ ...accountPreset, ...policyPreset(node) });
+    // The versioned routine ceiling may tighten the account's per-day cap, never widen it.
+    const account = evaluateAdsets(metrics, preset, { accountDailyBudgetCap: decisionDailyBudgetCap(node, ctx.caps.perDay) });
     const pick = account.pick;
 
     const optionId = (pick && binding.optionByVerdict[pick.verdict]) || binding.noActionOption;

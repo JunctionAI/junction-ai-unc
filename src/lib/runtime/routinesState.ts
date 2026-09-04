@@ -13,6 +13,7 @@
    availability: a store-only routine for a business with no store is "For stores — not your
    model" — off, not recommended, still listed honestly. Unknown type ⇒ nothing is hidden. */
 
+import { connectorHasRealSync } from "../connectors/sync";
 import { unwrap, type DbClient } from "../db/types";
 import { skillSourceFor } from "../n8n/registry";
 import { ALL_SYSTEMS } from "../platform/catalog";
@@ -86,8 +87,11 @@ const ID_BY_NAME = new Map(ALL_SYSTEMS.map((s) => [s.name, s.id]));
 
 export async function connectedPlatformsFor(db: DbClient | null, accountId: string): Promise<string[]> {
   if (!db) return [];
-  const rows = await unwrap<{ platform: string }[]>("connectors.select", db.from("connectors").select("platform").eq("account_id", accountId).eq("status", "connected"));
-  return [...new Set(rows.map((r) => r.platform))];
+  const rows = await unwrap<{ platform: string; last_sync_result: string | null }[]>(
+    "connectors.select",
+    db.from("connectors").select("platform, last_sync_result").eq("account_id", accountId).eq("status", "connected"),
+  );
+  return [...new Set(rows.filter((r) => connectorHasRealSync("connected", r.last_sync_result)).map((r) => r.platform))];
 }
 
 /** The latest plan's phase-1 routine names → catalog ids (unknown names dropped). */

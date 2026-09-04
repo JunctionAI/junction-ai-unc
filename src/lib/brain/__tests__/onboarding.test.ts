@@ -8,8 +8,8 @@ import { onboardingAnswersFromState } from "@/components/platform/useOnboardingM
 import { coerceOnboardingAnswers, onboardingMemories, onboardingSourceRef } from "../onboarding";
 import { ACCT, brainDb } from "./helpers";
 
-const sessionMock = vi.hoisted(() => ({ requireAccountSession: vi.fn() }));
-vi.mock("@/lib/db/session", () => ({ requireAccountSession: sessionMock.requireAccountSession }));
+const sessionMock = vi.hoisted(() => ({ requireAccountOwnerSession: vi.fn() }));
+vi.mock("@/lib/db/session", () => ({ requireAccountOwnerSession: sessionMock.requireAccountOwnerSession }));
 
 import { POST } from "@/app/api/unc/onboarding/route";
 
@@ -61,17 +61,17 @@ describe("onboardingMemories", () => {
 
 describe("POST /api/unc/onboarding", () => {
   it("demo mode passes the session's fallback through; bad bodies → 400", async () => {
-    sessionMock.requireAccountSession.mockResolvedValue(Response.json({ fallback: true }));
+    sessionMock.requireAccountOwnerSession.mockResolvedValue(Response.json({ fallback: true }));
     expect(await (await post({ answers: {} })).json()).toEqual({ fallback: true });
     const db = brainDb();
-    sessionMock.requireAccountSession.mockResolvedValue({ userId: "u1", email: null, accountId: ACCT, db, service: db });
+    sessionMock.requireAccountOwnerSession.mockResolvedValue({ userId: "u1", email: null, accountId: ACCT, role: "owner", db, service: db });
     expect((await post("{nope")).status).toBe(400);
     expect((await post({ answers: { deadline: "2026-12-31" } })).status).toBe(400);
   });
 
   it("writes the memories with the service-role client (idempotent on a second agree)", async () => {
     const db = brainDb();
-    sessionMock.requireAccountSession.mockResolvedValue({ userId: "u1", email: null, accountId: ACCT, db, service: db });
+    sessionMock.requireAccountOwnerSession.mockResolvedValue({ userId: "u1", email: null, accountId: ACCT, role: "owner", db, service: db });
     const answers = onboardingAnswersFromState(richState());
     const r1 = await (await post({ answers })).json();
     expect(r1).toEqual({ written: 14, merged: 0, failed: 0 });
@@ -79,5 +79,14 @@ describe("POST /api/unc/onboarding", () => {
     const r2 = await (await post({ answers })).json();
     expect(r2).toEqual({ written: 0, merged: 14, failed: 0 });
     expect(db.rows("memories")).toHaveLength(14);
+  });
+
+  it("passes an owner-only denial through before writing memories", async () => {
+    const db = brainDb();
+    sessionMock.requireAccountOwnerSession.mockResolvedValue(Response.json({ error: "only the account owner can do that", code: "owner_only" }, { status: 403 }));
+    const res = await post({ answers: onboardingAnswersFromState(richState()) });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "owner_only" });
+    expect(db.rows("memories")).toHaveLength(0);
   });
 });

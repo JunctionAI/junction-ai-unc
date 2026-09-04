@@ -14,8 +14,7 @@ import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 
-/** `request` is optional so the unit tests can call POST() bare (→ default locale, base price). */
-async function handlePOST(request?: Request) {
+async function handlePOST(request: Request) {
   const env = billingEnv();
   if (!env) return Response.json({ fallback: true });
   const session = await requireBillingSession();

@@ -10,11 +10,11 @@
    POST /api/routines/state  { routineId, enabled }  → { routine }   persist the switch
    (the view then dry-runs it through POST /api/routines/run when it was switched on).
 
-   Session-bound (src/lib/db/session.ts): always the caller's own account. Store =
-   getStore() (SupabaseStore with the service role); connectors + the plan through the
-   session's service client. */
+   Session-bound (src/lib/db/session.ts): always the caller's own account. GET is readable by
+   members; changing a switch is owner-only. Store = getStore() (SupabaseStore with the
+   service role); connectors + the plan go through the session's service client. */
 
-import { requireAccountSession } from "@/lib/db/session";
+import { requireAccountOwnerSession, requireAccountSession } from "@/lib/db/session";
 import { routinesStateForAccount, setRoutineEnabled } from "@/lib/runtime/routinesState";
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
@@ -46,7 +46,7 @@ async function handlePOST(req: Request) {
   const routineId = typeof body.routineId === "string" ? body.routineId.trim() : "";
   if (!ROUTINE_ID_RE.test(routineId)) return Response.json({ error: "routineId must look like D0x-W0y" }, { status: 400 });
   if (typeof body.enabled !== "boolean") return Response.json({ error: "enabled must be true or false" }, { status: 400 });
-  const session = await requireAccountSession();
+  const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   try {
     const routine = await setRoutineEnabled({ store: getStore(), db: session.service }, session.accountId, routineId, body.enabled);

@@ -113,6 +113,16 @@ describe("POST /api/approvals/<id>", () => {
     // untouched
     expect((await store.getApproval(theirs.approval!.id))!.status).toBe("pending");
   });
+  it("accounts mode: members cannot approve or hold on the owner's behalf", async () => {
+    const store = new SupabaseStore(db);
+    const mine = await seedPaused(store, ACCT);
+    db.rows("account_members")[0].role = "member";
+    const res = await post(mine.approval!.id, { decision: "held" });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: "owner_only" });
+    expect((await store.getApproval(mine.approval!.id))!.status).toBe("pending");
+    expect(db.rows("taste_events")).toHaveLength(0);
+  });
   it("accounts mode: Hold persists through the store, stamps decided_by = the caller, returns the receipts; second decision → 409", async () => {
     const store = new SupabaseStore(db);
     const mine = await seedPaused(store, ACCT);

@@ -12,6 +12,7 @@
 
 import { recallPlaybooks, renderPlaybooksForPrompt, type Playbook, type PlaybookDomain, type PlaybookRowLite, type RecallOptions } from "../brain/playbooks";
 import { splitBrain } from "./context";
+import { CONVERSATIONAL_VOICE, SMS_VOICE, type UncVoice } from "./voice";
 
 export type UncSurface = "corner" | "onboarding";
 
@@ -65,6 +66,7 @@ export const APPROVAL_ASK_RULE = `When you explain a pending approval (what it i
 const VOICE_AND_GUARDRAILS = `You are Unc, the Junction operator — the marketing department that runs a founder's growth beside them. You are chatting inside the Junction product. Your register: "In your corner."
 
 Voice rules (non-negotiable):
+- This text-only reply does not execute work. Never claim that this message started, queued, enabled, disabled, approved, sent or published anything. Executable requests are handled separately by the structured dispatcher, which returns its own receipt-backed response. Discuss past work only when the supplied account evidence confirms it.
 - First person, present tense. Numbers over adjectives.
 - Lead with the answer or the recommendation in the first sentence. The reason comes second; the detail only when the decision needs it.
 - One idea per sentence. Never restate the question. Never explain what you're about to do — do it.
@@ -85,14 +87,14 @@ Stance (how I disagree):
 Product guardrails (absolute):
 - You propose; the founder approves. Nothing publishes, sends, or spends without their explicit okay. If they ask you to just do something consequential, stage it as a proposal awaiting their approval instead.
 - Creative drafts obey the same truth rule. When you write hooks, headlines, ad or email copy, do not invent facts, statistics, history, awards, customer counts or quotes. Use only what the ACCOUNT CONTEXT, the founder's memories, or the scanned business profile support. If a strong hook needs a claim you can't source, write the placeholder [needs a real fact: what would make this true] instead of the claim, and say the founder can supply it.
-- Connector state governs everything behind it. If a platform's connector in the ACCOUNT CONTEXT is "needs_reconnect", "expired", "disconnected", "off" or "error", then every routine that reads or writes that platform is blocked — no results from it are current, nothing there has run or changed since it broke. Say that first, name the platform, and point the founder to Connectors → Reconnect before discussing that work. Never describe a blocked platform's activity as live.
-- No invented numbers. The ONLY numbers you may state are ones present in the ACCOUNT CONTEXT below or in the "What I know about this founder" section (numbers the founder stated to you count as context; you may do simple arithmetic on them and say so). If neither contains a number the founder asks for, say plainly that you don't have that number yet — never estimate or make one up.
+- Connector state governs everything behind it. If a platform's connector in the ACCOUNT CONTEXT is "needs_reconnect", "expired", "disconnected", "off", "error", "connecting" or anything other than "connected" after a real sync, then every routine that reads or writes that platform is blocked — no results from it are current, nothing there has run or changed since it broke. Say that first, name the platform, and point the founder to Connectors before discussing that work. Never describe a blocked platform's activity as live. Never call a connector "connected" if its status is "connecting".
+- No invented numbers. The ONLY numbers you may state are: (1) CERTIFIED METRICS below (catalog snapshots — a missing key is absent, never 0), (2) goal and resource numbers in ACCOUNT CONTEXT, (3) numbers the founder stated to you (you may do simple arithmetic on those and say so). Never cite an ad-hoc read, a playbook, or a guess. If a number is not in those three places, say you don't have it yet.
 - Playbooks are Junction's methods, not facts about the founder's business. When a JUNCTION PLAYBOOK NOTES section is present, draw on it to shape the recommendation — name the method in plain words — but never present a playbook line as something that happened in this account, and never take a number from it.
 - Ground answers in the account context: their goal, pace, plan phases, pending approvals, routines and connectors. Point to the specific routine or approval when relevant.
 - ${APPROVAL_ASK_RULE}
 
 Format (chat bubble):
-- Up to 3 short sentences by default (see the voice rules for when more is earned). Plain text only — no markdown, no bullet points, no headings, no emojis.`;
+- Up to 3 short sentences by default (see the voice rules for when more is earned). Plain text only — no markdown, no bullet points, no headings. Emoji use follows the conversational voice below.`;
 
 const SURFACE_NOTES: Record<UncSurface, string> = {
   corner: `Setting: the in-app chat. You run this account day to day. Answer questions about the numbers, explain decisions and reasoning, and when the founder asks for work, say what you'd run and what would come back for their approval.`,
@@ -107,6 +109,10 @@ export const MEMORY_RULE = `Memory rules:
 export const PLAYBOOK_RULE = `Playbook rule: these are Junction's methods, not facts about the founder's business — they inform the recommendation, never the numbers. Use one when it fits the question; say which method you're drawing on in plain words; never quote a playbook as if it were the founder's data.`;
 
 export const PLAYBOOK_NOTES_HEADER = "JUNCTION PLAYBOOK NOTES (use when relevant, never quote as the founder's data):";
+
+export const CERTIFIED_METRICS_HEADER = "CERTIFIED METRICS (catalog snapshots via getMetric — the only live numbers I may cite besides goal/resources and what the founder stated). A missing key is not 0:";
+
+export const CERTIFIED_METRICS_RULE = `Certified-metrics rule: these are locked catalog snapshots. Quote a line only if it is listed. Never treat a missing key as 0. Never mix in a number from ACCOUNT CONTEXT signals, playbooks, or an ad-hoc platform read.`;
 
 export function renderMemorySection(memories: string[]): string {
   if (!memories.length) return "";
@@ -124,21 +130,32 @@ export function renderPlaybookSection(notes: string | undefined): string {
   return n ? `${n}\n\n${PLAYBOOK_RULE}` : "";
 }
 
-/** `context` may carry `memories` (string lines), `profile` (text) and `playbooks` (the rendered
-    notes) from attachBrain — they are rendered as their own sections, above the JSON account state. */
-export function buildUncSystemPrompt(context: unknown, surface: UncSurface): string {
-  const note = SURFACE_NOTES[surface] ?? SURFACE_NOTES.corner;
+export function renderCertifiedMetricsSection(block: string | undefined): string {
+  const n = (block ?? "").trim();
+  return n ? `${CERTIFIED_METRICS_HEADER}\n${n}\n\n${CERTIFIED_METRICS_RULE}` : "";
+}
+
+/** `context` may carry `memories` (string lines), `profile` (text), `playbooks` and `certifiedMetrics`
+    from attachBrain — they are rendered as their own sections, above the JSON account state. */
+export function buildUncSystemPrompt(context: unknown, surface: UncSurface, voice: UncVoice = "default"): string {
+  const note = voice === "sms" ? "Setting: an SMS conversation with the founder, sharing the same account context and conversation as the app." : SURFACE_NOTES[surface] ?? SURFACE_NOTES.corner;
   const { context: base, brain } = splitBrain(context);
-  const sections = [VOICE_AND_GUARDRAILS, note];
+  // Replace the conflicting presentation rules; all authority/truth rules stay intact.
+  const rules = voice === "sms"
+    ? VOICE_AND_GUARDRAILS.replace(APPROVAL_ASK_RULE, "When explaining a pending approval, include the SMS decision instructions below.")
+    : VOICE_AND_GUARDRAILS;
+  const sections = [rules, note, CONVERSATIONAL_VOICE, ...(voice === "sms" ? [SMS_VOICE] : [])];
   if (brain) {
     const mem = renderMemorySection(brain.memories);
     const prof = renderProfileSection(brain.profile);
     const play = renderPlaybookSection(brain.playbooks);
+    const metrics = renderCertifiedMetricsSection(brain.certifiedMetrics);
     if (mem) sections.push(mem);
     if (prof) sections.push(prof);
     if (play) sections.push(play);
+    if (metrics) sections.push(metrics);
   }
-  sections.push(`ACCOUNT CONTEXT (the founder's live account state — your only source of numbers besides the memories above):\n${JSON.stringify(base, null, 0)}`);
+  sections.push(`ACCOUNT CONTEXT (the founder's live account state — goal, plan, connectors, approvals. Live KPI numbers live in CERTIFIED METRICS, not here):\n${JSON.stringify(base, null, 0)}`);
   return sections.join("\n\n");
 }
 

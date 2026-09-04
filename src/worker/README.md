@@ -7,17 +7,17 @@ dry-run-only**:
 - `LIVE_MODE_ENABLED = false` in `service.ts` is a hard constant. Every run the worker or
   the API starts is `mode: "dry_run"`. Flipping it is a product decision gated by the
   founder (Wave 2) — see the last section.
-- The only Executor shipped is `RefusingExecutor`: every mutation returns
-  `{ ok: false, error: "not_implemented — mutations are Wave 2, founder-gated" }`, and the
-  engine fails the run closed with a receipt saying so. This holds even for a live run
-  with an approved gate.
+- The shipped `ActionExecutor` shapes guarded previews for typed Meta actions. Unknown action
+  ids fail closed as `not_implemented`; campaign creation is deliberately preview-only; and
+  `LIVE_MODE_ENABLED = false` prevents every provider-side mutation.
 - Credentials are chosen in `wiring.ts`: `ConnectorCredentialProvider` (real tokens from
   `connector_secrets`) when Supabase (service role) + `CONNECTOR_SECRET_KEY` are configured,
   else `FixtureCredentialProvider`. `FixtureCredentialProvider` returns fixture
   markers, never tokens. Nothing in `src/worker/` reads `.env` files or platform tokens
   from `process.env`.
-- Dry runs never pause: a gate becomes a `Would ask <approver>: …` draft receipt and the
-  run finishes. `waiting_approval` only arises from live runs, which are disabled.
+- A dry-run gate becomes a `Would ask <approver>: …` draft receipt. A producer may pause at
+  `waiting_input` for missing business truth, and an async n8n producer may remain `running`
+  until its signed callback arrives; neither state is an outward action.
 
 ## Module map
 
@@ -38,11 +38,11 @@ dry-run-only**:
 | `log.ts` | JSON-lines logger with unconditional secret redaction (key names and token-shaped values). |
 | `../lib/llm/budget.ts` | Per-account monthly model-spend cap: the loop skips an over-cap account's produce routines for the tick (`report.budgetSkipped`), the router refuses the call, chat / produce answer the honest line. |
 | `providers/connectorReader.ts` | `WorkerConnectorReader` — resolves credentials, dispatches by platform, maps reader answers onto the engine's `ReadResult`. |
-| `providers/executor.ts` | `RefusingExecutor`. |
+| `providers/executor.ts` | `ActionExecutor`: typed Meta previews/actions, guard/risk/live-mode enforcement, and explicit unsupported-action blockers. |
 | `providers/llmDecision.ts` | `LlmDecisionProvider` for `rule: { kind: "llm" }` decide nodes (env-gated), strict `{optionId, reasoning}` validation, deterministic fallback on any failure; the FOUNDER block (tone / decision style / taste lines) in the prompt and the taste-derived spend ceiling applied after every decision (docs/PROACTIVE.md). |
 | `readers/{shopify,klaviyo,ga4,meta,googleAds,hubspot}.ts` | `read(query, creds, opts)` per platform: request shaping for real read endpoints + fixture rows. |
 | `readers/http.ts`, `readers/types.ts` | Shared fetch-with-timeout, window parsing, `ReaderResult` contract. |
-| `../lib/runtime/store/index.ts` | `getStore()` — process-wide `MemoryStore` (TODO Supabase swap). |
+| `../lib/runtime/store/index.ts` | `getStore()` — shared `SupabaseStore` when the service role is configured; process-local `MemoryStore` otherwise. |
 | `../app/api/routines/run/route.ts` | `POST {accountId, routineId}` → dry-run now. |
 | `../app/api/routines/resume/route.ts` | `POST {runId, decision}` → resume a paused run. |
 | `../../deploy/worker/{Dockerfile,fly.toml}` | Fly.io deployment sketch. |
@@ -91,7 +91,7 @@ Fields whose key looks like a secret, or whose value looks like a token, are rep
 
 | Var | Required | Used by |
 |---|---|---|
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY` / `LLM_CUSTOM_BASE_URL` | no | Model providers for `LlmDecisionProvider` (task `routine_decision`: fast tier by default, `max_tokens` 4000, effort low) and the self-review (task `self_review`: Sonnet 5 by default). Per-task overrides `LLM_MODEL_<TASK>`; per-account picks in `account_model_prefs`. See `docs/MODELS.md`. Without any provider every `llm`-rule decide node resolves to its declared fallback with a reasoning line that says so. The worker never reads or logs the values. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY` / `LLM_CUSTOM_BASE_URL` | no | Model providers for decisions and artifact production. `routine_decision` defaults fast (4000 tokens, effort low); `routine_produce` defaults balanced (8000 tokens, effort medium). Per-task overrides use `LLM_MODEL_<TASK>`; the five founder-configurable tasks also support account picks. Without a provider, decisions take their declared fallback and production fails or asks honestly rather than inventing a draft. Values are never logged. See `docs/MODELS.md`. |
 | `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | no | `wiring.ts`: DB accounts source, the `oauth_states` sweep, benchmark segments. Absent → the static `demo` account, no sweep. |
 | `CONNECTOR_SECRET_KEY` (+ `_VERSION`, `_PREVIOUS`) | no | With the DB: `ConnectorCredentialProvider` (live tokens from `connector_secrets`). Absent → `FixtureCredentialProvider`. |
 | `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | no | The Google Ads credential shape (reads are fixture-only today regardless). |
@@ -134,18 +134,16 @@ Both go through `service.ts`, i.e. the same adapters and checks as the loop. Bot
   Returns `{ run: { runId, status, summary, receipts[], approval } }`.
 - `POST /api/routines/resume` — body `{ runId, decision: "approved" | "held", decidedBy? }`.
   404 when the run/approval is unknown, 409 when the run is not `waiting_approval`.
-  Since nothing this app creates ever pauses (dry runs don't), this route answers 404/409
-  today; it exists so the approval UI is wired to the right place for Wave 2. Even then
-  "approved" on a mutating routine fails closed via `RefusingExecutor`.
+  Current service-started runs are dry-run-only, so they do not create new pending mutation
+  approvals. The route remains session-bound for stored approvals and the guarded live path.
 
-**MemoryStore caveat.** `getStore()` returns a process-wide `MemoryStore` (cached on
-`globalThis` so Next's per-route module graphs share it). Runs, receipts, approvals and
-routine states **do not survive a restart**, and the Next server and the worker daemon are
-separate processes with separate memory — a run started by the API is not visible to the
-worker and vice-versa until the Supabase swap below.
+**MemoryStore caveat.** Without a configured Supabase service role, `getStore()` returns a
+process-wide `MemoryStore` (cached on `globalThis`). Runs, receipts, approvals and routine
+states **do not survive a restart**, and the Next server and worker daemon have separate
+memory. With the service role configured, both use `SupabaseStore` and share durable state.
 
-No auth is implemented in these routes; the app middleware (built separately) is expected
-to gate them.
+Accounts mode binds run/resume routes to the authenticated account. Demo mode is intentionally
+unbound, visibly labelled, fixture-backed, and dry-run-only.
 
 ## Readers — "couldn't ask" vs "nothing happened"
 
@@ -174,8 +172,8 @@ failure reasons carry host + path only):
 
 Platforms with no reader yet (instagram, tiktok, linkedin, youtube, search_console, gmail,
 gorgias, xero, quickbooks, slack, web, llm_search, calendar) answer an empty fixture
-result under fixture credentials — so every catalog routine dry-runs end to end — and
-"couldn't ask" under anything else.
+result under fixture credentials; checks may skip and producers may ask for missing business
+context. With non-fixture credentials they return "couldn't ask" until a reader exists.
 
 ## LLM decisions
 
@@ -201,7 +199,7 @@ approval's `reasoning`. Tests inject a fake `LlmClient`; there are no live calls
 | `hubspot.test.ts` | HubSpot search shaping, the engagements pass + median, fixtures, dispatch, the sealed credential |
 | `jobs.test.ts` | `dueJobs` on a fake clock, markers in memory / on the heartbeat / across a restart, a failing job, the hourly `oauth_states` sweep against the schema-checked fake DB |
 | `llmDecision.test.ts` | validator, prompt, provider fallbacks (fake client) |
-| `providers.test.ts` | credentials, ConnectorReader dispatch/provenance, RefusingExecutor incl. an approved live run failing closed, log redaction |
+| `providers.test.ts` / `actionExecutor.test.ts` | credentials, connector dispatch/provenance, typed action previews, unsupported/live blockers, guards, idempotency and log redaction |
 | `loop.test.ts` | full tick on MemoryStore (receipts, dedup across ticks/days), tick budget, error isolation, heartbeat file, start/stop, manual trigger, resume via the service (held / approved-but-refused) |
 | `api-routes.test.ts` | both route handlers end to end against `setStoreForTests` |
 
@@ -227,46 +225,36 @@ fly deploy --config deploy/worker/fly.toml --dockerfile deploy/worker/Dockerfile
 
 Not deployed yet; deploying is a founder-gated step like any other outward action.
 
-## The SupabaseStore swap
+## Durable store selection
 
-`src/lib/runtime/store/supabase.ts` (built separately, same `Store` interface, maps onto
-`supabase/migrations/0001_init.sql` + `0002_runtime_columns.sql`) is not imported anywhere in
-the worker yet. To swap:
-
-1. In `src/lib/runtime/store/index.ts`, construct the SupabaseStore instead of `MemoryStore`
-   in `getStore()` (the TODO marks the line). Nothing else in the worker or the routes changes.
-2. In `src/worker/main.ts`, replace `StaticAccountsSource` with an `AccountsSource` that reads
-   `accounts` + `resource_profiles` (currency, `budget_monthly`, approver) through the same
-   client. The interface is two methods.
-3. `tsconfig.worker.json` currently excludes `supabase.ts` from the standalone build; remove
-   that exclusion (`@supabase/*` is already a dependency).
-4. The scheduler's dedup then survives restarts and the API and the daemon see the same
-   runs — `POST /api/routines/run` results appear in the worker's candidate list and
-   vice-versa.
+`src/lib/runtime/store/index.ts` already selects `SupabaseStore` when a service-role client is
+configured and `MemoryStore` otherwise. `wiring.ts` likewise selects the database-backed
+account source. Before calling a target durable, apply every migration in order and prove
+cross-account isolation plus worker/app visibility with fresh readback; configuration alone is
+not that proof.
 
 ## Wave 2 (founder-gated)
 
-What real executors and live mode would need — none of it is built, and nothing here should
-be flipped without Tom's explicit decision:
+What live graduation still needs; nothing here should be flipped without an explicit release
+decision and a fresh destination readback plan:
 
 1. **`LIVE_MODE_ENABLED = true`** in `service.ts` (a one-line change, deliberately a constant
    so it shows up in review, not an env var that could be set by accident).
-2. **Real executors** per platform behind the engine's three hard rules (approved unexpired
-   gate on this run, live mode, spend caps): Meta `update_adset_budget` / `pause_ad` /
-   `swap_ad_creative` / `create_test_adset` / `create_ad_from_post` / `reduce_daily_budgets`;
-   Klaviyo `update_flow_message` / `add_flow_message` / `update_flow_delay` /
-   `update_segment_definitions`; Shopify `update_page_seo`; HubSpot `update_deal_properties` /
-   `update_deal_stage`. Each needs idempotency (`idempotencyKey` is already on the node), a
-   read-back for the receipt, and a rollback path (`rollback` is already described per node).
+2. **Typed executors beyond Meta**, plus the currently preview-only Meta campaign builder:
+   Klaviyo flow/segment actions, Shopify page SEO, and HubSpot property/stage actions. Every
+   action needs stable target checks, idempotency, exact provider response, fresh readback and a
+   tested rollback. Until then the proposal is useful but execution is explicitly blocked.
 3. ~~A real `CredentialProvider`~~ — built (`ConnectorCredentialProvider`, sealed tokens,
    refresh for Google / Klaviyo / HubSpot, Meta reauth). What remains here is the Google Ads
    **reader** (GAQL `searchStream`; the developer token + customer id are already wired).
-4. **Approval UI → `/api/routines/resume`** with auth (middleware) and `decidedBy` set from
-   the session user, plus expiry handling (the engine already expires stale approvals).
+4. **Approval graduation tests** proving the session identity, exact proposal/action match,
+   expiry, hold path and destination readback for each action class. The UI/routes and decided-by
+   plumbing exist; provider-specific proof does not.
 5. **Live-mode dedup + concurrency**: the engine's per-day dedup covers live runs; the
    worker should additionally take a per-account lease when more than one machine runs.
 6. **Event triggers** (`event:<platform>:<event>`): webhook receivers that call `triggerRun`
    with `triggeredBy: "event"` — the scheduler deliberately never fires these.
 7. **Remaining readers** (search_console, instagram, gorgias, gmail, calendar, …) and
    Klaviyo metric-id resolution, so live reads stop being "couldn't ask". HubSpot is done.
-8. **SupabaseStore swap** above, so anything live is durable and auditable before it is live.
+8. **Target-project durability proof**: apply/read back migrations and prove the app and worker
+   see the same account-scoped run, approval, artifact and receipt state.
