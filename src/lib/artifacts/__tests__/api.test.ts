@@ -149,6 +149,7 @@ describe("POST /api/routines/artifacts (n8n callback)", () => {
     const held = await runRoutine(CATALOG_SPEC_BY_ID["D01-W01"], { account: { accountId: "demo", currency: "NZD", budgetMonthly: 0 }, triggeredBy: "manual" }, adapters, { mode: "dry_run" });
     expect(held.status).toBe("running");
     expect((await callbackPost(signed(JSON.stringify({ runId: held.runId, artifact: { kind: "post_set", title: "t", body: "b" } })))).status).toBe(400); // a post set needs items
+    expect((await callbackPost(signed(JSON.stringify({ runId: held.runId, artifact: { ...SAMPLE_ARTIFACT, kind: "generic" } })))).status).toBe(400);
     const ok = await callbackPost(signed(JSON.stringify({ runId: held.runId, artifact: { ...SAMPLE_ARTIFACT, title: "From the workflow" } })));
     expect(ok.status).toBe(200);
     const { run } = await ok.json();

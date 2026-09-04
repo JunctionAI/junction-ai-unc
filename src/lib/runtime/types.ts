@@ -343,6 +343,8 @@ export interface ProduceNode extends NodeBase {
     webhookUrlEnv is set; absent both, the account's registered workflow (n8n_workflows) is used. */
 export interface N8nNode extends NodeBase {
   kind: "n8n";
+  /** Optional server-pinned, synchronous, fail-closed pilot contract. */
+  shadowContract?: import("../n8n/shadowContract").KeywordShadowContract;
   webhookUrl?: string;
   /** Name of the env variable holding the webhook URL. */
   webhookUrlEnv?: string;

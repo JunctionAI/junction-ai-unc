@@ -66,7 +66,7 @@ describe("HttpN8nBridge", () => {
   it("202 → accepted; { needs } → needs; a banned phrase in the artifact is rejected", async () => {
     expect(await new HttpN8nBridge({ env, fetch: fetchStub(202).f, now: () => NOW }).call(node, ctx(), workflow)).toEqual({ kind: "accepted" });
     expect(await new HttpN8nBridge({ env, fetch: fetchStub(200, { needs: [{ input: "brand_notes", why: "need them" }] }).f, now: () => NOW }).call(node, ctx(), workflow)).toEqual({ kind: "needs", needs: [{ input: "brand_notes", why: "need them" }] });
-    await expect(new HttpN8nBridge({ env, fetch: fetchStub(200, { artifact: { kind: "generic", title: "t", body: "This will 10x your business in a month, guaranteed by the workflow." } }).f, now: () => NOW }).call(node, ctx(), workflow)).rejects.toThrow("banned phrases: 10x, guarantee");
+    await expect(new HttpN8nBridge({ env, fetch: fetchStub(200, { artifact: { kind: "post_set", title: "t", body: "This will 10x your business in a month, guaranteed by the workflow.", items: [{ title: "Test", body: "Test item" }] } }).f, now: () => NOW }).call(node, ctx(), workflow)).rejects.toThrow("banned phrases: 10x, guarantee");
     expect(() => parseN8nReply({}, "post_set")).toThrow("neither artifact nor needs");
   });
 

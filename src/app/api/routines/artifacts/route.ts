@@ -18,6 +18,7 @@ import { completeExternal, type ServiceDeps } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun } from "../shared";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { SKILL_BY_ID } from "@/lib/runtime/skills";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,10 +48,12 @@ async function handlePOST(req: Request) {
   if (run.status !== "running" || run.snapshot?.awaiting !== "n8n") return Response.json({ error: `run ${runId} is not waiting for an n8n artifact` }, { status: 409 });
 
   const node = run.snapshot.spec.nodes[run.snapshot.nextNodeIndex - 1];
-  const expectedKind = node?.kind === "produce" ? (node.skill ?? run.routineId) : run.routineId;
+  if (node?.kind === "n8n" && node.shadowContract) return Response.json({ error: "shadow integrations require synchronous completion with execution evidence" }, { status: 409 });
+  const skillId = node?.kind === "produce" ? (node.skill ?? run.routineId) : run.routineId;
+  const expectedKind = SKILL_BY_ID[skillId]?.kind ?? "generic";
   let parsed;
   try {
-    parsed = parseN8nReply(body, expectedKind, node?.kind === "produce" ? node.maxItems : undefined);
+    parsed = parseN8nReply(body, expectedKind, node?.kind === "produce" ? node.maxItems : SKILL_BY_ID[skillId]?.maxItems);
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : "invalid artifact" }, { status: 400 });
   }

@@ -383,6 +383,8 @@ class RunSession {
       items: n,
       evidence: artifact.evidence.length,
       via,
+      ...(via === "n8n" && node.kind === "n8n" && node.shadowContract
+        ? { externalExecution: artifact.meta.executionReceipt } : {}),
     });
     return artifact;
   }

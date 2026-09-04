@@ -2,6 +2,7 @@
    before a draft can be dry-run or promoted. Pure. */
 
 import type { Node, NodeKind, Platform, Predicate, RoutineSpec } from "./types";
+import { shadowContractProblem } from "../n8n/shadowContract";
 
 export interface ValidationIssue {
   path: string;
@@ -151,6 +152,12 @@ export function validateSpec(spec: RoutineSpec): ValidationIssue[] {
         if (n.maxItems !== undefined && !(Number.isInteger(n.maxItems) && n.maxItems > 0)) push(path, "maxItems must be a positive integer");
         break;
       case "n8n":
+        if (n.shadowContract !== undefined) {
+          const problem = shadowContractProblem(n.shadowContract);
+          if (problem) push(path, problem);
+          if (n.shadowContract?.routineId !== spec.id) push(path, "shadow routine must match the enclosing spec");
+          if (spec.mutates) push(path, "shadow contract cannot be used in a mutating spec");
+        }
         if (n.timeoutMs !== undefined && !(n.timeoutMs > 0)) push(path, "timeoutMs must be > 0");
         if (n.webhookUrl !== undefined && !/^https?:\/\//.test(n.webhookUrl)) push(path, "webhookUrl must be an http(s) URL");
         if (n.webhookUrlEnv !== undefined && !/^[A-Z][A-Z0-9_]*$/.test(n.webhookUrlEnv)) push(path, "webhookUrlEnv must be an env variable name");
