@@ -33,15 +33,26 @@ Scope: six agreed improvements while Apple/provider approval and n8n development
 
 ## Release boundary
 
+### Preview READY — verified 4 September 2026
+
+- URL: https://junction-6cmgci9hq-tom-junctionmedis-projects.vercel.app/app
+- Deployment: `dpl_9Hr4mScpP9MFCpbFSYeGamAXht84`; target Preview; state READY; Next.js 16.3.4; commit `854ff333f05ea45d6e7b6d5340276baa0224f40d`. Build duration approximately 60 seconds.
+- Deployment-specific settings requested: `NEXT_PUBLIC_READINESS_PREVIEW=true` at build/runtime; `UNC_COMMANDS_ENABLED=false`; `LIVE_MODE_ENABLED=false`. No shared environment values changed and no production credentials copied.
+- Browser readback confirmed the demo-only warning, working demo-dashboard navigation and opening chat. At the 390px mobile viewport the document width was 390px (no horizontal overflow). The viewport was reset after the test.
+- Deployed health endpoint returned `ok: true`, build SHA `854ff333f05e`, `db.configured: false`, `worker: null`. This is intentionally not real AVGAR data or workflow execution.
+- The deployed Apple placeholder returned HTTP 503 with `apple_channel_not_ready` to an empty POST, confirming it remains disabled.
+- The production alias `junction-unc.vercel.app` was independently resolved after upload and still points to `dpl_H9MGF4UraVQQEhzN1QuaTjLGA2Lv`, the same deployment as before.
+- No GitHub push, production promotion, database migration, connector activation or live messaging was performed. The earlier blocked preview remains as a diagnostic record; it was not deleted.
+
 ### Approved preview upload follow-up
 
 Tom explicitly approved uploading this code to the existing `junction-unc` Vercel project as a demo-only preview. The source upload succeeded on 4 September, but deployment `dpl_3k9H6HUPDMKSWYAAMbD3okK9Wjst` was BLOCKED before build: Vercel could not authorize the checkpoint's automatically inferred Mac-local Git author email.
 
 Read-only identity reconciliation confirmed the authenticated Vercel owner's email is `tom@junctionmedia.ai`; GitHub attributes the existing successful deployment commit `4fc0d13304a1a8d0ff63fe727c834fdc576ad781` with that email to the currently authenticated `JunctionAI` account. The next local checkpoint uses this verified existing owner identity through per-command Git configuration. No account membership, credential, global Git setting or security policy is changed. The old checkpoint remains preserved in history. Preview readiness still requires a successful build and readback.
 
-The Vercel dry-run excluded local environment files and generated/test/private documentation directories (656 files, approximately 8.1 MB remaining). The actual preview upload was rejected by the security approval check before execution because explicit authorization to transmit this source payload to Vercel is required. No preview was deployed and production was not promoted. Ask Tom to approve uploading this code to the existing `junction-unc` project for an isolated, demo-only preview; do not retry via another tool or destination.
+Historical pre-approval boundary: the Vercel dry-run excluded local environment files and generated/test/private documentation directories (656 files, approximately 8.1 MB remaining). The initial upload command was rejected before execution pending explicit source-upload approval. Tom subsequently gave that approval, and the READY receipt above supersedes this earlier blocker.
 
-No GitHub push was performed. The local code and this readiness record are the deliverables so far. Full real-account acceptance remains open, not PASS.
+No GitHub push was performed. The local code, this readiness record and the demo-only preview are the deliverables so far. Full real-account acceptance remains open, not PASS.
 
 ## Next real pilot steps
 
