@@ -1,5 +1,13 @@
 # Junction / Unc readiness — 4 September 2026
 
+## Approved live release update
+
+The subsequent explicit approval authorized production database/security updates and replacing the app and worker while publishing, external messaging and ad changes remain disabled. This section supersedes the historical pre-release statements below. Detailed receipts: [LIVE-RELEASE-2026-09-04.md](./LIVE-RELEASE-2026-09-04.md).
+
+Six migrations are applied; the production app and existing Fly worker are replaced. Existing AVGAR Shopify/Meta credentials passed fresh read-only checks without reconnecting. Command dispatch remains OFF pending controlled workflow acceptance. Final chat persistence acceptance is recorded in the linked release receipt, not inferred from a successful build.
+
+## Historical preparation and preview record
+
 Scope: six agreed improvements while Apple/provider approval and n8n development continue. Production data, connectors, messaging and workflow activation were not changed. Existing uncommitted command/SMS work was preserved and included in local verification.
 
 ## Implementation and acceptance

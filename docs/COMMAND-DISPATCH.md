@@ -1,7 +1,10 @@
 # Conversation → governed routine execution
 
-Status: local implementation, opt-in and draft-only. Not deployed or exercised against
-AVGAR/n8n Cloud. `UNC_COMMANDS_ENABLED` is OFF unless exactly `true` in both app and worker.
+Status as of 4 September: schema, app and worker deployed in the approved live release;
+command dispatch still OFF in both app and worker. Not yet exercised end-to-end against
+AVGAR/n8n Cloud. `UNC_COMMANDS_ENABLED` must be exactly `true` in both before controlled activation.
+See [live release receipts](./LIVE-RELEASE-2026-09-04.md). Historical local-only receipts below
+describe their original verification stage, not the current deployment state.
 
 ## Implemented path
 
