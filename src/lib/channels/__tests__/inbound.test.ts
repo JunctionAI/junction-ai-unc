@@ -14,7 +14,7 @@ import { SupabaseStore } from "@/lib/runtime/store/supabase";
 import { budgetMoveSpec, clock as rtClock, input, SPEND_FIXTURE } from "@/lib/runtime/__tests__/helpers";
 import { StaticAccountsSource } from "@/worker/accounts";
 import { buildAdapters as buildRunAdapters, type ServiceDeps } from "@/worker/service";
-import { NO_MODEL_LINE } from "../approvals";
+import { SMS_NO_MODEL_LINE } from "../approvals";
 import { handleInbound, OWNER_DECISION_LINE, type InboundDeps, type RespondFn } from "../inbound";
 import { findVerifiedLink, issueLinkCode } from "../links";
 import { listOutbound } from "../outbound";
@@ -43,6 +43,14 @@ function deps(over: Partial<InboundDeps> = {}): TestDeps {
 const tgText = (text: string, id = "555:1"): InboundEvent => ({ channel: "telegram", externalId: "555", externalMsgId: id, text, handle: "tomh", displayName: "Tom" });
 
 describe("linking + unknown senders", () => {
+  it("welcomes a verified SMS link in the texting voice", async () => {
+    const d = deps();
+    const issued = await issueLinkCode(d.db, { accountId: ACCT, userId: USER, channel: "sms", now: d.now() });
+    const out = await handleInbound(d, { channel: "sms", externalId: "+6421", externalMsgId: "SM-link", text: issued.code });
+    expect(out.kind).toBe("linked");
+    expect(d.adapters.sms.sent[0].payload.text).toMatch(/^hey 👋/);
+    expect(d.adapters.sms.sent[0].payload.text).toContain("same conversation");
+  });
   it("/start <code> links the device and sends the welcome; nothing lands in the thread", async () => {
     const d = deps();
     const issued = await issueLinkCode(d.db, { accountId: ACCT, userId: USER, channel: "telegram", now: d.now() });
@@ -69,6 +77,18 @@ describe("linking + unknown senders", () => {
 });
 
 describe("a message → the same Unc", () => {
+  it("takes the SMS delivery channel from the verified event for voice selection", async () => {
+    const d = deps();
+    seedLink(d.db, { channel: "sms", external_id: "+6421" });
+    let actualChannel: string | undefined;
+    await handleInbound({ ...d, respond: async ({ channel }) => {
+      actualChannel = channel;
+      return { ok: true, reply: "hey 👋 what do you want to tackle?" };
+    } }, { channel: "sms", externalId: "+6421", externalMsgId: "SM-voice", text: "hello" });
+    expect(actualChannel).toBe("sms");
+    expect(d.adapters.sms.sent[0].payload.text).toBe("hey 👋 what do you want to tackle?");
+  });
+
   it("appends the turn with its channel, runs the pipeline over the cross-channel history, stores + sends the reply; redelivery is a no-op", async () => {
     const d = deps();
     seedLink(d.db, { channel: "telegram", external_id: "555" });
@@ -101,8 +121,8 @@ describe("a message → the same Unc", () => {
     const d = deps();
     seedLink(d.db, { channel: "sms", external_id: "+6421" });
     const out = await handleInbound({ ...d, respond: async () => ({ ok: false, reason: "not_configured" }) }, { channel: "sms", externalId: "+6421", externalMsgId: "SM1", text: "hello?" });
-    expect(out).toEqual({ kind: "replied", accountId: ACCT, reply: NO_MODEL_LINE, live: false });
-    expect(d.adapters.sms.sent[0].payload.text).toBe(NO_MODEL_LINE);
+    expect(out).toEqual({ kind: "replied", accountId: ACCT, reply: SMS_NO_MODEL_LINE, live: false });
+    expect(d.adapters.sms.sent[0].payload.text).toBe(SMS_NO_MODEL_LINE);
     const boom = await handleInbound({ ...d, respond: async () => Promise.reject(new Error("provider down")) }, { channel: "sms", externalId: "+6421", externalMsgId: "SM2", text: "still there?" });
     expect(boom).toMatchObject({ kind: "replied", live: false });
     expect((await listThread(d.db, ACCT)).filter((m) => m.sender === "unc").every((m) => m.delivery.live === false)).toBe(true);

@@ -13,6 +13,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CHANNEL_LABEL, type Channel } from "@/lib/channels/types";
+import { pollLink } from "@/lib/channels/linkPolling";
 
 export interface WireLink {
   id: string;
@@ -32,6 +33,7 @@ export interface WireAvailability {
   configured: boolean;
   botUsername?: string | null;
   number?: string | null;
+  setupNote?: string;
 }
 export interface LinksListing {
   links: WireLink[];
@@ -44,12 +46,13 @@ export const STEP_TITLE = "Where should I reach you?";
 export const STEP_LINE = "Wherever you talk to me, it’s the same conversation — and every decision still lands in the app.";
 export const LATER_LABEL = "I’ll do this later";
 export const APP_ONLY_LABEL = "Just the app";
-export const NOT_ON_LINE = "Not switched on yet — I’ll tell you the moment it is.";
+export const NOT_ON_LINE = "Not connected yet — provider setup is required.";
 export const WAITING_LINE = "Waiting for your message — this code lasts 10 minutes.";
-export const LINKED_LINE = "Linked. I’ll send the morning brief and anything that needs you here too.";
+export const LINKED_LINE = "linked — this channel is connected. delivery still depends on your enabled routines and notification settings.";
 export const POLL_MS = 4000;
 
 const CHOICES: { channel: Channel; line: string }[] = [
+  { channel: "apple", line: "Junction in Messages — the same Unc conversation." },
   { channel: "telegram", line: "A bot in your Telegram — buttons for approvals." },
   { channel: "whatsapp", line: "Unc on WhatsApp — reply buttons for approvals." },
   { channel: "slack", line: "A DM in your workspace — approve from Slack." },
@@ -76,9 +79,9 @@ const pill = (fg: string, bg: string): React.CSSProperties => ({ display: "inlin
 export type FetchedListing = { listing: LinksListing; error: null } | { listing: null; error: string };
 
 /** GET /api/channels/links, never throws; demo mode / no session read as an error line. */
-export async function fetchListing(): Promise<FetchedListing> {
+export async function fetchListing(signal?: AbortSignal): Promise<FetchedListing> {
   try {
-    const res = await fetch("/api/channels/links");
+    const res = await fetch("/api/channels/links", { signal: signal ?? AbortSignal.timeout(10_000), cache: "no-store" });
     const data = (await res.json().catch(() => ({}))) as LinksResponse;
     if (!res.ok || data.fallback || !data.links) return { listing: null, error: data.error ?? (data.fallback ? "Sign in to link a channel." : `couldn’t load channels (${res.status})`) };
     return { listing: { links: data.links, channels: data.channels ?? [] }, error: null };
@@ -97,6 +100,7 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
   const [chosen, setChosen] = useState<Channel | null>(null);
   const [issue, setIssue] = useState<IssueResponse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [linkState, setLinkState] = useState<"waiting" | "linked" | "expired" | "error">("waiting");
   const doneRef = useRef(false);
 
   /** Apply a fetched listing (or its error) to state; `load` never sets state itself. */
@@ -109,7 +113,6 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
     setLoadError(null);
     return r.listing;
   }, []);
-  const load = useCallback(() => fetchListing().then(apply), [apply]);
 
   useEffect(() => {
     if (initial) return;
@@ -125,22 +128,30 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
   // Poll while a code is out, until the chosen channel reads verified.
   useEffect(() => {
     if (!chosen || !issue?.code) return;
-    const t = setInterval(async () => {
-      const next = await load();
-      if (next && verifiedFor(next, chosen) && !doneRef.current) {
-        doneRef.current = true;
-        clearInterval(t);
-        onDone?.("linked");
-      }
-    }, POLL_MS);
-    return () => clearInterval(t);
-  }, [chosen, issue, load, onDone]);
+    return pollLink({
+      expiresAt: issue.expiresAt,
+      intervalMs: POLL_MS,
+      fetch: async (signal) => {
+        const r = await fetchListing(signal);
+        if (r.error !== null) throw new Error(r.error);
+        return r;
+      },
+      apply,
+      verified: (r) => !!r.listing?.links.some(l => l.id === issue.linkId && l.channel === chosen && l.verified),
+      finish: (state) => {
+        setLinkState(state);
+        if (state === "linked" && !doneRef.current) { doneRef.current = true; onDone?.("linked"); }
+      },
+    });
+  }, [chosen, issue, apply, onDone]);
 
   async function choose(channel: Channel) {
     const avail = listing?.channels.find((c) => c.channel === channel);
     if (!avail?.configured || busy) return;
     setChosen(channel);
     setIssue(null);
+    setLinkState("waiting");
+    doneRef.current = false;
     if (channel === "slack") {
       // an API route that 302s to Slack's consent screen — a full navigation, not a client route
       window.location.assign(`/api/channels/slack/start?redirect_to=${encodeURIComponent(window.location.pathname || "/app")}`);
@@ -148,7 +159,7 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/channels/links", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ channel }) });
+      const res = await fetch("/api/channels/links", { method: "POST", signal: AbortSignal.timeout(10_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ channel }) });
       const data = (await res.json().catch(() => ({}))) as IssueResponse;
       if (res.status === 401) setIssue({ error: "Sign in first." });
       else if (!res.ok || data.fallback || !data.code) setIssue({ error: data.error ?? NOT_ON_LINE });
@@ -172,7 +183,7 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
 
       {loadError && (
         <div data-testid="channels-error" style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 10 }}>
-          {loadError}
+          {loadError} <button style={ghost} onClick={() => void fetchListing().then(apply)}>try again</button>
         </div>
       )}
 
@@ -188,7 +199,7 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
                 <span style={{ fontSize: 13.5, fontWeight: 700 }}>{CHANNEL_LABEL[channel]}</span>
                 {already && <span style={pill("var(--cyan-text)", "var(--cyan-wash)")}>Linked</span>}
               </span>
-              <span style={{ fontSize: 12, color: configured ? "var(--ink-soft)" : "var(--muted)", lineHeight: 1.4 }}>{configured ? (already ? `${already.displayName ?? already.handle ?? already.workspace ?? "this device"} — add another or leave it.` : line) : NOT_ON_LINE}</span>
+              <span style={{ fontSize: 12, color: configured ? "var(--ink-soft)" : "var(--muted)", lineHeight: 1.4 }}>{configured ? (already ? `${already.displayName ?? already.handle ?? already.workspace ?? "this device"} — add another or leave it.` : line) : (avail?.setupNote ?? NOT_ON_LINE)}</span>
             </button>
           );
         })}
@@ -197,24 +208,25 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
       {chosen && chosen !== "slack" && (
         <div data-testid="link-instruction" style={{ marginTop: 14, background: "var(--cream-dim)", border: "1px solid var(--card-border)", borderRadius: 14, padding: "12px 14px" }}>
           {busy && <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Getting you a code…</div>}
-          {issue?.error && <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{issue.error}</div>}
+          {issue?.error && <div role="alert" style={{ fontSize: 12.5, color: "var(--muted)" }}>{issue.error} <button disabled={busy} style={ghost} onClick={() => choose(chosen)}>try again</button></div>}
           {issue?.code && (
             <>
               <div style={{ fontSize: 13, lineHeight: 1.5 }}>{issue.instruction?.text}</div>
+              {chosen === "sms" && <div data-testid="sms-link-safety" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 8 }}>Send this code from your own phone to connect it to the business currently open in Unc. This does not give Unc access to your personal SMS inbox. One business per phone for this pilot. Reply STOP to disconnect.</div>}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
                 <code data-testid="link-code" style={{ fontSize: 16, fontWeight: 700, letterSpacing: 1.5, background: "white", border: "1px solid var(--card-border)", borderRadius: 10, padding: "6px 12px" }}>
                   {issue.code}
                 </code>
-                {issue.instruction?.url && (
+                {issue.instruction?.url && linkState === "waiting" && (
                   <a href={issue.instruction.url} target="_blank" rel="noreferrer" className="btn-cyan" style={{ padding: "8px 16px", fontSize: 12, display: "inline-block" }}>
                     Open {CHANNEL_LABEL[chosen]}
                   </a>
                 )}
-                <button onClick={() => choose(chosen)} style={ghost}>
+                <button disabled={busy} onClick={() => choose(chosen)} style={ghost}>
                   New code
                 </button>
               </div>
-              <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>{verifiedFor(listing, chosen) ? LINKED_LINE : WAITING_LINE}</div>
+              <div role="status" style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>{linkState === "linked" ? LINKED_LINE : linkState === "expired" ? "that code has expired. get a new code to try again." : linkState === "error" ? "i couldn’t confirm the connection. checking has paused — get a new code to retry." : WAITING_LINE}</div>
             </>
           )}
         </div>

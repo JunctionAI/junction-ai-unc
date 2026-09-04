@@ -129,6 +129,8 @@ export interface Adapters {
 
 export interface RunOptions {
   mode: RunMode;
+  /** Trusted queue-assigned identity; never accepted from an unauthenticated request. */
+  runId?: string;
 }
 
 export interface ResumeOptions {
@@ -625,7 +627,7 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
   const idGen = adapters.idGen ?? newId;
   const startedAt = now().toISOString();
   const ctx: RunContext = {
-    runId: idGen(),
+    runId: opts.runId ?? idGen(),
     routineId: spec.id,
     version: spec.version,
     mode: opts.mode,

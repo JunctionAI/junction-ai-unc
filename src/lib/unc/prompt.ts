@@ -12,6 +12,7 @@
 
 import { recallPlaybooks, renderPlaybooksForPrompt, type Playbook, type PlaybookDomain, type PlaybookRowLite, type RecallOptions } from "../brain/playbooks";
 import { splitBrain } from "./context";
+import { CONVERSATIONAL_VOICE, SMS_VOICE, type UncVoice } from "./voice";
 
 export type UncSurface = "corner" | "onboarding";
 
@@ -65,6 +66,7 @@ export const APPROVAL_ASK_RULE = `When you explain a pending approval (what it i
 const VOICE_AND_GUARDRAILS = `You are Unc, the Junction operator — the marketing department that runs a founder's growth beside them. You are chatting inside the Junction product. Your register: "In your corner."
 
 Voice rules (non-negotiable):
+- This text-only reply does not execute work. Never claim that this message started, queued, enabled, disabled, approved, sent or published anything. Executable requests are handled separately by the structured dispatcher, which returns its own receipt-backed response. Discuss past work only when the supplied account evidence confirms it.
 - First person, present tense. Numbers over adjectives.
 - Lead with the answer or the recommendation in the first sentence. The reason comes second; the detail only when the decision needs it.
 - One idea per sentence. Never restate the question. Never explain what you're about to do — do it.
@@ -92,7 +94,7 @@ Product guardrails (absolute):
 - ${APPROVAL_ASK_RULE}
 
 Format (chat bubble):
-- Up to 3 short sentences by default (see the voice rules for when more is earned). Plain text only — no markdown, no bullet points, no headings, no emojis.`;
+- Up to 3 short sentences by default (see the voice rules for when more is earned). Plain text only — no markdown, no bullet points, no headings. Emoji use follows the conversational voice below.`;
 
 const SURFACE_NOTES: Record<UncSurface, string> = {
   corner: `Setting: the in-app chat. You run this account day to day. Answer questions about the numbers, explain decisions and reasoning, and when the founder asks for work, say what you'd run and what would come back for their approval.`,
@@ -135,10 +137,14 @@ export function renderCertifiedMetricsSection(block: string | undefined): string
 
 /** `context` may carry `memories` (string lines), `profile` (text), `playbooks` and `certifiedMetrics`
     from attachBrain — they are rendered as their own sections, above the JSON account state. */
-export function buildUncSystemPrompt(context: unknown, surface: UncSurface): string {
-  const note = SURFACE_NOTES[surface] ?? SURFACE_NOTES.corner;
+export function buildUncSystemPrompt(context: unknown, surface: UncSurface, voice: UncVoice = "default"): string {
+  const note = voice === "sms" ? "Setting: an SMS conversation with the founder, sharing the same account context and conversation as the app." : SURFACE_NOTES[surface] ?? SURFACE_NOTES.corner;
   const { context: base, brain } = splitBrain(context);
-  const sections = [VOICE_AND_GUARDRAILS, note];
+  // Replace the conflicting presentation rules; all authority/truth rules stay intact.
+  const rules = voice === "sms"
+    ? VOICE_AND_GUARDRAILS.replace(APPROVAL_ASK_RULE, "When explaining a pending approval, include the SMS decision instructions below.")
+    : VOICE_AND_GUARDRAILS;
+  const sections = [rules, note, CONVERSATIONAL_VOICE, ...(voice === "sms" ? [SMS_VOICE] : [])];
   if (brain) {
     const mem = renderMemorySection(brain.memories);
     const prof = renderProfileSection(brain.profile);

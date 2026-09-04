@@ -9,6 +9,7 @@ import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
 import type { PlatformVals } from "@/lib/platform/derive";
 import { knownPlatformSlugs, SUGGESTION_COPY } from "@/lib/setup/channels";
 import { connectorHasRealSync } from "@/lib/connectors/sync";
+import { connectorEvidence } from "@/lib/connectors/readiness";
 import { isReading, useConnectorsState, type ConnectorsStateListing, type ConnectorStateView } from "./useConnectorsState";
 
 /* Connect / Reconnect: in demo mode (no Supabase configured) the button does exactly what the
@@ -71,7 +72,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   const googleChildren = new Set(live.data?.google.children ?? []);
   const googleCards = V.connectors.filter((c) => googleChildren.has(CONNECTOR_PLATFORMS[c.name] ?? ""));
   const cardSynced = (name: string, fallbackOk: boolean): boolean => {
-    if (!live.active) return fallbackOk;
+    if (!live.active) return accountsMode ? false : fallbackOk;
     const row = liveBy[name];
     if (!row) return false;
     return connectorHasRealSync(row.status, row.lastSyncResult);
@@ -276,7 +277,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
       </div>
       {live.error && (
         <div data-testid="connectors-live-error" style={{ fontSize: 12.5, color: "var(--amber-text)", marginTop: 10, lineHeight: 1.5 }}>
-          Couldn’t reach the connector state just now ({live.error}) — the cards below are your last saved state.
+          Couldn’t verify connector status ({live.error}). <button onClick={live.refresh} className="hov-underline" style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer" }}>try again</button>
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 26 }}>
@@ -316,6 +317,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
           const oauthOn = !!lc?.oauthConfigured;
           const viaGoogle = googleOn && googleChildren.has(platform ?? "");
           const rl = live.active && lc ? readLine(lc) : null;
+          const evidence = lc ? connectorEvidence(lc) : null;
           const form = tokenFor === cn.name && platform ? MANUAL_FORMS[platform] : null;
           return (
             <div key={cn.name} data-testid={`connector-${platform ?? cn.name}`} style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "16px 19px", display: "flex", alignItems: "center", gap: 16 }}>
@@ -337,6 +339,8 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
                   {cn.note} · unlocks {cn.unlocks} routines
                 </div>
+                {evidence && <div data-testid="connector-evidence" style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, overflowWrap: "anywhere" }}>{evidence.identity}<br />{evidence.read}</div>}
+                {accountsMode && !lc && <div role="status" style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>connection status is unverified.</div>}
                 {rl && (
                   <div data-testid="read-line" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginTop: 6, color: rl.tone === "cyan" ? "var(--cyan-text)" : rl.tone === "amber" ? "var(--amber-text)" : "var(--muted)", fontWeight: 500 }}>
                     {isReading(lc!) && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan-link)", animation: "jpulse 1.6s infinite", flex: "none" }}></span>}

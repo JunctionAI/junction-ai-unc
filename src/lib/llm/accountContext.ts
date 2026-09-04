@@ -12,6 +12,7 @@ import type { DbClient } from "../db/types";
 
 export interface ModelAccountContext {
   accountId: string;
+  userId?: string;
   db: DbClient;
 }
 
@@ -21,5 +22,5 @@ export async function requireModelAccountContext(): Promise<ModelAccountContext 
   if (!isDbConfigured()) return process.env.NODE_ENV === "production" ? unavailable() : null;
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
-  return { accountId: session.accountId, db: session.service };
+  return { accountId: session.accountId, userId: session.userId, db: session.service };
 }

@@ -45,13 +45,15 @@ describe("config + availability", () => {
       ["slack", true],
       ["sms", true],
       ["email", false],
+      ["apple", false],
     ]);
     expect(availability({}).every((a) => !a.configured)).toBe(true);
     const a = availability(ENV);
     expect(a.find((x) => x.channel === "telegram")?.botUsername).toBe("UncJunctionBot");
     expect(JSON.stringify(a)).not.toContain("token");
     const reg = buildAdapters({ env: ENV, fetch: async () => new Response("{}") });
-    expect(Object.values(reg).every((ad) => ad?.configured)).toBe(true);
+    expect(Object.values(reg).filter(ad => ad?.channel !== "apple").every((ad) => ad?.configured)).toBe(true);
+    expect(reg.apple?.configured).toBe(false);
   });
 
   it("button ids round-trip and stay under Telegram's 64-byte cap", () => {

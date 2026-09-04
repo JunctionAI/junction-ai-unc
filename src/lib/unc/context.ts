@@ -12,12 +12,12 @@
               strategy rationale is built from the founder's own budget / hours / strengths, with
               no invented date or evidence gate. */
 
-import { connectorHasRealSync } from "@/lib/connectors/sync";
-import { ALL_SYSTEMS, CATEGORIES, CONNECTOR_DEFS } from "@/lib/platform/catalog";
-import { AP_DATA, AP_WHY_TEXTS, COMPLETED_DEFS, LEVER_DEFS, SIGNAL_DEFS, postureDefs } from "@/lib/platform/derive";
-import { DEMO_TODAY, goalMath } from "@/lib/platform/goal";
-import { scoreChannels, span, weekSplit } from "@/lib/platform/plan";
-import type { PlatformState } from "@/lib/platform/state";
+import { connectorHasRealSync } from "../connectors/sync";
+import { ALL_SYSTEMS, CATEGORIES, CONNECTOR_DEFS } from "../platform/catalog";
+import { AP_DATA, AP_WHY_TEXTS, COMPLETED_DEFS, LEVER_DEFS, SIGNAL_DEFS, postureDefs } from "../platform/derive";
+import { DEMO_TODAY, goalMath } from "../platform/goal";
+import { scoreChannels, span, weekSplit } from "../platform/plan";
+import type { PlatformState } from "../platform/state";
 import type { AccountFacts, ApprovalFact } from "./accountFacts";
 
 const LIST_CAP = 10;

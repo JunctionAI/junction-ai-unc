@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "dist/**", // standalone worker compiler output
     // Frozen prototype exports are visual source material, not production code.
     "design-reference/**",
     "next-env.d.ts",

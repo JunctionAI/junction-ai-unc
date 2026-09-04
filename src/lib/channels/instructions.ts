@@ -19,5 +19,7 @@ export function instructionFor(channel: Channel, code: string, avail: ReturnType
       return { url: "/api/channels/slack/start", text: "Add Unc to your Slack workspace — that links you, no code needed." };
     case "email":
       return { url: null, text: "Not switched on yet — I'll tell you the moment it is." };
+    case "apple":
+      return { url: null, text: "Apple Messages is not ready yet. Use app chat while we finish provider verification." };
   }
 }

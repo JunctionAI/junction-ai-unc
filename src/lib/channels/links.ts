@@ -39,7 +39,12 @@ export function normaliseLinkCode(raw: string | null | undefined): string | null
 }
 
 /** True when a message is (only) a link code — the "link me" handshake. */
-export const looksLikeLinkCode = (text: string | undefined | null) => normaliseLinkCode(text) !== null;
+export const looksLikeLinkCode = (text: string | undefined | null) => {
+  if (!text || normaliseLinkCode(text) === null) return false;
+  // Six-letter words such as "thanks" and "cancel" are conversation, not codes.
+  // The UI always supplies UNC-; bare mixed codes remain backwards-compatible.
+  return /^(?:\/start\s+|unc[-\s]?)/i.test(text.trim()) || /[2-9]/.test(text);
+};
 
 export function normalisePrefs(raw: unknown): ChannelPrefs {
   const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
@@ -144,10 +149,13 @@ export interface ConsumeInput {
   handle?: string | null;
   displayName?: string | null;
   now: Date;
+  accountScope?: string;
 }
 
 export const welcomeLine = (channel: Channel) =>
-  `Linked. Wherever you talk to me — here on ${CHANNEL_LABEL[channel]} or in the app — it's the same conversation, and every decision still lands in the app. I'll send the morning brief and anything that needs you here.`;
+  channel === "sms"
+    ? "hey 👋 we're connected. it's the same conversation here and in the app, with every decision saved there. what do you want to tackle?"
+    : `Linked. Wherever you talk to me — here on ${CHANNEL_LABEL[channel]} or in the app — it's the same conversation, and every decision still lands in the app. I'll send the morning brief and anything that needs you here.`;
 
 export async function consumeLinkCode(db: DbClient, input: ConsumeInput): Promise<ConsumeResult> {
   const code = normaliseLinkCode(input.code);
@@ -155,6 +163,7 @@ export async function consumeLinkCode(db: DbClient, input: ConsumeInput): Promis
   const row = await unwrap<Row | null>("channel_links.select", db.from("channel_links").select(LINK_COLS).eq("link_code", code).maybeSingle());
   if (!row) return { ok: false, reason: "unknown" };
   const pending = rowToLink(row);
+  if (input.accountScope && pending.accountId !== input.accountScope) return { ok: false, reason: "unknown" };
   if (pending.channel !== input.channel) return { ok: false, reason: "channel_mismatch" };
   if (!pending.linkCodeExpiresAt || new Date(pending.linkCodeExpiresAt).getTime() < input.now.getTime()) return { ok: false, reason: "expired" };
 

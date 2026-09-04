@@ -35,8 +35,7 @@ export function useConnectorsState(enabled: boolean, initial: ConnectorsStateLis
     const res = await fetch("/api/connectors/state", { cache: "no-store" });
     const body = (await res.json().catch(() => ({}))) as Partial<ConnectorsStateListing> & { fallback?: boolean; error?: string };
     if (!res.ok || body.fallback || !Array.isArray(body.connectors)) {
-      if (res.status !== 401 && !body.fallback) throw new Error(body.error ?? `couldn’t load connectors (${res.status})`);
-      return null;
+      throw new Error(res.status === 401 ? "your session expired — sign in again to check connectors." : body.fallback ? "connector data is unavailable — connection status is unverified." : body.error ?? `couldn’t load connectors (${res.status})`);
     }
     return body as ConnectorsStateListing;
   }, []);
@@ -56,7 +55,7 @@ export function useConnectorsState(enabled: boolean, initial: ConnectorsStateLis
         if (w && (!stillReading || Date.now() - w.since > READ_POLL_MAX_MS)) watching.current = null;
         if (watching.current) timer = setTimeout(() => void step(), READ_POLL_MS);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) { setData(null); setError(e instanceof Error ? e.message : String(e)); }
       }
     };
     void step();

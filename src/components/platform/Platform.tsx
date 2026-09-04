@@ -233,6 +233,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
 
   return (
     <div
+      className="unc-platform"
       style={{
         display: "flex",
         minHeight: "100vh",
@@ -244,6 +245,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
     >
       {V.notOnboarding && !showGuided && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} billing={gated} onModels={inAccount ? () => setModelsOpen(true) : undefined} onSkills={inAccount ? () => setSkillsOpen(true) : undefined} onWhatUncKnows={inAccount ? () => setKnowsOpen(true) : undefined} />}
       <main style={{ flex: 1, minWidth: 0 }}>
+        {process.env.NEXT_PUBLIC_READINESS_PREVIEW === "true" && <aside role="note" style={{ padding: "12px 16px", background: "#082B45", color: "white", fontSize: 13 }}>Demo-only preview — sample data and replies. No AVGAR connections, real workflow execution, or Apple Messages delivery.</aside>}
         {gated?.state === "past_due" && <BillingBanner />}
         {V.isOnboarding && <Onboarding V={V} />}
         {showGuided && S.setupFlow === "connect" && (

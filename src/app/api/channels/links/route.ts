@@ -41,7 +41,8 @@ async function handleGET() {
   if (session instanceof Response) return session;
   try {
     const links = await listLinks(session.db, session.accountId);
-    return json({ links: links.map(wireLink), channels: channelAvailability() }, 200);
+    const channels = channelAvailability().map(({ pilotAccountId, ...c }) => pilotAccountId && pilotAccountId !== session.accountId ? { ...c, configured: false, number: null, setupNote: "SMS is not enabled for this business yet." } : c);
+    return json({ links: links.map(wireLink), channels }, 200);
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : "listing failed" }, 500);
   }
@@ -63,6 +64,7 @@ async function handlePOST(req: Request) {
   if (!body || !isChannel(body.channel)) return json({ error: "channel must be one of telegram | whatsapp | slack | sms" }, 400);
   const avail = channelAvailability();
   const a = avail.find((x) => x.channel === body.channel);
+  if (a?.pilotAccountId && a.pilotAccountId !== session.accountId) return json({ error: "SMS is not enabled for this business yet." }, 403);
   if (!a?.configured) return json({ fallback: true, reason: "not_configured", channel: body.channel }, 200);
   if (body.channel === "slack") return json({ linkId: null, code: null, expiresAt: null, instruction: instructionFor("slack", "", avail) }, 200);
   try {

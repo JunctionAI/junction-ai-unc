@@ -16,22 +16,23 @@
    `respond` and `decide` are injectable so the tests script them; the defaults are the real
    pipeline and the real approvals handler. */
 
-import { decideApproval, DecideError, type DecideInput, type DecideOutcome } from "@/lib/approvals/handlers";
+import { decideApproval, DecideError, type DecideInput, type DecideOutcome } from "../approvals/handlers";
 import { randomUUID } from "node:crypto";
-import { unwrap, type DbClient } from "@/lib/db/types";
-import type { Store } from "@/lib/runtime/store/interface";
-import { buildServerContext, respondAsUnc } from "@/lib/unc/respond";
+import { unwrap, type DbClient } from "../db/types";
+import type { Store } from "../runtime/store/interface";
+import { buildServerContext, respondAsUnc } from "../unc/respond";
 import type { AccountsSource } from "@/worker/accounts";
-import { linkFailedLine, NO_MODEL_LINE, receiptLine, resolveApproval, resolveFailureLine, unlinkedLine, whyLine } from "./approvals";
-import { consumeLinkCode, findVerifiedLink, looksLikeLinkCode, touchInbound } from "./links";
+import { linkFailedLine, NO_MODEL_LINE, SMS_NO_MODEL_LINE, receiptLine, resolveApproval, resolveFailureLine, unlinkedLine, whyLine } from "./approvals";
+import { consumeLinkCode, findVerifiedLink, looksLikeLinkCode, mergeMeta, touchInbound, unlink } from "./links";
 import { flushQueued, sendOnLink, type AdapterRegistry, type OutboundDeps } from "./outbound";
 import { parseSmsKeyword } from "./adapters/twilio";
 import { appendInbound, appendOutbound, historyFor, type HistoryTurn } from "./thread";
 import { parseApprovalButton, type ChannelLink, type InboundEvent } from "./types";
+import { routeCommand } from "../commands/message";
 
 export type Log = (event: string, fields: Record<string, unknown>) => void;
 
-export type RespondFn = (input: { accountId: string; db: DbClient; history: HistoryTurn[] }) => Promise<{ ok: true; reply: string } | { ok: false; reason: string }>;
+export type RespondFn = (input: { accountId: string; db: DbClient; history: HistoryTurn[]; channel: InboundEvent["channel"] }) => Promise<{ ok: true; reply: string } | { ok: false; reason: string }>;
 export type DecideFn = (input: DecideInput) => Promise<DecideOutcome>;
 
 export const OWNER_DECISION_LINE = "Only the account owner can approve or hold this. The decision is still waiting in the app.";
@@ -54,14 +55,15 @@ export type InboundOutcome =
   | { kind: "linked"; accountId: string; linkId: string }
   | { kind: "link_failed"; reason: "unknown" | "expired" | "channel_mismatch" }
   | { kind: "unlinked" }
+  | { kind: "unsubscribed"; accountId: string }
   | { kind: "replied"; accountId: string; reply: string; live: boolean }
   | { kind: "decided"; accountId: string; approvalId: string; decision: "approved" | "held"; reply: string }
   | { kind: "why"; accountId: string; approvalId: string; reply: string }
   | { kind: "decision_failed"; accountId: string; reply: string };
 
-const defaultRespond: RespondFn = async ({ accountId, db, history }) => {
+const defaultRespond: RespondFn = async ({ accountId, db, history, channel }) => {
   const context = await buildServerContext(db, accountId);
-  return respondAsUnc({ history, context, surface: "corner", account: { accountId, db } });
+  return respondAsUnc({ history, context, surface: "corner", account: { accountId, db }, voice: channel === "sms" ? "sms" : "default" });
 };
 
 async function seen(db: DbClient, event: InboundEvent): Promise<boolean> {
@@ -98,8 +100,8 @@ export async function handleInbound(deps: InboundDeps, event: InboundEvent): Pro
   const outbound: OutboundDeps = { db: deps.db, adapters: deps.adapters, now: deps.now, log };
 
   // 1. the link handshake
-  if (event.text && looksLikeLinkCode(event.text)) {
-    const r = await consumeLinkCode(deps.db, { code: event.text, channel: event.channel, externalId: event.externalId, handle: event.handle ?? null, displayName: event.displayName ?? null, now });
+  if (!event.lifecycle && event.text && looksLikeLinkCode(event.text)) {
+    const r = await consumeLinkCode(deps.db, { code: event.text, channel: event.channel, externalId: event.externalId, handle: event.handle ?? null, displayName: event.displayName ?? null, now, accountScope: event.accountScope });
     if (!r.ok) {
       log("channels.link_failed", { channel: event.channel, reason: r.reason });
       await sayToUnknown(deps, event, linkFailedLine(r.reason));
@@ -117,8 +119,26 @@ export async function handleInbound(deps: InboundDeps, event: InboundEvent): Pro
     log("channels.unlinked_sender", { channel: event.channel });
     return { kind: "unlinked" };
   }
+  if (event.accountScope && event.accountScope !== link.accountId) return { kind: "ignored", reason: "SMS pilot account mismatch" };
+  if (event.channel === "slack" && (!event.scopeId || link.meta.team_id !== event.scopeId)) return { kind: "ignored", reason: "Slack workspace does not match the verified link" };
   if (await seen(deps.db, event)) return { kind: "duplicate" };
   const accountId = link.accountId;
+  // SMS STOP is a communications opt-out, never a business approval/hold command.
+  if ((event.channel === "apple" && event.lifecycle === "conversation_closed") || ((event.channel === "sms" || event.channel === "apple") && /^\s*(stop|unsubscribe|cancel|end|quit)\s*$/i.test(event.text ?? ""))) {
+    await appendInbound(deps.db, { accountId, channel: event.channel, text: event.lifecycle ? "[conversation closed]" : event.text!, externalMsgId: event.externalMsgId, now });
+    await unlink(deps.db, accountId, link.id);
+    return { kind: "unsubscribed", accountId };
+  }
+  if (event.channel === "apple") {
+    if (link.meta.human_support_requested) return { kind: "ignored", reason: "human support requested; automation paused" };
+    if (/^\s*(help|human|support|talk to a human)\s*$/i.test(event.text ?? "")) {
+      await appendInbound(deps.db, { accountId, channel: "apple", text: event.text!, externalMsgId: event.externalMsgId, now });
+      await mergeMeta(deps.db, link.id, { human_support_requested: true });
+      const reply = "i’ve paused automated replies here. open Junction in the app for support. a human has not been assigned yet.";
+      await sendOnLink(outbound, link, "system", { text: reply });
+      return { kind: "replied", accountId, reply, live: false };
+    }
+  }
   await touchInbound(deps.db, link.id, now);
   const openedLink: ChannelLink = { ...link, lastInboundAt: now.toISOString() };
   try {
@@ -181,10 +201,11 @@ export async function handleInbound(deps: InboundDeps, event: InboundEvent): Pro
   if (!turn.created) return { kind: "duplicate" };
   const history = await historyFor(deps.db, accountId);
   const respond = deps.respond ?? defaultRespond;
-  let reply = NO_MODEL_LINE;
+  let reply = event.channel === "sms" ? SMS_NO_MODEL_LINE : NO_MODEL_LINE;
   let live = false;
   try {
-    const r = await respond({ accountId, db: deps.db, history });
+    const command = await routeCommand(deps.db, deps.store, { accountId, userId: link.userId ?? "", channel: event.channel, requestId: event.externalMsgId, linkId: link.id }, event.text);
+    const r = command ? { ok: true as const, reply: command.reply } : await respond({ accountId, db: deps.db, history, channel: event.channel });
     if (r.ok) {
       reply = r.reply;
       live = true;

@@ -55,6 +55,21 @@ afterEach(() => {
 });
 
 describe("/api/channels/links", () => {
+  it("keeps a different business out of the TNZ pilot and does not expose its account ID", async () => {
+    const values = { SMS_PROVIDER: "tnz", TNZ_SMS_ENABLED: "true", TNZ_AUTH_TOKEN: "fixture", TNZ_WEBHOOK_AUTHORIZATION: "Basic fixture-webhook-secret-012345", TNZ_SENDER: "unc@example.test", TNZ_FROM: "800123", TNZ_PILOT_PHONE: "+64210000001", TNZ_PILOT_ACCOUNT_ID: "00000000-0000-4000-8000-00000000acc2" };
+    try {
+      for (const [k, v] of Object.entries(values)) vi.stubEnv(k, v);
+      const data = await (await GET()).json();
+      expect(data.channels.find((c: { channel: string }) => c.channel === "sms")).toMatchObject({ configured: false, number: null });
+      expect(JSON.stringify(data)).not.toContain(values.TNZ_PILOT_ACCOUNT_ID);
+      expect((await POST(req("POST", { channel: "sms" }))).status).toBe(403);
+      expect(db.rows("channel_links")).toHaveLength(0);
+      vi.stubEnv("TNZ_PILOT_ACCOUNT_ID", ACCT);
+      const issued = await (await POST(req("POST", { channel: "sms" }))).json();
+      expect(issued.instruction.url).toBe(`sms:800123?&body=${issued.code}`);
+      expect(db.rows("channel_links")[0].account_id).toBe(ACCT);
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("demo mode → fallback; no session → 401", async () => {
     clearBillingEnv();
     expect(await (await GET()).json()).toEqual({ fallback: true });
@@ -73,6 +88,7 @@ describe("/api/channels/links", () => {
       ["slack", false],
       ["sms", true],
       ["email", false],
+      ["apple", false],
     ]);
     expect(JSON.stringify(listing)).not.toContain("tg-secret");
 

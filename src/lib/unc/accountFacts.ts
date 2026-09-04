@@ -15,13 +15,13 @@
    shows its honest empty state, never a demo number. Nothing here is imported by the server. */
 
 import { useSyncExternalStore } from "react";
-import { connectorHasRealSync } from "@/lib/connectors/sync";
-import { listMemberships } from "@/lib/db/accountState";
-import { asDb, getBrowserSupabase, isDbConfigured } from "@/lib/db/client";
-import type { PlanPhaseJson } from "@/lib/db/mapping";
-import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
-import { unwrap, type DbClient } from "@/lib/db/types";
-import { ALL_SYSTEMS } from "@/lib/platform/catalog";
+import { connectorHasRealSync } from "../connectors/sync";
+import { listMemberships } from "../db/accountState";
+import { asDb, getBrowserSupabase, isDbConfigured } from "../db/client";
+import type { PlanPhaseJson } from "../db/mapping";
+import { CONNECTOR_PLATFORMS } from "../db/mapping";
+import { unwrap, type DbClient } from "../db/types";
+import { ALL_SYSTEMS } from "../platform/catalog";
 
 export type AccountMode = "unknown" | "demo" | "account";
 

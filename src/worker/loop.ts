@@ -38,6 +38,7 @@ import { runChannelsTick, type ChannelsTickReport } from "./channels";
 import { keyringFromEnv } from "../lib/connectors/crypto";
 import type { SelfReviewLlm } from "../lib/telemetry/selfReview";
 import { readTimezone, type BriefLlm } from "../lib/brain/brief";
+import { runCommandsTick } from "./commands";
 
 export interface WorkerOptions {
   /** Seconds between ticks. Default 60. */
@@ -150,6 +151,11 @@ export class Worker {
   async tick(now: Date = this.now()): Promise<TickReport> {
     const t0 = Date.now();
     const report: TickReport = { at: now.toISOString(), accounts: 0, candidates: 0, due: 0, started: [], deferred: 0, budgetSkipped: 0, jobs: [], briefs: [], swept: false, ms: 0 };
+    try {
+      await runCommandsTick(this.deps, this.adapters, this.tickBudgetMs);
+    } catch {
+      this.log.warn("commands.tick_failed", { reason: "command queue unavailable; queued work was not acknowledged as complete" });
+    }
     try {
       const accounts = await this.deps.accounts.listAccounts();
       report.accounts = accounts.length;

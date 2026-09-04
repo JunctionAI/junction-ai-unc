@@ -164,6 +164,7 @@ export async function triggerRun(deps: ServiceDeps, input: TriggerRunInput, adap
   const acct = await resolveAccount(deps, input.accountId, input.accountFallback);
   const catalog = catalogSpecOrThrow(input.routineId);
   const state = await getOrInitState({ store: deps.store, now: deps.now }, acct.account.accountId, catalog.id);
+  if (input.triggeredBy === "schedule" && !state.enabled) throw new WorkerError("invalid_request", "routine was switched off before the scheduled run started");
   const spec = effectiveSpec(state, catalog);
   deps.log?.info("run.start", { accountId: acct.account.accountId, routineId: spec.id, version: spec.version, mode, triggeredBy: input.triggeredBy ?? "manual" });
   const result = await runRoutine(spec, { account: acct.account, triggeredBy: input.triggeredBy ?? "manual", vars: { ...(acct.vars ?? {}), ...(input.vars ?? {}) } }, adapters, { mode });

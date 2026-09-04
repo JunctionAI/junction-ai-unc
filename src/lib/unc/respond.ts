@@ -22,18 +22,19 @@
    Nothing here logs a key or surfaces a provider error. The system prompt is built by
    src/lib/unc/prompt.ts (buildUncSystemPrompt) — never duplicated. */
 
-import { afterChatReply } from "@/lib/brain/hooks";
-import { getProfile, renderProfileForPrompt } from "@/lib/brain/profile";
-import { recallForContext } from "@/lib/brain/retrieve";
-import { loadAccountState } from "@/lib/db/accountState";
-import type { DbClient } from "@/lib/db/types";
-import { BUDGET_EXHAUSTED_LINE, BUDGET_UNAVAILABLE_LINE, isBudgetExceeded, isBudgetUnavailable } from "@/lib/llm/budget";
-import { complete, resolveModel } from "@/lib/llm/router";
-import type { LlmMessage } from "@/lib/llm/types";
-import { getMetrics, renderCertifiedMetrics } from "@/lib/metrics/catalog";
-import { enforceConcision } from "@/lib/unc/concision";
-import { attachBrain, buildUncContext, type BrainContext } from "@/lib/unc/context";
-import { buildUncSystemPrompt, recallPlaybookNotes, type UncSurface } from "@/lib/unc/prompt";
+import { afterChatReply } from "../brain/hooks";
+import { getProfile, renderProfileForPrompt } from "../brain/profile";
+import { recallForContext } from "../brain/retrieve";
+import { loadAccountState } from "../db/accountState";
+import type { DbClient } from "../db/types";
+import { BUDGET_EXHAUSTED_LINE, BUDGET_UNAVAILABLE_LINE, isBudgetExceeded, isBudgetUnavailable } from "../llm/budget";
+import { complete, resolveModel } from "../llm/router";
+import type { LlmMessage } from "../llm/types";
+import { getMetrics, renderCertifiedMetrics } from "../metrics/catalog";
+import { enforceConcision } from "./concision";
+import { attachBrain, buildUncContext, type BrainContext } from "./context";
+import { buildUncSystemPrompt, recallPlaybookNotes, type UncSurface } from "./prompt";
+import type { UncVoice } from "./voice";
 
 export const MAX_REPLY_TOKENS = 2000; // Sonnet 5 adaptive thinking counts against max_tokens; effort pinned low
 export const MAX_TURNS = 24; // most recent turns the model sees
@@ -49,6 +50,8 @@ export interface RespondInput {
   context: unknown;
   surface: UncSurface;
   account: RespondAccount | null;
+  /** Selected by the trusted channel adapter, never by account context text. */
+  voice?: UncVoice;
 }
 
 export type RespondFailure = "not_configured" | "invalid_history" | "refusal" | "error" | "empty";
@@ -105,7 +108,7 @@ export async function respondAsUnc(input: RespondInput): Promise<RespondResult> 
       notes || certified || brain
         ? { memories: brain?.memories ?? [], profile: brain?.profile ?? "", ...(notes ? { playbooks: notes } : {}), ...(certified ? { certifiedMetrics: certified } : {}) }
         : null;
-    const system = buildUncSystemPrompt(attachBrain(input.context, withNotes), surface);
+    const system = buildUncSystemPrompt(attachBrain(input.context, withNotes), surface, input.voice);
     const llmCtx = { accountId: account?.accountId ?? null, db: account?.db };
     const response = await complete("chat", { system, messages, maxTokens: MAX_REPLY_TOKENS, effort: "low" }, llmCtx);
     if (!response) return { ok: false, reason: "error" };

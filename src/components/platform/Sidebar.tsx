@@ -67,6 +67,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
   const connLine = inAccount ? accountConnectorLine(facts, factsState.loading) : V.connSummary;
   return (
     <aside
+      className="unc-sidebar"
       style={{
         width: 236,
         flex: "none",
@@ -85,7 +86,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
         <img src="/brand/mascot-small.png" alt="Junction" style={{ width: 42, height: 45, objectFit: "contain" }} />
         <div style={{ minWidth: 0 }}>
           <div data-testid="sidebar-account-name" style={{ fontWeight: 700, fontSize: 16, letterSpacing: "0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={account?.accountName || undefined}>
-            {account?.accountName?.trim() || "Junction"}
+            {account?.accountName?.trim() || (inAccount ? "Business not named" : "Junction")}
           </div>
           <div style={{ fontSize: 10, color: "var(--on-navy-dim)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{account?.accountName?.trim() ? "Junction · Growth agent" : "Growth agent"}</div>
         </div>

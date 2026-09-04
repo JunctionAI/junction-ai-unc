@@ -34,13 +34,14 @@ export function useRoutinesState(enabled: boolean, initial: RoutinesStateListing
         const body = (await res.json().catch(() => ({}))) as Partial<RoutinesStateListing> & { fallback?: boolean; error?: string };
         if (cancelled) return;
         if (!res.ok || body.fallback || !Array.isArray(body.routines)) {
-          setError(body.error ?? (body.fallback ? null : `couldn’t load routines (${res.status})`));
+          setData(null);
+          setError(body.error ?? (body.fallback ? "routine state is unavailable — nothing is verified as running." : res.status === 401 ? "your session expired — sign in again." : `couldn’t load routines (${res.status})`));
         } else {
           setData(body as RoutinesStateListing);
           setError(null);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) { setData(null); setError(e instanceof Error ? e.message : String(e)); }
       } finally {
         if (!cancelled) setLoading(false);
       }

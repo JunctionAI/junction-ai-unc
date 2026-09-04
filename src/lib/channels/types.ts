@@ -7,14 +7,14 @@
 
    Relative imports only — the worker build (src/worker/channels.ts) reaches these. */
 
-export type Channel = "telegram" | "whatsapp" | "slack" | "sms" | "email";
-export const CHANNELS: readonly Channel[] = ["telegram", "whatsapp", "slack", "sms", "email"] as const;
+export type Channel = "telegram" | "whatsapp" | "slack" | "sms" | "email" | "apple";
+export const CHANNELS: readonly Channel[] = ["telegram", "whatsapp", "slack", "sms", "email", "apple"] as const;
 export const isChannel = (v: unknown): v is Channel => typeof v === "string" && (CHANNELS as readonly string[]).includes(v);
 
 /** Where a chat turn was said. 'app' = the corner chat in the product. */
 export type MessageChannel = Channel | "app";
 
-export const CHANNEL_LABEL: Record<Channel, string> = { telegram: "Telegram", whatsapp: "WhatsApp", slack: "Slack", sms: "Text", email: "Email" };
+export const CHANNEL_LABEL: Record<Channel, string> = { telegram: "Telegram", whatsapp: "WhatsApp", slack: "Slack", sms: "Text", email: "Email", apple: "Apple Messages" };
 
 export interface QuietHours {
   /** "HH:MM" local to the account's timezone (account_profiles.cadence.timezone). */
@@ -75,6 +75,8 @@ export interface SendOptions {
 
 /** One inbound thing from a channel, normalised. Exactly one of `text` / `action` is set. */
 export interface InboundEvent {
+  /** Only a verified provider event may set this; not inferred from customer prose. */
+  lifecycle?: "conversation_closed";
   channel: Channel;
   /** The sender's id on the platform — the link's external_id. */
   externalId: string;
@@ -89,6 +91,8 @@ export interface InboundEvent {
   displayName?: string;
   /** Slack: the workspace the event came from (selects the bot token). */
   scopeId?: string;
+  /** Trusted ingress restriction for a single-account pilot. Never parsed from customer text. */
+  accountScope?: string;
   at?: string;
 }
 

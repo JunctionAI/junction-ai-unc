@@ -20,6 +20,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "beta_invites",
       "billing_events",
       "business_profiles",
+      "channel_inbox",
       "channel_links",
       "channel_secrets",
       "chat_messages",
@@ -40,6 +41,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "playbooks",
       "receipts",
       "resource_profiles",
+      "routine_commands",
       "routine_outcomes",
       "routine_params",
       "routine_runs",
@@ -101,7 +103,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect([...s.account_profiles.columns]).toEqual(expect.arrayContaining(["tone", "decision_style", "cadence", "channels", "founder_notes"]));
     // 0012 channels: the one thread carries its channel; links / ledger / secrets are keyed and enum-checked
     expect([...s.chat_messages.columns]).toEqual(expect.arrayContaining(["channel", "external_msg_id", "delivery"]));
-    expect([...s.chat_messages.enums.channel]).toEqual(["app", "telegram", "whatsapp", "slack", "sms", "email"]);
+    expect([...s.chat_messages.enums.channel]).toEqual(["app", "telegram", "whatsapp", "slack", "sms", "email", "apple"]);
     expect(s.chat_messages.uniques).toContainEqual({ columns: ["channel", "external_msg_id"], partialNotNull: "external_msg_id" });
     expect(s.channel_links.uniques).toContainEqual({ columns: ["channel", "external_id"] });
     expect(s.channel_links.uniques).toContainEqual({ columns: ["link_code"], partialNotNull: "link_code" });

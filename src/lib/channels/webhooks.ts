@@ -84,6 +84,7 @@ export const TWILIO_WEBHOOK_PATH = "/api/webhooks/twilio";
 export const EMPTY_TWIML = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>";
 
 export function receiveTwilio(deps: ReceiveDeps, req: { signature: string | null; rawBody: string; url?: string }): Received {
+  if (deps.env.SMS_PROVIDER && deps.env.SMS_PROVIDER !== "twilio") return bad(503, "Twilio is not the selected SMS provider");
   const config = twilioConfig(deps.env);
   if (!config) return bad(503, "sms is not configured");
   const params = formToRecord(req.rawBody);
