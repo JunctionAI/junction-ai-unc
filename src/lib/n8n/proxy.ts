@@ -58,7 +58,7 @@ export interface ProxyDeps {
   playbooks?: ((query: string, domains: Skill["domain"][] | null, limit: number) => Promise<Playbook[]>) | null;
 }
 
-export type ProxyAuth = { ok: true; claims: DataTokenClaims; run: RunRecord } | { ok: false; status: number; error: string };
+export type ProxyAuth = { ok: true; claims: DataTokenClaims; run: RunRecord; spec: RoutineSpec } | { ok: false; status: number; error: string };
 
 const sharedLimiter = new RateLimiter();
 
@@ -99,7 +99,7 @@ export async function authenticate(deps: ProxyDeps, req: Request): Promise<Proxy
   }
   if (run.status !== "running") return { ok: false, status: 409, error: `run ${run.id} is ${run.status} — its data token is no longer valid` };
   if (!(deps.limiter ?? sharedLimiter).take(tokenKey(token))) return { ok: false, status: 429, error: "too many calls on this token — at most 60 a minute" };
-  return { ok: true, claims, run };
+  return { ok: true, claims, run, spec };
 }
 
 function ctxFor(claims: DataTokenClaims, run: RunRecord, currency = "NZD"): RunContext {
