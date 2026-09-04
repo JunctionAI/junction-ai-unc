@@ -14,6 +14,7 @@ import { TwilioAdapter, twilioConfig } from "./twilio";
 import { WhatsAppAdapter, whatsappConfig } from "./whatsapp";
 import { TnzAdapter, tnzConfig } from "./tnz";
 import { AppleAdapter, APPLE_SETUP_NOTE } from "./apple";
+import { messagingDisabled, MESSAGING_DISABLED_NOTE } from "../releaseGate";
 
 export interface AdapterInputs {
   env: Env;
@@ -25,6 +26,7 @@ export interface AdapterInputs {
 
 export function buildAdapters(inputs: AdapterInputs): AdapterRegistry {
   const { env, fetch } = inputs;
+  if (messagingDisabled(env)) return {};
   const tokenFor = inputs.db ? slackTokenResolver(inputs.db, inputs.keyring ?? null) : async () => null;
   const db = inputs.db;
   return {
@@ -47,6 +49,7 @@ export interface ChannelAvailability {
 }
 
 export function availability(env: Env): ChannelAvailability[] {
+  if (messagingDisabled(env)) return (["telegram", "whatsapp", "slack", "sms", "email", "apple"] as Channel[]).map(channel => ({ channel, configured: false, setupNote: MESSAGING_DISABLED_NOTE }));
   const tg = telegramConfig(env);
   const wa = whatsappConfig(env);
   const sl = slackConfig(env);

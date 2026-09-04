@@ -5,6 +5,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { getServiceSupabase, isServiceRoleConfigured } from "@/lib/db/server";
 import type { Sink, WaitlistEntry, WaitlistSinks } from "./store";
+import { messagingDisabled } from "../channels/releaseGate";
 
 export const WAITLIST_FROM = "Unc <tom@getjunction.ai>";
 export const WAITLIST_TO = "tom@getjunction.ai";
@@ -30,6 +31,7 @@ export function dbSink(): Sink | null {
 
 /** Notification to Tom via Resend's HTTP API — a plain fetch, no SDK (no new dependencies). */
 export function emailSink(fetchImpl: typeof fetch = fetch, env: Record<string, string | undefined> = process.env): Sink | null {
+  if (messagingDisabled(env)) return null;
   const key = (env.RESEND_API_KEY || "").trim();
   if (!key) return null;
   return async (entry: WaitlistEntry) => {

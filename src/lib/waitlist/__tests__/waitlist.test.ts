@@ -217,6 +217,9 @@ describe("default sinks (env-gated)", async () => {
     await expect(sink(entry())).rejects.toThrow(/42P01/);
   });
   it("email sink is null without RESEND_API_KEY; posts to Resend from/to tom@getjunction.ai; non-2xx throws", async () => {
+    const blockedFetch = vi.fn();
+    expect(emailSink(blockedFetch, { RESEND_API_KEY: "re_fake", UNC_MESSAGING_ENABLED: "false" })).toBeNull();
+    expect(blockedFetch).not.toHaveBeenCalled();
     expect(emailSink(fetch, {})).toBeNull();
     const calls: { url: string; init: RequestInit }[] = [];
     const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {

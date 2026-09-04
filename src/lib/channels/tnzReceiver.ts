@@ -1,8 +1,10 @@
 import { parseTnzInbound, tnzConfig, TNZ_MAX_BODY_BYTES, verifyTnzWebhook } from "./adapters/tnz";
 import type { Env, InboundEvent } from "./types";
+import { messagingDisabled } from "./releaseGate";
 
 /** No body/token logging. Authenticate before reading; acknowledge only durable storage. */
 export async function receiveTnz(req: Request, deps: { env: Env; now: Date; save: (events: InboundEvent[]) => Promise<void>; wake: () => void }): Promise<Response> {
+  if (messagingDisabled(deps.env)) return new Response("messaging_disabled", { status: 503 });
   const config = tnzConfig(deps.env);
   if (!config) return new Response("SMS unavailable", { status: 503 });
   if (!verifyTnzWebhook(config, req.headers, deps.now)) return new Response("Unauthorized", { status: 401 });

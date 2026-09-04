@@ -15,10 +15,11 @@ Scope: six agreed improvements while Apple/provider approval and n8n development
 
 ## Live facts checked in this work
 
-- The open production app was signed in as `halltaylor.tom@gmail.com`, with Junction AI context. It is not the AVGAR account.
-- The existing **AVGAR Sport** account is owned by `tom@getjunction.ai` (one owner member).
-- AVGAR's Shopify, Meta Ads, GA4, Google Ads and Klaviyo connector records were all disconnected, with no external account reference or sync receipt. No credentials were copied from another business.
+- Correction after Tom confirmed the intended pilot: `halltaylor.tom@gmail.com` owns account `aa5cfc84-2569-4c99-9b40-67003ae55eda`, which is the AVGAR pilot account. Its saved business context still says Junction AI; the profile label must not be mistaken for connector ownership.
+- A separate account named **AVGAR Sport**, owned by `tom@getjunction.ai`, has disconnected connectors. That is not the account Tom selected. Do not move credentials there or request another OAuth connection.
+- Fresh provider reads through the updated compiled backend passed on 4 September at 15:43 NZST using the Gmail account's existing encrypted connections: Shopify `avgar-sport.myshopify.com` returned 14 seven-day order rows; Meta `act_3235248400060604` returned two seven-day insight rows with AVGAR-named ads/ad sets. Check ID: `6fa09ba3-d70c-4f48-9664-9475f2cc2c6b`; completed `2026-09-04T03:43:48.662Z`. This diagnostic wrote no database rows and made no provider mutations. It proves current reader access, not deployed app or worker acceptance.
 - In the target Junction database, `routine_commands` and `channel_inbox` do not yet exist. New command dispatch therefore needs reviewed migration and worker rollout before activation; leave `UNC_COMMANDS_ENABLED=false` and `LIVE_MODE_ENABLED=false` meanwhile.
+- Fresh schema read also found `llm_spend_reservations`, `reserve_llm_spend` and `release_llm_spend_reservation` absent. The updated router requires these even with command dispatch disabled; do not deploy/promote it over the working app without the budget migration. The prior client-write policies and public RPC grants are still present, so the pending security migrations need an explicit project-wide permission-change decision. No migrations or production release were performed in the fresh-read follow-up.
 - Vercel project `junction-unc` was resolved and linked. Preview environment listing showed no Supabase or model configuration. Local environment files and generated/test/private documentation directories are excluded from preview upload.
 - Apple review is reported by Tom. No fresh Apple approval or real message-delivery evidence was obtained here. The prior Infobip request was Pending; do not submit a duplicate without reconciliation.
 
@@ -56,9 +57,9 @@ No GitHub push was performed. The local code, this readiness record and the demo
 
 ## Next real pilot steps
 
-1. Tom signs in to the existing AVGAR account using `tom@getjunction.ai`. No password or verification code should be shared in chat.
-2. Connect AVGAR's own Shopify account first through its authorized OAuth flow; confirm actual store identity and a fresh sync receipt before enabling a source-dependent routine. Do not connect all platforms speculatively.
-3. Provision a separately scoped authenticated test deployment and review/apply the queue/inbox migration and worker rollout to the intended environment. Confirm model/budget settings. No production credential copying into an unprotected preview.
+1. Keep the intended pilot on `halltaylor.tom@gmail.com`. Existing Shopify and Meta credentials passed fresh reads; no reconnection or credential transfer is required.
+2. Reconcile the saved business profile with AVGAR before treating its company goals/context as authoritative. Do not invent a new goal, deadline or budget.
+3. Obtain approval for the live database migration/security-policy changes and replacing the production backend (earlier deployment approval was demo-only). Review dependencies and current grants, verify the model-budget migration, stage a production-environment build without changing the main alias, then test before promotion. Queue activation needs a matching durable worker; keep it OFF until that receipt exists. No production credential copying into an unprotected preview.
 4. From the phone, ask a source-backed business question, check source/freshness, reload and verify durable chat history. Then request one enabled draft-only routine and reconcile the resulting run/output receipt. Test switched-off, duplicate, failed lookup and wrong-account denial paths.
 5. Keep Apple disabled until provider acceptance and the missing authentication/delivery/human-support contracts are verified. App chat does not depend on Apple approval.
 
