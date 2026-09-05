@@ -94,6 +94,29 @@ describe("Slack install", () => {
     expect(db.rows("oauth_states").find((r) => r.state === s2)?.redirect_to).toBe("/app");
   });
 
+  it("concurrent Slack callbacks exchange and link only once", async () => {
+    const db = channelDb();
+    const f = stubFetch([() => json({ ok: true, access_token: "synthetic-bot", team: { id: "T1", name: "Example" }, authed_user: { id: "U1" }, bot_user_id: "UB" })]);
+    const { state } = await startSlackInstall({ db, config, appUrl: "https://unc.test", accountId: ACCT, now: now() });
+    const base = { db, keyring: KEYRING, config, fetch: f.fetch, appUrl: "https://unc.test", now: now(), userId: USER };
+    const query = new URLSearchParams({ code: "synthetic-code", state });
+    const results = await Promise.all([finishSlackInstall(base, query), finishSlackInstall(base, query)]);
+    expect(results.filter(r => r.ok)).toHaveLength(1);
+    expect(f.calls).toHaveLength(1);
+    expect(db.rows("channel_secrets")).toHaveLength(1);
+    expect(db.rows("channel_links")).toHaveLength(1);
+  });
+
+  it.each(["boundary", "invalid"])("rejects Slack expiry %s before provider work", async (mode) => {
+    const db = channelDb();
+    const f = stubFetch();
+    const { state } = await startSlackInstall({ db, config, appUrl: "https://unc.test", accountId: ACCT, now: now() });
+    db.rows("oauth_states")[0].expires_at = mode === "boundary" ? now().toISOString() : "invalid";
+    const result = await finishSlackInstall({ db, keyring: KEYRING, config, fetch: f.fetch, appUrl: "https://unc.test", now: now(), userId: USER }, new URLSearchParams({ code: "synthetic-code", state }));
+    expect(result).toMatchObject({ ok: false, reason: "bad_state" });
+    expect(f.calls).toHaveLength(0);
+  });
+
   it("finish: bad / reused / expired state; denied; exchange failure; success seals the bot token per team and links the installing user", async () => {
     const db = channelDb();
     const clk = clock();

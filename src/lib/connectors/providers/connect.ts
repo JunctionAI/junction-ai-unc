@@ -24,7 +24,7 @@ import type { FallbackReason, HandlerDeps } from "../handlers";
 import { callbackUri, newState, STATE_TTL_MS } from "../oauth";
 import { hasPicker } from "../options";
 import { connectorEntry, normaliseShopDomain, type ConnectorEntry } from "../registry";
-import { accountForUser, consumeOauthState, getConnector, insertOauthState, memberRole, updateConnector, upsertConnector, type ConnectorRow } from "../store";
+import { accountForUser, consumeOauthState, getConnector, insertOauthState, markOauthFailure, memberRole, updateConnector, upsertConnector, type ConnectorRow } from "../store";
 import { authProviderFor } from "./index";
 import { AuthProviderError, providerRefOf, providerRefPatch, withoutProviderRef, type AuthProvider, type AuthProviderId, type ProviderRef } from "./interface";
 import type { Platform } from "@/lib/runtime/types";
@@ -123,17 +123,18 @@ export async function callbackViaProvider(deps: HandlerDeps, providerId: string,
   const fail = async (reason: string) => {
     deps.log?.(`connectors.provider.callback provider=${providerId} platform=${entry.id} account=${accountId} reason=${reason}`);
     try {
-      await upsertConnector(db, accountId, entry.id, { status: "error", last_sync_result: "error:oauth" });
+      await markOauthFailure(db, accountId, entry.id);
     } catch {
       /* the redirect is still the right answer */
     }
     return errRedirect(entry.id);
   };
-  if (new Date(stateRow.expires_at).getTime() < now.getTime()) return fail("state_expired");
   if (!deps.userId || (await memberRole(db, deps.userId, accountId)) !== "owner") {
     deps.log?.(`connectors.provider.callback provider=${providerId} platform=${entry.id} account=${accountId} reason=session_mismatch`);
     return errRedirect(entry.id);
   }
+  const expiresAt = new Date(stateRow.expires_at).getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= now.getTime()) return fail("state_expired");
   // Composio appends ?status=success&connected_account_id=…; anything else on `error`/`status` is a refusal.
   const cbStatus = (params.get("status") || "").toLowerCase();
   if (params.get("error") || (cbStatus && cbStatus !== "success")) return fail("provider_denied");

@@ -14,8 +14,8 @@
    honestly; only malformed input / missing session are real errors.
 
    Callback never shows the founder a stack trace: every failure lands on
-   /app?connect_error=<platform> with the connector row in status 'error' and
-   last_sync_result 'error:oauth' when we know which row it was. Tokens are sealed straight
+   /app?connect_error=<platform>; only a still-pending connection can be marked 'error'.
+   An existing usable grant is preserved on failed reconnect. Tokens are sealed straight
    into connector_secrets and appear in no log, no response and no redirect. */
 
 import type { DbClient } from "@/lib/db/types";
@@ -26,7 +26,7 @@ import type { PurgeResult, SyncProvisioner } from "./provisioning";
 import { connectorEntry, GOOGLE_CHILDREN, isGoogleUmbrella, META_GRAPH_VERSION, normaliseShopDomain, platformCredentials, type ConnectorEntry } from "./registry";
 import { revokeToken, type RevokeResult } from "./revoke";
 import { insertSystemReceipt } from "@/lib/db/receipts";
-import { accountForUser, consumeOauthState, deleteSecret, getConnector, getSecret, insertOauthState, memberRole, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
+import { accountForUser, beginOauthConnection, consumeOauthState, deleteSecret, getConnector, getSecret, insertOauthState, markOauthFailure, memberRole, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
 import { getAccessTokenFor } from "./tokens";
 import { authProviderMode } from "./registry";
 import { clearProviderRef, providerLabel, revokeViaProvider, startViaProvider } from "./providers/connect";
@@ -118,9 +118,9 @@ export async function handleStart(deps: HandlerDeps, platform: string, body: unk
     created_at: now.toISOString(),
     expires_at: new Date(now.getTime() + STATE_TTL_MS).toISOString(),
   });
-  // Mark the row as in flight so a stale card reads "connecting" rather than "connected".
+  // A reconnect attempt must leave the current connection available until replaced.
   // The Google umbrella has no row of its own: its children keep whatever state they have.
-  if (!isGoogleUmbrella(entry.id)) await upsertConnector(deps.db, accountId, entry.id, { status: "connecting" });
+  if (!isGoogleUmbrella(entry.id)) await beginOauthConnection(deps.db, accountId, entry.id);
 
   const url = entry.authorizeUrl({
     clientId: creds.clientId,
@@ -164,20 +164,21 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
   const fail = async (reason: string) => {
     deps.log?.(`connectors.callback platform=${entry.id} account=${accountId} reason=${reason}`);
     try {
-      if (!isGoogleUmbrella(entry.id)) await upsertConnector(db, accountId, entry.id, { status: "error", last_sync_result: "error:oauth" });
+      if (!isGoogleUmbrella(entry.id)) await markOauthFailure(db, accountId, entry.id);
     } catch {
       /* the redirect is still the right answer */
     }
     return errRedirect(entry.id);
   };
 
-  if (new Date(row.expires_at).getTime() < now.getTime()) return fail("state_expired");
   // The browser that finishes the flow must be an owner of the account that started it.
   // Authorization failures do not mutate the connector row through the service client.
   if (!deps.userId || (await memberRole(db, deps.userId, accountId)) !== "owner") {
     deps.log?.(`connectors.callback platform=${entry.id} account=${accountId} reason=session_mismatch`);
     return errRedirect(entry.id);
   }
+  const expiresAt = new Date(row.expires_at).getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= now.getTime()) return fail("state_expired");
   if (params.get("error")) return fail("provider_denied");
   const code = params.get("code") || "";
   if (!code) return fail("no_code");

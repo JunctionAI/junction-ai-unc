@@ -122,6 +122,24 @@ export async function updateConnector(
   await unwrap("connectors.update", db.from("connectors").update(patch).eq("id", connectorId));
 }
 
+/** Starting native OAuth must not interrupt an existing usable connection. Neither
+    statement can downgrade a connected row, including a concurrent successful callback. */
+export async function beginOauthConnection(db: DbClient, accountId: string, platform: string): Promise<void> {
+  await unwrap("connectors.begin.insert", db.from("connectors").upsert(
+    { account_id: accountId, platform, status: "connecting" },
+    { onConflict: "account_id,platform", ignoreDuplicates: true },
+  ));
+  await unwrap("connectors.begin.update", db.from("connectors").update({ status: "connecting" })
+    .eq("account_id", accountId).eq("platform", platform).in("status", ["disconnected", "needs_reconnect", "error"]));
+}
+
+/** A failed attempt is not evidence that an existing grant stopped working. Never
+    recreate a removed connector or overwrite a successful connection/disconnect. */
+export async function markOauthFailure(db: DbClient, accountId: string, platform: string): Promise<void> {
+  await unwrap("connectors.oauth_failure", db.from("connectors").update({ status: "error", last_sync_result: "error:oauth" })
+    .eq("account_id", accountId).eq("platform", platform).eq("status", "connecting"));
+}
+
 export async function putSecret(db: DbClient, connectorId: string, sealed: SealedSecret, now: string): Promise<void> {
   await unwrap(
     "connector_secrets.upsert",
@@ -145,14 +163,14 @@ export async function insertOauthState(db: DbClient, row: OauthStateRow & { crea
   await unwrap("oauth_states.insert", db.from("oauth_states").insert({ ...row }));
 }
 
-/** Read-and-delete: a state is single-use whatever happens next. */
+/** Atomic DELETE RETURNING: only the winning callback receives the state. A separate
+    SELECT followed by DELETE allows concurrent callbacks to exchange the same code. */
 export async function consumeOauthState(db: DbClient, state: string): Promise<OauthStateRow | null> {
-  const row = await unwrap<OauthStateRow | null>(
-    "oauth_states.select",
-    db.from("oauth_states").select("state, account_id, platform, code_verifier, shop, redirect_to, expires_at").eq("state", state).maybeSingle(),
+  return unwrap<OauthStateRow | null>(
+    "oauth_states.consume",
+    db.from("oauth_states").delete().eq("state", state)
+      .select("state, account_id, platform, code_verifier, shop, redirect_to, expires_at").maybeSingle(),
   );
-  if (row) await unwrap("oauth_states.delete", db.from("oauth_states").delete().eq("state", state));
-  return row;
 }
 
 /** Expiry sweep (call from a cron / the worker heartbeat). Returns nothing; idempotent. */

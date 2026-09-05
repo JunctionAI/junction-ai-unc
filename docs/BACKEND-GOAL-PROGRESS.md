@@ -10,7 +10,16 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 23, 5 September 2026, approximately 08:59 UTC
+## Latest state — Batch 24, 5 September 2026, approximately 09:12 UTC
+
+**Implementation progress, release pending.** The preceding status answer was no implementation progress. Revalidated the current checkout and repaired native reconnect interruption, unconditional callback-failure updates, non-atomic shared OAuth-state consumption and expiry boundaries. Native reconnect preserves a usable grant; shared callback consumption is a single DELETE RETURNING. Hosted callback failures and Slack duplicate/expiry handling share the correction; hosted reconnect-start pointer isolation is not yet fixed.
+
+- **198 files / 2,458 tests PASS**, app/worker TypeScript, production build, lint zero errors / 39 existing warnings, and diff checks. Actual supabase-js transport shapes and concurrent native/Slack callback fixtures pass.
+- The rollback-only PostgreSQL lifecycle canary and independent cleanup readback pass. No production business/credential/channel data changed. AVGAR stays paused with zero registrations/runs.
+- [Exact behavior, evidence and remaining auth work](OAUTH-LIFECYCLE-2026-09-05.md). Full captured initiating-owner/account-generation/attempt/connector-version binding, atomic success commit, hosted pending-state isolation, refresh/disconnect/asset-selection and delayed-read protection remain open. This is not B07 completion.
+- Preparing a clean-source matched app/worker release with no schema or secret changes. B02's last verified live release remains Batch 23 until the new candidate and worker are independently checked. The unrelated untracked `src/lib/runtime/context 2.ts` is preserved and excluded from release.
+
+## Batch 23, 5 September 2026, approximately 08:59 UTC
 
 **Live coordinated release progress. B02's current matched-release acceptance gate passes; the full B01–B24 goal remains incomplete.** The preceding status reply was no implementation progress. This continuation finished the attested chat-preservation gate, corrected an obsolete pause-test fixture without weakening protection, and committed/pushed release source `56dbfdb0d4b95e760ca3b045798d5ed3c4a7eeab`.
 

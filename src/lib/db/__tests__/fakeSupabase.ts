@@ -147,6 +147,7 @@ export interface Call {
   limit?: number;
   single?: "single" | "maybeSingle";
   onConflict?: string;
+  ignoreDuplicates?: boolean;
   returning: boolean;
 }
 
@@ -379,7 +380,9 @@ export class FakeSupabase implements DbClient {
     this.tables.get(table)!.push(full);
     return full;
   }
-  upsertRow(table: string, row: Row, onConflict?: string): Row {
+  upsertRow(table: string, row: Row, onConflict?: string): Row;
+  upsertRow(table: string, row: Row, onConflict: string | undefined, ignoreDuplicates: boolean): Row | null;
+  upsertRow(table: string, row: Row, onConflict?: string, ignoreDuplicates = false): Row | null {
     this.assertColumns(table, Object.keys(row));
     const t = this.assertTable(table);
     const key = onConflict ? cols(onConflict) : t.primaryKey;
@@ -388,6 +391,7 @@ export class FakeSupabase implements DbClient {
       throw new Error(`fake: upsert onConflict "${key.join(",")}" is not a unique key of ${table}`);
     const existing = (this.tables.get(table) ?? []).find((r) => key.every((c) => r[c] === row[c]));
     if (existing) {
+      if (ignoreDuplicates) return null;
       const merged = { ...existing, ...row };
       this.assertEnums(table, merged);
       const v = this.uniqueViolation(table, merged, existing);
@@ -468,8 +472,8 @@ class FakeTable implements DbTable {
   update(values: Row) {
     return new FakeFilter(this.db, { table: this.table, op: "update", values, filters: [], returning: false });
   }
-  upsert(values: Row | Row[], opts: { onConflict?: string } = {}) {
-    return new FakeFilter(this.db, { table: this.table, op: "upsert", values, filters: [], onConflict: opts.onConflict, returning: false });
+  upsert(values: Row | Row[], opts: { onConflict?: string; ignoreDuplicates?: boolean } = {}) {
+    return new FakeFilter(this.db, { table: this.table, op: "upsert", values, filters: [], onConflict: opts.onConflict, ignoreDuplicates: opts.ignoreDuplicates, returning: false });
   }
   delete() {
     return new FakeFilter(this.db, { table: this.table, op: "delete", filters: [], returning: false });
@@ -575,7 +579,7 @@ class FakeFilter implements DbFilter {
         }
         case "upsert": {
           const vals = Array.isArray(this.call.values) ? this.call.values : [this.call.values!];
-          affected = vals.map((v) => this.db.upsertRow(table, v, this.call.onConflict));
+          affected = vals.map((v) => this.db.upsertRow(table, v, this.call.onConflict, this.call.ignoreDuplicates ?? false)).filter((v): v is Row => v !== null);
           break;
         }
         case "update":

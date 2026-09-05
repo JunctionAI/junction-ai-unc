@@ -43,7 +43,7 @@ export async function finishSlackInstall(
 ): Promise<FinishResult> {
   const state = query.get("state") ?? "";
   const row = state ? await consumeOauthState(deps.db, state) : null;
-  if (!row || row.platform !== SLACK_STATE_PLATFORM || new Date(row.expires_at).getTime() < deps.now.getTime()) return { ok: false, reason: "bad_state", redirectTo: "/app" };
+  if (!row || row.platform !== SLACK_STATE_PLATFORM || !(new Date(row.expires_at).getTime() > deps.now.getTime())) return { ok: false, reason: "bad_state", redirectTo: "/app" };
   const redirectTo = safeRedirect(row.redirect_to);
   if (!deps.userId || (await memberRole(deps.db, deps.userId, row.account_id)) !== "owner") {
     return { ok: false, reason: "session_mismatch", redirectTo };
