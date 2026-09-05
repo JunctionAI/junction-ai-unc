@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import path from "node:path";
 import { fixture } from "./data";
-import { opsFixture } from "../ops-fixture/data";
+import { opsFixture, workFixture } from "../ops-fixture/data";
 import { agentsFixture } from "../agents-fixture/data";
 import { detailFixture,paramsFixture } from "../routine-detail-fixture/data";
 import { manualFixture } from "../manual-recovery-fixture/server";
@@ -23,6 +23,7 @@ export default defineConfig({
       if (req.url?.startsWith("/api/routines/params?") && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(paramsFixture())); return; }
       if (req.url?.startsWith("/api/artifacts?") && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify({accountId:agentsFixture.accountId,contextGeneration:1,artifacts:[],channels:[]})); return; }
       if (req.url === "/api/agents" && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(req.headers.referer?.includes("/routine-detail-fixture/")?detailFixture():agentsFixture)); return; }
+      if (req.url?.startsWith("/api/ops/run?")) { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(workFixture())); return; }
       if (req.url?.startsWith("/api/ops")) { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(opsFixture(new URL(req.url, "http://fixture.test").searchParams.get("accountId")))); return; }
       if (req.url?.startsWith("/api/workspace/history")) { res.setHeader("content-type", "application/json"); res.end(JSON.stringify({accountId:fixture.accountId,contextGeneration:fixture.contextGeneration,
         asOf:fixture.fetchedAt,fetchedAt:fixture.fetchedAt,nextCursor:null,entries:[{kind:"artifact",id:fixture.artifacts[0].id,occurredAt:fixture.artifacts[0].createdAt,artifact:fixture.artifacts[0]}]})); return; }

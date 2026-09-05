@@ -4,12 +4,13 @@ import Link from "next/link";
 import { ALL_SYSTEMS } from "@/lib/platform/catalog";
 import { OPS_STAGES, opsNext, opsStage, opsTime, type OpsClient, type OpsRun, type OpsSnapshot } from "@/lib/ops/types";
 import styles from "./ops.module.css";
+import OpsRunReview from "./OpsRunReview";
 
 const names = new Map(ALL_SYSTEMS.map(r => [r.id, r.name]));
-type View = "clients" | "pipeline" | "runs" | `client/${string}`;
+type View = "clients" | "pipeline" | "runs" | `client/${string}` | `run/${string}/${string}`;
 const readView = (): View => {
   const hash = window.location.hash.slice(1);
-  return hash === "pipeline" || hash === "runs" || /^client\/[0-9a-f-]{36}$/i.test(hash) ? hash as View : "clients";
+  return hash === "pipeline" || hash === "runs" || /^client\/[0-9a-f-]{36}$/i.test(hash) || /^run\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/i.test(hash) ? hash.toLowerCase() as View : "clients";
 };
 
 export default function OpsConsole() {
@@ -19,7 +20,8 @@ export default function OpsConsole() {
   const [search, setSearch] = useState("");
   const [runStatus, setRunStatus] = useState("all");
   const [runClient, setRunClient] = useState("all");
-  const accountId = view.startsWith("client/") ? view.slice(7) : null;
+  const reviewingRun = view.startsWith("run/") ? view.split("/")[2] : null;
+  const accountId = view.startsWith("client/") ? view.slice(7) : reviewingRun ? view.split("/")[1] : null;
   const key = `${accountId || "index"}:${revision}`;
   const data = state.key === key ? state.data : undefined;
   const error = state.key === key ? state.error : undefined;
@@ -57,7 +59,7 @@ export default function OpsConsole() {
   const total = (field: "enabledCount" | "pendingDraftCount" | "pendingRunApprovalCount") => data?.clients.reduce((sum, c) => sum + c[field], 0);
   const clientLink = (c: OpsClient) => <a href={`#client/${c.id}`} className={styles.clientLink}>{c.name}<small>{c.id}</small></a>;
   const count = (label: string, value: number | undefined, note?: string) => <div className={styles.stat}><span>{label}</span><strong>{value ?? "—"}</strong>{note && <small>{note}</small>}</div>;
-  const runsTable = (rows: OpsRun[]) => rows.length ? <div className={styles.tableWrap}><table><thead><tr><th>Account / routine</th><th>Saved status</th><th>Started</th><th>Finished</th></tr></thead><tbody>{rows.map(r => <tr key={r.id}><td><a href={`#client/${r.accountId}`}>{data?.clients.find(c => c.id === r.accountId)?.name || r.accountId}</a><strong>{names.get(r.routineId) || r.routineId}</strong><small>{r.routineId} · version {r.version}</small><code>{r.id}</code></td><td>{r.status.replaceAll("_", " ")}<small>{r.mode === "dry_run" ? "shadow / dry run" : r.mode}</small></td><td>{opsTime(r.startedAt)}</td><td>{opsTime(r.finishedAt)}</td></tr>)}</tbody></table></div> : <p className={styles.empty}>No saved runs match this view. No execution is inferred.</p>;
+  const runsTable = (rows: OpsRun[]) => rows.length ? <div className={styles.tableWrap}><table><thead><tr><th>Account / routine</th><th>Saved status</th><th>Started</th><th>Finished</th></tr></thead><tbody>{rows.map(r => <tr key={r.id}><td><a href={`#client/${r.accountId}`}>{data?.clients.find(c => c.id === r.accountId)?.name || r.accountId}</a><strong>{names.get(r.routineId) || r.routineId}</strong><small>{r.routineId} · version {r.version}</small><code>{r.id}</code><a href={`#run/${r.accountId}/${r.id}`}>Review output and receipts →</a></td><td>{r.status.replaceAll("_", " ")}<small>{r.mode === "dry_run" ? "shadow / dry run" : r.mode}</small></td><td>{opsTime(r.startedAt)}</td><td>{opsTime(r.finishedAt)}</td></tr>)}</tbody></table></div> : <p className={styles.empty}>No saved runs match this view. No execution is inferred.</p>;
   const title = accountId ? client?.name || "Client detail" : view === "pipeline" ? "Setup pipeline" : view === "runs" ? "Run monitor" : "Clients";
 
   return <div className={styles.root}>
@@ -88,13 +90,14 @@ export default function OpsConsole() {
           {data && runsTable(runRows)}
           <p className={styles.muted}>Delivery failures, provider costs and stalled-run thresholds are not inferred from run status. Those monitoring views remain to be wired.</p>
         </>}
-        {accountId && data && client && detail && <>
+        {accountId && reviewingRun && data && detail && <OpsRunReview key={`${accountId}:${reviewingRun}:${revision}`} accountId={accountId} runId={reviewingRun} />}
+        {accountId && !reviewingRun && data && client && detail && <>
           <p className={styles.code}>{client.id} · generation {client.contextGeneration} · {client.currency}</p>
           <div className={styles.stats}>{count("Login members", client.memberCount)}{count("Dated connector reads", client.datedReadCount, `of ${client.connectorCount} saved connector rows`)}{count("Routines enabled", client.enabledCount)}{count("Verified channel links", client.verifiedChannelCount, "Not delivery acceptance")}</div>
           <section className={styles.card}><h2>Setup checklist</h2><p className={styles.badge}>{opsStage(client)}{client.paused ? " · automation paused" : " · no account pause recorded"}</p><p>{opsNext(client)}</p><ul><li>Saved website: {client.website || "Not recorded"}</li><li>Login membership: {client.memberCount ? `${client.memberCount} saved member(s); role grants are separate from operator access.` : "No assigned login. Reconcile ownership before inviting."}</li><li>Callable registry: {client.registeredWorkflowCount} active row(s). Independent execution verification still required.</li><li>Existing-system mapping: not yet certified in Unc. Do not merge or reconnect accounts from display names.</li><li>Customer acceptance: not inferred from these records.</li></ul></section>
           <section><h2>Connections and read freshness</h2>{detail.connectors.length ? <div className={styles.connectionGrid}>{detail.connectors.map(c => <article className={styles.card} key={c.id}><h3>{c.platform}</h3><span className={styles.badge}>{c.status.replaceAll("_", " ")}</span><p className={styles.code}>{c.externalRef || "Business asset not selected"}</p><p>Last read: {opsTime(c.lastReadAt)}<br />Result: {c.lastReadResult || "Not recorded"}<br />Metrics: {c.lastReadMetrics ?? "Unknown"}</p><small>Saved read evidence, not a fresh provider check.</small></article>)}</div> : <p className={styles.empty}>No connector records for this account.</p>}</section>
           <section><h2>Routine switches</h2><p className={styles.muted}>Saved switches only. No operator-side activation or change of customer permissions.</p><div className={styles.routines}>{ALL_SYSTEMS.map(r => <div key={r.id}><span>{r.name}<small>{r.id}</small></span><strong>{detail.routines.find(s => s.id === r.id)?.enabled ? "Enabled" : "Off"}</strong></div>)}</div></section>
-          <section><h2>Saved review queue</h2><p className={styles.muted}>{client.pendingDraftCount} pending draft(s) · {client.pendingRunApprovalCount} unexpired run approval(s). Operator access does not grant review or execution authority.</p>{detail.drafts.length ? detail.drafts.map(d => <article className={styles.card} key={d.id}><h3>{d.title}</h3><p>{d.status} · revision {d.revision} · {opsTime(d.createdAt)}</p><code>Artifact {d.id}<br />Run {d.runId}</code></article>) : <p className={styles.empty}>No saved draft headers in this context.</p>}</section>
+          <section><h2>Saved review queue</h2><p className={styles.muted}>{client.pendingDraftCount} pending draft(s) · {client.pendingRunApprovalCount} unexpired run approval(s). Opening work requires a separate read grant and never gives approval or execution authority.</p>{detail.drafts.length ? detail.drafts.map(d => <article className={styles.card} key={d.id}><h3>{d.title}</h3><p>{d.status} · revision {d.revision} · {opsTime(d.createdAt)}</p><code>Artifact {d.id}<br />Run {d.runId}</code><p><a href={`#run/${accountId}/${d.runId}`}>Review output and receipts →</a></p></article>) : <p className={styles.empty}>No saved draft headers in this context.</p>}</section>
           <section><h2>Recent runs</h2>{runsTable(detail.runs)}</section>
           <section><h2>Execution receipts</h2>{detail.receipts.length ? detail.receipts.map(r => <details className={styles.card} key={r.id}><summary>{r.description}</summary><p>{r.kind} · {r.platform || "No platform recorded"} · {opsTime(r.createdAt)}</p><code>Receipt {r.id}<br />Run {r.runId}</code></details>) : <p className={styles.empty}>No run-linked receipts in this context.</p>}</section>
           <section><h2>Verified channel bindings</h2>{detail.channels.length ? detail.channels.map((c, i) => <p key={`${c.channel}:${i}`}>{c.channel} · verified {opsTime(c.verifiedAt)} · last inbound {opsTime(c.lastInboundAt)}</p>) : <p className={styles.empty}>No currently member-bound verified channel links.</p>}<p className={styles.muted}>A verified binding does not establish a successful reply or authorized customer messaging.</p></section>

@@ -46,6 +46,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "n8n_workflows",
       "oauth_states",
       "ops_account_access",
+      "ops_work_reads",
       "outbound_messages",
       "plans",
       "playbooks",
@@ -66,6 +67,9 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     // 0014 launch hardening
     expect(s.manual_routine_cancellations.primaryKey).toEqual(["account_id","context_generation","actor_id","request_id"]);
     expect(s.ops_account_access.primaryKey).toEqual(["user_id", "account_id"]);
+    expect(s.ops_work_reads.primaryKey).toEqual(["id"]);
+    expect([...s.ops_work_reads.columns]).toEqual(expect.arrayContaining(["user_id", "account_id", "run_id", "context_generation", "artifact_ids", "receipt_ids", "read_at"]));
+    expect([...s.ops_account_access.columns]).toEqual(expect.arrayContaining(["work_read_granted_at", "work_read_granted_by", "work_read_reason"]));
     expect([...s.ops_account_access.columns]).toEqual(expect.arrayContaining(["granted_at", "granted_by", "reason", "revoked_at", "expires_at"]));
     expect(s.n8n_shadow_candidates.primaryKey).toEqual(["permit_id"]);
     expect(s.n8n_shadow_completions.primaryKey).toEqual(["permit_id"]);

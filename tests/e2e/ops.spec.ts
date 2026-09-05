@@ -1,8 +1,52 @@
 import { test, expect } from "@playwright/test";
-import { A, B, opsFixture } from "../ops-fixture/data";
+import { A, B, R, opsFixture, workFixture } from "../ops-fixture/data";
 const base = process.env.WORKSPACE_FIXTURE_BASE;
 test.skip(!base, "Isolated component fixture only, not a live account.");
 const url = () => `${base}/tests/ops-fixture/index.html`;
+test("run links open real component work, receipts, reload and revocation without writes", async ({ page }) => {
+  const writes: string[] = [];
+  page.on("request", r => { if (!["GET", "HEAD"].includes(r.method())) writes.push(r.url()); });
+  await page.goto(url() + "#runs");
+  await page.getByRole("link", { name: "Review output and receipts →" }).click();
+  await expect(page.getByRole("heading", { name: "Run output review" })).toBeVisible();
+  await expect(page.getByText("Synthetic business output for golf travel bags.", { exact: true })).toBeVisible();
+  await page.getByText("Synthetic draft prepared", { exact: true }).click();
+  await expect(page.getByText(`Receipt ${workFixture().receipts[0].id}`, { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Approve|Send|Retry|Enable/ })).toHaveCount(0);
+  await page.reload(); await expect(page.getByText("Synthetic business output for golf travel bags.", { exact: true })).toBeVisible();
+  await page.route("**/api/ops/run?*", r => r.fulfill({ status: 403, json: {} }));
+  await page.getByRole("button", { name: "Refresh work", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("separate operator work-read grant");
+  await expect(page.getByText("Synthetic business output for golf travel bags.", { exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+test("work pagination is context-bound and clears old output on conflict", async ({ page }) => {
+  const data = workFixture();
+  await page.route("**/api/ops/run?*", r => {
+    const p = new URL(r.request().url()).searchParams;
+    if (p.get("generation") === "1" && p.get("artifactAfter") === data.artifactAfter) return r.fulfill({ status: 409, json: {} });
+    return r.fulfill({ json: { ...data, hasMore: true } });
+  });
+  await page.goto(url() + `#run/${A}/${R}`);
+  await expect(page.getByText(data.artifacts[0].body, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Next work page" }).click();
+  await expect(page.getByRole("alert")).toContainText("Context or page changed");
+  await expect(page.getByText(data.artifacts[0].body, { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Refresh work" }).click();
+  await expect(page.getByText(data.artifacts[0].body, { exact: true })).toBeVisible();
+});
+test("a late previous-account response cannot leak into a new client", async ({ page }) => {
+  let release!: () => void;
+  const wait = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/ops/run?*", async r => { await wait; await r.fulfill({ json: workFixture() }).catch(() => {}); });
+  await page.goto(url() + `#run/${A}/${R}`);
+  await expect(page.getByText("Reading authorized run output…")).toBeVisible();
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await page.locator(`a[href="#client/${B}"]`).click();
+  release();
+  await expect(page.getByText(B, { exact: false }).first()).toBeVisible();
+  await expect(page.getByText(workFixture().artifacts[0].body, { exact: true })).toHaveCount(0);
+});
 test("clients, exact-identity details, setup pipeline and monitor use records without writes", async ({ page }) => {
   const writes: string[] = []; const errors: string[] = [];
   page.on("request", r => { if (r.method() === "POST") writes.push(r.url()); }); page.on("pageerror", e => errors.push(e.message));
@@ -24,7 +68,7 @@ test("clients, exact-identity details, setup pipeline and monitor use records wi
   await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("failed");
   await expect(page.getByText("No saved runs match this view.", { exact: false })).toBeVisible();
   await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("all");
-  await expect(page.getByText("run-fixture", { exact: true })).toBeVisible();
+  await expect(page.getByText(R, { exact: true })).toBeVisible();
   await page.goBack(); await expect(page.getByRole("heading", { name: "Setup pipeline", exact: true })).toBeVisible();
   expect(writes).toEqual([]); expect(errors).toEqual([]);
 });
@@ -55,6 +99,9 @@ for (const width of [390, 1280]) test(`ops layout fits ${width}px`, async ({ pag
   await expect(page.getByText(A, { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole("link", { name: "Setup pipeline", exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.goto(url() + `#run/${A}/${R}`);
+  await expect(page.getByText(workFixture().artifacts[0].body, { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath(`ops-${width}.png`), fullPage: true });
 });
