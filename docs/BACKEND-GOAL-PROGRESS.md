@@ -13,7 +13,64 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 83, 6 September NZ
+## Latest state — Batch 84, 6 September NZ
+
+**Existing-client source/agency identity reconciliation advanced. No new access,
+runtime activation, data import or deployment.** Previous turn was progress
+(real Slack staging). This turn obtained new authoritative cross-system evidence
+that changes the migration order; the limited Slack pilot has not been approved.
+
+Read-only queries across Mission Control `ebcatvidixdjjwmmades` and Unc
+`ycgayfsvcjpsnryrpukv` establish:
+
+- Tom's exact confirmed Gmail is source user `deae6d15-6ea5-4af0-b943-d7373bad6899`,
+  with active `junction_admin` memberships on DBH, NZPH, AVGAR Sport and Junction.
+  Unc uses a different user ID. Agency admin is not client owner; neither UUID
+  nor role can be copied as authorization.
+- DBH source account `82d2ebf1-33aa-42a9-8d6e-f4238a5c7ac6` and Unc seed
+  `4fae2ad8-194f-49c4-9954-39a6b6d35b14` have the same website hostname after
+  `www` normalization. This is stronger candidate identity evidence, not an
+  accepted provider/grant mapping. NZPH has a source account and verified agency
+  membership but no Unc account. Unity has source/target records but no source
+  membership or website. H1/Domes are instead in the separate org registry.
+- There are two materially different source AVGAR records: legacy avgar.co.nz
+  with shadow deployments/no memberships, and avgarsport.com with agency members
+  but no deployments. H1's registry agent IDs differ from current native IDs.
+  No duplicate was merged, deleted or silently selected.
+- `agent_connector_mappings` has zero rows for the inspected DBH/NZPH/Unity/
+  AVGAR Sport account IDs. Thus those registry rows do not yield an accepted
+  reusable grant. The five non-AVGAR Unc seeds still have zero login members;
+  their existing connector rows have no selected assets or dated reads.
+
+At `2026-09-05T23:32:17.726040Z`, actual warehouse aggregates show DBH 195
+campaigns, no missing metrics, latest 18:42:53.175923Z; NZPH 42/no missing,
+latest 18:43:08.043447Z; H1 86/13 missing, latest 19:08:11.737281Z.
+These are real stored rows, not new provider calls or proof every metric is
+correct. Existing source registry names `reader_h1_email`; DBH/NZPH read_role
+fields are null (unrecorded, not proof roles are absent). H1 sync log also has
+successful Meta/ad (105 rows) and Shopify/inventory (121 rows) entries around
+19:08Z. Preserve and bind working source feeds instead of creating duplicate syncs.
+
+**Concrete Codex implementation next:** explicit client selection/agency access
+and account-bound source reads. Source tracing finds independent first-membership
+selection in `db/session.ts`, `billing/server.ts`, `connectors/store.ts`, browser
+`unc/accountFacts.ts` fallback and legacy `db/accountState.ts` bootstrap. Merely
+adding memberships or a UI selector would leave billing/connectors misrouted.
+Implement one captured per-request selection contract, all consumers and account
+picker together; test two tabs, stale responses/saves, OAuth callbacks bound to
+their original account, revoked membership and owner/member distinctions. Do not
+solve this with a global active-account cookie and unscoped mutations. Retain
+separate ops grants; no automatic agency-admin-to-client-owner conversion.
+
+The [same authoritative inventory](integration/existing-client-rollout.v1.json)
+now holds the exact source/target candidate IDs, source roles, conflicts and dated
+warehouse coverage. No new competing registry or verifier was created. The next
+turn should implement this delivery slice, not repeat these unchanged reads.
+App remains `6bbe07e73f74`, compatible worker 43; the first Slack route remains
+staged, not delivered. Full B01–B24/all-client/all-screen scope and action holds
+remain active.
+
+## Previous state — Batch 83, 6 September NZ
 
 **First actual client Slack channel verified and staged through the production
 owner UI. Not activated; no Slack request/reply acceptance yet.** Source

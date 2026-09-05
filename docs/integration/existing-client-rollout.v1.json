@@ -17,6 +17,30 @@
     "createClientMembership": false,
     "changeNativeAgent": false
   },
+  "accountSourceReconciliation": {
+    "observedAt":"2026-09-05T23:32:17.726040Z",
+    "sourceProject":"ebcatvidixdjjwmmades",
+    "targetProject":"ycgayfsvcjpsnryrpukv",
+    "status":"read_only_evidence_not_grant_or_import",
+    "verifiedAgencyIdentity":{"email":"halltaylor.tom@gmail.com","sourceUserId":"deae6d15-6ea5-4af0-b943-d7373bad6899","targetUserId":"74802c60-149a-4405-b719-dc058d174072","sourceEmailConfirmed":true,"sourceRole":"junction_admin","roleNotEquivalentToTargetOwner":true},
+    "sourceAccountCandidates":[
+      {"client":"Deep Blue Health","sourceAccountId":"82d2ebf1-33aa-42a9-8d6e-f4238a5c7ac6","sourceWebsite":"https://www.deepbluehealth.co.nz","targetAccountId":"4fae2ad8-194f-49c4-9954-39a6b6d35b14","targetWebsite":"https://deepbluehealth.co.nz","sourceAgencyMembershipActive":true,"targetLoginMembers":0,"mappingAccepted":false},
+      {"client":"NZ Pure Health","sourceAccountId":"83465b57-e408-44af-a660-a1277fa4f708","sourceWebsite":"https://www.newzealandpurehealth.com","targetAccountId":null,"sourceAgencyMembershipActive":true,"mappingAccepted":false},
+      {"client":"Unity MMA","sourceAccountId":"fa43e65b-75e1-4ee5-9378-0d13e997e339","sourceWebsite":null,"targetAccountId":"083d6e9f-4697-4845-8869-952c0e1f9d83","sourceAgencyMembershipActive":false,"targetLoginMembers":0,"mappingAccepted":false}
+    ],
+    "registryConflicts":[
+      "Mission Control has AVGAR a45db485-92a4-4eda-b1bf-dfab0506e836 at avgar.co.nz with shadow deployments and no memberships, separately from AVGAR Sport 9fa0ec20-b157-415a-989f-27362235c131 at avgarsport.com with agency memberships and no deployments",
+      "H1 and Domes exist in junction.client_orgs but not the inspected public.client_accounts registry; H1 registered agent_ identifiers differ from current native cmsy identifiers",
+      "agent_connector_mappings returns no rows for the inspected DBH, NZPH, Unity and AVGAR Sport source accounts; source metadata cannot supply an accepted connector grant"
+    ],
+    "warehouseEvidence":[
+      {"client":"Home1nvasion","table":"h1.email_campaigns","rows":86,"missingMetrics":13,"latestMetricsAt":"2026-09-05T19:08:11.737281Z","oldestMetricsAt":"2026-09-05T19:08:11.737281Z","registeredReadRole":"reader_h1_email"},
+      {"client":"Deep Blue Health","table":"dbh.email_campaigns","rows":195,"missingMetrics":0,"latestMetricsAt":"2026-09-05T18:42:53.175923Z","oldestMetricsAt":"2026-09-05T18:42:41.474112Z","registeredReadRole":null},
+      {"client":"NZ Pure Health","table":"nzph.email_campaigns","rows":42,"missingMetrics":0,"latestMetricsAt":"2026-09-05T18:43:08.043447Z","oldestMetricsAt":"2026-09-05T18:43:06.093276Z","registeredReadRole":null}
+    ],
+    "limits":["Warehouse timestamps do not prove provider grant validity, metric semantics, completeness, or future scheduler health","NULL read_role is missing registry evidence, not proof no database role exists","Do not copy auth user IDs across projects or convert agency admin into client owner","No source credentials, client rows, memberships, source jobs or grants changed"],
+    "implementationBlocker":"Several app session, billing, connector and facts paths independently choose first membership. Complete explicit per-request client selection and captured-context refusal before exposing multi-client access; a shared cookie alone risks cross-tab switching."
+  },
   "sharedGaps": [
     "Earlier zero-Slack-link and one-account/DM-only routing gaps are superseded by Batches 75-82; one verified Junction Slack identity and explicit client-channel/thread routing now exist",
     "No active client channel or live same-thread delivery acceptance yet; staging is not activation",
