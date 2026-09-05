@@ -235,6 +235,7 @@ export interface RunRecord {
 }
 
 export interface ListRunsOptions {
+  contextGeneration?: number;
   routineId?: RoutineId;
   mode?: RunMode;
   status?: RunStatus;
@@ -246,6 +247,7 @@ export interface ListRunsOptions {
 }
 
 export interface ListReceiptsOptions {
+  contextGeneration?: number;
   runId?: string;
   kind?: ReceiptKind;
   since?: string;
@@ -274,7 +276,7 @@ export interface Store {
     patch: Partial<Pick<ApprovalRecord, "status" | "decidedAt" | "decidedBy">>,
     expectedStatus?: ApprovalStatus,
   ): Promise<ApprovalRecord>;
-  listApprovals(accountId: string, status?: ApprovalStatus): Promise<ApprovalRecord[]>;
+  listApprovals(accountId: string, status?: ApprovalStatus, contextGeneration?: number): Promise<ApprovalRecord[]>;
 
   // ----- receipts (append-only) -----
   appendReceipt(receipt: Receipt): Promise<Receipt>;

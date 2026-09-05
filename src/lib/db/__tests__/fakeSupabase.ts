@@ -23,7 +23,7 @@ export interface TableSchema {
   primaryKey: string[];
   /** Unique column sets (PK + unique constraints + unique indexes). `partialNotNull` marks
       partial indexes of the form `where col is not null`. */
-  uniques: { columns: string[]; partialNotNull?: string }[];
+  uniques: { columns: string[]; partialNotNull?: string; name?: string }[];
   enums: Record<string, Set<string>>;
 }
 export type Schema = Record<string, TableSchema>;
@@ -76,7 +76,8 @@ export function loadSchema(dir = MIGRATIONS_DIR): Schema {
           continue;
         }
         if (low.startsWith("unique")) {
-          t.uniques.push({ columns: cols(def.match(/\(([^)]*)\)/)![1]) });
+          const columns = cols(def.match(/\(([^)]*)\)/)![1]);
+          t.uniques.push({ columns, name: `${t.name}_${columns.join("_")}_key` });
           continue;
         }
         if (low.startsWith("check") || low.startsWith("constraint") || low.startsWith("foreign")) continue;
@@ -93,6 +94,10 @@ export function loadSchema(dir = MIGRATIONS_DIR): Schema {
     // alter table … add column | add constraint … check (col in (…))  (0013 widens routine_runs.status)
     const alterRe = /alter table (?:public\.)?(\w+)\s+([\s\S]*?);/g;
     for (const m of sql.matchAll(alterRe)) {
+      const dropped = m[2].match(/drop constraint (\w+)/i);
+      if (dropped) table(m[1]).uniques = table(m[1]).uniques.filter(u => u.name !== dropped[1]);
+      const unique = m[2].match(/add constraint (\w+) unique \(([^)]+)\)/i);
+      if (unique) table(m[1]).uniques.push({ name: unique[1], columns: cols(unique[2]) });
       const con = m[2].match(/add constraint \w+ check \((\w+) in \(([^)]+)\)\)/i);
       if (con) table(m[1]).enums[con[1]] = new Set(con[2].split(",").map((v) => v.trim().replace(/^'|'$/g, "")));
       if (!/add column/i.test(m[2])) continue;
@@ -162,6 +167,13 @@ export class FakeSupabase implements DbClient {
   now: () => string = () => new Date().toISOString();
 
   constructor(readonly schema: Schema = migrationSchema()) {
+    this.rpcs.write_decision_style_context = args => {
+      const a = this.rows("accounts").find(a => a.id === args.p_account);
+      if (!a || a.context_generation !== args.p_generation || a.automation_paused !== false) throw new Error("Captured style context unavailable");
+      const profile = this.rows("account_profiles").find(p => p.account_id === args.p_account);
+      this.upsertRow("account_profiles", { account_id: args.p_account, decision_style: { ...(profile?.decision_style as Row ?? {}), ...(args.p_style as Row) }, updated_at: args.p_now }, "account_id");
+      return null;
+    };
     // Query-shape/application fixture only. Real command trigger/role guarantees
     // are verified separately by the rollback SQL canary.
     this.rpcs.list_current_routine_commands = (args) => {
@@ -318,7 +330,8 @@ export class FakeSupabase implements DbClient {
     const t = this.assertTable(table);
     const out: Row = {};
     for (const c of t.columns) out[c] = c in row ? row[c] : null;
-    if ((table === "accounts" || table === "memories") && t.columns.has("context_generation") && !("context_generation" in row)) out.context_generation = 0;
+    if (t.columns.has("context_generation") && !("context_generation" in row)) out.context_generation = 0;
+    if (table === "accounts" && !("automation_paused" in row)) out.automation_paused = false;
     if (t.columns.has("id") && out.id === null) out.id = fakeUuid();
     for (const c of ["created_at", "updated_at", "started_at", "saved_at"]) if (t.columns.has(c) && out[c] === null) out[c] = this.now();
     return out;

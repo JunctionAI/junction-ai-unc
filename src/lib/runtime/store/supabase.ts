@@ -179,6 +179,7 @@ function receiptToRow(r: Receipt): Row {
   return {
     id: r.id,
     account_id: r.accountId,
+    ...(r.contextGeneration !== undefined ? { context_generation: r.contextGeneration } : {}),
     run_id: r.runId,
     approval_id: nul(r.approvalId),
     kind: r.kind,
@@ -369,6 +370,7 @@ export class SupabaseStore implements Store {
   }
   async listRuns(accountId: string, opts: ListRunsOptions = {}) {
     let q = this.db.from("routine_runs").select("*").eq("account_id", accountId);
+    if (opts.contextGeneration !== undefined) q = q.eq("context_generation", opts.contextGeneration);
     if (opts.routineId) q = q.eq("routine_id", opts.routineId);
     if (opts.mode) q = q.eq("mode", opts.mode);
     if (opts.status) q = q.eq("status", opts.status);
@@ -406,8 +408,9 @@ export class SupabaseStore implements Store {
       throw error;
     }
   }
-  async listApprovals(accountId: string, status?: ApprovalStatus) {
+  async listApprovals(accountId: string, status?: ApprovalStatus, contextGeneration?: number) {
     let q = this.db.from("approvals").select("*").eq("account_id", accountId);
+    if (contextGeneration !== undefined) q = q.eq("context_generation", contextGeneration);
     if (status) q = q.eq("status", status);
     q = q.order("created_at", { ascending: false });
     const rows = await unwrap<Row[]>("approvals.select", q);
@@ -421,6 +424,7 @@ export class SupabaseStore implements Store {
   }
   async listReceipts(accountId: string, opts: ListReceiptsOptions = {}) {
     let q = this.db.from("receipts").select("*").eq("account_id", accountId);
+    if (opts.contextGeneration !== undefined) q = q.eq("context_generation", opts.contextGeneration);
     if (opts.runId) q = q.eq("run_id", opts.runId);
     if (opts.kind) q = q.eq("kind", opts.kind);
     if (opts.since) q = q.gte("created_at", opts.since);

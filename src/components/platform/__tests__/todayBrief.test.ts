@@ -21,6 +21,7 @@ const liveList = (over: Partial<LiveApprovals> = {}): LiveApprovals => ({ active
 const BRIEF: DailyBriefRecord = {
   id: "b1",
   accountId: "acct-1",
+  contextGeneration: 0,
   day: "2026-09-03",
   body: "Overnight I completed 1 run and wrote 1 draft; 1 decision is waiting on you.",
   createdAt: "2026-09-02T18:31:00.000Z",
@@ -48,6 +49,13 @@ describe("TodayBrief — demo mode is byte-identical", () => {
 });
 
 describe("TodayBrief — accounts mode", () => {
+  it("never renders an initial brief from another account or context generation", () => {
+    for (const props of [{ accountId: "different", contextGeneration: 0 }, { accountId: BRIEF.accountId, contextGeneration: 1 }]) {
+      const html = renderToStaticMarkup(createElement(TodayBrief, { accountMode: true, initial: BRIEF, ...props }));
+      expect(html).not.toContain(BRIEF.body);
+      expect(html).not.toContain('data-testid="today-brief"');
+    }
+  });
   it("before the fetch answers: nothing (no flash); with no brief yet: the quiet ghost pill", () => {
     expect(renderToStaticMarkup(createElement(TodayBrief, { accountMode: true }))).toBe("");
     const empty = renderToStaticMarkup(createElement(TodayBrief, { accountMode: true, initial: null }));

@@ -197,7 +197,7 @@ describe("Home in accounts mode — no demo constant can render", () => {
   });
 
   it("the first-day line vs a brief: a brief in hand becomes the headline, the first-day line goes", () => {
-    const brief = { id: "b1", accountId: "a", day: "2026-09-02", body: "One draft landed.", items: [], createdAt: "2026-09-02T06:30:00Z" };
+    const brief = { id: "b1", accountId: "a", contextGeneration: 0, day: "2026-09-02", body: "One draft landed.", items: [], createdAt: "2026-09-02T06:30:00Z" };
     const html = render(base, { accountMode: true, live: liveList(), setup: setupState(), briefInitial: brief });
     expectNoDemo(html);
     expect(html).toContain(esc(BRIEF_GREETING));

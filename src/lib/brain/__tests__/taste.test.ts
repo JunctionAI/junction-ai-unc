@@ -142,10 +142,11 @@ describe("account_profiles.decision_style", () => {
     expect(row.channels).toEqual({ slack: true });
     expect(row.founder_notes).toBe("Be brief.");
     expect(row.decision_style).toEqual({ founder_set: "cautious please", ...style });
-    expect(db.lastCall("account_profiles", "upsert")).toMatchObject({ onConflict: "account_id", values: { account_id: ACCT, updated_at: NOW.toISOString() } });
-    expect(Object.keys(db.lastCall("account_profiles", "upsert").values as Record<string, unknown>).sort()).toEqual(["account_id", "decision_style", "updated_at"]);
+    expect(row.updated_at).toBe(NOW.toISOString());
+    expect(db.callsFor("account_profiles", "upsert")).toHaveLength(0); // atomic context RPC, not read/merge/write
     // a first write creates the row
     const fresh = new FakeSupabase();
+    fresh.seed("accounts", [{ id: "acct-2" }]);
     await writeDecisionStyle(fresh, "acct-2", style, NOW);
     expect(fresh.rows("account_profiles")).toHaveLength(1);
     expect(await readAccountProfile(fresh, "acct-2")).toMatchObject({ tone: {}, decisionStyle: style, founderNotes: null });

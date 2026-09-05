@@ -18,6 +18,8 @@
    modules (memory / profile …) are not imported here — this file reads its tables directly. */
 
 import { unwrap, type DbClient, type Row } from "../db/types";
+import { assertRuntimeContext } from "../db/runtimeContext";
+import { runtimeGeneration } from "../runtime/contextFence";
 import { newId } from "../runtime/context";
 import type { AccountContext, ConnectorReader, Platform, ReadQuery, ReadResult, RunContext } from "../runtime/types";
 
@@ -101,6 +103,7 @@ export function windowStartDate(windowEnd: string, days: number): string {
 
 export interface KpiSnapshotRow {
   account_id: string;
+  context_generation: number;
   metric_key: KpiMetricKey;
   value: number;
   currency: string | null;
@@ -145,19 +148,24 @@ export async function accountsWithConnectors(db: DbClient): Promise<string[]> {
 }
 
 function syntheticContext(accountId: string, account: SnapshotDeps["account"], now: Date, key: string): RunContext {
-  const acct: AccountContext = { accountId, currency: account?.currency ?? "NZD", budgetMonthly: account?.budgetMonthly ?? 0, approver: account?.approver };
+  const acct: AccountContext = { accountId, contextGeneration: runtimeGeneration(account?.contextGeneration), currency: account?.currency ?? "NZD", budgetMonthly: account?.budgetMonthly ?? 0, approver: account?.approver };
   return { runId: `kpi-${key}`, routineId: "kpi_snapshot", version: 0, mode: "dry_run", startedAt: now.toISOString(), account: acct, caps: { currency: acct.currency, perDay: 0, perMonth: 0 }, triggeredBy: "schedule", vars: {}, reads: {}, checks: {} };
 }
 
 const readKey = (m: KpiMetricDef) => `${m.platform}:${m.read.resource}:${m.read.window ?? ""}`;
 
 export async function snapshotKpis(deps: SnapshotDeps): Promise<SnapshotReport> {
+  const context = Object.freeze({ accountId: deps.accountId, contextGeneration: runtimeGeneration(deps.account?.contextGeneration) });
+  const account = deps.account ? { ...deps.account, contextGeneration: context.contextGeneration } : { contextGeneration: 0, currency: "NZD", budgetMonthly: 0 };
+  const { accountId, contextGeneration } = context;
+  const guard = () => assertRuntimeContext(deps.db, context);
+  await guard();
   const now = (deps.now ?? (() => new Date()))();
-  const connected = deps.connected ?? (await connectedPlatforms(deps.db, deps.accountId));
+  const connected = deps.connected ?? (await connectedPlatforms(deps.db, accountId));
   const wanted = metricsForPlatforms(connected);
-  const report: SnapshotReport = { accountId: deps.accountId, connected, written: [], couldntAsk: [], notConnected: KPI_METRICS.filter((m) => !wanted.includes(m)).map((m) => m.key) };
+  const report: SnapshotReport = { accountId, connected, written: [], couldntAsk: [], notConnected: KPI_METRICS.filter((m) => !wanted.includes(m)).map((m) => m.key) };
   const windowEnd = windowEndDate(now);
-  const currency = deps.account?.currency ?? "NZD";
+  const currency = account.currency;
 
   // one certified read per (platform, resource, window), shared by the metrics that need it
   const reads = new Map<string, Promise<{ ok: true; result: ReadResult } | { ok: false; reason: string }>>();
@@ -166,7 +174,7 @@ export async function snapshotKpis(deps: SnapshotDeps): Promise<SnapshotReport> 
     let p = reads.get(k);
     if (!p) {
       p = deps.reader
-        .read(m.platform, m.read, syntheticContext(deps.accountId, deps.account, now, m.key))
+        .read(m.platform, m.read, syntheticContext(accountId, account, now, m.key))
         .then((result) => ({ ok: true as const, result }))
         .catch((err: unknown) => ({ ok: false as const, reason: (err instanceof Error ? err.message : String(err)).slice(0, 300) }));
       reads.set(k, p);
@@ -176,7 +184,9 @@ export async function snapshotKpis(deps: SnapshotDeps): Promise<SnapshotReport> 
 
   const rows: KpiSnapshotRow[] = [];
   for (const m of wanted) {
+    await guard();
     const r = await readFor(m);
+    await guard();
     if (!r.ok) {
       report.couldntAsk.push({ key: m.key, platform: m.platform, reason: r.reason });
       continue;
@@ -187,7 +197,8 @@ export async function snapshotKpis(deps: SnapshotDeps): Promise<SnapshotReport> 
       continue;
     }
     rows.push({
-      account_id: deps.accountId,
+      account_id: accountId,
+      context_generation: contextGeneration,
       metric_key: m.key,
       value,
       currency: m.money ? currency : null,
@@ -200,16 +211,20 @@ export async function snapshotKpis(deps: SnapshotDeps): Promise<SnapshotReport> 
   }
 
   if (rows.length) {
-    await unwrap("kpi_snapshots.upsert", deps.db.from("kpi_snapshots").upsert(rows as unknown as Row[], { onConflict: "account_id,metric_key,window_end" }));
+    await guard();
+    await unwrap("kpi_snapshots.upsert", deps.db.from("kpi_snapshots").upsert(rows as unknown as Row[], { onConflict: "account_id,context_generation,metric_key,window_end" }));
+    await guard();
     report.written = rows;
   }
   // "couldn't ask" → no row + a notification receipt (run_id null: no routine run owns it)
   for (const c of report.couldntAsk) {
+    await guard();
     await unwrap(
       "receipts.insert",
       deps.db.from("receipts").insert({
         id: newId(),
-        account_id: deps.accountId,
+        account_id: accountId,
+        context_generation: contextGeneration,
         run_id: null,
         kind: "notification",
         platform: c.platform,
@@ -219,6 +234,7 @@ export async function snapshotKpis(deps: SnapshotDeps): Promise<SnapshotReport> 
       }),
     );
   }
+  await guard();
   deps.log?.("kpi.snapshot", { accountId: deps.accountId, connected, written: rows.map((r) => r.metric_key), couldntAsk: report.couldntAsk.map((c) => c.key) });
   return report;
 }
@@ -291,12 +307,15 @@ export function computeDeltas(rows: KpiSnapshotRead[], now: Date = new Date()): 
 }
 
 /** The last ~5 weeks of snapshots for the account → deltas. */
-export async function kpiDeltas(db: DbClient, accountId: string, now: Date = new Date()): Promise<KpiDelta[]> {
+export async function kpiDeltas(db: DbClient, accountId: string, now: Date = new Date(), contextGeneration = 0): Promise<KpiDelta[]> {
+  const context = Object.freeze({ accountId, contextGeneration: runtimeGeneration(contextGeneration) });
+  await assertRuntimeContext(db, context, { allowPaused: true });
   const since = windowStartDate(windowEndDate(now), 35);
   const rows = await unwrap<KpiSnapshotRead[]>(
     "kpi_snapshots.select",
-    db.from("kpi_snapshots").select("metric_key, value, currency, window_end, provenance").eq("account_id", accountId).gte("window_end", since).order("window_end", { ascending: false }).limit(400),
+    db.from("kpi_snapshots").select("metric_key, value, currency, window_end, provenance").eq("account_id", accountId).eq("context_generation", contextGeneration).gte("window_end", since).order("window_end", { ascending: false }).limit(400),
   );
+  await assertRuntimeContext(db, context, { allowPaused: true });
   return computeDeltas(rows, now);
 }
 

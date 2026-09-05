@@ -278,7 +278,7 @@ function DemoHome({ V, live = null, telemetry = null, accountMode = false }: Hom
           </div>
         </div>
         {/* Unc's daily brief — accounts mode only; the component renders nothing in demo mode. */}
-        {accountMode && <TodayBrief accountMode={accountMode} />}
+        {accountMode && <TodayBrief accountMode={accountMode} accountId={V.accountId} contextGeneration={V.contextGeneration} />}
         {review && (
           <div data-testid="unc-self-review" style={{ display: "flex", gap: 12, marginBottom: 14 }}>
             <img src="/brand/mascot-small.png" alt="" style={{ ...smallMascot, marginTop: 4 }} />
@@ -764,7 +764,10 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
   const showAutomation = runsDone >= 1 || (tele?.automation.runsThisWeek ?? 0) >= 1;
 
   /* Headline bubble: latest self-review → today's brief → the first-day line. */
-  const [briefState, setBriefState] = useState<"loading" | "present" | "absent">(briefInitial === undefined ? "loading" : briefInitial ? "present" : "absent");
+  const briefContext = `${V.accountId}:${V.contextGeneration}`;
+  const validInitial = briefInitial && briefInitial.contextGeneration === V.contextGeneration && (!V.accountId || briefInitial.accountId === V.accountId) ? briefInitial : null;
+  const [briefStatus, setBriefStatus] = useState<{ context: string; state: "loading" | "present" | "absent" }>({ context: briefContext, state: briefInitial === undefined ? "loading" : validInitial ? "present" : "absent" });
+  const briefState = briefStatus.context === briefContext ? briefStatus.state : "loading";
   const firstDayLine = paused ? HOME_COPY.paused : anyOn ? HOME_COPY.firstDayRunning : HOME_COPY.firstDay;
 
   /* Motion 1: the plan card settles into the timeline on the first Home after "Agree the plan →". */
@@ -865,7 +868,7 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
         {review && <ReviewBubble review={review} V={V} />}
         {!review && briefState === "absent" && <UncBubble testId="first-day-line">{firstDayLine}</UncBubble>}
         <div id={BRIEF_ID}>
-          <TodayBrief accountMode paused={paused} initial={briefInitial} onLoaded={(b) => setBriefState(b ? "present" : "absent")} />
+          <TodayBrief accountMode accountId={V.accountId} contextGeneration={V.contextGeneration} paused={paused} initial={briefInitial} onLoaded={(b) => setBriefStatus({ context: briefContext, state: b ? "present" : "absent" })} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {liveLoading && (

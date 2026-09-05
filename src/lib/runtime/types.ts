@@ -489,6 +489,8 @@ export interface ApprovalRecord {
 export interface Receipt {
   id: string;
   accountId: string;
+  /** Required for a run-less producer after a reset; otherwise inherited from the parent run. */
+  contextGeneration?: number;
   runId: string;
   approvalId?: string;
   kind: ReceiptKind;

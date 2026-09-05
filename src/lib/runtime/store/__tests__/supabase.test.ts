@@ -78,7 +78,7 @@ describe("SupabaseStore call shapes (columns/filters match the migrations)", () 
   it("routine_runs: insert writes the 0002 columns; explicit undefined clears via NULL; duplicates throw", async () => {
     const { db, store } = fresh();
     const r = run({ dedupKey: "D02-W01:2026-09-02", specHash: "abc", snapshot: { spec: budgetMoveSpec(), ctx: {} as never, nextNodeIndex: 5 } });
-    expect(await store.createRun(r)).toEqual(r);
+    expect(await store.createRun(r)).toEqual({ ...r, contextGeneration: 0 });
     expect(db.lastCall("routine_runs", "insert").values).toEqual({
       id: r.id,
       account_id: ACCT,
@@ -327,7 +327,8 @@ describe.each([
     expect((await store.listRuns("acct-1")).map((x) => x.id)).toEqual([U(12), U(13), U(11)]);
     expect((await store.listRuns("acct-1", { status: "running", limit: 1 })).map((x) => x.id)).toEqual([U(13)]);
     expect((await store.listRuns("acct-1", { since: "2026-09-02T07:00:00.000Z" })).map((x) => x.id)).toEqual([U(12), U(13)]);
-    expect(await store.getRun(U(12))).toEqual(run({ accountId: "acct-1", id: U(12), startedAt: "2026-09-03T07:00:00.000Z", status: "done", finishedAt: "2026-09-03T07:05:00.000Z", summary: "s" }));
+    const stored = await store.getRun(U(12));
+    expect({ ...stored, contextGeneration: stored?.contextGeneration ?? 0 }).toEqual(run({ accountId: "acct-1", contextGeneration: 0, id: U(12), startedAt: "2026-09-03T07:00:00.000Z", status: "done", finishedAt: "2026-09-03T07:05:00.000Z", summary: "s" }));
     expect(await store.listRuns("someone-else")).toEqual([]);
   });
 });

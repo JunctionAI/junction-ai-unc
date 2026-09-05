@@ -78,9 +78,32 @@ export function TodayBriefCard({ brief }: { brief: DailyBriefRecord }) {
 
 type Fetched = { brief: DailyBriefRecord | null } | { fallback: true } | { error: string };
 
-export default function TodayBrief({ accountMode, paused = false, initial, onLoaded }: { accountMode: boolean; paused?: boolean; initial?: DailyBriefRecord | null; onLoaded?: (brief: DailyBriefRecord | null) => void }) {
+interface TodayBriefProps {
+  accountMode: boolean;
+  accountId?: string | null;
+  contextGeneration?: number;
+  paused?: boolean;
+  initial?: DailyBriefRecord | null;
+  onLoaded?: (brief: DailyBriefRecord | null) => void;
+}
+
+export default function TodayBrief(props: TodayBriefProps) {
+  const accountId = props.accountId ?? props.initial?.accountId ?? null;
+  const contextGeneration = props.contextGeneration ?? 0;
+  const initial = props.initial && (props.initial.accountId !== accountId || props.initial.contextGeneration !== contextGeneration) ? undefined : props.initial;
+  // Keyed lifetime: a same-account generation reset also discards state and
+  // aborts pending GET/POST work. No old card or callback enters the new context.
+  return <ScopedTodayBrief key={`${accountId}:${contextGeneration}`} {...props} accountId={accountId} contextGeneration={contextGeneration} initial={initial} />;
+}
+
+function ScopedTodayBrief({ accountMode, accountId, contextGeneration, paused = false, initial, onLoaded }: TodayBriefProps) {
   const [state, setState] = useState<{ loaded: boolean; brief: DailyBriefRecord | null; error: string | null }>({ loaded: initial !== undefined, brief: initial ?? null, error: null });
   const [busy, setBusy] = useState(false);
+  const work = useRef(new Set<AbortController>());
+  useEffect(() => {
+    const pending = work.current;
+    return () => { for (const controller of pending) controller.abort(); pending.clear(); };
+  }, []);
   /* Home reads whether a brief exists (its headline bubble falls back to the first-day line without one). */
   const onLoadedRef = useRef(onLoaded);
   useEffect(() => {
@@ -91,40 +114,48 @@ export default function TodayBrief({ accountMode, paused = false, initial, onLoa
   }, [state.loaded, state.brief]);
 
   useEffect(() => {
-    if (!accountMode || initial !== undefined) return;
+    if (!accountMode || !accountId || initial !== undefined) return;
     let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       try {
-        const res = await fetch("/api/unc/brief", { cache: "no-store" });
+        const res = await fetch("/api/unc/brief", { cache: "no-store", signal: controller.signal, headers: { "x-unc-context-generation": String(contextGeneration) } });
         const body = (await res.json().catch(() => ({}))) as Fetched;
         if (cancelled) return;
         if (!res.ok || "fallback" in body) setState({ loaded: true, brief: null, error: "error" in body ? body.error : null });
-        else setState({ loaded: true, brief: "brief" in body ? body.brief : null, error: null });
+        else if ("brief" in body && (!body.brief || (body.brief.accountId === accountId && body.brief.contextGeneration === contextGeneration))) setState({ loaded: true, brief: body.brief, error: null });
+        else setState({ loaded: true, brief: null, error: "Your business context changed. Reload Unc." });
       } catch (e) {
         if (!cancelled) setState({ loaded: true, brief: null, error: e instanceof Error ? e.message : String(e) });
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [accountMode, initial]);
+  }, [accountMode, accountId, contextGeneration, initial]);
 
   if (!accountMode) return null;
   if (!state.loaded) return null;
   if (state.brief) return <TodayBriefCard brief={state.brief} />;
 
   const generate = async () => {
-    if (paused) return;
+    if (paused || !accountId) return;
+    const controller = new AbortController();
+    work.current.add(controller);
     setBusy(true);
     try {
-      const res = await fetch("/api/unc/brief", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      const res = await fetch("/api/unc/brief", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "x-unc-context-generation": String(contextGeneration) }, body: "{}" });
       const body = (await res.json().catch(() => ({}))) as Fetched;
+      if (controller.signal.aborted) return;
       if (!res.ok || "fallback" in body) setState((s) => ({ ...s, error: "error" in body ? body.error : `couldn’t write the brief (${res.status})` }));
-      else setState({ loaded: true, brief: "brief" in body ? body.brief : null, error: null });
+      else if ("brief" in body && (!body.brief || (body.brief.accountId === accountId && body.brief.contextGeneration === contextGeneration))) setState({ loaded: true, brief: body.brief, error: null });
+      else setState({ loaded: true, brief: null, error: "Your business context changed. Reload Unc." });
     } catch (e) {
-      setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e) }));
+      if (!controller.signal.aborted) setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e) }));
     } finally {
-      setBusy(false);
+      work.current.delete(controller);
+      if (!controller.signal.aborted) setBusy(false);
     }
   };
 
@@ -132,7 +163,7 @@ export default function TodayBrief({ accountMode, paused = false, initial, onLoa
     <div data-testid="today-brief-empty" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, paddingLeft: 36 }}>
       <button
         onClick={generate}
-        disabled={paused || busy}
+        disabled={paused || busy || !accountId}
         className="hov-border-muted"
         style={{ border: "1px solid oklch(0.88 0.015 260)", background: "transparent", color: "var(--muted-2)", borderRadius: 999, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}
       >

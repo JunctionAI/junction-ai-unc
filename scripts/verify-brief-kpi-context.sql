@@ -1,0 +1,121 @@
+-- Real PostgreSQL, synthetic accounts only. No providers, model calls, sends or retained rows.
+begin;
+set local lock_timeout='5s';
+set local statement_timeout='20s';
+set local role service_role;
+do $$
+declare
+  a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid();
+  old_brief uuid:=gen_random_uuid(); old_kpi uuid:=gen_random_uuid();
+  old_run uuid:=gen_random_uuid(); fresh_run uuid:=gen_random_uuid();
+  rec uuid; ap uuid; denied boolean;
+begin
+  insert into public.accounts(id,name) values(a,'UNC_BRIEF_KPI_CONTEXT_CANARY'),(b,'UNC_BRIEF_KPI_CONTEXT_CANARY_OTHER');
+  insert into public.daily_briefs(id,account_id,day,body) values(old_brief,a,current_date,'old brief');
+  insert into public.kpi_snapshots(id,account_id,metric_key,window_end,value) values(old_kpi,a,'roas_7d',current_date,2);
+  insert into public.account_profiles(account_id,tone,cadence,founder_notes,decision_style)
+    values(a,'{"formality":"casual"}','{"timezone":"UTC"}','keep notes','{"founder_set":"retain"}');
+  perform public.write_decision_style_context(a,0,'{"decided":0}',now());
+  assert (select decision_style='{"founder_set":"retain","decided":0}' and tone='{"formality":"casual"}' and cadence='{"timezone":"UTC"}' and founder_notes='keep notes' from public.account_profiles where account_id=a),'style merge lost unrelated fields';
+  insert into public.routine_runs(id,account_id,routine_id,version) values(old_run,a,'D03-W01',1);
+  denied:=false;
+  begin insert into public.approvals(account_id,context_generation,routine_id,title,expires_at) values(a,1,'D03-W01','unbound',now()+interval '1 day');
+  exception when serialization_failure then denied:=true; end;
+  assert denied,'run-less approval forged a future generation';
+  update public.accounts set context_generation=1 where id=a;
+  denied:=false;
+  begin insert into public.daily_briefs(account_id,day,body) values(a,current_date,'legacy');
+  exception when serialization_failure then denied:=true; end;
+  assert denied,'legacy brief admitted after reset';
+  denied:=false;
+  begin insert into public.kpi_snapshots(account_id,metric_key,window_end,value) values(a,'roas_7d',current_date,99);
+  exception when serialization_failure then denied:=true; end;
+  assert denied,'legacy KPI admitted after reset';
+  denied:=false;
+  begin update public.daily_briefs set body='late' where id=old_brief;
+  exception when serialization_failure then denied:=true; end;
+  assert denied,'stale brief overwritten';
+  denied:=false;
+  begin update public.kpi_snapshots set value=99 where id=old_kpi;
+  exception when serialization_failure then denied:=true; end;
+  assert denied,'stale KPI overwritten';
+  denied:=false;
+  begin update public.daily_briefs set context_generation=1 where id=old_brief;
+  exception when check_violation then denied:=true; end;
+  assert denied,'brief rebased';
+  denied:=false;
+  begin update public.kpi_snapshots set account_id=b where id=old_kpi;
+  exception when check_violation then denied:=true; end;
+  assert denied,'KPI moved across tenants';
+  denied:=false;
+  begin perform public.write_decision_style_context(a,0,'{"decided":999}',now());
+  exception when serialization_failure then denied:=true; end;
+  assert denied,'late style merged into new context';
+  insert into public.daily_briefs(account_id,context_generation,day,body) values(a,1,current_date,'fresh brief')
+    on conflict(account_id,context_generation,day) do update set body=excluded.body;
+  insert into public.kpi_snapshots(account_id,context_generation,metric_key,window_end,value) values(a,1,'roas_7d',current_date,3)
+    on conflict(account_id,context_generation,metric_key,window_end) do update set value=excluded.value;
+  assert (select count(*)=2 from public.daily_briefs where account_id=a),'same-day brief history lost';
+  assert (select count(*)=2 from public.kpi_snapshots where account_id=a),'same-day KPI history lost';
+  assert (select body='old brief' and context_generation=0 from public.daily_briefs where id=old_brief),'old brief changed';
+  assert (select value=2 and context_generation=0 from public.kpi_snapshots where id=old_kpi),'old KPI changed';
+
+  -- Parent-bound children inherit the immutable executing run, not current account metadata.
+  insert into public.routine_runs(id,account_id,context_generation,routine_id,version) values(fresh_run,a,1,'D03-W01',1);
+  insert into public.receipts(account_id,run_id,kind,description) values(a,fresh_run,'draft','fresh') returning id into rec;
+  insert into public.approvals(account_id,run_id,routine_id,title,expires_at) values(a,fresh_run,'D03-W01','fresh',now()+interval '1 day') returning id into ap;
+  assert (select context_generation=1 from public.receipts where id=rec),'receipt did not inherit parent generation';
+  assert (select context_generation=1 from public.approvals where id=ap),'approval did not inherit parent generation';
+  denied:=false;
+  begin update public.receipts set context_generation=0 where id=rec;
+  exception when check_violation then denied:=true; end;
+  assert denied,'receipt generation changed';
+  denied:=false;
+  begin update public.approvals set run_id=old_run where id=ap;
+  exception when check_violation then denied:=true; end;
+  assert denied,'approval parent changed';
+  denied:=false;
+  begin insert into public.receipts(account_id,context_generation,run_id,kind,description) values(a,1,old_run,'draft','old parent');
+  exception when serialization_failure then denied:=true; end;
+  assert denied,'old parent receipt rebased by caller';
+  denied:=false;
+  begin insert into public.receipts(account_id,kind,description) values(a,'notification','legacy run-less');
+  exception when serialization_failure then denied:=true; end;
+  assert denied,'run-less receipt omitted captured identity';
+  insert into public.receipts(account_id,context_generation,kind,description) values(a,1,'notification','current KPI failure');
+  update public.accounts set automation_paused=true where id=a;
+  denied:=false;
+  begin insert into public.daily_briefs(account_id,context_generation,day,body) values(a,1,current_date+1,'paused');
+  exception when object_not_in_prerequisite_state then denied:=true; end;
+  assert denied,'paused brief accepted';
+  denied:=false;
+  begin insert into public.kpi_snapshots(account_id,context_generation,metric_key,window_end,value) values(a,1,'sessions_7d',current_date,3);
+  exception when object_not_in_prerequisite_state then denied:=true; end;
+  assert denied,'paused KPI accepted';
+  denied:=false;
+  begin insert into public.receipts(account_id,context_generation,kind,description) values(a,1,'notification','paused');
+  exception when object_not_in_prerequisite_state then denied:=true; end;
+  assert denied,'paused failure receipt accepted';
+  denied:=false;
+  begin perform public.write_decision_style_context(a,1,'{"decided":9}',now());
+  exception when object_not_in_prerequisite_state then denied:=true; end;
+  assert denied,'paused style accepted';
+  assert (select decision_style='{"founder_set":"retain","decided":0}' from public.account_profiles where account_id=a),'denied style mutated profile';
+  insert into public.daily_briefs(account_id,day,body) values(b,current_date,'unrelated tenant still works');
+  assert not has_table_privilege('authenticated','public.daily_briefs','INSERT');
+  assert not has_table_privilege('authenticated','public.kpi_snapshots','UPDATE');
+  assert not has_table_privilege('anon','public.daily_briefs','DELETE');
+  assert not has_function_privilege('authenticated','public.write_decision_style_context(uuid,bigint,jsonb,timestamptz)','EXECUTE');
+  assert has_function_privilege('service_role','public.write_decision_style_context(uuid,bigint,jsonb,timestamptz)','EXECUTE');
+  assert not (select prosecdef from pg_proc where oid='public.write_decision_style_context(uuid,bigint,jsonb,timestamptz)'::regprocedure),'unnecessary definer privilege';
+end $$;
+set local role authenticated;
+do $$
+declare denied boolean:=false;
+begin
+  begin perform public.write_decision_style_context(gen_random_uuid(),0,'{}',now());
+  exception when insufficient_privilege then denied:=true; end;
+  assert denied,'authenticated role called service-only style writer';
+end $$;
+rollback;
+select 'PASS: captured brief/KPI identity, same-day history, parent-derived receipt/approval scope, style merge, pause and client denial; synthetic rows rolled back' as result;

@@ -17,6 +17,8 @@
    Relative imports only (worker build). No brain/* imports: this file reads its own tables. */
 
 import { unwrap, type DbClient } from "../db/types";
+import { assertRuntimeContext } from "../db/runtimeContext";
+import { runtimeGeneration } from "../runtime/contextFence";
 import { ALL_SYSTEMS, type CategoryName } from "../platform/catalog";
 import type { Store } from "../runtime/store/interface";
 import type { ApprovalRecord, DecideNode, Decision, SpendAmount, TasteEvent } from "../runtime/types";
@@ -133,6 +135,7 @@ function median(xs: number[]): number | null {
 }
 
 export interface TasteOptions {
+  contextGeneration?: number;
   now?: () => Date;
   windowDays?: number;
   currency?: string;
@@ -142,7 +145,11 @@ export async function tastePatterns(store: Store, accountId: string, opts: Taste
   const now = (opts.now ?? (() => new Date()))();
   const windowDays = opts.windowDays ?? TASTE_WINDOW_DAYS;
   const since = new Date(now.getTime() - windowDays * DAY_MS).toISOString();
-  const [approvedAll, heldAll, events] = await Promise.all([store.listApprovals(accountId, "approved"), store.listApprovals(accountId, "held"), store.listTasteEvents(accountId, { since })]);
+  const [approvedAll, heldAll, allEvents] = await Promise.all([store.listApprovals(accountId, "approved", opts.contextGeneration), store.listApprovals(accountId, "held", opts.contextGeneration), store.listTasteEvents(accountId, { since })]);
+  // Once scoped, unbound events are not evidence for a new context. Only events
+  // attached to these generation-filtered approvals may influence the derived style.
+  const ids = new Set([...approvedAll, ...heldAll].map(a => a.id));
+  const events = opts.contextGeneration === undefined ? allEvents : allEvents.filter(e => e.approvalId && ids.has(e.approvalId));
   const inWindow = (a: ApprovalRecord) => (a.decidedAt ?? a.createdAt) >= since;
   const approved = approvedAll.filter(inWindow);
   const held = heldAll.filter(inWindow);
@@ -151,7 +158,7 @@ export async function tastePatterns(store: Store, accountId: string, opts: Taste
   // proposed spend per approval: the run's draft receipts carry decision.spend
   const spendByApproval = new Map<string, number | null>();
   for (const a of decided) {
-    const receipts = await store.listReceipts(accountId, { runId: a.runId });
+    const receipts = await store.listReceipts(accountId, { runId: a.runId, contextGeneration: opts.contextGeneration });
     let per: number | null = null;
     for (const r of receipts) {
       if (r.kind !== "draft") continue;
@@ -298,10 +305,13 @@ export function deriveDecisionStyle(p: TastePatterns, now: Date): DecisionStyle 
 
 /** Merge the derived keys into account_profiles.decision_style (other keys in that jsonb —
     founder-set ones, say — survive; tone / cadence / channels are not touched). */
-export async function writeDecisionStyle(db: DbClient, accountId: string, style: DecisionStyle, now: Date): Promise<void> {
-  const existing = await readAccountProfile(db, accountId);
-  const merged = { ...(existing?.decisionStyle ?? {}), ...style };
-  await unwrap("account_profiles.upsert", db.from("account_profiles").upsert({ account_id: accountId, decision_style: merged, updated_at: now.toISOString() }, { onConflict: "account_id" }));
+export async function writeDecisionStyle(db: DbClient, accountId: string, style: DecisionStyle, now: Date, contextGeneration = 0): Promise<void> {
+  const context = Object.freeze({ accountId, contextGeneration: runtimeGeneration(contextGeneration) });
+  await assertRuntimeContext(db, context);
+  await unwrap("account_profiles.decision_style", db.rpc("write_decision_style_context", {
+    p_account: accountId, p_generation: context.contextGeneration, p_style: style, p_now: now.toISOString(),
+  }));
+  await assertRuntimeContext(db, context);
 }
 
 /** The founder block for the DECIDE prompt (tone + decision style + notes), empty when unknown. */

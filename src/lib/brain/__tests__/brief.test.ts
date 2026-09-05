@@ -96,6 +96,7 @@ describe("evidence + the deterministic brief", () => {
 
   it("a quiet night with nothing waiting says so, with no numbers to claim", async () => {
     const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT }]);
     const ev = await gatherBriefEvidence({ store: new MemoryStore(), db, accountId: ACCT, now: NOW, timezone: null });
     const b = deterministicBrief(ev);
     expect(b.body).toBe("Quiet night — nothing ran and nothing is waiting on you. I have no new numbers to claim.");
@@ -169,6 +170,7 @@ describe("parseBrief (the validator)", () => {
 
   it("no notable delta → no 'noticed' at all, even if the model writes one", async () => {
     const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT }]);
     const quiet = await gatherBriefEvidence({ store: new MemoryStore(), db, accountId: ACCT, now: NOW, timezone: null });
     const p = parseBrief({ body: "Quiet.", items: [{ kind: "noticed", text: "Revenue is up 12%.", ref: "revenue_7d" }, { kind: "happened", text: "Nothing ran.", ref: null }] }, quiet);
     expect(p.brief.items).toEqual([{ kind: "happened", text: "Nothing ran.", ref: null }]);
@@ -220,7 +222,7 @@ describe("generateDailyBrief", () => {
     expect(first.record).toMatchObject({ accountId: ACCT, day: "2026-09-03", createdAt: NOW.toISOString() });
     expect(first.record.items.map((i) => i.kind)).toEqual(["needs_you", "noticed", "reminder", "happened"]);
     expect(db.rows("daily_briefs")).toHaveLength(1);
-    expect(db.lastCall("daily_briefs", "upsert").onConflict).toBe("account_id,day");
+    expect(db.lastCall("daily_briefs", "upsert").onConflict).toBe("account_id,context_generation,day");
 
     const again = await generateDailyBrief({ store, db, accountId: ACCT, now: () => new Date(NOW.getTime() + 2 * H), llm: llm("should not be called") });
     expect(again.existed).toBe(true);

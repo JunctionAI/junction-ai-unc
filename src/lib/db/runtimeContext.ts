@@ -4,7 +4,7 @@ import { AUTOMATION_PAUSED_MESSAGE } from "./automationPause";
 
 /** Re-check before provider work. Atomic persistence fencing is enforced by SQL triggers;
  * this read is not a lock held across network/model calls or a substitute for those triggers. */
-export async function assertRuntimeContext(db: DbClient, expected: RuntimeContextIdentity): Promise<void> {
+export async function assertRuntimeContext(db: DbClient, expected: RuntimeContextIdentity, opts: { allowPaused?: boolean } = {}): Promise<void> {
   runtimeGeneration(expected.contextGeneration);
   let row: { context_generation: unknown; automation_paused: unknown } | null;
   try {
@@ -15,5 +15,5 @@ export async function assertRuntimeContext(db: DbClient, expected: RuntimeContex
   if (!row || row.context_generation == null || typeof row.automation_paused !== "boolean")
     throw new RuntimeContextError("context_unavailable", "The account's runtime controls are unavailable.");
   assertSameRuntimeContext(expected, { accountId: expected.accountId, contextGeneration: runtimeGeneration(row.context_generation) });
-  if (row.automation_paused) throw new RuntimeContextError("automation_paused", AUTOMATION_PAUSED_MESSAGE);
+  if (row.automation_paused && !opts.allowPaused) throw new RuntimeContextError("automation_paused", AUTOMATION_PAUSED_MESSAGE);
 }

@@ -72,6 +72,7 @@ export class MemoryStore implements Store {
   async listRuns(accountId: string, opts: ListRunsOptions = {}) {
     const out = [...this.runs.values()]
       .filter((r) => r.accountId === accountId)
+      .filter((r) => opts.contextGeneration === undefined || (r.contextGeneration ?? 0) === opts.contextGeneration)
       .filter((r) => (opts.routineId ? r.routineId === opts.routineId : true))
       .filter((r) => (opts.mode ? r.mode === opts.mode : true))
       .filter((r) => (opts.status ? r.status === opts.status : true))
@@ -99,10 +100,11 @@ export class MemoryStore implements Store {
     this.approvals.set(approvalId, next);
     return clone(next);
   }
-  async listApprovals(accountId: string, status?: ApprovalStatus) {
+  async listApprovals(accountId: string, status?: ApprovalStatus, contextGeneration?: number) {
     return clone(
       [...this.approvals.values()]
         .filter((a) => a.accountId === accountId && (status ? a.status === status : true))
+        .filter((a) => contextGeneration === undefined || (this.runs.get(a.runId)?.contextGeneration ?? 0) === contextGeneration)
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
     );
   }
@@ -114,6 +116,7 @@ export class MemoryStore implements Store {
   }
   async listReceipts(accountId: string, opts: ListReceiptsOptions = {}) {
     let out = this.receipts.filter((r) => r.accountId === accountId);
+    if (opts.contextGeneration !== undefined) out = out.filter((r) => (this.runs.get(r.runId)?.contextGeneration ?? r.contextGeneration ?? 0) === opts.contextGeneration);
     if (opts.runId) out = out.filter((r) => r.runId === opts.runId);
     if (opts.kind) out = out.filter((r) => r.kind === opts.kind);
     if (opts.since) out = out.filter((r) => r.createdAt >= opts.since!);

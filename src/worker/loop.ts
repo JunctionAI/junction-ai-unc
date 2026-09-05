@@ -310,7 +310,7 @@ export class Worker {
         } catch (err) {
           this.log.warn("brief.timezone_failed", { accountId: id, error: err instanceof Error ? err.message : String(err) });
         }
-        candidates.push({ accountId: id, timezone });
+        candidates.push({ accountId: id, contextGeneration: a.account.contextGeneration ?? 0, timezone });
       }
     } catch (err) {
       this.log.warn("brief.candidates_failed", { error: err instanceof Error ? err.message : String(err) });
@@ -322,14 +322,14 @@ export class Worker {
       const base = { job: "daily_brief", accountId: d.accountId, day: d.day, slot: d.slot.toISOString(), timezone: d.timezone ?? "UTC" };
       this.log.info("job.start", base);
       try {
-        const r = await runDailyBrief(this.telemetryDeps(), { accountId: d.accountId, timezone: d.timezone });
+        const r = await runDailyBrief(this.telemetryDeps(), { accountId: d.accountId, contextGeneration: d.contextGeneration, timezone: d.timezone });
         this.log.info("job.finish", { ...base, written: r.written.length, alreadyDone: r.alreadyDone.length, ms: Date.now() - t0 });
-        this.stats.briefs[d.accountId] = { day: d.day, ranAt: this.now().toISOString(), ok: true };
+        this.stats.briefs[d.accountId] = { day: d.day, contextGeneration: d.contextGeneration, ranAt: this.now().toISOString(), ok: true };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.stats.lastError = message;
         this.log.error("job.error", { ...base, error: message });
-        this.stats.briefs[d.accountId] = { day: d.day, ranAt: this.now().toISOString(), ok: false, error: message };
+        this.stats.briefs[d.accountId] = { day: d.day, contextGeneration: d.contextGeneration, ranAt: this.now().toISOString(), ok: false, error: message };
       }
       served.push(d.accountId);
     }

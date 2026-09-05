@@ -98,6 +98,7 @@ export const BRIEF_HOUR_LOCAL = 6;
 export const BRIEF_MINUTE_LOCAL = 30;
 
 export interface BriefMarker {
+  contextGeneration?: number;
   /** The local day (YYYY-MM-DD in the account's zone) last served — including failed attempts. */
   day: string;
   ranAt: string;
@@ -110,12 +111,14 @@ export type BriefMarkers = Record<string, BriefMarker>;
 
 export interface BriefCandidate {
   accountId: string;
+  contextGeneration?: number;
   /** null / invalid → UTC. */
   timezone: string | null;
 }
 
 export interface DueBrief {
   accountId: string;
+  contextGeneration?: number;
   timezone: string | null;
   /** The local day being served. */
   day: string;
@@ -133,8 +136,8 @@ export function dueBriefs(now: Date, candidates: BriefCandidate[], markers: Brie
     const slot = briefSlotUtc(now, c.timezone, BRIEF_HOUR_LOCAL, BRIEF_MINUTE_LOCAL);
     if (slot.getTime() > now.getTime()) continue; // not yet today
     if (now.getTime() - slot.getTime() > lookbackMs) continue; // missed by more than the look-back: wait for tomorrow
-    if (markers[c.accountId]?.day === day) continue;
-    out.push({ accountId: c.accountId, timezone: c.timezone, day, slot });
+    if (markers[c.accountId]?.day === day && (markers[c.accountId].contextGeneration ?? 0) === (c.contextGeneration ?? 0)) continue;
+    out.push({ ...c, day, slot });
   }
   return out;
 }
@@ -144,9 +147,10 @@ export function sanitiseBriefMarkers(raw: unknown): BriefMarkers {
   if (!raw || typeof raw !== "object") return out;
   for (const [accountId, m] of Object.entries(raw as Record<string, unknown>)) {
     if (!m || typeof m !== "object") continue;
-    const { day, ranAt, ok } = m as Record<string, unknown>;
+    const { day, ranAt, ok, contextGeneration } = m as Record<string, unknown>;
     if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
-    out[accountId] = { day, ranAt: typeof ranAt === "string" ? ranAt : day, ok: ok === true };
+    if (contextGeneration !== undefined && (!Number.isSafeInteger(contextGeneration) || (contextGeneration as number) < 0)) continue;
+    out[accountId] = { day, ranAt: typeof ranAt === "string" ? ranAt : day, ok: ok === true, ...(contextGeneration !== undefined ? { contextGeneration: contextGeneration as number } : {}) };
   }
   return out;
 }

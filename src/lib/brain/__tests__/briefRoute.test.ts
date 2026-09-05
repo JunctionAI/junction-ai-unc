@@ -20,7 +20,8 @@ vi.mock("@/lib/db/server", () => ({
   isServiceRoleConfigured: () => serviceRole,
 }));
 
-import { GET, POST } from "@/app/api/unc/brief/route";
+import { GET as routeGET, POST } from "@/app/api/unc/brief/route";
+const GET = () => routeGET(new Request("http://unc.test/api/unc/brief"));
 
 const ACCT = "00000000-0000-4000-8000-00000000acc1";
 const USER = "00000000-0000-4000-8000-00000000u5e1";
@@ -70,6 +71,47 @@ describe("demo mode + auth", () => {
 });
 
 describe("the brief", () => {
+  it("requires the captured generation after reset and reads only that generation while paused", async () => {
+    db.rows("accounts")[0].context_generation = 1;
+    db.rows("accounts")[0].automation_paused = true;
+    db.seed("daily_briefs", [
+      { account_id: ACCT, context_generation: 0, day: "2026-09-03", body: "old", items: [] },
+      { account_id: ACCT, context_generation: 1, day: "2026-09-03", body: "current", items: [] },
+    ]);
+    expect((await GET()).status).toBe(409);
+    expect((await post()).status).toBe(409);
+    const request = () => new Request("http://unc.test/api/unc/brief", { headers: { "x-unc-context-generation": "1" } });
+    const current = await routeGET(request());
+    expect(current.status).toBe(200);
+    expect((await current.json()).brief.body).toBe("current");
+    expect(current.headers.get("cache-control")).toBe("no-store");
+    const held = await POST(new Request(request(), { method: "POST", body: "{}" }));
+    expect(held.status).toBe(503);
+    expect((await held.json()).code).toBe("automation_paused");
+  });
+  it("does not return raw database/provider errors", async () => {
+    const from = db.from.bind(db);
+    vi.spyOn(db, "from").mockImplementation(table => {
+      if (table === "daily_briefs") throw new Error("private bearer should-not-appear");
+      return from(table);
+    });
+    const res = await GET();
+    expect(res.status).toBe(503);
+    expect(await res.text()).not.toContain("should-not-appear");
+  });
+  it("returns context_changed after a late model answer without saving a brief", async () => {
+    clearLlmEnv({ ANTHROPIC_API_KEY: "fake" });
+    setProviderFactoryForTests(id => ({
+      id, async complete(req) {
+        db.rows("accounts")[0].context_generation = 1;
+        return { text: '{"body":"Quiet.","items":[]}', stopReason: "end", usage: { input: 2, output: 2 }, provider: id, model: req.model, latencyMs: 1 };
+      },
+    }));
+    const res = await post();
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("context_changed");
+    expect(db.rows("daily_briefs")).toHaveLength(0);
+  });
   it("a held account blocks generation before a model call or any write, but can read", async () => {
     db.rows("accounts")[0].automation_paused = true;
     const result = await post({ force: true });

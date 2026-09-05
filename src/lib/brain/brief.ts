@@ -22,6 +22,8 @@
    ownership. */
 
 import { unwrap, type DbClient } from "../db/types";
+import { assertRuntimeContext } from "../db/runtimeContext";
+import { runtimeGeneration } from "../runtime/contextFence";
 import type { Store } from "../runtime/store/interface";
 import type { ApprovalRecord, Receipt } from "../runtime/types";
 import { describeDelta, kpiDeltas, type KpiDelta } from "./kpi";
@@ -49,6 +51,7 @@ export interface DailyBrief {
 export interface DailyBriefRecord extends DailyBrief {
   id: string;
   accountId: string;
+  contextGeneration: number;
   createdAt: string;
 }
 
@@ -124,6 +127,7 @@ export interface GatherDeps {
   store: Store;
   db: DbClient;
   accountId: string;
+  contextGeneration?: number;
   now: Date;
   timezone: string | null;
 }
@@ -132,6 +136,9 @@ const shortText = (s: string, max = 140) => s.replace(/\s+/g, " ").trim().slice(
 
 export async function gatherBriefEvidence(deps: GatherDeps): Promise<BriefEvidence> {
   const { store, db, accountId, now } = deps;
+  const contextGeneration = runtimeGeneration(deps.contextGeneration);
+  const context = Object.freeze({ accountId, contextGeneration });
+  await assertRuntimeContext(db, context);
   const tz = deps.timezone ?? "UTC";
   const day = localDay(now, tz);
   const windowEnd = now.toISOString();
@@ -139,16 +146,17 @@ export async function gatherBriefEvidence(deps: GatherDeps): Promise<BriefEviden
   const weekAhead = new Date(now.getTime() + 7 * DAY_MS).toISOString();
 
   const [receipts, pending, runs, deltas, eventRows, yRow] = await Promise.all([
-    store.listReceipts(accountId, { since: windowStart, limit: 200 }),
-    store.listApprovals(accountId, "pending"),
-    store.listRuns(accountId, { since: windowStart, status: "done" }),
-    kpiDeltas(db, accountId, now),
+    store.listReceipts(accountId, { since: windowStart, limit: 200, contextGeneration }),
+    store.listApprovals(accountId, "pending", contextGeneration),
+    store.listRuns(accountId, { since: windowStart, status: "done", contextGeneration }),
+    kpiDeltas(db, accountId, now, contextGeneration),
     unwrap<{ id: string; text: string; happens_at: string }[]>(
       "memories.select",
-      db.from("memories").select("id, text, happens_at").eq("account_id", accountId).eq("kind", "event").is("valid_to", null).gte("happens_at", windowEnd).lte("happens_at", weekAhead).order("happens_at", { ascending: true }).limit(10),
+      db.from("memories").select("id, text, happens_at").eq("account_id", accountId).eq("context_generation", contextGeneration).eq("kind", "event").is("valid_to", null).gte("happens_at", windowEnd).lte("happens_at", weekAhead).order("happens_at", { ascending: true }).limit(10),
     ),
-    unwrap<{ body: string; items: unknown } | null>("daily_briefs.select", db.from("daily_briefs").select("body, items").eq("account_id", accountId).eq("day", previousDay(day)).maybeSingle()),
+    unwrap<{ body: string; items: unknown } | null>("daily_briefs.select", db.from("daily_briefs").select("body, items").eq("account_id", accountId).eq("context_generation", contextGeneration).eq("day", previousDay(day)).maybeSingle()),
   ]);
+  await assertRuntimeContext(db, context);
 
   const count = (k: Receipt["kind"]) => receipts.filter((r) => r.kind === k).length;
   const lines = receipts
@@ -387,6 +395,8 @@ export interface GenerateBriefDeps {
   store: Store;
   db: DbClient;
   accountId: string;
+  /** Captured before resolving the job/request inputs. Omission is generation zero only. */
+  contextGeneration?: number;
   now?: () => Date;
   /** null = deterministic brief. */
   llm?: BriefLlm | null;
@@ -407,32 +417,43 @@ export interface GeneratedBrief {
   evidence: BriefEvidence | null;
 }
 
-function rowToRecord(row: { id: string; account_id: string; day: string; body: string; items: unknown; created_at: string }): DailyBriefRecord {
-  return { id: row.id, accountId: row.account_id, day: row.day, body: row.body, items: Array.isArray(row.items) ? (row.items as BriefItem[]) : [], createdAt: row.created_at };
+type BriefRow = { id: string; account_id: string; context_generation: number; day: string; body: string; items: unknown; created_at: string };
+
+function rowToRecord(row: BriefRow): DailyBriefRecord {
+  return { id: row.id, accountId: row.account_id, contextGeneration: runtimeGeneration(row.context_generation), day: row.day, body: row.body, items: Array.isArray(row.items) ? (row.items as BriefItem[]) : [], createdAt: row.created_at };
 }
 
-export async function getDailyBrief(db: DbClient, accountId: string, day: string): Promise<DailyBriefRecord | null> {
-  const row = await unwrap<{ id: string; account_id: string; day: string; body: string; items: unknown; created_at: string } | null>(
+export async function getDailyBrief(db: DbClient, accountId: string, day: string, contextGeneration = 0): Promise<DailyBriefRecord | null> {
+  const context = Object.freeze({ accountId, contextGeneration: runtimeGeneration(contextGeneration) });
+  await assertRuntimeContext(db, context, { allowPaused: true });
+  const row = await unwrap<BriefRow | null>(
     "daily_briefs.select",
-    db.from("daily_briefs").select("id, account_id, day, body, items, created_at").eq("account_id", accountId).eq("day", day).maybeSingle(),
+    db.from("daily_briefs").select("id, account_id, context_generation, day, body, items, created_at").eq("account_id", accountId).eq("context_generation", contextGeneration).eq("day", day).maybeSingle(),
   );
+  await assertRuntimeContext(db, context, { allowPaused: true });
   return row ? rowToRecord(row) : null;
 }
 
 export async function generateDailyBrief(deps: GenerateBriefDeps): Promise<GeneratedBrief> {
+  const context = Object.freeze({ accountId: deps.accountId, contextGeneration: runtimeGeneration(deps.contextGeneration) });
+  const { accountId, contextGeneration } = context;
+  const guard = () => assertRuntimeContext(deps.db, context);
+  await guard();
   const now = (deps.now ?? (() => new Date()))();
-  const timezone = deps.timezone === undefined ? await readTimezone(deps.db, deps.accountId) : deps.timezone;
+  const timezone = deps.timezone === undefined ? await readTimezone(deps.db, accountId) : deps.timezone;
   const day = localDay(now, timezone);
   if (!deps.force) {
-    const existing = await getDailyBrief(deps.db, deps.accountId, day);
+    const existing = await getDailyBrief(deps.db, accountId, day, contextGeneration);
+    await guard();
     if (existing) return { record: existing, existed: true, author: "deterministic", liveItems: 0, rejected: [], evidence: null };
   }
-  const evidence = await gatherBriefEvidence({ store: deps.store, db: deps.db, accountId: deps.accountId, now, timezone });
+  const evidence = await gatherBriefEvidence({ store: deps.store, db: deps.db, accountId, contextGeneration, now, timezone });
   let parsed: ParsedBrief = { brief: deterministicBrief(evidence), liveBody: false, liveItems: 0, rejected: [] };
   let author: GeneratedBrief["author"] = "deterministic";
   if (deps.llm) {
+    await guard();
     try {
-      const text = await deps.llm.complete({ system: BRIEF_SYSTEM, user: buildBriefUserMessage(evidence), accountId: deps.accountId });
+      const text = await deps.llm.complete({ system: BRIEF_SYSTEM, user: buildBriefUserMessage(evidence), accountId });
       const p = parseBrief(extractJsonObject(text), evidence);
       if (p.liveBody || p.liveItems > 0) {
         parsed = p;
@@ -442,14 +463,17 @@ export async function generateDailyBrief(deps: GenerateBriefDeps): Promise<Gener
       deps.log?.("brief.llm_failed", { accountId: deps.accountId, error: err instanceof Error ? err.name : "unknown" });
     }
   }
-  const row = await unwrap<{ id: string; account_id: string; day: string; body: string; items: unknown; created_at: string }>(
+  // Also runs after a failed LLM call: stale work cannot take the deterministic fallback.
+  await guard();
+  const row = await unwrap<BriefRow>(
     "daily_briefs.upsert",
     deps.db
       .from("daily_briefs")
-      .upsert({ account_id: deps.accountId, day, body: parsed.brief.body, items: parsed.brief.items, created_at: now.toISOString() }, { onConflict: "account_id,day" })
-      .select("id, account_id, day, body, items, created_at")
+      .upsert({ account_id: accountId, context_generation: contextGeneration, day, body: parsed.brief.body, items: parsed.brief.items, created_at: now.toISOString() }, { onConflict: "account_id,context_generation,day" })
+      .select("id, account_id, context_generation, day, body, items, created_at")
       .single(),
   );
+  await guard();
   deps.log?.("brief.written", { accountId: deps.accountId, day, author, liveItems: parsed.liveItems, items: parsed.brief.items.length, rejected: parsed.rejected.length });
   return { record: rowToRecord(row), existed: false, author, liveItems: parsed.liveItems, rejected: parsed.rejected, evidence };
 }

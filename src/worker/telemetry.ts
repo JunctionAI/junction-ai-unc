@@ -20,6 +20,8 @@ import { generateDailyBrief, readTimezone, type BriefLlm } from "../lib/brain/br
 import { accountsWithConnectors, snapshotKpis, type SnapshotReport } from "../lib/brain/kpi";
 import { deriveDecisionStyle, tastePatterns, writeDecisionStyle } from "../lib/brain/taste";
 import type { DbClient } from "../lib/db/types";
+import { assertRuntimeContext } from "../lib/db/runtimeContext";
+import { assertSameRuntimeContext, runtimeGeneration } from "../lib/runtime/contextFence";
 import type { Store } from "../lib/runtime/store/interface";
 import type { ConnectorReader } from "../lib/runtime/types";
 import { computeBenchmarks, type AccountBenchmarkRows } from "../lib/telemetry/benchmarks";
@@ -184,9 +186,10 @@ export async function runKpiSnapshot(deps: TelemetryDeps, opts: { accountId?: st
   }
   const ids = opts.accountId ? [opts.accountId] : await accountsWithConnectors(deps.db);
   for (const accountId of ids) {
-    out.accounts++;
     const acct = await deps.accounts.getAccount(accountId);
-    const report = await snapshotKpis({ db: deps.db, reader: deps.reader, accountId, account: acct?.account, now: deps.now, log: deps.log ? (event, fields) => deps.log!.info(event, fields) : undefined });
+    if (!acct || acct.automationPaused) continue;
+    out.accounts++;
+    const report = await snapshotKpis({ db: deps.db, reader: deps.reader, accountId, account: acct.account, now: deps.now, log: deps.log ? (event, fields) => deps.log!.info(event, fields) : undefined });
     out.written += report.written.length;
     out.couldntAsk += report.couldntAsk.length;
     out.perAccount.push(report);
@@ -207,16 +210,18 @@ export interface DailyBriefJobReport {
 
 /** Refresh this account's taste patterns into account_profiles.decision_style (jsonb merge on
     that one key). Separate so a brief still lands when the profile write fails. */
-export async function refreshDecisionStyle(deps: TelemetryDeps, accountId: string, currency: string): Promise<void> {
+export async function refreshDecisionStyle(deps: TelemetryDeps, accountId: string, currency: string, contextGeneration = 0): Promise<void> {
   if (!deps.db) return;
+  const context = Object.freeze({ accountId, contextGeneration: runtimeGeneration(contextGeneration) });
+  await assertRuntimeContext(deps.db, context);
   const now = (deps.now ?? (() => new Date()))();
-  const patterns = await tastePatterns(deps.store, accountId, { now: deps.now, currency });
-  await writeDecisionStyle(deps.db, accountId, deriveDecisionStyle(patterns, now), now);
+  const patterns = await tastePatterns(deps.store, accountId, { now: deps.now, currency, contextGeneration });
+  await writeDecisionStyle(deps.db, accountId, deriveDecisionStyle(patterns, now), now, contextGeneration);
   deps.log?.info("taste.decision_style", { accountId, decided: patterns.decided, approvalRatePct: patterns.approvalRatePct, ceiling: patterns.maxApprovedPerDay });
 }
 
 /** One brief per account per local day. `force` regenerates today's. Demo mode does nothing. */
-export async function runDailyBrief(deps: TelemetryDeps, opts: { accountId?: string; force?: boolean; timezone?: string | null } = {}): Promise<DailyBriefJobReport> {
+export async function runDailyBrief(deps: TelemetryDeps, opts: { accountId?: string; contextGeneration?: number; force?: boolean; timezone?: string | null } = {}): Promise<DailyBriefJobReport> {
   const out: DailyBriefJobReport = { accounts: 0, written: [], alreadyDone: [], skipped: false };
   if (!deps.db) {
     out.skipped = true;
@@ -227,13 +232,17 @@ export async function runDailyBrief(deps: TelemetryDeps, opts: { accountId?: str
   for (const acct of await targets(deps, opts.accountId)) {
     out.accounts++;
     const id = acct.account.accountId;
+    const context = Object.freeze({ accountId: id, contextGeneration: runtimeGeneration(acct.account.contextGeneration) });
+    if (opts.contextGeneration !== undefined) assertSameRuntimeContext({ accountId: opts.accountId!, contextGeneration: opts.contextGeneration }, context);
+    await assertRuntimeContext(db, context);
     try {
-      await refreshDecisionStyle(deps, id, acct.account.currency);
+      await refreshDecisionStyle(deps, id, acct.account.currency, context.contextGeneration);
     } catch (err) {
       deps.log?.warn("taste.refresh_failed", { accountId: id, error: err instanceof Error ? err.message : String(err) });
     }
+    await assertRuntimeContext(db, context);
     const timezone = opts.timezone !== undefined ? opts.timezone : await readTimezone(db, id);
-    const g = await generateDailyBrief({ store: deps.store, db, accountId: id, now: deps.now, llm: deps.briefLlm ?? null, timezone, force: opts.force, log: deps.log ? (event, fields) => deps.log!.info(event, fields) : undefined });
+    const g = await generateDailyBrief({ store: deps.store, db, ...context, now: deps.now, llm: deps.briefLlm ?? null, timezone, force: opts.force, log: deps.log ? (event, fields) => deps.log!.info(event, fields) : undefined });
     if (g.existed) out.alreadyDone.push(id);
     else out.written.push({ accountId: id, day: g.record.day, author: g.author, items: g.record.items.length });
   }

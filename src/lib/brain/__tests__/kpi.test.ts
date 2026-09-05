@@ -87,7 +87,7 @@ describe("snapshotKpis", () => {
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({ account_id: ACCT, run_id: null, kind: "notification", platform: "ga4", description: expect.stringMatching(/^Couldn't ask ga4 for sessions \(7d\): couldn't ask ga4 report/) });
     expect((receipts[0].payload as { metricKey: string }).metricKey).toBe("sessions_7d");
-    expect(db.lastCall("kpi_snapshots", "upsert").onConflict).toBe("account_id,metric_key,window_end");
+    expect(db.lastCall("kpi_snapshots", "upsert").onConflict).toBe("account_id,context_generation,metric_key,window_end");
 
     // re-running the same day rewrites the same rows (idempotent)
     await snapshotKpis({ db, reader, accountId: ACCT, now: () => new Date("2026-09-02T09:00:00.000Z") });
@@ -111,6 +111,7 @@ describe("snapshotKpis", () => {
 
   it("an account with nothing connected asks nothing and writes nothing", async () => {
     const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT }]);
     const reader = fakeReader({});
     const report = await snapshotKpis({ db, reader, accountId: ACCT, now: () => NOW });
     expect(report.written).toEqual([]);
@@ -149,6 +150,7 @@ describe("deltas", () => {
 
   it("kpiDeltas reads the account's last 35 days from the table", async () => {
     const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT }]);
     db.seed("kpi_snapshots", [
       { account_id: ACCT, metric_key: "revenue_7d", value: 4120, currency: "NZD", window_start: "2026-08-26", window_end: "2026-09-02", platform: "shopify", provenance: "live", captured_at: NOW.toISOString() },
       { account_id: ACCT, metric_key: "revenue_7d", value: 3500, currency: "NZD", window_start: "2026-08-19", window_end: "2026-08-26", platform: "shopify", provenance: "live", captured_at: NOW.toISOString() },
@@ -159,6 +161,7 @@ describe("deltas", () => {
     expect(d[0]).toMatchObject({ key: "revenue_7d", latest: 4120, previous: 3500, deltaPct: 17.7, notable: true, provenance: "live" });
     expect(db.lastCall("kpi_snapshots", "select").filters).toEqual([
       { kind: "eq", column: "account_id", value: ACCT },
+      { kind: "eq", column: "context_generation", value: 0 },
       { kind: "gte", column: "window_end", value: "2026-07-29" },
     ]);
   });

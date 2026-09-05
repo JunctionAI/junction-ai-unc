@@ -67,10 +67,10 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.action_ledger.enums.status).toEqual(new Set(["started", "ok", "failed"]));
     expect([...s.action_ledger.columns]).toEqual(expect.arrayContaining(["key", "account_id", "run_id", "action_id", "status", "external_id", "error"]));
     // 0006 telemetry
-    expect(s.routine_outcomes.uniques).toContainEqual({ columns: ["account_id", "routine_id", "kpi_key", "window_end"] });
+    expect(s.routine_outcomes.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "routine_id", "kpi_key", "window_end"] }));
     expect(s.routine_outcomes.enums.kpi_op).toEqual(new Set(["gte", "lte"]));
     expect([...s.routine_outcomes.columns]).toEqual(expect.arrayContaining(["kpi_target", "kpi_actual", "provenance", "window_start", "window_end", "measured_at", "run_id"]));
-    expect(s.self_reviews.uniques).toContainEqual({ columns: ["account_id", "week_start"] });
+    expect(s.self_reviews.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "week_start"] }));
     expect([...s.self_reviews.columns]).toEqual(expect.arrayContaining(["body", "changes", "evidence"]));
     expect(s.benchmarks.primaryKey).toEqual(["metric_key", "segment"]);
     expect([...s.benchmarks.columns]).toEqual(expect.arrayContaining(["p50", "p75", "n", "computed_at"]));
@@ -91,7 +91,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.routine_runs.enums.status).toEqual(new Set(["running", "waiting_approval", "waiting_input", "done", "failed", "skipped"]));
     expect(s.chat_messages.enums.thread).toEqual(new Set(["corner", "onboarding", "human"]));
     expect(s.approvals.uniques).toContainEqual({ columns: ["account_id", "client_key"], partialNotNull: "client_key" });
-    expect(s.connectors.uniques).toContainEqual({ columns: ["account_id", "platform"] });
+    expect(s.connectors.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "platform"] }));
     expect(s.connectors.columns.has("sync_ref")).toBe(true); // 0005
     expect(s.connector_secrets.primaryKey).toEqual(["connector_id"]);
     expect([...s.connector_secrets.columns]).toEqual(expect.arrayContaining(["ciphertext", "iv", "tag", "key_version"]));
@@ -110,14 +110,16 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect([...s.chat_messages.columns]).toEqual(expect.arrayContaining(["channel", "external_msg_id", "delivery"]));
     expect([...s.chat_messages.enums.channel]).toEqual(["app", "telegram", "whatsapp", "slack", "sms", "email", "apple"]);
     expect(s.chat_messages.uniques).toContainEqual({ columns: ["channel", "external_msg_id"], partialNotNull: "external_msg_id" });
-    expect(s.channel_links.uniques).toContainEqual({ columns: ["channel", "external_id"] });
+    expect(s.channel_links.uniques).toContainEqual(expect.objectContaining({ columns: ["channel", "external_id"] }));
     expect(s.channel_links.uniques).toContainEqual({ columns: ["link_code"], partialNotNull: "link_code" });
     expect([...s.outbound_messages.enums.status]).toEqual(["sent", "failed", "queued"]);
-    expect(s.channel_secrets.uniques).toContainEqual({ columns: ["channel", "scope_id"] });
-    expect(s.kpi_snapshots.uniques).toContainEqual({ columns: ["account_id", "metric_key", "window_end"] });
-    expect(s.daily_briefs.uniques).toContainEqual({ columns: ["account_id", "day"] });
+    expect(s.channel_secrets.uniques).toContainEqual(expect.objectContaining({ columns: ["channel", "scope_id"] }));
+    expect(s.kpi_snapshots.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "context_generation", "metric_key", "window_end"] }));
+    expect(s.daily_briefs.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "context_generation", "day"] }));
+    expect(s.kpi_snapshots.uniques.some(u => u.columns.join() === "account_id,metric_key,window_end")).toBe(false);
+    expect(s.daily_briefs.uniques.some(u => u.columns.join() === "account_id,day")).toBe(false);
     expect(s.intake_keys.uniques).toContainEqual({ columns: ["key_hash"] });
-    expect(s.playbooks.uniques).toContainEqual({ columns: ["domain", "title"] });
+    expect(s.playbooks.uniques).toContainEqual(expect.objectContaining({ columns: ["domain", "title"] }));
   });
 
   it("answers match_memories (0010) with cosine similarity over live embedded memories", async () => {
