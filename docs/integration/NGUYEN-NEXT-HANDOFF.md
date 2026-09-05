@@ -91,8 +91,8 @@ Do not write directly to runtime tables or add a second scheduler. Do not let th
 ## 6. Delivery order and current blockers
 
 1. Nguyen has delivered the keyword wrapper and missing-origin denial. Set the exact canonical origin, validate/test and return the final published revision, as recorded in the wrapper handoff above. The current delivery is not yet a successful provider round trip.
-2. Codex has completed the archived AVGAR context repair and matched app/worker release. AVGAR automation remains paused while delayed-work generation fencing and pilot admission are completed. US/NZ/AU and the 50%-of-product-price CPA ceiling are recorded; the keyword seed and other unconfirmed business settings remain unknown. Do not overwrite these with the old `travel bag`/location `2840` test values.
-3. Codex deploys/configures the matching backend, binds only the pilot account/revision and performs the real shadow round trip.
+2. Codex has completed the archived AVGAR context repair and matched app/worker release (`d95aaa403217422dc53d655a4ff9b305516577c6`). AVGAR automation remains paused while delayed-work generation fencing and pilot admission are completed. US/NZ/AU, the 50%-of-product-price CPA ceiling and Tom's discovery seed **golf travel bag** are recorded in current AVGAR context. Other unconfirmed business settings remain unknown. Do not overwrite these with the old `travel bag`/location `2840` test values; validate a separate provider location/language binding per market.
+3. Codex completes backend configuration, including the missing worker signing root and independent execution API access, binds only the pilot account/final revision and performs the real shadow round trip after admission gates pass. No paid provider call has been made for this handoff.
 4. Together, integrate the six proven Meta lanes using explicit adapters and agreed metrics, then other ready lanes. Keep blocked capabilities visibly unavailable.
 5. Codex proves phone/web experience, isolated second-client onboarding and ongoing sync/recovery before claiming the full product works.
 

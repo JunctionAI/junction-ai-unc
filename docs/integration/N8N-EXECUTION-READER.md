@@ -1,6 +1,6 @@
 # Independent n8n execution evidence — 5 September 2026
 
-Status: implemented and covered by synthetic tests; **not activated or live-proven**. Nguyen can continue the keyword-only wrapper under `unc.keyword-shadow.v1`. No response-contract change or runtime version lookup is required on his side.
+Status: implemented, covered by synthetic tests and deployed to matching app/worker source `d95aaa403217422dc53d655a4ff9b305516577c6`; **not activated or live-proven**. See [release evidence](../RUNTIME-CONTEXT-RELEASE-2026-09-05.md). Nguyen can continue the keyword-only wrapper under `unc.keyword-shadow.v1`. No response-contract change or runtime version lookup is required on his side.
 
 ## Evidence path
 
@@ -37,7 +37,7 @@ Use the least available API scope and restrict the credential's project access w
 - Vercel/Fly environment metadata and local key-name checks found no execution-reader API credential/configuration. Secret values were not extracted or compared.
 - n8n's official authentication documentation says the public API is unavailable during the free trial. Plan/access resolution is an owner/provider dependency, not a reason to fake execution evidence or use private browser-cookie endpoints.
 - The official MCP `get_workflow_execution` implementation inspected below exposes execution metadata and optional run data, but omits `workflowVersionId` and the saved `workflowData` snapshot. It does not satisfy this reader's provenance requirements. This is a source finding, not a claim about an untested future MCP version.
-- No Nguyen workflow was edited, executed, registered, published or activated. No source change in this batch has yet been deployed; the live matched runtime remains `b7c347bfd9ff862f00b01e6fb71740e26d783b0c` at documentation time.
+- No Nguyen workflow was edited, executed, registered, published or activated. The subsequent matching `d95aaa403217422dc53d655a4ff9b305516577c6` app/worker release includes this reader, still disabled and without an execution API credential. Configuration inspection also found the signing root absent from the worker; that is a separate Codex-owned provisioning gate, not a reason to issue an unsigned token.
 
 ## Acceptance before enabling dispatch
 

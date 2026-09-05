@@ -4,6 +4,8 @@ Status at 5 September 2026, approximately 14:20 NZST. This is the current known 
 
 **Execution goal is active.** Subsequent work and remaining handoff gates are tracked in `docs/BACKEND-GOAL-PROGRESS.md`; the snapshot below remains the original evidence baseline.
 
+Later confirmed input: Tom approved **golf travel bag** as the first discovery seed, separately in US/NZ/AU. It is now persisted in AVGAR context; see `docs/integration/AVGAR-PILOT-POLICY.md`. References below to an unknown seed describe the initial audit, not the current decision. The original 24-item register remains in scope.
+
 ## Outcome and boundaries
 
 Tom confirmed during this work: **US, NZ and AU; maximum CPA = 50% of the relevant product price**. See `docs/integration/AVGAR-PILOT-POLICY.md` for the currency/product-binding requirements. A keyword seed, a separate scaling target and product-to-ad mapping are not implied by this confirmation.
