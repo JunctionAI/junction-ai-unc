@@ -2,6 +2,12 @@
 
 6 September 2026 NZ. **Backend implementation; no live customer calendar claim.**
 
+**Batch 70:** [real campaign input and staged registration](integration/CALENDAR-CAMPAIGN-READ-2026-09-06.md).
+Execution 98 returns 42 sent campaigns; the receiver accepts 10 recent inputs.
+An inactive account destination is saved and all five runtime settings are
+staged. No binding, allowance, calendar run or deployment exists from this batch;
+AVGAR remains paused. Customer selection and end-to-end acceptance remain ours.
+
 **Batch 69:** [source-matched receiver draft and real refusal tests](integration/CALENDAR-RECEIVER-DRAFT-2026-09-06.md).
 The separate receiver now exists but remains unpublished. Executions 95/96 stop
 before Klaviyo; current-source synthetic execution 97 passes. Dedicated inbound

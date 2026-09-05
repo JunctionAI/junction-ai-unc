@@ -13,7 +13,25 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 69, 6 September NZ / 5 September UTC
+## Latest state — Batch 70, 6 September NZ / 5 September UTC
+
+**Native AVGAR campaign read verified; inactive registration and separate runtime
+settings staged.** [Exact evidence and remaining journey](integration/CALENDAR-CAMPAIGN-READ-2026-09-06.md).
+Manual execution 98 returned 42 sent campaigns from existing Klaviyo account
+SuYidF; the actual receiver normalizer accepts 10 within the original 90-day
+window. Saved graph/revision/input proof passes without rerunning the provider.
+Registration `33336ed7-41b9-410b-9560-4fdf42938e32` is inactive; all five calendar
+settings exist in Vercel Production and are staged in Fly, not deployed.
+
+82 Node tests and focused lint pass. Receiver remains unpublished, AVGAR paused
+at generation 1 / NZD, with zero calendar bindings/runs/enabled routines. Saved
+timezone is null; owner choice is pending, not silently taken from provider USD/
+US-Eastern context. Binding, receiver publication/failure visibility, coherent
+configuration release and actual customer calendar acceptance remain Codex-owned.
+No Nguyen workflow, action flag or customer message changed. This is progress
+after an advice-only turn; full B01–B24/all-client/launch goal remains active.
+
+## Previous state — Batch 69, 6 September NZ / 5 September UTC
 
 **Separate calendar receiver is source-matched in Cloud; real refusal paths and
 current compiled-code compatibility pass.** [Exact draft, receipts and remaining

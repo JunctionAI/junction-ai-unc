@@ -61,6 +61,7 @@ export function inspectDefinition(w, expected, hash, normalize) {
       (n.executeOnce === true) === e.executeOnce && (n.retryOnFail === true) === e.retryOnFail, e.name + ':execution_policy');
   }
   return { status: failures.length ? 'FAIL' : 'PASS', workflowId: w.id, revision: w.versionId,
+    definitionDigest: hash({ nodes: w.nodes, connections: w.connections, settings: w.settings }),
     active: w.active, failures, triggerNodeId: w.nodes?.find(n => n.name === 'Incoming calendar')?.id,
     resultNodeId: w.nodes?.find(n => n.name === 'Build calendar result')?.id,
     unattendedReady: false, note: 'Definition parity is not provider or end-to-end acceptance.' };

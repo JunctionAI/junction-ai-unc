@@ -6,6 +6,13 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
+**Batch 70 overlay:** [native campaign read and staged integration](integration/CALENDAR-CAMPAIGN-READ-2026-09-06.md)
+prove execution 98's 42 sent campaigns and 10 recent compatible inputs. Inactive
+account registration is saved; separate calendar configuration is staged, not
+released. No calendar customer journey passes yet. Binding/timezone, receiver
+publication/failure visibility, runtime release, client result/recovery and the
+remaining all-client requirements remain open; Nguyen is not the dependency.
+
 **Batch 69 overlay:** [separate calendar draft](integration/CALENDAR-RECEIVER-DRAFT-2026-09-06.md)
 matches reviewed source; real test-webhook executions 95/96 prove refusal before
 provider access, and current-source synthetic execution 97 passes. Receiver is
