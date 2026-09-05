@@ -1,16 +1,18 @@
 "use client";
+import { useAccountRequest } from "./AccountScope";
 /* Amber strip above the control centre while a payment is failing ('past_due'). */
 
 import { useState } from "react";
 import { openPortal } from "@/lib/billing/clientActions";
 
 export default function BillingBanner() {
+  const accountRequest = useAccountRequest();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const go = async () => {
     setBusy(true);
     setError(null);
-    const err = await openPortal();
+    const err = await openPortal(accountRequest);
     if (err) {
       setError(err);
       setBusy(false);

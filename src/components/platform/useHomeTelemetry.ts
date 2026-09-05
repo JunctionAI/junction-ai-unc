@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 /* Home's telemetry in accounts mode: Unc's latest self-review, the three "The bar" inputs
    and hours saved (GET /api/telemetry/home). A no-op in demo mode, so the demo Home never
    fetches and stays byte-identical. */
@@ -15,6 +16,7 @@ export interface HomeTelemetryState {
 }
 
 export function useHomeTelemetry(enabled: boolean): HomeTelemetryState {
+  const accountRequest = useAccountRequest();
   const [data, setData] = useState<HomeTelemetry | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -24,7 +26,7 @@ export function useHomeTelemetry(enabled: boolean): HomeTelemetryState {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/telemetry/home", { cache: "no-store" });
+        const res = await accountRequest("/api/telemetry/home", { cache: "no-store" });
         const body = (await res.json().catch(() => ({}))) as Partial<HomeTelemetry> & { fallback?: boolean; error?: string };
         if (cancelled) return;
         if (!res.ok || body.fallback || !Array.isArray(body.bar) || !body.automation) {
@@ -41,7 +43,7 @@ export function useHomeTelemetry(enabled: boolean): HomeTelemetryState {
     return () => {
       cancelled = true;
     };
-  }, [enabled, tick]);
+  }, [accountRequest, enabled, tick]);
 
   return { active: enabled && data !== null, data, error, refresh: () => setTick((n) => n + 1) };
 }

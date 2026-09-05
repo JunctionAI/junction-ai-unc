@@ -134,7 +134,7 @@ describe("GET /api/connectors/provider/<provider>/callback", () => {
     const { d, state } = await startedWith(COMPOSIO_ENV, "meta_ads", composioRoutes);
     d.onConnected = (i) => connected.push(i);
     const res = await callbackViaProvider(d, "composio", cb("composio", { state, status: "success", connected_account_id: "ca_1" }));
-    expect(res).toEqual({ redirect: "/app?connected=meta_ads" });
+    expect(res).toEqual({ redirect: `/app?connected=meta_ads&account=${accountId}` });
     expect(db.rows("oauth_states")).toHaveLength(0);
     const row = db.rows("connectors")[0];
     expect(row).toMatchObject({ status: "connected", external_ref: null, last_sync_result: null, sync_ref: { auth_provider: "composio", provider_connection_id: "ca_1" } });
@@ -162,7 +162,7 @@ describe("GET /api/connectors/provider/<provider>/callback", () => {
       dd.routes.push((c) => (c.url.endsWith("/connect/sessions") ? json({ data: { token: "sess", connect_link: "https://connect.nango.dev/link/xyz" } }) : undefined));
       dd.routes.push((c) => (c.url.includes("/connections?") ? json({ connections: [{ connection_id: "nc_9", provider_config_key: "hubspot-prod", created: "2026-09-02T00:00:00Z", errors: [] }] }) : undefined));
     });
-    expect(await callbackViaProvider(d, "nango", cb("nango", { platform: "hubspot", state }))).toEqual({ redirect: "/app?connected=hubspot" });
+    expect(await callbackViaProvider(d, "nango", cb("nango", { platform: "hubspot", state }))).toEqual({ redirect: `/app?connected=hubspot&account=${accountId}` });
     expect(db.rows("connectors")[0]).toMatchObject({ platform: "hubspot", status: "connected", sync_ref: { auth_provider: "nango", provider_connection_id: "nc_9", provider_integration: "hubspot-prod" } });
   });
 

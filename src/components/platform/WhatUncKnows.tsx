@@ -4,7 +4,9 @@
    Every row can be corrected or forgotten; the founder is the source of truth. Mirrors the
    ModelSettings dialog pattern. */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAccountRequest } from "./AccountScope";
+import type { AccountFetch } from "@/lib/db/accountRequest";
 
 type Kind = "fact" | "preference" | "constraint" | "decision" | "relationship" | "event" | "lesson" | "summary";
 type Source = "chat" | "onboarding" | "scan" | "receipt" | "self_review" | "intake" | "founder" | "brief";
@@ -61,14 +63,16 @@ const ghost: React.CSSProperties = { border: "1px solid oklch(0.85 0.02 262)", b
 const primary: React.CSSProperties = { border: "none", background: "var(--navy)", color: "var(--on-navy, white)", cursor: "pointer", fontSize: 12, padding: "6px 12px", borderRadius: 999 };
 const input: React.CSSProperties = { fontSize: 13, padding: "8px 10px", borderRadius: 8, border: "1px solid oklch(0.85 0.02 262)", background: "white", color: "var(--ink)", width: "100%", boxSizing: "border-box" };
 
-async function call<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { cache: "no-store", ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } });
+async function requestJson<T>(request: AccountFetch, url: string, init?: RequestInit): Promise<T> {
+  const res = await request(url, { cache: "no-store", ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } });
   const body = (await res.json().catch(() => ({}))) as T & { error?: string; fallback?: boolean };
   if (!res.ok || body.fallback) throw new Error(body.error ?? `request failed (${res.status})`);
   return body;
 }
 
 export default function WhatUncKnows({ onClose }: { onClose: () => void }) {
+  const accountRequest = useAccountRequest();
+  const call = useCallback(<T,>(url: string, init?: RequestInit) => requestJson<T>(accountRequest, url, init), [accountRequest]);
   const [memories, setMemories] = useState<Memory[] | null>(null);
   const [contextGeneration, setContextGeneration] = useState(0);
   const [notes, setNotes] = useState<string>("");
@@ -96,7 +100,7 @@ export default function WhatUncKnows({ onClose }: { onClose: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [call]);
 
   const grouped = useMemo(() => {
     const list = memories ?? [];

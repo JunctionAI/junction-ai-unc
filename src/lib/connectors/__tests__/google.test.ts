@@ -75,7 +75,7 @@ describe("start + callback", () => {
     d.routes.push((c) => (c.url === "https://oauth2.googleapis.com/token" ? json({ access_token: "ya29.FIXTURE", refresh_token: "1//rt-FIXTURE", expires_in: 3600, scope: GOOGLE_UMBRELLA.scopes.join(" "), token_type: "Bearer" }) : undefined));
 
     const res = await handleCallback(d, "google", `${APP_URL}/api/connectors/google/callback?code=auth-code&state=${state}`);
-    expect(res).toEqual({ redirect: "/app?connected=google" });
+    expect(res).toEqual({ redirect: `/app?connected=google&account=${accountId}` });
     expect(d.calls.filter((c) => c.url === "https://oauth2.googleapis.com/token")).toHaveLength(1);
 
     const rows = db.rows("connectors");

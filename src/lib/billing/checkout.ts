@@ -39,7 +39,7 @@ export interface CheckoutOpts {
 }
 
 export function checkoutParams(env: BillingEnv, opts: CheckoutOpts): Stripe.Checkout.SessionCreateParams {
-  const urls = billingUrls(env);
+  const urls = billingUrls(env, opts.accountId);
   const localeMeta: Record<string, string> = opts.locale ? { country: opts.locale.country, currency: opts.locale.currency } : {};
   return {
     mode: "subscription",
@@ -68,6 +68,6 @@ export async function createCheckoutSession(stripe: StripeSlice, service: DbClie
 export async function createPortalSession(stripe: StripeSlice, service: DbClient, env: BillingEnv, accountId: string): Promise<{ url: string } | { error: "no_customer" }> {
   const customerId = await existingCustomerId(service, accountId);
   if (!customerId) return { error: "no_customer" };
-  const session = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: billingUrls(env).portalReturn });
+  const session = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: billingUrls(env, accountId).portalReturn });
   return { url: session.url };
 }

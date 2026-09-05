@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 
 import React, { useEffect, useRef } from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
@@ -104,6 +105,7 @@ export function keepFounderPick(fresh: BusinessProfile, previous: BusinessProfil
 
 /** Fires once per distinct {website, socials} when the founder leaves step 4 (steps 5/6). */
 function useOnboardingScan(V: PlatformVals) {
+  const accountRequest = useAccountRequest();
   const inflight = useRef<string | null>(null);
   const setScan = useRef(V.obSetScan);
   const profileRef = useRef(V.obScan.profile);
@@ -125,7 +127,7 @@ function useOnboardingScan(V: PlatformVals) {
     const before = profileRef.current;
     const pick = before?.businessTypeSource === "founder" ? before : null;
     setScan.current({ status: "running", key, profile: pick });
-    fetch("/api/unc/scan", { method: "POST", headers: { "Content-Type": "application/json", "x-unc-context-generation": String(contextGeneration) }, body: JSON.stringify({ website, socials }) })
+    accountRequest("/api/unc/scan", { method: "POST", headers: { "Content-Type": "application/json", "x-unc-context-generation": String(contextGeneration) }, body: JSON.stringify({ website, socials }) })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((data: { profile?: BusinessProfile; fallback?: boolean }) => {
         if (inflight.current !== key) return; // a newer input superseded this scan
@@ -135,11 +137,12 @@ function useOnboardingScan(V: PlatformVals) {
       .catch(() => {
         if (inflight.current === key) setScan.current({ status: "failed", key, profile: pick });
       });
-  }, [armed, website, socials, scanKey, contextGeneration]);
+  }, [armed, website, socials, scanKey, contextGeneration, accountRequest]);
 }
 
 /** Requests Unc's prose for the plan card whenever the step-6 request changes (incl. when the scan lands). */
 function useOnboardingNarrative(V: PlatformVals) {
+  const accountRequest = useAccountRequest();
   const inflight = useRef<string | null>(null);
   const setNarrative = useRef(V.obSetNarrative);
   useEffect(() => {
@@ -157,7 +160,7 @@ function useOnboardingNarrative(V: PlatformVals) {
     if (current.key === key || inflight.current === key) return;
     inflight.current = key;
     setNarrative.current({ ...current, status: "running", key, baseKey });
-    fetch("/api/unc/narrative", { method: "POST", headers: { "Content-Type": "application/json", "x-unc-context-generation": String(contextGeneration) }, body: JSON.stringify(req) })
+    accountRequest("/api/unc/narrative", { method: "POST", headers: { "Content-Type": "application/json", "x-unc-context-generation": String(contextGeneration) }, body: JSON.stringify(req) })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((data: Partial<PlanNarrative> & { fallback?: boolean }) => {
         if (inflight.current !== key) return;
@@ -168,7 +171,7 @@ function useOnboardingNarrative(V: PlatformVals) {
         if (inflight.current === key) setNarrative.current({ status: "failed", key, baseKey, value: null });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `req` is fully captured by `key`
-  }, [V.ob6, key, baseKey, scanRunning, current.key, planReady, contextGeneration]);
+  }, [V.ob6, key, baseKey, scanRunning, current.key, planReady, contextGeneration, accountRequest]);
 }
 
 export default function Onboarding({ V }: { V: PlatformVals }) {

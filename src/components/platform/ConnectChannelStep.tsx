@@ -1,4 +1,6 @@
 "use client";
+import { useAccountRequest, useSelectedAccount } from "./AccountScope";
+import type { AccountFetch } from "@/lib/db/accountRequest";
 /* First-run card: "Where should I reach you?" — Telegram / WhatsApp / Slack / Text / Just the app.
 
    Accounts mode only (the caller mounts it; demo mode never fetches). GET /api/channels/links
@@ -81,9 +83,9 @@ const pill = (fg: string, bg: string): React.CSSProperties => ({ display: "inlin
 export type FetchedListing = { listing: LinksListing; error: null } | { listing: null; error: string };
 
 /** GET /api/channels/links, never throws; demo mode / no session read as an error line. */
-export async function fetchListing(signal?: AbortSignal): Promise<FetchedListing> {
+export async function fetchListing(signal?: AbortSignal, request: AccountFetch = fetch): Promise<FetchedListing> {
   try {
-    const res = await fetch("/api/channels/links", { signal: signal ?? AbortSignal.timeout(10_000), cache: "no-store" });
+    const res = await request("/api/channels/links", { signal: signal ?? AbortSignal.timeout(10_000), cache: "no-store" });
     const data = (await res.json().catch(() => ({}))) as LinksResponse;
     if (!res.ok || data.fallback || !data.links) return { listing: null, error: data.error ?? (data.fallback ? "Sign in to link a channel." : `couldn’t load channels (${res.status})`) };
     return { listing: { links: data.links, channels: data.channels ?? [] }, error: null };
@@ -97,6 +99,8 @@ export function verifiedFor(listing: LinksListing | null, channel: Channel): Wir
 }
 
 export default function ConnectChannelStep({ onDone, initial, compact }: { onDone?: (choice: "linked" | "later" | "app") => void; initial?: LinksListing | null; compact?: boolean }) {
+  const accountRequest = useAccountRequest();
+  const accountId = useSelectedAccount();
   const [listing, setListing] = useState<LinksListing | null>(initial ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Channel | null>(null);
@@ -119,13 +123,13 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
   useEffect(() => {
     if (initial) return;
     let alive = true;
-    void fetchListing().then((r) => {
+    void fetchListing(undefined, accountRequest).then((r) => {
       if (alive) apply(r);
     });
     return () => {
       alive = false;
     };
-  }, [initial, apply]);
+  }, [initial, apply, accountRequest]);
 
   // Poll while a code is out, until the chosen channel reads verified.
   useEffect(() => {
@@ -134,7 +138,7 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
       expiresAt: issue.expiresAt,
       intervalMs: POLL_MS,
       fetch: async (signal) => {
-        const r = await fetchListing(signal);
+        const r = await fetchListing(signal, accountRequest);
         if (r.error !== null) throw new Error(r.error);
         return r;
       },
@@ -145,7 +149,7 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
         if (state === "linked" && !doneRef.current) { doneRef.current = true; onDone?.("linked"); }
       },
     });
-  }, [chosen, issue, apply, onDone]);
+  }, [chosen, issue, apply, onDone, accountRequest]);
 
   async function choose(channel: Channel) {
     const avail = listing?.channels.find((c) => c.channel === channel);
@@ -156,12 +160,12 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
     doneRef.current = false;
     if (channel === "slack") {
       // an API route that 302s to Slack's consent screen — a full navigation, not a client route
-      window.location.assign(`/api/channels/slack/start?redirect_to=${encodeURIComponent(window.location.pathname || "/app")}`);
+      window.location.assign(`/api/channels/slack/start?redirect_to=${encodeURIComponent(window.location.pathname || "/app")}${accountId ? `&account=${encodeURIComponent(accountId)}` : ""}`);
       return;
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/channels/links", { method: "POST", signal: AbortSignal.timeout(10_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ channel }) });
+      const res = await accountRequest("/api/channels/links", { method: "POST", signal: AbortSignal.timeout(10_000), headers: { "content-type": "application/json" }, body: JSON.stringify({ channel }) });
       const data = (await res.json().catch(() => ({}))) as IssueResponse;
       if (res.status === 401) setIssue({ error: "Sign in first." });
       else if (!res.ok || data.fallback || !data.code) setIssue({ error: data.error ?? NOT_ON_LINE });
@@ -185,7 +189,7 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
 
       {loadError && (
         <div data-testid="channels-error" style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 10 }}>
-          {loadError} <button style={ghost} onClick={() => void fetchListing().then(apply)}>try again</button>
+          {loadError} <button style={ghost} onClick={() => void fetchListing(undefined, accountRequest).then(apply)}>try again</button>
         </div>
       )}
 

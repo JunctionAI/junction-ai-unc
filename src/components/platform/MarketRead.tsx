@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 /* "How I read your market" — the niche brief on Home, accounts mode only (docs/PRESETS.md).
 
    Reads GET /api/unc/niche-brief once; renders nothing until a brief exists and never blocks
@@ -47,6 +48,7 @@ function Group({ title, items, testId }: { title: string; items: string[]; testI
 }
 
 export default function MarketRead({ initial }: { initial?: NicheBrief | null }) {
+  const accountRequest = useAccountRequest();
   const [brief, setBrief] = useState<NicheBrief | null | undefined>(initial);
   const [open, setOpen] = useState<boolean>(() => !seenBefore());
 
@@ -55,7 +57,7 @@ export default function MarketRead({ initial }: { initial?: NicheBrief | null })
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/unc/niche-brief", { cache: "no-store" });
+        const res = await accountRequest("/api/unc/niche-brief", { cache: "no-store" });
         const body = (await res.json().catch(() => ({}))) as { brief?: NicheBrief | null; fallback?: boolean };
         if (!cancelled) setBrief(res.ok && !body.fallback && body.brief ? body.brief : null);
       } catch {
@@ -65,7 +67,7 @@ export default function MarketRead({ initial }: { initial?: NicheBrief | null })
     return () => {
       cancelled = true;
     };
-  }, [initial]);
+  }, [accountRequest, initial]);
 
   useEffect(() => {
     if (brief && open) markSeen();

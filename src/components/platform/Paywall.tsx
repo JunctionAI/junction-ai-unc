@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest, AccountSwitcher } from "./AccountScope";
 /* The paywall — shown instead of the control centre when billing is configured and the
    account has no live subscription ('none' / 'canceled'). Same card language as /login;
    pricing copy verbatim from the landing page (src/lib/billing/plan.ts). */
@@ -16,6 +17,7 @@ const HEADLINE: Record<"none" | "canceled", { title: string; sub: string }> = {
 /** `pricing` is the visitor's resolved country row (src/lib/locale); without it the card
     falls back to the plan constants (US$100 / month). */
 export default function Paywall({ state, email = null, pricing }: { state: "none" | "canceled"; email?: string | null; pricing?: LocalePricing }) {
+  const accountRequest = useAccountRequest();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const h = HEADLINE[state];
@@ -24,7 +26,7 @@ export default function Paywall({ state, email = null, pricing }: { state: "none
   const go = async () => {
     setBusy(true);
     setError(null);
-    const err = await startCheckout();
+    const err = await startCheckout(accountRequest);
     if (err) {
       setError(err);
       setBusy(false);
@@ -45,6 +47,7 @@ export default function Paywall({ state, email = null, pricing }: { state: "none
       }}
     >
       <div style={{ width: "100%", maxWidth: 520 }}>
+        <AccountSwitcher />
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22, padding: "0 6px" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/mascot-small.png" alt="Unc" style={{ width: 52, height: 56, objectFit: "contain" }} />

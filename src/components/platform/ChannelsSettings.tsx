@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 /* Channels — manage the places Unc reaches you: what goes where (brief / decisions /
    drafts), quiet hours, unlink, add another. Accounts mode only. `initial` lets a server
    render / test pass the listing in; every change is a PATCH / DELETE on /api/channels/links.
@@ -42,6 +43,7 @@ export function describeLink(l: WireLink): string {
 }
 
 export default function ChannelsSettings({ initial, context }: { initial?: LinksListing | null; context?: AgentContext }) {
+  const accountRequest = useAccountRequest();
   const [listing, setListing] = useState<LinksListing | null>(initial ?? null);
   const [note, setNote] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -51,24 +53,24 @@ export default function ChannelsSettings({ initial, context }: { initial?: Links
     if (r.error !== null) setNote(r.error);
     else setListing(r.listing);
   }, []);
-  const load = useCallback(() => fetchListing().then(apply), [apply]);
+  const load = useCallback(() => fetchListing(undefined, accountRequest).then(apply), [apply, accountRequest]);
 
   useEffect(() => {
     if (initial) return;
     let alive = true;
-    void fetchListing().then((r) => {
+    void fetchListing(undefined, accountRequest).then((r) => {
       if (alive) apply(r);
     });
     return () => {
       alive = false;
     };
-  }, [initial, apply]);
+  }, [initial, apply, accountRequest]);
 
   async function patch(link: WireLink, prefs: Partial<WireLink["prefs"]>) {
     const optimistic = { ...link, prefs: { ...link.prefs, ...prefs } };
     setListing((l) => (l ? { ...l, links: l.links.map((x) => (x.id === link.id ? optimistic : x)) } : l));
     try {
-      const res = await fetch("/api/channels/links", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ linkId: link.id, prefs }) });
+      const res = await accountRequest("/api/channels/links", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ linkId: link.id, prefs }) });
       if (!res.ok) {
         setNote("couldn’t save that — try again");
         await load();
@@ -83,7 +85,7 @@ export default function ChannelsSettings({ initial, context }: { initial?: Links
       setNote("Refresh this account’s Slack connection before unlinking."); setConfirmUnlink(null); return;
     }
     try {
-      const res = await fetch("/api/channels/links", { method: "DELETE", headers: { "content-type": "application/json", ...(link.channel === "slack" && context ? artifactHeaders(context.accountId, context.contextGeneration) : {}) }, body: JSON.stringify({ linkId: link.id, ...(link.channel === "slack" ? { bindingVersion: link.bindingVersion } : {}) }) });
+      const res = await accountRequest("/api/channels/links", { method: "DELETE", headers: { "content-type": "application/json", ...(link.channel === "slack" && context ? artifactHeaders(context.accountId, context.contextGeneration) : {}) }, body: JSON.stringify({ linkId: link.id, ...(link.channel === "slack" ? { bindingVersion: link.bindingVersion } : {}) }) });
       const result = await res.json().catch(() => null);
       if (res.ok && result?.ok === true) {
         setNote(`Unlinked this ${link.label} connection. Other connections are unchanged.`);

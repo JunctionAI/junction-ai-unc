@@ -1,9 +1,10 @@
 "use client";
+import { createAccountFetch, type AccountFetch } from "@/lib/db/accountRequest";
 /* Browser side of billing: call the route, follow the URL Stripe gave us. */
 
-async function follow(path: string): Promise<string | null> {
+async function follow(path: string, request: AccountFetch): Promise<string | null> {
   try {
-    const res = await fetch(path, { method: "POST" });
+    const res = await request(path, { method: "POST" });
     const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string; fallback?: boolean };
     if (body.url) {
       window.location.assign(body.url);
@@ -17,6 +18,6 @@ async function follow(path: string): Promise<string | null> {
 }
 
 /** Start the trial (Stripe Checkout). Resolves with an error message, or null once redirecting. */
-export const startCheckout = () => follow("/api/billing/checkout");
+export const startCheckout = (request: AccountFetch = createAccountFetch(null)) => follow("/api/billing/checkout", request);
 /** Open the Stripe Customer Portal (cancel, update card, invoices). */
-export const openPortal = () => follow("/api/billing/portal");
+export const openPortal = (request: AccountFetch = createAccountFetch(null)) => follow("/api/billing/portal", request);

@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest, AccountSwitcher } from "./AccountScope";
 
 import { useEffect } from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
@@ -53,6 +54,7 @@ export function accountConnectorLine(facts: Parameters<typeof connectorSummary>[
     `onModels` (DB mode only) opens the "Models" settings — which brain for which job.
     `onWhatUncKnows` (DB mode only) opens "What Unc knows" — the founder's view of his memory. */
 export default function Sidebar({ V, account = null, billing = null, onModels, onSkills, onWhatUncKnows }: { V: PlatformVals; account?: Persistence | null; billing?: Entitlement | null; onModels?: () => void; onSkills?: () => void; onWhatUncKnows?: () => void }) {
+  const accountRequest = useAccountRequest();
   const plan = billing ? planLine(billing) : null;
   const accountMode = account?.mode ?? null;
   const accountId = account?.accountId ?? null;
@@ -91,6 +93,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
           <div style={{ fontSize: 10, color: "var(--on-navy-dim)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{account?.accountName?.trim() ? "Junction · Growth agent" : "Growth agent"}</div>
         </div>
       </div>
+      <AccountSwitcher />
       <nav style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 32 }}>
         <button onClick={V.goToday} className="hov-bg-navylift" style={{ ...navBtn, background: V.todayBg }}>
           <span style={dot(V.todayDot)}></span>Home
@@ -160,7 +163,7 @@ export default function Sidebar({ V, account = null, billing = null, onModels, o
               <div style={{ display: "flex", alignItems: "center", gap: 8, color: billing?.state === "past_due" ? "var(--amber)" : "var(--faint-on-navy)" }}>
                 <span>{plan.text}</span>
                 <span>·</span>
-                <button type="button" onClick={() => void openPortal()} className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "inherit" }}>
+                <button type="button" onClick={() => void openPortal(accountRequest)} className="hov-fg-onnavy" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 10, color: "inherit" }}>
                   {plan.action}
                 </button>
               </div>

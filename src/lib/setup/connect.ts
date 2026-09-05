@@ -12,10 +12,11 @@
    passes through: the response carries a URL or a reason, nothing else. */
 
 export type ConnectStart = { kind: "redirect"; url: string } | { kind: "fallback"; reason: string } | { kind: "shop" } | { kind: "signIn" } | { kind: "error"; message: string };
+import type { AccountFetch } from "@/lib/db/accountRequest";
 
 type StartResponse = { url?: string; fallback?: boolean; reason?: string; error?: string };
 
-export async function startConnect(platform: string, opts: { shop?: string; fetch?: typeof fetch } = {}): Promise<ConnectStart> {
+export async function startConnect(platform: string, opts: { shop?: string; fetch?: AccountFetch } = {}): Promise<ConnectStart> {
   if (platform === "shopify" && !opts.shop) return { kind: "shop" };
   const f = opts.fetch ?? fetch;
   try {
@@ -43,7 +44,7 @@ export const EMAIL_ANSWER_MEMORY: Record<"klaviyo" | "mailchimp" | "none", strin
   none: "No email tool yet — nothing sends email today; email routines wait until there is one.",
 };
 
-export async function recordEmailAnswer(answer: "klaviyo" | "mailchimp" | "none", opts: { fetch?: typeof fetch; contextGeneration?: number } = {}): Promise<boolean> {
+export async function recordEmailAnswer(answer: "klaviyo" | "mailchimp" | "none", opts: { fetch?: AccountFetch; contextGeneration?: number } = {}): Promise<boolean> {
   const f = opts.fetch ?? fetch;
   try {
     const res = await f("/api/brain/memories", { method: "POST", headers: { "content-type": "application/json", "x-unc-context-generation": String(opts.contextGeneration ?? 0) }, body: JSON.stringify({ text: EMAIL_ANSWER_MEMORY[answer], kind: "fact" }) });

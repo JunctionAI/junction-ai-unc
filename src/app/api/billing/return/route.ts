@@ -8,6 +8,7 @@ import { billingEnv, getStripe } from "@/lib/billing/config";
 import { requireBillingSession } from "@/lib/billing/server";
 import { applySubscription } from "@/lib/billing/sync";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { accountNavigationRequest } from "@/lib/db/accountSelection";
 
 export const runtime = "nodejs";
 
@@ -16,8 +17,9 @@ async function handleGET(req: Request) {
   const env = billingEnv();
   const home = new URL("/app", env?.appUrl || url.origin);
   if (!env) return Response.redirect(home, 303);
-  const session = await requireBillingSession();
+  const session = await requireBillingSession(accountNavigationRequest(req));
   if (session instanceof Response) return Response.redirect(home, 303);
+  home.searchParams.set("account", session.accountId);
   const sessionId = url.searchParams.get("session_id") || "";
   if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) return Response.redirect(home, 303);
   try {

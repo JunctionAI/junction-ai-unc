@@ -107,7 +107,7 @@ describe("GET …/callback", () => {
     d.routes.push((c) => (c.url.startsWith("https://a.klaviyo.com/api/accounts/") ? json({ data: [{ type: "account", id: "ACC0UNT" }] }) : undefined));
 
     const res = await handleCallback(d, "klaviyo", cb("klaviyo", { code: "auth-code", state }));
-    expect(res).toEqual({ redirect: "/app?connected=klaviyo" });
+    expect(res).toEqual({ redirect: `/app?connected=klaviyo&account=${accountId}` });
 
     const token = d.calls.find((c) => c.url === "https://a.klaviyo.com/oauth/token")!;
     expect(token.method).toBe("POST");
@@ -140,7 +140,7 @@ describe("GET …/callback", () => {
       .join("&");
     params.hmac = createHmac("sha256", FAKE_ENV.SHOPIFY_CLIENT_SECRET).update(message).digest("hex");
 
-    expect(await handleCallback(d, "shopify", cb("shopify", params))).toEqual({ redirect: "/app?connected=shopify" });
+    expect(await handleCallback(d, "shopify", cb("shopify", params))).toEqual({ redirect: `/app?connected=shopify&account=${accountId}` });
     const form = new URLSearchParams(d.calls[0].body!);
     expect(form.get("client_id")).toBe(FAKE_ENV.SHOPIFY_CLIENT_ID);
     expect(form.get("client_secret")).toBe(FAKE_ENV.SHOPIFY_CLIENT_SECRET);
@@ -236,7 +236,7 @@ describe("GET …/callback", () => {
   it("Google happy path: form-encoded exchange with the verifier; external_ref stays null until a property is chosen", async () => {
     const { d, state, row } = await startFlow("ga4");
     d.routes.push((c) => (c.url === "https://oauth2.googleapis.com/token" ? json({ access_token: "ya29.FIXTURE", refresh_token: "1//FIXTURE", expires_in: 3599, scope: "https://www.googleapis.com/auth/analytics.readonly", token_type: "Bearer" }) : undefined));
-    expect(await handleCallback(d, "ga4", cb("ga4", { code: "g-code", state, scope: "https://www.googleapis.com/auth/analytics.readonly" }))).toEqual({ redirect: "/app?connected=ga4" });
+    expect(await handleCallback(d, "ga4", cb("ga4", { code: "g-code", state, scope: "https://www.googleapis.com/auth/analytics.readonly" }))).toEqual({ redirect: `/app?connected=ga4&account=${accountId}` });
     const form = new URLSearchParams(d.calls[0].body!);
     expect(form.get("code_verifier")).toBe(row.code_verifier);
     expect(form.get("client_secret")).toBe(FAKE_ENV.GOOGLE_CLIENT_SECRET);
@@ -251,7 +251,7 @@ describe("GET …/callback", () => {
     expect(row.code_verifier).toBeNull();
     d.routes.push((c) => (c.url === "https://api.hubapi.com/oauth/v1/token" ? json({ access_token: "hs-access-FIXTURE", refresh_token: "hs-refresh-FIXTURE", expires_in: 1800, token_type: "bearer" }) : undefined));
     d.routes.push((c) => (c.url === "https://api.hubapi.com/account-info/v3/details" ? json({ portalId: 24681357, timeZone: "Pacific/Auckland" }) : undefined));
-    expect(await handleCallback(d, "hubspot", cb("hubspot", { code: "hs-code", state }))).toEqual({ redirect: "/app?connected=hubspot" });
+    expect(await handleCallback(d, "hubspot", cb("hubspot", { code: "hs-code", state }))).toEqual({ redirect: `/app?connected=hubspot&account=${accountId}` });
     const form = new URLSearchParams(d.calls[0].body!);
     expect(form.get("grant_type")).toBe("authorization_code");
     expect(form.get("client_id")).toBe(FAKE_ENV.HUBSPOT_CLIENT_ID);
@@ -278,7 +278,7 @@ describe("GET …/callback", () => {
       return json({ access_token: "short-FIXTURE", token_type: "bearer", expires_in: 5000 });
     });
     d.routes.push((c) => (c.url.startsWith("https://graph.facebook.com/v23.0/me/adaccounts") ? json({ data: [{ account_id: "123456" }] }) : undefined));
-    expect(await handleCallback(d, "meta_ads", cb("meta_ads", { code: "m-code", state }))).toEqual({ redirect: "/app?connected=meta_ads" });
+    expect(await handleCallback(d, "meta_ads", cb("meta_ads", { code: "m-code", state }))).toEqual({ redirect: `/app?connected=meta_ads&account=${accountId}` });
     expect(d.calls.map((c) => c.method)).toEqual(["GET", "GET", "GET"]);
     const conn = db.rows("connectors")[0];
     expect(conn).toMatchObject({ status: "connected", external_ref: "act_123456" });

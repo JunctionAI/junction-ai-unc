@@ -100,7 +100,7 @@ export interface ProviderCallbackResult {
   redirect: string;
 }
 
-const okRedirect = (platform: string) => ({ redirect: `/app?connected=${encodeURIComponent(platform)}` });
+const okRedirect = (platform: string, accountId: string) => ({ redirect: `/app?connected=${encodeURIComponent(platform)}&account=${encodeURIComponent(accountId)}` });
 const errRedirect = (platform: string) => ({ redirect: `/app?connect_error=${encodeURIComponent(platform)}` });
 
 export async function callbackViaProvider(deps: HandlerDeps, providerId: string, requestUrl: string): Promise<ProviderCallbackResult> {
@@ -165,7 +165,7 @@ export async function callbackViaProvider(deps: HandlerDeps, providerId: string,
     });
     deps.log?.(`connectors.provider.callback provider=${providerId} platform=${entry.id} account=${accountId} result=connected`);
     if (!hasPicker(entry.id) || externalRef) fireConnected(deps, { accountId, platform: entry.id as Platform, connectorId: row.id });
-    return okRedirect(entry.id);
+    return okRedirect(entry.id, accountId);
   } catch (e) {
     const code = e instanceof AuthProviderError ? e.code : "unexpected";
     return fail(`provider_${code}`);

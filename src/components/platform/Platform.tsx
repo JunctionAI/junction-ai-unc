@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 
 import { useEffect, useRef, useState } from "react";
 import { derive } from "@/lib/platform/derive";
@@ -89,6 +90,7 @@ export function AccountPersistenceFailure({ kind, error, email, onRetry }: { kin
         {error && <p data-testid="account-persistence-error-detail" style={{ margin: "16px 0 0", padding: "10px 12px", borderRadius: 10, background: "var(--amber-wash)", color: "var(--amber-text)", fontSize: 12.5, lineHeight: 1.5 }}>{error}</p>}
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 22 }}>
           <button type="button" className="btn-navy" onClick={onRetry} style={{ padding: "11px 20px", fontSize: 13.5 }}>Try again</button>
+          {!saving && <a href="/app" style={{ fontSize: 13 }}>Choose a workspace</a>}
           <form action="/auth/signout" method="post">
             <button type="submit" className="hov-fg-ink" style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>Sign out</button>
           </form>
@@ -100,6 +102,7 @@ export function AccountPersistenceFailure({ kind, error, email, onRetry }: { kin
 }
 
 function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set: Setter; persistence: Persistence; billing: BillingProps | null }) {
+  const accountRequest = useAccountRequest();
   const gated = billing?.configured ? billing.entitlement : null;
   const uncSend = useUncChat(S, set);
   const inAccount = persistence.mode === "account" && !!persistence.accountId;
@@ -138,7 +141,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
     previousOnboarded.current = S.onboarded;
     if (!agreementRequested.current || S.automationPaused || !inAccount || !S.onboarded || !setupData || setupData.agreedAt || agreeFired.current) return;
     agreeFired.current = true;
-    fetch("/api/setup/agree", { method: "POST", headers: { "x-unc-context-generation": String(S.contextGeneration ?? 0) } })
+    accountRequest("/api/setup/agree", { method: "POST", headers: { "x-unc-context-generation": String(S.contextGeneration ?? 0) } })
       .then((r) => r.json().catch(() => ({})))
       .then((body: { agreedAt?: string; accountName?: string | null }) => {
         if (typeof body.agreedAt === "string") setPlanAgreedAt(body.agreedAt);
@@ -146,7 +149,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
         setupRefresh();
       })
       .catch(() => {});
-  }, [inAccount, S.onboarded, S.automationPaused, S.contextGeneration, setupData, setPlanAgreedAt, setupRefresh, setAccountName]);
+  }, [inAccount, S.onboarded, S.automationPaused, S.contextGeneration, setupData, setPlanAgreedAt, setupRefresh, setAccountName, accountRequest]);
   const showGuided = inAccount && S.onboarded && S.setupFlow !== "home";
   const phaseOne = phaseChannels(S)[0];
   const liveRefresh = live.refresh;
@@ -277,7 +280,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
             V={V}
             channel={phaseOne}
             onConnect={async (platform, shop) => {
-              const r = await startConnect(platform, { shop });
+              const r = await startConnect(platform, { shop, fetch: accountRequest });
               if (r.kind === "redirect") window.location.assign(r.url);
               return r;
             }}
@@ -290,7 +293,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
             onEmailAnswer={(answer) => {
               // known_platforms (autosaved) + a founder memory — one answer replaces any earlier one
               V.addKnownPlatform(EMAIL_TOOL_LABEL[answer], Object.values(EMAIL_TOOL_LABEL));
-              void recordEmailAnswer(answer, { contextGeneration: S.contextGeneration });
+              void recordEmailAnswer(answer, { contextGeneration: S.contextGeneration, fetch: accountRequest });
               setupRefresh();
             }}
           />

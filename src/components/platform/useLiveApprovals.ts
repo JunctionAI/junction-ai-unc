@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 /* The account's live "needs you" list. Enabled only when the platform is in accounts mode
    (Supabase configured + session); a no-op otherwise, so demo mode never fetches.
 
@@ -52,6 +53,7 @@ interface Listing {
 type DecideResponse = { approval?: { status?: string }; run?: { status?: string; error?: string | null }; receipts?: { id: string }[]; error?: string };
 
 export function useLiveApprovals(enabled: boolean, now: () => Date = () => new Date()): LiveApprovals {
+  const accountRequest = useAccountRequest();
   const [listing, setListing] = useState<Listing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outcomes, setOutcomes] = useState<Record<string, DecisionOutcome>>({});
@@ -64,7 +66,7 @@ export function useLiveApprovals(enabled: boolean, now: () => Date = () => new D
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/approvals", { cache: "no-store" });
+        const res = await accountRequest("/api/approvals", { cache: "no-store" });
         const data = (await res.json().catch(() => ({}))) as Partial<Listing> & { fallback?: boolean; error?: string };
         if (cancelled) return;
         if (!res.ok || data.fallback || !Array.isArray(data.approvals)) {
@@ -81,12 +83,12 @@ export function useLiveApprovals(enabled: boolean, now: () => Date = () => new D
     return () => {
       cancelled = true;
     };
-  }, [enabled, tick]);
+  }, [accountRequest, enabled, tick]);
 
   const decide = useCallback(async (id: string, decision: "approved" | "held") => {
     setBusy((b) => ({ ...b, [id]: true }));
     try {
-      const res = await fetch(`/api/approvals/${encodeURIComponent(id)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ decision }) });
+      const res = await accountRequest(`/api/approvals/${encodeURIComponent(id)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ decision }) });
       const data = (await res.json().catch(() => ({}))) as DecideResponse;
       if (!res.ok) {
         setError(data.error ?? `decision failed (${res.status})`);
@@ -101,7 +103,7 @@ export function useLiveApprovals(enabled: boolean, now: () => Date = () => new D
     } finally {
       setBusy((b) => ({ ...b, [id]: false }));
     }
-  }, []);
+  }, [accountRequest]);
 
   const t = now();
   const approvals: LiveApprovalCard[] = (listing?.approvals ?? []).map((a) => {

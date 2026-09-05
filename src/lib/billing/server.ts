@@ -56,8 +56,8 @@ const json = (body: unknown, status: number) => Response.json(body, { status });
     return instead: {fallback:true} when billing isn't active, 503 without the service role,
     401 without a session, or 403 when the identity has no invited account. Same resolution
     as every other session-bound route (src/lib/db/session.ts) with the billing gate in front. */
-export async function requireBillingSession(): Promise<BillingSession | Response> {
+export async function requireBillingSession(request?: Request): Promise<BillingSession | Response> {
   if (!isBillingActive()) return json({ fallback: true }, 200);
   if (!isServiceRoleConfigured()) return json({ error: "billing storage is not configured" }, 503);
-  return requireAccountOwnerSession();
+  return requireAccountOwnerSession(request);
 }

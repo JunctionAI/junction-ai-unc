@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 
 /* Client Brain — when the founder clicks "Agree the plan" (derive.ts obFinish flips
    `onboarded`), post the onboarding answers to /api/unc/onboarding so they become memories.
@@ -40,6 +41,7 @@ export function onboardingAnswersFromState(S: PlatformState): OnboardingAnswers 
 }
 
 export function useOnboardingMemories(S: PlatformState, enabled: boolean): void {
+  const accountRequest = useAccountRequest();
   const stateRef = useRef(S);
   useEffect(() => {
     stateRef.current = S;
@@ -49,17 +51,17 @@ export function useOnboardingMemories(S: PlatformState, enabled: boolean): void 
     const was = prev.current;
     prev.current = { onboarded: S.onboarded, enabled };
     if (!enabled || !was.enabled || was.onboarded || !S.onboarded) return;
-    fetch("/api/unc/onboarding", {
+    accountRequest("/api/unc/onboarding", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-unc-context-generation": String(stateRef.current.contextGeneration ?? 0) },
       body: JSON.stringify({ answers: onboardingAnswersFromState(stateRef.current) }),
     }).catch(() => {});
     // The niche brief ("How I read your market", docs/PRESETS.md): one model call over the scan's profile;
     // its band steers every routine's industry preset. Fire-and-forget, never blocking the plan.
-    fetch("/api/unc/niche-brief", {
+    accountRequest("/api/unc/niche-brief", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-unc-context-generation": String(stateRef.current.contextGeneration ?? 0) },
       body: JSON.stringify({ profile: stateRef.current.scan.profile }),
     }).catch(() => {});
-  }, [S.onboarded, enabled]);
+  }, [S.onboarded, accountRequest, enabled]);
 }

@@ -111,8 +111,8 @@ describe("POST /api/billing/checkout", () => {
       payment_method_collection: "always",
       subscription_data: { trial_period_days: 14, metadata: { account_id: ACCT } },
       automatic_tax: { enabled: true },
-      success_url: "https://unc.example.test/api/billing/return?session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: "https://unc.example.test/app?billing=cancelled",
+      success_url: `https://unc.example.test/api/billing/return?session_id={CHECKOUT_SESSION_ID}&account=${ACCT}`,
+      cancel_url: `https://unc.example.test/app?billing=cancelled&account=${ACCT}`,
     });
     expect(db.rows("subscriptions")).toEqual([expect.objectContaining({ account_id: ACCT, stripe_customer_id: "cus_new", status: "none" })]);
   });
@@ -153,30 +153,42 @@ describe("POST /api/billing/checkout", () => {
 describe("POST /api/billing/portal", () => {
   it("fallback when unconfigured; 401 without a session", async () => {
     clearBillingEnv();
-    expect(await (await portal()).json()).toEqual({ fallback: true });
+    expect(await (await portal(new Request("https://unc.example.test/api/billing/portal", { method: "POST" }))).json()).toEqual({ fallback: true });
     setFakeEnv();
     user = null;
-    expect((await portal()).status).toBe(401);
+    expect((await portal(new Request("https://unc.example.test/api/billing/portal", { method: "POST" }))).status).toBe(401);
   });
   it("409 when the account has no Stripe customer yet", async () => {
-    expect((await portal()).status).toBe(409);
+    expect((await portal(new Request("https://unc.example.test/api/billing/portal", { method: "POST" }))).status).toBe(409);
     expect(stripeCalls).toEqual([]);
   });
   it("403 for a member before a portal session is created", async () => {
     db.rows("account_members")[0].role = "member";
     db.seed("subscriptions", [{ account_id: ACCT, stripe_customer_id: "cus_existing", status: "active" }]);
-    expect((await portal()).status).toBe(403);
+    expect((await portal(new Request("https://unc.example.test/api/billing/portal", { method: "POST" }))).status).toBe(403);
     expect(stripeCalls).toEqual([]);
   });
   it("opens a portal session for the account's customer, returning to /app", async () => {
     db.seed("subscriptions", [{ account_id: ACCT, stripe_customer_id: "cus_existing", status: "active" }]);
-    const res = await portal();
+    const res = await portal(new Request("https://unc.example.test/api/billing/portal", { method: "POST" }));
     expect(await res.json()).toEqual({ url: "https://billing.stripe.test/p/1" });
-    expect(stripeCalls).toEqual([{ method: "billingPortal.sessions.create", params: { customer: "cus_existing", return_url: "https://unc.example.test/app" } }]);
+    expect(stripeCalls).toEqual([{ method: "billingPortal.sessions.create", params: { customer: "cus_existing", return_url: `https://unc.example.test/app?account=${ACCT}` } }]);
   });
 });
 
 describe("GET /api/billing/return", () => {
+  it("resolves the original client's query selection, but never treats it as proof of checkout ownership", async () => {
+    const other = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    db.seed("accounts", [{ id: other, name: "Second client" }]);
+    db.seed("account_members", [{ account_id: other, user_id: USER, role: "owner" }]);
+    retrieved = { id: "cs_1", client_reference_id: ACCT, subscription: { id: "sub_foreign", status: "active", customer: "cus_foreign", items: { data: [] } } };
+    const response = await ret(new Request(`https://unc.example.test/api/billing/return?session_id=cs_1&account=${other}`));
+    expect(response.headers.get("location")).toBe(`https://unc.example.test/app?account=${other}`);
+    expect(db.rows("subscriptions")).toEqual([]);
+    stripeCalls.length = 0;
+    await ret(new Request(`https://unc.example.test/api/billing/return?session_id=cs_1&account=${ACCT}&account=${other}`));
+    expect(stripeCalls).toEqual([]);
+  });
   const req = (sid: string | null) => new Request(`https://unc.example.test/api/billing/return${sid === null ? "" : `?session_id=${sid}`}`);
   it("mirrors the subscription immediately and lands on /app?billing=welcome", async () => {
     retrieved = {
@@ -186,19 +198,19 @@ describe("GET /api/billing/return", () => {
     };
     const res = await ret(req("cs_1"));
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("https://unc.example.test/app?billing=welcome");
+    expect(res.headers.get("location")).toBe(`https://unc.example.test/app?account=${ACCT}&billing=welcome`);
     expect(stripeCalls[0]).toEqual({ method: "checkout.sessions.retrieve", params: { id: "cs_1", expand: ["subscription"] } });
     expect(db.rows("subscriptions")).toEqual([expect.objectContaining({ account_id: ACCT, stripe_subscription_id: "sub_1", status: "trialing" })]);
   });
   it("refuses a session that belongs to another account (plain redirect, nothing written)", async () => {
     retrieved = { id: "cs_1", client_reference_id: "someone-else", subscription: { id: "sub_9", status: "trialing", customer: "cus_9", items: { data: [] } } };
     const res = await ret(req("cs_1"));
-    expect(res.headers.get("location")).toBe("https://unc.example.test/app");
+    expect(res.headers.get("location")).toBe(`https://unc.example.test/app?account=${ACCT}`);
     expect(db.rows("subscriptions")).toEqual([]);
   });
   it("ignores a malformed session id and never calls Stripe", async () => {
-    expect((await ret(req("../../evil"))).headers.get("location")).toBe("https://unc.example.test/app");
-    expect((await ret(req(null))).headers.get("location")).toBe("https://unc.example.test/app");
+    expect((await ret(req("../../evil"))).headers.get("location")).toBe(`https://unc.example.test/app?account=${ACCT}`);
+    expect((await ret(req(null))).headers.get("location")).toBe(`https://unc.example.test/app?account=${ACCT}`);
     expect(stripeCalls).toEqual([]);
   });
   it("just goes home when unconfigured or signed out", async () => {

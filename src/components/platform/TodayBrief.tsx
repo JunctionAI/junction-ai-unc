@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 /* "Morning. Here's today:" — Unc's daily brief, a bubble at the top of Home in accounts mode.
 
    Demo mode renders NOTHING (the component returns null before any hook does work), so the
@@ -97,6 +98,7 @@ export default function TodayBrief(props: TodayBriefProps) {
 }
 
 function ScopedTodayBrief({ accountMode, accountId, contextGeneration, paused = false, initial, onLoaded }: TodayBriefProps) {
+  const accountRequest = useAccountRequest();
   const [state, setState] = useState<{ loaded: boolean; brief: DailyBriefRecord | null; error: string | null }>({ loaded: initial !== undefined, brief: initial ?? null, error: null });
   const [busy, setBusy] = useState(false);
   const work = useRef(new Set<AbortController>());
@@ -119,7 +121,7 @@ function ScopedTodayBrief({ accountMode, accountId, contextGeneration, paused = 
     const controller = new AbortController();
     (async () => {
       try {
-        const res = await fetch("/api/unc/brief", { cache: "no-store", signal: controller.signal, headers: { "x-unc-context-generation": String(contextGeneration) } });
+        const res = await accountRequest("/api/unc/brief", { cache: "no-store", signal: controller.signal, headers: { "x-unc-context-generation": String(contextGeneration) } });
         const body = (await res.json().catch(() => ({}))) as Fetched;
         if (cancelled) return;
         if (!res.ok || "fallback" in body) setState({ loaded: true, brief: null, error: "error" in body ? body.error : null });
@@ -133,7 +135,7 @@ function ScopedTodayBrief({ accountMode, accountId, contextGeneration, paused = 
       cancelled = true;
       controller.abort();
     };
-  }, [accountMode, accountId, contextGeneration, initial]);
+  }, [accountMode, accountId, contextGeneration, initial, accountRequest]);
 
   if (!accountMode) return null;
   if (!state.loaded) return null;
@@ -145,7 +147,7 @@ function ScopedTodayBrief({ accountMode, accountId, contextGeneration, paused = 
     work.current.add(controller);
     setBusy(true);
     try {
-      const res = await fetch("/api/unc/brief", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "x-unc-context-generation": String(contextGeneration) }, body: "{}" });
+      const res = await accountRequest("/api/unc/brief", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "x-unc-context-generation": String(contextGeneration) }, body: "{}" });
       const body = (await res.json().catch(() => ({}))) as Fetched;
       if (controller.signal.aborted) return;
       if (!res.ok || "fallback" in body) setState((s) => ({ ...s, error: "error" in body ? body.error : `couldn’t write the brief (${res.status})` }));

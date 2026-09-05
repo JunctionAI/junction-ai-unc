@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest, AccountSwitcher } from "./AccountScope";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -32,6 +33,7 @@ export default function ClientWorkspace(props: ClientWorkspaceProps) {
 }
 
 function BoundWorkspace({ S, V, account, send, legacy, onModels, onSkills, onContext, initial, billingEnabled = false }: ClientWorkspaceProps) {
+  const accountRequest = useAccountRequest();
   const work = useWorkspace(account.accountId!, S.contextGeneration ?? 0, initial);
   const data = work.data;
   const [localTab, setLocalTab] = useState<"today" | "inbox" | "ask">("today");
@@ -91,9 +93,10 @@ function BoundWorkspace({ S, V, account, send, legacy, onModels, onSkills, onCon
     <aside className={styles.sidebar} aria-label="Client navigation">
       <Link className={styles.brand} href="/">↗ <span>Junction</span><small>PRIVATE BETA</small></Link>
       <div className={styles.accountName}>{account.accountName || "Your workspace"}</div>
+      <AccountSwitcher />
       <nav>{(["today", "inbox", "agents", "ask", "connections"] as Tab[]).map(id => <button key={id} aria-current={tab === id ? "page" : undefined} onClick={() => navigate(id)}><span className={styles.dot} />{titles[id]}{id === "inbox" && data && data.counts.needsReview > 0 && <small>{data.counts.needsReview}{truncated ? "+" : ""}</small>}</button>)}</nav>
       <div className={styles.secondary}><button onClick={() => navigate("strategy")}>Business plan</button><button onClick={() => navigate("channels")}>Messaging channels</button><button onClick={onContext}>Business context</button><button onClick={onModels}>Models</button><button onClick={onSkills}>Skills</button></div>
-      <div className={styles.identity}><span>{account.userEmail}</span><span>{account.role === "member" ? "Read-only member" : account.autosave === "pending" || account.autosave === "saving" ? "Saving…" : "Saved"}</span>{billingEnabled && <button onClick={() => { void openPortal().then(setBillingError); }}>Manage billing</button>}{billingError && <p role="alert">{billingError}</p>}<form action="/auth/signout" method="post"><button>Sign out</button></form><p>Publishing, customer messaging and ad changes are disabled.</p></div>
+      <div className={styles.identity}><span>{account.userEmail}</span><span>{account.role === "member" ? "Read-only member" : account.autosave === "pending" || account.autosave === "saving" ? "Saving…" : "Saved"}</span>{billingEnabled && <button onClick={() => { void openPortal(accountRequest).then(setBillingError); }}>Manage billing</button>}{billingError && <p role="alert">{billingError}</p>}<form action="/auth/signout" method="post"><button>Sign out</button></form><p>Publishing, customer messaging and ad changes are disabled.</p></div>
     </aside>
     <main className={styles.main}>
       {(S.automationPaused || data?.paused) && <aside className={styles.pause} role="status">Automation paused for setup verification. Connections and saved work are preserved; account chat is available.</aside>}

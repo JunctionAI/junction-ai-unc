@@ -1,6 +1,17 @@
 import type { Membership } from "./accountState";
 
 export const ACCOUNT_SELECTION_HEADER = "x-unc-account-id";
+
+/** Only navigation endpoints (OAuth start/billing return) opt into query-based
+ * selection. The result still goes through normal verified membership checks. */
+export function accountNavigationRequest(request: Request): Request {
+  const values = new URL(request.url).searchParams.getAll("account");
+  if (!values.length) return request;
+  const headers = new Headers(request.headers);
+  const existing = headers.get(ACCOUNT_SELECTION_HEADER);
+  headers.set(ACCOUNT_SELECTION_HEADER, values.length === 1 && (!existing || existing === values[0]) ? values[0] : "");
+  return new Request(request, { headers });
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export type AccountSelection =
   | { ok: true; membership: Membership }

@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 async function handlePOST(request: Request) {
   const env = billingEnv();
   if (!env) return Response.json({ fallback: true });
-  const session = await requireBillingSession();
+  const session = await requireBillingSession(request);
   if (session instanceof Response) return session;
   // Country price: STRIPE_PRICE_ID_<CUR> for the visitor's locale, else the base price.
   const locale = resolveLocaleFromRequest(request);

@@ -143,7 +143,7 @@ export interface CallbackResult {
   redirect: string;
 }
 
-const okRedirect = (platform: string) => ({ redirect: `/app?connected=${encodeURIComponent(platform)}` });
+const okRedirect = (platform: string, accountId: string) => ({ redirect: `/app?connected=${encodeURIComponent(platform)}&account=${encodeURIComponent(accountId)}` });
 const errRedirect = (platform: string) => ({ redirect: `/app?connect_error=${encodeURIComponent(platform)}` });
 
 export async function handleCallback(deps: HandlerDeps, platform: string, requestUrl: string): Promise<CallbackResult> {
@@ -230,7 +230,7 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
       if (readableOnConnect(target.platform, ref)) fireConnected(deps, { accountId, platform: target.platform as Platform,
         connectorId: target.id, contextGeneration: context.contextGeneration, externalRef: ref });
     }
-    return okRedirect(entry.id);
+    return okRedirect(entry.id, accountId);
   } catch (e) {
     const code = e instanceof Error && "code" in e ? String((e as { code: unknown }).code) : "unexpected";
     return fail(`exchange_${code}`);

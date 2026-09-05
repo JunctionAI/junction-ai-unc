@@ -7,12 +7,13 @@ import { startSlackInstall } from "@/lib/channels/slackOauth";
 import { appUrlFor } from "@/lib/connectors/server";
 import { requireAccountOwnerSession } from "@/lib/db/session";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { accountNavigationRequest } from "@/lib/db/accountSelection";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function handleGET(req: Request) {
-  const session = await requireAccountOwnerSession(req);
+  const session = await requireAccountOwnerSession(accountNavigationRequest(req));
   if (session instanceof Response) return session;
   const config = slackConfig(process.env);
   if (!config) return Response.json({ error: "Slack is not switched on yet" }, { status: 503 });

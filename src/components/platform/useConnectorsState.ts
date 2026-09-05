@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 /* The Connectors grid's real state in accounts mode (GET /api/connectors/state), with a short
    poll while a first read is in flight ("Reading…" → "Read ✓ · N metrics"). A no-op without
    a database; a 401 / fallback answer leaves the demo cards untouched. */
@@ -27,19 +28,20 @@ export function isReading(c: ConnectorStateView): boolean {
 }
 
 export function useConnectorsState(enabled: boolean, initial: ConnectorsStateListing | null = null): ConnectorsLive {
+  const accountRequest = useAccountRequest();
   const [data, setData] = useState<ConnectorsStateListing | null>(initial);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const watching = useRef<{ platform: string; since: number } | null>(null);
 
   const load = useCallback(async (): Promise<ConnectorsStateListing | null> => {
-    const res = await fetch("/api/connectors/state", { cache: "no-store" });
+    const res = await accountRequest("/api/connectors/state", { cache: "no-store" });
     const body = (await res.json().catch(() => ({}))) as Partial<ConnectorsStateListing> & { fallback?: boolean; error?: string };
     if (!res.ok || body.fallback || !Array.isArray(body.connectors)) {
       throw new Error(res.status === 401 ? "your session expired — sign in again to check connectors." : body.fallback ? "connector data is unavailable — connection status is unverified." : body.error ?? `couldn’t load connectors (${res.status})`);
     }
     return body as ConnectorsStateListing;
-  }, []);
+  }, [accountRequest]);
 
   useEffect(() => {
     if (!enabled) return;

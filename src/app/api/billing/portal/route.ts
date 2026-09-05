@@ -8,10 +8,10 @@ import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
 
-async function handlePOST() {
+async function handlePOST(req: Request) {
   const env = billingEnv();
   if (!env) return Response.json({ fallback: true });
-  const session = await requireBillingSession();
+  const session = await requireBillingSession(req);
   if (session instanceof Response) return session;
   try {
     const res = await createPortalSession(getStripe(), session.service, env, session.accountId);

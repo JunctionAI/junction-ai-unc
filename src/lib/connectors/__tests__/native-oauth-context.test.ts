@@ -34,7 +34,7 @@ describe("native OAuth captured attempt", () => {
     const { d, state, context } = await start();
     expect(context).toMatchObject({ protocol: "native_oauth_v1", initiatedBy: f.userId, contextGeneration: 7, accountId: f.accountId });
     d.routes.push(c => response(c.url));
-    expect(await handleCallback(d, "klaviyo", cb("klaviyo", state))).toEqual({ redirect: "/app?connected=klaviyo" });
+    expect(await handleCallback(d, "klaviyo", cb("klaviyo", state))).toEqual({ redirect: `/app?connected=klaviyo&account=${f.accountId}` });
     expect(d.onConnected).toHaveBeenCalledWith(expect.objectContaining({ contextGeneration: 7, externalRef: "external-account" }));
     expect(f.db.rows("accounts")[0].automation_paused).toBe(true);
   });

@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 /* "Skills" — which source drafts each routine's produce step: my built-in skill card, or one of
    your n8n workflows. Accounts mode only (the sidebar hides the link in demo mode); the owner
    registers, tests, pauses and resumes; an admin (UNC_ADMIN_EMAILS) can make a workflow global
@@ -59,6 +60,7 @@ const SOURCE_STYLE: Record<SkillRowView["source"], React.CSSProperties> = {
 };
 
 export default function SkillsSettings({ onClose, initial = null }: { onClose: () => void; initial?: SkillsPayload | null }) {
+  const accountRequest = useAccountRequest();
   const [data, setData] = useState<SkillsPayload | null>(initial);
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -68,7 +70,7 @@ export default function SkillsSettings({ onClose, initial = null }: { onClose: (
 
   async function load() {
     try {
-      const res = await fetch("/api/skills/n8n", { cache: "no-store" });
+      const res = await accountRequest("/api/skills/n8n", { cache: "no-store" });
       const body = (await res.json().catch(() => ({}))) as Partial<SkillsPayload> & { fallback?: boolean; error?: string };
       if (!res.ok || body.fallback || !Array.isArray(body.routines)) setError(body.error ?? "I couldn’t load the skills just now.");
       else {
@@ -93,7 +95,7 @@ export default function SkillsSettings({ onClose, initial = null }: { onClose: (
   }, []);
 
   async function call(path: string, method: string, body: unknown): Promise<Record<string, unknown>> {
-    const res = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const res = await accountRequest(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const out = (await res.json().catch(() => ({}))) as Record<string, unknown> & { error?: string };
     if (!res.ok) throw new Error(out.error ?? `couldn’t save (${res.status})`);
     return out;

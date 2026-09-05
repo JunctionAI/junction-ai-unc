@@ -20,8 +20,10 @@ const safeRedirect = (v: string | null | undefined) => (v && /^\/app(?:[?#]|$)/.
 
 export async function startSlackInstall(deps: { db: DbClient; config: SlackConfig; appUrl: string; accountId: string; actorId: string; now: Date; redirectTo?: string | null }): Promise<{ url: string; state: string }> {
   const state = newState();
+  const returnUrl = new URL(safeRedirect(deps.redirectTo), "https://unc.invalid");
+  returnUrl.searchParams.set("account", deps.accountId);
   await unwrap("slack.install.begin", deps.db.rpc("begin_slack_install", { input: {
-    state, accountId: deps.accountId, actorId: deps.actorId, redirectTo: safeRedirect(deps.redirectTo),
+    state, accountId: deps.accountId, actorId: deps.actorId, redirectTo: returnUrl.pathname + returnUrl.search + returnUrl.hash,
   } }));
   return { url: slackAuthorizeUrl(deps.config, slackCallbackUri(deps.appUrl), state), state };
 }

@@ -85,7 +85,7 @@ describe("native reconnect availability and callback failure isolation", () => {
     const old = await start();
     const next = await start();
     next.d.routes.push(c => c.url.endsWith("/oauth/token") ? json({ access_token: "synthetic-new", expires_in: 3600 }) : json({ data: [{ id: "new-account" }] }));
-    expect(await handleCallback(next.d, "klaviyo", callback(next.state))).toEqual({ redirect: "/app?connected=klaviyo" });
+    expect(await handleCallback(next.d, "klaviyo", callback(next.state))).toEqual({ redirect: `/app?connected=klaviyo&account=${fixture.accountId}` });
     const before = structuredClone({ connector: fixture.db.rows("connectors")[0], secret: fixture.db.rows("connector_secrets")[0] });
     await handleCallback(old.d, "klaviyo", callback(old.state, "error=access_denied"));
     expect(fixture.db.rows("connectors")[0]).toEqual(before.connector);
@@ -110,7 +110,7 @@ describe("native reconnect availability and callback failure isolation", () => {
     d.onConnected = vi.fn();
     d.routes.push(c => c.url.endsWith("/oauth/token") ? json({ access_token: "synthetic-new", expires_in: 3600 }) : json({ data: [{ id: "new-account" }] }));
     const results = await Promise.all([handleCallback(d, "klaviyo", callback(state)), handleCallback(d, "klaviyo", callback(state))]);
-    expect(results.map(r => r.redirect).sort()).toEqual(["/app?connect_error=klaviyo", "/app?connected=klaviyo"].sort());
+    expect(results.map(r => r.redirect).sort()).toEqual(["/app?connect_error=klaviyo", `/app?connected=klaviyo&account=${fixture.accountId}`].sort());
     expect(d.calls.filter(c => c.url.endsWith("/oauth/token"))).toHaveLength(1);
     expect(fixture.db.rows("connector_secrets")).toHaveLength(1);
     expect(d.onConnected).toHaveBeenCalledTimes(1);

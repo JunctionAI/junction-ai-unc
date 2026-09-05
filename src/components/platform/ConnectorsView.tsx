@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 
 import { useEffect, useState } from "react";
 import { MANUAL_COPY, MANUAL_FORMS, type ManualPlatform } from "@/lib/connectors/manualFields";
@@ -76,6 +77,7 @@ export function readLine(c: ConnectorStateView): { text: string; tone: "cyan" | 
 }
 
 export default function ConnectorsView({ V, initialLive = null, modern = false }: { V: PlatformVals; initialLive?: ConnectorsStateListing | null; modern?: boolean }) {
+  const accountRequest = useAccountRequest();
   // Seeded from the OAuth return (if any) on first render; cleared once shown so it doesn't replay.
   const [notes, setNotes] = useState<Record<string, string>>(() => {
     const r = peekConnectReturn();
@@ -129,7 +131,7 @@ export default function ConnectorsView({ V, initialLive = null, modern = false }
   async function startGoogle() {
     setBusy(GOOGLE_UMBRELLA_NAME);
     try {
-      const res = await fetch("/api/connectors/google/start", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      const res = await accountRequest("/api/connectors/google/start", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
       const data = (await res.json().catch(() => ({}))) as StartResponse;
       if (res.status === 401) note(GOOGLE_UMBRELLA_NAME, CONNECT_COPY.signIn);
       else if (res.ok && data.url) {
@@ -161,7 +163,7 @@ export default function ConnectorsView({ V, initialLive = null, modern = false }
       const platform = CONNECTOR_PLATFORMS[name];
       void (async () => {
         try {
-          const res = await fetch(`/api/connectors/${platform}/options`);
+          const res = await accountRequest(`/api/connectors/${platform}/options`);
           const data = (await res.json().catch(() => ({}))) as OptionsResponse;
           if (cancelled) return;
           if (res.ok && !data.fallback && data.externalRef !== undefined) {
@@ -178,14 +180,14 @@ export default function ConnectorsView({ V, initialLive = null, modern = false }
     return () => {
       cancelled = true;
     };
-  }, [pickerKey]);
+  }, [accountRequest, pickerKey]);
 
   async function select(name: string, externalRef: string) {
     const platform = CONNECTOR_PLATFORMS[name];
     if (!platform || !externalRef) return;
     setBusy(name);
     try {
-      const res = await fetch(`/api/connectors/${platform}/select`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ externalRef }) });
+      const res = await accountRequest(`/api/connectors/${platform}/select`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ externalRef }) });
       const data = (await res.json().catch(() => ({}))) as SelectResponse;
       if (res.status === 401) note(name, CONNECT_COPY.signIn);
       else if (res.ok && data.ok && data.externalRef) {
@@ -206,7 +208,7 @@ export default function ConnectorsView({ V, initialLive = null, modern = false }
     if (!platform) return;
     setBusy(name);
     try {
-      const res = await fetch(`/api/connectors/${platform}/disconnect`, { method: "POST" });
+      const res = await accountRequest(`/api/connectors/${platform}/disconnect`, { method: "POST" });
       const data = (await res.json().catch(() => ({}))) as DisconnectResponse;
       if (res.status === 401) note(name, CONNECT_COPY.signIn);
       else if (res.ok && data.ok) {
@@ -238,7 +240,7 @@ export default function ConnectorsView({ V, initialLive = null, modern = false }
     }
     setBusy(name);
     try {
-      const res = await fetch(`/api/connectors/${platform}/start`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(shopDomain ? { shop: shopDomain } : {}) });
+      const res = await accountRequest(`/api/connectors/${platform}/start`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(shopDomain ? { shop: shopDomain } : {}) });
       const data = (await res.json().catch(() => ({}))) as StartResponse;
       if (res.status === 401) note(name, CONNECT_COPY.signIn);
       else if (res.ok && data.url) {
@@ -271,7 +273,7 @@ export default function ConnectorsView({ V, initialLive = null, modern = false }
     setTokenErr(null);
     note(name, MANUAL_COPY.testing);
     try {
-      const res = await fetch(`/api/connectors/${platform}/manual`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const res = await accountRequest(`/api/connectors/${platform}/manual`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const data = (await res.json().catch(() => ({}))) as ManualResponse;
       if (res.ok && data.ok) {
         demoConnect(); // immediate card feedback; the server API already owns persistence

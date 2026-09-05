@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 /* Setup progress for Home's "Getting set up" card and the guided steps (GET /api/setup/progress).
    Enabled only in accounts mode; a no-op in demo mode, so the demo Home never fetches.
    `refresh()` after anything that moves a step (a connect return, a routine turned on, a
@@ -17,6 +18,7 @@ export interface SetupProgressState {
 }
 
 export function useSetupProgress(enabled: boolean): SetupProgressState {
+  const accountRequest = useAccountRequest();
   const [data, setData] = useState<SetupProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -26,7 +28,7 @@ export function useSetupProgress(enabled: boolean): SetupProgressState {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/setup/progress", { cache: "no-store" });
+        const res = await accountRequest("/api/setup/progress", { cache: "no-store" });
         const body = (await res.json().catch(() => ({}))) as Partial<SetupProgress> & { fallback?: boolean; error?: string };
         if (cancelled) return;
         if (!res.ok || body.fallback || !Array.isArray(body.steps)) {
@@ -43,7 +45,7 @@ export function useSetupProgress(enabled: boolean): SetupProgressState {
     return () => {
       cancelled = true;
     };
-  }, [enabled, tick]);
+  }, [accountRequest, enabled, tick]);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);
   return { active: enabled && data !== null, loading: enabled && data === null && error === null, data, error, refresh };

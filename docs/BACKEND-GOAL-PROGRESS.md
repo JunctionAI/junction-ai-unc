@@ -13,7 +13,46 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 85, 6 September NZ
+## Latest state — Batch 86, 6 September NZ
+
+**Client picker and page-bound request integration implemented; release verification
+in progress.** The previous turn was progress (Batch 85 source pushed). This batch
+finishes its browser consumers instead of repeating the source/identity audit.
+
+- `/app?account=...` resolves only the verified user's memberships under their
+  own session. Multiple clients require a choice before billing or hydration;
+  invalid, foreign and repeated query selections show a picker, never another
+  client's workspace. Single-client callers remain compatible.
+- Modern and legacy workspaces, including the paywall, expose the same client
+  switcher. Switching performs a full navigation and clears the prior tree.
+  No shared active-client cookie or new account/role grant was introduced.
+- A page-scoped request function captures client identity for connectors,
+  channels, skills, model settings, memory/profile, setup, briefs, approvals,
+  telemetry and billing. It refuses conflicting headers/nonlocal API paths and
+  redirects; existing explicitly account-bound artifact/agent requests retain
+  their captured context. Hydration checks the returned client ID.
+- Successful connector callbacks return to their persisted original client;
+  Slack install pins the original client into its saved return URL. Billing
+  checkout/portal/return preserve that client, but query selection does not
+  establish Stripe ownership. Duplicate/mismatched navigation selection fails
+  closed before provider access. Failure paths without verified state return
+  to the generic picker instead of guessing an account.
+- **3,220 tests / 239 files pass**, app and worker TypeScript pass; changed-file
+  ESLint reports zero errors (12 existing warning-level notices). The isolated
+  Chromium fixture uses actual AccountScope/Switcher components: concurrent A/B
+  tabs send distinct headers, changing A to B clears the draft/result, and the
+  subsequent request targets B. No page errors. This is synthetic browser proof,
+  not two production client acceptances.
+- Fresh source query and signed-in production UI at 23:54 UTC confirm Tom's Unc
+  login still has only AVGAR owner access, eight saved runs/results, paused
+  generation 1 and zero enabled routines. Other-client source roles have not
+  been copied into owner access. No provider call, membership grant, workflow
+  mutation, live charge, native listener change or Slack send occurred.
+
+Release outcome will be recorded below once independently verified. Until then,
+production remains Batch 83. Full B01–B24/all-client/all-screen scope stays active.
+
+## Previous state — Batch 85, 6 September NZ
 
 **Shared client-selection foundation implemented in source. Not deployed and not
 an all-client migration.** Junction remains the intended runtime; Hyperagent is

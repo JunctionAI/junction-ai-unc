@@ -72,10 +72,11 @@ export function getStripe(): Stripe {
 }
 
 /** Where Stripe sends the founder back to. */
-export function billingUrls(env: BillingEnv) {
+export function billingUrls(env: BillingEnv, accountId?: string) {
+  const account = accountId ? `account=${encodeURIComponent(accountId)}` : "";
   return {
-    success: `${env.appUrl}/api/billing/return?session_id={CHECKOUT_SESSION_ID}`,
-    cancel: `${env.appUrl}/app?billing=cancelled`,
-    portalReturn: `${env.appUrl}/app`,
+    success: `${env.appUrl}/api/billing/return?session_id={CHECKOUT_SESSION_ID}${account ? `&${account}` : ""}`,
+    cancel: `${env.appUrl}/app?billing=cancelled${account ? `&${account}` : ""}`,
+    portalReturn: `${env.appUrl}/app${account ? `?${account}` : ""}`,
   };
 }

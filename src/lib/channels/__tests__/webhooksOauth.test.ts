@@ -155,10 +155,10 @@ describe("Slack install", () => {
     expect(u.origin + u.pathname).toBe("https://slack.com/oauth/v2/authorize");
     expect(u.searchParams.get("redirect_uri")).toBe("https://unc.test/api/channels/slack/callback");
     expect(u.searchParams.get("state")).toBe(state);
-    expect(db.rows("oauth_states")[0]).toMatchObject({ state, account_id: ACCT, platform: SLACK_STATE_PLATFORM, redirect_to: "/app?view=channels" });
+    expect(db.rows("oauth_states")[0]).toMatchObject({ state, account_id: ACCT, platform: SLACK_STATE_PLATFORM, redirect_to: `/app?view=channels&account=${ACCT}` });
     // open redirects are not followed
     const { state: s2 } = await startSlackInstall({ db, config, appUrl: "https://unc.test", accountId: ACCT, now: now(), redirectTo: "//evil.test" });
-    expect(db.rows("oauth_states").find((r) => r.state === s2)?.redirect_to).toBe("/app");
+    expect(db.rows("oauth_states").find((r) => r.state === s2)?.redirect_to).toBe(`/app?account=${ACCT}`);
   });
 
   it("concurrent Slack callbacks exchange and link only once", async () => {
@@ -194,7 +194,7 @@ describe("Slack install", () => {
     expect(await finishSlackInstall(base, new URLSearchParams({ code: "c", state: "nope" }))).toEqual({ ok: false, reason: "bad_state", redirectTo: "/app" });
 
     const { state } = await startSlackInstall({ db, config, appUrl: "https://unc.test", accountId: ACCT, now: clk.now(), redirectTo: "/app" });
-    expect(await finishSlackInstall(base, new URLSearchParams({ error: "access_denied", state }))).toEqual({ ok: false, reason: "denied", redirectTo: "/app" });
+    expect(await finishSlackInstall(base, new URLSearchParams({ error: "access_denied", state }))).toEqual({ ok: false, reason: "denied", redirectTo: `/app?account=${ACCT}` });
     expect(await finishSlackInstall(base, new URLSearchParams({ code: "c", state }))).toMatchObject({ ok: false, reason: "bad_state" }); // single-use
 
     const { state: s2 } = await startSlackInstall({ db, config, appUrl: "https://unc.test", accountId: ACCT, now: clk.now(), redirectTo: "/app" });
@@ -216,7 +216,7 @@ describe("Slack install", () => {
     const r = await finishSlackInstall(base, new URLSearchParams({ code: "good", state: s5 }));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.redirectTo).toBe("/app?view=channels");
+    expect(r.redirectTo).toBe(`/app?view=channels&account=${ACCT}`);
     expect(r.link).toMatchObject({ accountId: ACCT, userId: USER, channel: "slack", externalId: "U1", displayName: "Acme", meta: { team_id: "T1", team_name: "Acme", bot_user_id: "UB" } });
     const exchange = new URLSearchParams(f.calls[0].body!);
     expect(exchange.get("redirect_uri")).toBe("https://unc.test/api/channels/slack/callback");

@@ -19,6 +19,7 @@ import { getBrowserSupabase, isDbConfigured } from "./client";
 import { createAccountStateSaver } from "./stateSave";
 import { persistedProjection } from "./mapping";
 import { useAutosave, type AutosaveStatus } from "./useAutosave";
+import { useAccountRequest, useSelectedAccount } from "@/components/platform/AccountScope";
 
 export type PersistenceMode = "demo" | "connecting" | "account" | "error";
 
@@ -60,6 +61,8 @@ export function accountAutosaveEnabled(mode: PersistenceMode, accountId: string 
 }
 
 export function useAccountPersistence(S: PlatformState, set: Setter): Persistence {
+  const request = useAccountRequest();
+  const selectedAccountId = useSelectedAccount();
   const configured = isDbConfigured();
   const [mode, setMode] = useState<PersistenceMode>(configured ? "connecting" : "demo");
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -83,11 +86,12 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
         if (!cancelled) {
           setUserEmail(data.user.email ?? null);
         }
-        const response = await fetch("/api/account/state", { credentials: "same-origin", cache: "no-store" });
+        const response = await request("/api/account/state", { cache: "no-store" });
         if (!response.ok) throw new Error("Couldn't load your account. Try again or sign in again.");
         const res = await response.json() as { accountId: string; role: MembershipRole; name: string; state: PlatformState; revision: number };
         if (!res.accountId || (res.role !== "owner" && res.role !== "member") || !res.state || !Number.isSafeInteger(res.revision))
           throw new Error("The account could not be verified. Please try again.");
+        if (selectedAccountId && res.accountId !== selectedAccountId) throw new Error("Client selection changed. Reload this workspace.");
         if (cancelled) return;
         saver.current = createAccountStateSaver(res.accountId, res.revision, { initialState: res.state });
         setAccountId(res.accountId);
@@ -107,7 +111,7 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
     return () => {
       cancelled = true;
     };
-  }, [attempt, configured, set]);
+  }, [attempt, configured, set, request, selectedAccountId]);
 
   const enabled = accountAutosaveEnabled(mode, accountId, role);
   const autosave = useAutosave(

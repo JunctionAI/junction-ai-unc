@@ -1,4 +1,5 @@
 "use client";
+import { useAccountRequest } from "@/components/platform/AccountScope";
 /* "Models" — which brain for which job. DB mode only (the sidebar hides the link in demo
    mode). Reads/writes /api/settings/models; the catalogue, tiers and approximate prices
    come from src/lib/llm/registry.ts through that route so the UI never guesses. */
@@ -29,6 +30,7 @@ const TIER_LABEL: Record<string, string> = { fast: "fast · cheapest", balanced:
 const DEFAULT = "__default__";
 
 export default function ModelSettings({ onClose }: { onClose: () => void }) {
+  const accountRequest = useAccountRequest();
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<LlmTask | null>(null);
@@ -37,7 +39,7 @@ export default function ModelSettings({ onClose }: { onClose: () => void }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/settings/models", { cache: "no-store" });
+        const res = await accountRequest("/api/settings/models", { cache: "no-store" });
         const body = (await res.json().catch(() => ({}))) as Partial<Payload> & { fallback?: boolean; error?: string };
         if (cancelled) return;
         if (!res.ok || body.fallback || !Array.isArray(body.catalogue)) setError(body.error ?? "I couldn’t load the model settings just now.");
@@ -49,14 +51,14 @@ export default function ModelSettings({ onClose }: { onClose: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [accountRequest]);
 
   async function choose(task: LlmTask, value: string) {
     if (!data) return;
     setSaving(task);
     setError(null);
     try {
-      const res = await fetch("/api/settings/models", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ task, modelId: value === DEFAULT ? null : value }) });
+      const res = await accountRequest("/api/settings/models", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ task, modelId: value === DEFAULT ? null : value }) });
       const body = (await res.json().catch(() => ({}))) as Partial<Payload> & { error?: string };
       if (!res.ok || !body.prefs) throw new Error(body.error ?? `couldn’t save (${res.status})`);
       setData({ ...data, prefs: body.prefs, resolved: body.resolved ?? data.resolved });
