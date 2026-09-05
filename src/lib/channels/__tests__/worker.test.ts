@@ -19,6 +19,7 @@ const AP_OLD = "00000000-0000-4000-8000-00000000a003";
 function seeded() {
   const db = channelDb();
   const clk = clock("2026-09-02T19:00:00.000Z"); // 07:00 NZST
+  db.now = () => clk.now().toISOString();
   db.seed("account_profiles", [{ account_id: ACCT, cadence: { timezone: "Pacific/Auckland" } }]);
   db.seed("daily_briefs", [{ id: "00000000-0000-4000-8000-00000000b001", account_id: ACCT, day: "2026-09-03", body: "Overnight I completed 2 runs and wrote 1 draft; 1 decision is waiting on you.", items: [{ kind: "needs_you", text: "Move NZD 20/day to Prospecting NZ — waiting on your okay.", ref: AP }], created_at: "2026-09-02T18:30:00.000Z" }]);
   db.seed("routine_runs", [
@@ -107,7 +108,7 @@ describe("runChannelsTick", () => {
     expect(adapters.telegram.sent).toHaveLength(4);
   });
 
-  it("quiet hours hold pushes and the next tick outside the window sends them; a failed send is retried", async () => {
+  it("quiet hours hold pushes; an uncertain provider attempt is not retried on the next tick", async () => {
     const { db, clk } = seeded();
     const adapters = fakeAdapters();
     clk.set("2026-09-02T11:00:00.000Z"); // 23:00 NZST
@@ -122,7 +123,9 @@ describe("runChannelsTick", () => {
     expect(r2).toMatchObject({ briefs: 0, failed: 4 });
     adapters.telegram.fail = false;
     const r3 = await runChannelsTick(deps);
-    expect(r3).toMatchObject({ briefs: 1, drafts: 1, approvals: 1, reminders: 1, failed: 0 });
+    expect(r3).toMatchObject({ briefs: 0, drafts: 0, approvals: 0, reminders: 0, failed: 0 });
+    expect(adapters.telegram.sent).toHaveLength(4);
+    expect(db.rows("outbound_messages").every(r => r.status === "uncertain")).toBe(true);
   });
 
   it("firstDraftPerRun prefers the receipt carrying the approval preview, else the earliest draft", () => {

@@ -66,7 +66,7 @@ export async function finishSlackInstall(
   deps.log?.("channels.slack_installed", { accountId: row.account_id, teamId: install.teamId });
   if (deps.adapters) {
     try {
-      await sendOnLink({ db: deps.db, adapters: deps.adapters, now: () => deps.now, log: deps.log }, link, "link", { text: welcomeLine("slack") }, { appendToThread: false });
+      await sendOnLink({ db: deps.db, adapters: deps.adapters, now: () => deps.now, log: deps.log }, link, "link", { text: welcomeLine("slack") }, { ref: `install:${link.id}:${link.bindingVersion}`, appendToThread: false });
     } catch (err) {
       deps.log?.("channels.slack_welcome_failed", { error: err instanceof Error ? err.message : String(err) });
     }

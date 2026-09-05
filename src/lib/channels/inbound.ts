@@ -23,9 +23,9 @@ import { buildServerContext, respondAsUnc } from "../unc/respond";
 import type { AccountsSource } from "@/worker/accounts";
 import { linkFailedLine, NO_MODEL_LINE, SMS_NO_MODEL_LINE, receiptLine, resolveApproval, resolveFailureLine, unlinkedLine, whyLine } from "./approvals";
 import { looksLikeLinkCode, welcomeLine } from "./links";
-import { sendOnLink, type AdapterRegistry, type OutboundDeps } from "./outbound";
+import { flushQueued, sendOnLink, type AdapterRegistry, type OutboundDeps } from "./outbound";
 import { parseSmsKeyword } from "./adapters/twilio";
-import { appendInbound, appendOutbound, historyFor, type HistoryTurn } from "./thread";
+import { appendInbound, historyFor, type HistoryTurn } from "./thread";
 import { parseApprovalButton, type ChannelLink, type InboundEvent } from "./types";
 import { routeCommand } from "../commands/message";
 import { applyInboundControl, assertInboundBinding, readCapturedInbound, type CapturedInbound } from "./binding";
@@ -133,13 +133,13 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
   const outbound: OutboundDeps = { db: deps.db, adapters: deps.adapters, now: deps.now, log, guard: () => guard(control.kind === "linked" || control.kind === "handoff") };
   if (control.kind === "linked") {
     await guard(true);
-    await sendOnLink(outbound, link, "link", { text: welcomeLine(event.channel) }, { contextGeneration, appendToThread: false });
+    await sendOnLink(outbound, link, "link", { text: welcomeLine(event.channel) }, { contextGeneration, ref: `inbound:${captured.id}`, allowPaused: true, appendToThread: false });
     return { kind: "linked", accountId, linkId: link.id };
   }
   if (control.kind === "handoff") {
     await guard(true);
     const reply = "i’ve paused automated replies here. open Junction in the app for support. a human has not been assigned yet.";
-    await sendOnLink(outbound, link, "system", { text: reply }, { contextGeneration });
+    await sendOnLink(outbound, link, "system", { text: reply }, { contextGeneration, ref: `inbound:${captured.id}`, allowPaused: true });
     return { kind: "replied", accountId, reply, live: false };
   }
   if (event.channel === "apple" && link.meta.human_support_requested) return { kind: "ignored", reason: "human support requested; automation paused" };
@@ -147,8 +147,9 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
   if (await seen(deps.db, event, accountId, contextGeneration, link.id)) return { kind: "duplicate" };
   await guard();
   const openedLink = link;
-  // Legacy WhatsApp queue rows have no captured generation/link revision. They must not
-  // be released by this new arrival. The generation-bound outbox consumer replaces this.
+  // Only queued work with this same original account/generation/link revision can drain.
+  await flushQueued(outbound, link, contextGeneration);
+  await guard();
 
   // 3. a decision — a button, or a keyword ("YES 1a2b3c4d")
   const button = parseApprovalButton(event.action);
@@ -201,9 +202,9 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
     await guard();
     await deps.adapters[event.channel]?.ack?.(event, reply.slice(0, 200)).catch(() => undefined);
     await guard();
-    const sent = await sendOnLink(outbound, openedLink, "reply", { text: reply }, { contextGeneration, appendToThread: false });
+    const sent = await sendOnLink(outbound, openedLink, "reply", { text: reply }, { contextGeneration, ref: `inbound:${captured.id}`, appendToThread: true });
     await guard();
-    await appendOutbound(deps.db, { accountId, contextGeneration, externalScope: link.id, channel: event.channel, text: reply, externalMsgId: sent.status === "sent" && sent.externalMsgId ? `out:${sent.externalMsgId}` : null, delivery: { status: sent.status, in_reply_to: event.externalMsgId }, now: deps.now() });
+    if (sent.status === "uncertain") throw new Error("Channel delivery requires reconciliation; do not replay");
     return outcome;
   }
 
@@ -231,8 +232,9 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
     log("channels.respond_failed", { accountId, error: err instanceof Error ? err.message : String(err) });
   }
   await guard();
-  const sent = await sendOnLink(outbound, openedLink, "reply", { text: reply }, { contextGeneration, appendToThread: false });
+  const sent = await sendOnLink(outbound, openedLink, "reply", { text: reply }, { contextGeneration, ref: `inbound:${captured.id}`, appendToThread: true,
+    replyContext: { live, inReplyTo: event.externalMsgId } });
   await guard();
-  await appendOutbound(deps.db, { accountId, contextGeneration, externalScope: link.id, channel: event.channel, text: reply, externalMsgId: sent.status === "sent" && sent.externalMsgId ? `out:${sent.externalMsgId}` : null, delivery: { status: sent.status, live, in_reply_to: event.externalMsgId }, now: deps.now() });
+  if (sent.status === "uncertain") throw new Error("Channel delivery requires reconciliation; do not replay");
   return { kind: "replied", accountId, reply, live };
 }

@@ -19,6 +19,7 @@ import { readTimezone } from "../lib/brain/brief";
 import { buildAdapters } from "../lib/channels/adapters/index";
 import { approvalPayload, briefPayload, draftPayload } from "../lib/channels/approvals";
 import { accountsWithLinks, verifiedLinks } from "../lib/channels/links";
+import { maintainOutbound } from "../lib/channels/outbox";
 import { pushToAccount, type AdapterRegistry, type OutboundDeps, type PushReport } from "../lib/channels/outbound";
 import type { Env, FetchLike } from "../lib/channels/types";
 import type { Keyring } from "../lib/connectors/crypto";
@@ -93,6 +94,10 @@ export async function runChannelsTick(deps: ChannelsDeps, opts: { accountId?: st
   const db = deps.db;
   const now = deps.now ?? (() => new Date());
   const log = (event: string, fields: Record<string, unknown>) => deps.log?.info(event, fields);
+  // A crash can lose the final provider response or the subsequent thread projection.
+  // Repair those facts even when messaging is off or the original link has been removed.
+  const repaired = await maintainOutbound(db);
+  if (repaired.uncertain || repaired.expired || repaired.projected) log("channels.outbox_repaired", repaired);
   const adapters = deps.adapters ?? buildAdapters({ env: deps.env ?? process.env, fetch: deps.fetch ?? ((input, init) => fetch(input, init)), db, keyring: deps.keyring ?? null });
   const out: OutboundDeps = { db, adapters, now, log };
   const lookback = opts.lookbackMs ?? CHANNELS_LOOKBACK_MS;

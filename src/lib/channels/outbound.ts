@@ -1,8 +1,8 @@
 /* Outbound — sending on a channel, the send ledger (outbound_messages), prefs and quiet
    hours, and the WhatsApp 24-hour rule.
 
-     sendOnLink(deps, link, kind, payload, opts)   one send, always ledgered (sent | failed |
-                                                   queued); the thread row is the caller's job
+     sendOnLink(deps, link, kind, payload, opts)   durable intent before a single attempt;
+                                                   confirmed sends project into the thread
      pushToAccount(deps, {accountId, kind, ref…})  a proactive push: every verified link whose
                                                    prefs allow the kind, skipping quiet hours,
                                                    deduped on `ref` per link — the worker's call
@@ -14,7 +14,8 @@
    inbound.ts (replies). Relative imports only (worker-buildable). */
 
 import { unwrap, type DbClient, type Row } from "../db/types";
-import { appendOutbound } from "./thread";
+import { boundedSend, claimOutbound, enqueueOutbound, finishOutbound, projectOutbound, type DeliveryStatus, type ReplyContext } from "./outbox";
+import { messagingDisabled } from "./releaseGate";
 import type { Channel, ChannelAdapter, ChannelLink, OutboundKind, OutboundPayload, QuietHours } from "./types";
 
 export type AdapterRegistry = Partial<Record<Channel, ChannelAdapter>>;
@@ -91,7 +92,7 @@ export interface LedgerRow {
   ref: string | null;
   body: string;
   externalMsgId: string | null;
-  status: "sent" | "failed" | "queued";
+  status: DeliveryStatus;
   error: string | null;
   createdAt: string;
 }
@@ -112,46 +113,39 @@ const rowToLedger = (r: Row): LedgerRow => ({
   createdAt: String(r.created_at ?? ""),
 });
 
-export async function recordOutbound(db: DbClient, r: Omit<LedgerRow, "id" | "createdAt"> & { now: Date }): Promise<string> {
-  const row = await unwrap<{ id: string }>(
-    "outbound_messages.insert",
-    db
-      .from("outbound_messages")
-      .insert({ account_id: r.accountId, link_id: r.linkId, channel: r.channel, kind: r.kind, ref: r.ref, body: r.body, external_msg_id: r.externalMsgId, status: r.status, error: r.error, created_at: r.now.toISOString() })
-      .select("id")
-      .single(),
-  );
-  return row.id;
-}
-
-/** Has this ref already been sent (or queued) to this link? The durable dedup for pushes. */
-export async function alreadyPushed(db: DbClient, accountId: string, linkId: string, ref: string): Promise<boolean> {
-  const rows = await unwrap<{ id: string; status: string }[]>("outbound_messages.select", db.from("outbound_messages").select("id, status").eq("account_id", accountId).eq("link_id", linkId).eq("ref", ref));
-  return rows.some((r) => r.status === "sent" || r.status === "queued");
+/** An existing attempt, including uncertainty, must never be blindly re-sent. */
+export async function alreadyPushed(db: DbClient, accountId: string, linkId: string, ref: string, contextGeneration = 0, bindingVersion?: number): Promise<boolean> {
+  let q = db.from("outbound_messages").select("id").eq("account_id", accountId).eq("context_generation", contextGeneration).eq("captured_link_id", linkId).eq("ref", ref);
+  if (bindingVersion !== undefined) q = q.eq("binding_version", bindingVersion);
+  return (await unwrap<Row[]>("outbound_messages.select", q)).length > 0;
 }
 
 export async function listOutbound(db: DbClient, accountId: string, opts: { since?: string; limit?: number } = {}): Promise<LedgerRow[]> {
   let q = db.from("outbound_messages").select(LEDGER_COLS).eq("account_id", accountId);
   if (opts.since) q = q.gte("created_at", opts.since);
-  q = q.order("created_at", { ascending: false });
+  q = q.order("created_at", { ascending: false }).order("id", { ascending: false });
   if (opts.limit) q = q.limit(opts.limit);
   return (await unwrap<Row[]>("outbound_messages.select", q)).map(rowToLedger);
 }
 
 // ---------- send ----------
 
-export type SendOutcome = { status: "sent"; ledgerId: string; externalMsgId: string | null } | { status: "failed"; ledgerId: string; error: string } | { status: "queued"; ledgerId: string } | { status: "skipped"; reason: "no_adapter" | "not_configured" | "pref_off" | "quiet_hours" | "unverified" };
+export type SendOutcome = { status: "sent"; ledgerId: string; externalMsgId: string | null } | { status: "failed" | "uncertain"; ledgerId: string; error: string } | { status: "queued"; ledgerId: string } | { status: "skipped"; reason: "no_adapter" | "not_configured" | "pref_off" | "quiet_hours" | "unverified" | "messaging_disabled" | "cancelled" };
 
 export interface SendOnLinkOptions {
   contextGeneration?: number;
+  /** Only a captured link handshake or human-handoff acknowledgement may use this. */
+  allowPaused?: boolean;
   ref?: string | null;
   /** Set on briefs: outside the WhatsApp window this goes as the approved template instead of queuing. */
   allowTemplate?: boolean;
   /** Also write Unc's turn to the one thread (the caller passes false when it already did). */
   appendToThread?: boolean;
+  replyContext?: ReplyContext;
 }
 
 export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: OutboundKind, payload: OutboundPayload, opts: SendOnLinkOptions = {}): Promise<SendOutcome> {
+  if (messagingDisabled(process.env)) return { status: "skipped", reason: "messaging_disabled" };
   await deps.guard?.();
   // No proactive Apple messages or automation during human handoff in the initial pilot.
   if (link.channel === "apple" && ((!prefAllows(link, kind)) || (link.meta.human_support_requested && kind !== "system"))) return { status: "skipped", reason: "pref_off" };
@@ -159,40 +153,32 @@ export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: Ou
   const adapter = deps.adapters[link.channel];
   if (!adapter) return { status: "skipped", reason: "no_adapter" };
   if (!adapter.configured) return { status: "skipped", reason: "not_configured" };
-  const now = deps.now();
-  const base = { accountId: link.accountId, linkId: link.id, channel: link.channel, kind, ref: opts.ref ?? null, body: payload.text, now };
-
-  let template = false;
-  if (!whatsappWindowOpen(link, now)) {
-    if (opts.allowTemplate) template = true;
-    else {
+  const queued = await enqueueOutbound(deps.db, link, kind, payload, opts);
+  const claim = await claimOutbound(deps.db, String(queued.id));
+  let row = claim.row;
+  if (claim.claimed) {
+    try {
       await deps.guard?.();
-      const ledgerId = await recordOutbound(deps.db, { ...base, externalMsgId: null, status: "queued", error: null });
-      await deps.guard?.();
-      deps.log?.("channels.queued", { accountId: link.accountId, channel: link.channel, kind, ref: opts.ref ?? null });
-      return { status: "queued", ledgerId };
+      if (messagingDisabled(process.env)) throw new Error("Messaging disabled before provider call");
+      if (!claim.link?.externalId) throw new Error("Missing claimed destination");
+      const pinned = claim.link;
+      const result = await boundedSend(() => adapter.send(pinned.externalId!, row.payload as unknown as OutboundPayload, { link: pinned, template: claim.template }));
+      row = await finishOutbound(deps.db, String(row.id), claim.attempt, result);
+    } catch {
+      // Even persistence failure after provider acceptance must not lead to a resend.
+      try { row = await finishOutbound(deps.db, String(row.id), claim.attempt, null); } catch { /* durable claim remains non-retryable */ }
+      return { status: "uncertain", ledgerId: String(row.id), error: "provider_outcome_unknown" };
     }
   }
-
-  await deps.guard?.();
-  const result = await adapter.send(link.externalId, payload, { link, template });
-  await deps.guard?.();
-  if (result.ok) {
-    const ledgerId = await recordOutbound(deps.db, { ...base, externalMsgId: result.externalMsgId, status: "sent", error: null });
-    await deps.guard?.();
-    if (opts.appendToThread ?? true) {
-      try {
-        await appendOutbound(deps.db, { accountId: link.accountId, contextGeneration: opts.contextGeneration, externalScope: link.id, channel: link.channel, text: payload.text, externalMsgId: result.externalMsgId ? `out:${result.externalMsgId}` : null, delivery: { status: "sent", kind, ref: opts.ref ?? null, link_id: link.id }, now });
-      } catch (err) {
-        deps.log?.("channels.thread_write_failed", { accountId: link.accountId, error: err instanceof Error ? err.message : String(err) });
-      }
-    }
-    deps.log?.("channels.sent", { accountId: link.accountId, channel: link.channel, kind, ref: opts.ref ?? null, template });
-    return { status: "sent", ledgerId, externalMsgId: result.externalMsgId };
+  const ledgerId = String(row.id);
+  if (row.status === "sent") {
+    try { await projectOutbound(deps.db, ledgerId); }
+    catch { deps.log?.("channels.thread_projection_pending", { accountId: link.accountId, ledgerId }); }
+    return { status: "sent", ledgerId, externalMsgId: row.external_msg_id ? String(row.external_msg_id) : null };
   }
-  const ledgerId = await recordOutbound(deps.db, { ...base, externalMsgId: null, status: "failed", error: result.error.slice(0, 300) });
-  deps.log?.("channels.send_failed", { accountId: link.accountId, channel: link.channel, kind, error: result.error });
-  return { status: "failed", ledgerId, error: result.error };
+  if (row.status === "queued") return { status: "queued", ledgerId };
+  if (row.status === "cancelled") return { status: "skipped", reason: "cancelled" };
+  return { status: row.status === "failed" ? "failed" : "uncertain", ledgerId, error: "provider_outcome_unknown" };
 }
 
 // ---------- proactive push ----------
@@ -216,14 +202,13 @@ export interface PushReport {
   queued: number;
   quiet: number;
   skipped: number;
-  /** True when at least one send went (or queued) — the thread row is written once, on the first. */
+  /** True only on provider acceptance, never merely because delivery was queued. */
   delivered: boolean;
 }
 
 export async function pushToAccount(deps: OutboundDeps, input: PushInput): Promise<PushReport> {
   const report: PushReport = { sent: 0, failed: 0, queued: 0, quiet: 0, skipped: 0, delivered: false };
   const now = deps.now();
-  let threadWritten = false;
   for (const link of input.links) {
     if (link.accountId !== input.accountId) continue;
     if (!prefAllows(link, input.kind)) {
@@ -234,37 +219,34 @@ export async function pushToAccount(deps: OutboundDeps, input: PushInput): Promi
       report.quiet++;
       continue; // not ledgered: the next tick outside the window sends it
     }
-    if (await alreadyPushed(deps.db, input.accountId, link.id, input.ref)) continue;
-    const out = await sendOnLink(deps, link, input.kind, input.payload, { contextGeneration: input.contextGeneration, ref: input.ref, allowTemplate: input.allowTemplate, appendToThread: !threadWritten });
+    if (await alreadyPushed(deps.db, input.accountId, link.id, input.ref, input.contextGeneration ?? 0, link.bindingVersion)) continue;
+    const out = await sendOnLink(deps, link, input.kind, input.payload, { contextGeneration: input.contextGeneration, ref: input.ref, allowTemplate: input.allowTemplate, appendToThread: true });
     if (out.status === "sent") {
       report.sent++;
-      threadWritten = true;
     } else if (out.status === "queued") report.queued++;
-    else if (out.status === "failed") report.failed++;
+    else if (out.status === "failed" || out.status === "uncertain") report.failed++;
     else report.skipped++;
   }
-  report.delivered = report.sent + report.queued > 0;
+  report.delivered = report.sent > 0;
   return report;
 }
 
 // ---------- WhatsApp queue ----------
 
 /** Send what waited for the window. Called on every inbound message (the window just opened). */
-export async function flushQueued(deps: OutboundDeps, link: ChannelLink): Promise<number> {
+export async function flushQueued(deps: OutboundDeps, link: ChannelLink, contextGeneration = 0): Promise<number> {
   if (link.channel !== "whatsapp" || !link.externalId) return 0;
   const adapter = deps.adapters.whatsapp;
   if (!adapter?.configured) return 0;
-  const rows = await unwrap<Row[]>("outbound_messages.select", deps.db.from("outbound_messages").select(LEDGER_COLS).eq("link_id", link.id).eq("status", "queued").order("created_at", { ascending: true }));
+  const rows = await unwrap<Row[]>("outbound_messages.select", deps.db.from("outbound_messages").select("*")
+    .eq("account_id", link.accountId).eq("context_generation", contextGeneration).eq("captured_link_id", link.id)
+    .eq("binding_version", link.bindingVersion).eq("status", "queued").order("created_at", { ascending: true }).limit(20));
   let flushed = 0;
   for (const raw of rows) {
-    const r = rowToLedger(raw);
-    const result = await adapter.send(link.externalId, { text: r.body }, { link });
-    if (result.ok) {
-      await unwrap("outbound_messages.update", deps.db.from("outbound_messages").update({ status: "sent", external_msg_id: result.externalMsgId, error: null }).eq("id", r.id));
-      flushed++;
-    } else {
-      await unwrap("outbound_messages.update", deps.db.from("outbound_messages").update({ status: "failed", error: result.error.slice(0, 300) }).eq("id", r.id));
-    }
+    const result = await sendOnLink(deps, link, raw.kind as OutboundKind, raw.payload as unknown as OutboundPayload,
+      { contextGeneration, ref: String(raw.ref), appendToThread: raw.append_thread === true, allowTemplate: raw.allow_template === true, allowPaused: raw.allow_paused === true,
+        replyContext: raw.reply_context as unknown as ReplyContext | undefined });
+    if (result.status === "sent") flushed++;
   }
   return flushed;
 }

@@ -109,7 +109,8 @@ describe("a message → the same Unc", () => {
       ["telegram", "unc", "Two runs finished overnight and one draft is waiting in the app."],
     ]);
     expect(thread[2].delivery).toMatchObject({ status: "sent", live: true, in_reply_to: "555:1" });
-    expect(thread[2].externalMsgId).toBe("out:telegram-out-1");
+    expect(thread[2].externalMsgId).toMatch(/^reply:inbound:/);
+    expect(thread[2].delivery.provider_message_id).toBe("telegram-out-1");
     expect((await listOutbound(d.db, ACCT)).map((l) => [l.kind, l.status])).toEqual([["reply", "sent"]]);
     expect((await findVerifiedLink(d.db, "telegram", "555"))?.lastInboundAt).not.toBe("2026-09-02T09:00:00.000Z");
 

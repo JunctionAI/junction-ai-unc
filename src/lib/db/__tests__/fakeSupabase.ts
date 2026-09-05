@@ -98,7 +98,7 @@ export function loadSchema(dir = MIGRATIONS_DIR): Schema {
       if (dropped) table(m[1]).uniques = table(m[1]).uniques.filter(u => u.name !== dropped[1]);
       const unique = m[2].match(/add constraint (\w+) unique \(([^)]+)\)/i);
       if (unique) table(m[1]).uniques.push({ name: unique[1], columns: cols(unique[2]) });
-      const con = m[2].match(/add constraint \w+ check \((\w+) in \(([^)]+)\)\)/i);
+      const con = m[2].match(/add constraint \w+\s+check \((\w+) in \(([^)]+)\)\)/i);
       if (con) table(m[1]).enums[con[1]] = new Set(con[2].split(",").map((v) => v.trim().replace(/^'|'$/g, "")));
       if (!/add column/i.test(m[2])) continue;
       const t = table(m[1]);
@@ -335,7 +335,7 @@ export class FakeSupabase implements DbClient {
     const t = this.assertTable(table);
     const out: Row = {};
     for (const c of t.columns) out[c] = c in row ? row[c] : null;
-    if (t.columns.has("context_generation") && !("context_generation" in row)) out.context_generation = 0;
+    if (t.columns.has("context_generation") && !("context_generation" in row) && table !== "outbound_messages") out.context_generation = 0;
     if (table === "channel_links" && !("binding_version" in row)) out.binding_version = 0;
     if (table === "chat_messages" && !("external_scope" in row)) out.external_scope = "";
     if (table === "accounts" && !("automation_paused" in row)) out.automation_paused = false;

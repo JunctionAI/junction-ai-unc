@@ -10,7 +10,18 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 15, 5 September 2026, approximately 06:50 UTC
+## Latest state — Batch 16, 5 September 2026, approximately 07:12 UTC
+
+**Verified source and rollback-only database progress; no production rollout.** The preceding Nguyen reply was a handoff/status turn, not backend progress. This continuation resumed the existing test handle, inspected its failures, and completed the durable linked-channel outbox implementation and real SQL rehearsal.
+
+- Immutable pre-I/O operation plus original account/generation/link/member/destination binding, one atomic send attempt and no blind retry on uncertainty. Provider acceptance is retained after a reset/link removal; confirmed-only history projection is deduplicated and repairable.
+- Bounded worker housekeeping recovers interrupted attempt state and missed history projections without provider I/O. WhatsApp queues retain original payload/buttons and binding; unbound legacy rows cannot drain. Production messaging now requires an explicit true release flag.
+- Real PostgreSQL exposed a blanket pause trigger that blocked recording a send already accepted during reset. The staged migration now gates new operations/claims while allowing original outcome evidence; DELETE hold remains. Corrected actual-role rollback canary passes, including tenant/rebind/client denials and original receipt preservation.
+- **190 files / 2,310 tests**, app/worker TypeScript, production build and diff checks pass. Lint zero errors / 39 existing warnings. Live advisors remain six WARN/eight INFO.
+- Independent **07:10:09 UTC** readback: zero synthetic canary accounts/staged columns/outbound rows, AVGAR generation 1 / revision 15 / paused, zero enabled routines and n8n registrations. No persistent migration, deployment, provider/model call, workflow edit, plan/key creation or message.
+- [Exact behavior, correction, verification and remaining rollout gates](CHANNEL-OUTBOX-2026-09-05.md). Still required: original command-notification identity, stable artifact-send operations, OAuth-init identity, anonymous reply journaling, queued business-object expiry/recovery, provider reconciliation, remaining delayed writers, coordinated release and real customer acceptance. n8n registration/admission/access gates are unchanged. Full B01–B24 scope remains active.
+
+## Batch 15, 5 September 2026, approximately 06:50 UTC
 
 **Verified source and rollback-only database progress; no production rollout.** The preceding handoff-only reply did not advance authoritative backend state. This continuation revalidated the dirty checkout and completed the chat/history generation patch rather than treating the pending n8n approval as a whole-goal blocker.
 

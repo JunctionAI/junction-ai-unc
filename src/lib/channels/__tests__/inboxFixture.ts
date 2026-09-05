@@ -3,8 +3,10 @@
 import type { FakeSupabase } from "../../db/__tests__/fakeSupabase";
 import type { Row } from "../../db/types";
 import { looksLikeLinkCode, normaliseLinkCode } from "../links";
+import { installOutboxFixture } from "./outboxFixture";
 
 export function installInboxFixture(db: FakeSupabase) {
+  installOutboxFixture(db);
   db.rpcs.verify_channel_inbound_binding = args => {
     const b = args.expected as Row;
     const event = args.inbound_event as Row;

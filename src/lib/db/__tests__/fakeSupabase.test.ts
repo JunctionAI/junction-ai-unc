@@ -114,7 +114,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.chat_messages.uniques).not.toContainEqual(expect.objectContaining({ columns: ["account_id", "thread", "position"] }));
     expect(s.channel_links.uniques).toContainEqual(expect.objectContaining({ columns: ["channel", "external_id"] }));
     expect(s.channel_links.uniques).toContainEqual(expect.objectContaining({ columns: ["link_code"], partialNotNull: "link_code" }));
-    expect([...s.outbound_messages.enums.status]).toEqual(["sent", "failed", "queued"]);
+    expect([...s.outbound_messages.enums.status]).toEqual(["queued", "sending", "sent", "failed", "uncertain", "cancelled"]);
     expect(s.channel_secrets.uniques).toContainEqual(expect.objectContaining({ columns: ["channel", "scope_id"] }));
     expect(s.kpi_snapshots.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "context_generation", "metric_key", "window_end"] }));
     expect(s.daily_briefs.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "context_generation", "day"] }));

@@ -39,6 +39,7 @@ describe("pushToAccount", () => {
   it("sends to every verified link whose prefs allow the kind, once per ref, writing one thread row; failures are ledgered", async () => {
     const db = channelDb();
     const clk = clock();
+    db.now = () => clk.now().toISOString();
     const adapters = fakeAdapters();
     const tg = seedLink(db, { channel: "telegram", external_id: "555" });
     const sms = seedLink(db, { channel: "sms", external_id: "+6421", prefs: { ...PREFS_ON, brief: false } });
@@ -67,19 +68,21 @@ describe("pushToAccount", () => {
     expect(adapters.telegram.sent[1].payload.buttons).toHaveLength(3);
     const ledger = await listOutbound(db, ACCT);
     expect(ledger.map((l) => [l.channel, l.kind, l.status, l.ref])).toEqual([
-      ["sms", "approval", "failed", `approval:${AP}`],
+      ["sms", "approval", "uncertain", `approval:${AP}`],
       ["telegram", "approval", "sent", `approval:${AP}`],
       ["telegram", "brief", "sent", "brief:b1"],
     ]);
-    expect(ledger[0].error).toBe("sms down");
+    expect(ledger[0].error).toBe("provider_outcome_unknown");
     expect((await listThread(db, ACCT)).filter((m) => m.body === "One decision needs you.")).toHaveLength(1);
-    // a failed send is not "pushed": the next tick retries that link
-    expect(await alreadyPushed(db, ACCT, sms.id, `approval:${AP}`)).toBe(false);
+    // An ambiguous provider error is not permission to send twice.
+    expect(await alreadyPushed(db, ACCT, sms.id, `approval:${AP}`)).toBe(true);
   });
 
   it("quiet hours skip without a ledger row so the next tick outside the window sends", async () => {
     const db = channelDb();
     const clk = clock("2026-09-02T11:00:00.000Z"); // 23:00 NZST
+    db.now = () => clk.now().toISOString();
+    db.seed("account_profiles", [{ account_id: ACCT, cadence: { timezone: "Pacific/Auckland" } }]);
     const adapters = fakeAdapters();
     const link = seedLink(db, { prefs: { ...PREFS_ON, quiet_hours: { start: "22:00", end: "07:00" } } });
     const deps: OutboundDeps = { db, adapters, now: clk.now };
@@ -108,6 +111,7 @@ describe("WhatsApp 24-hour window", () => {
   it("open within 24 h of the last inbound; briefs use the template outside it; other kinds queue and flush on the next inbound", async () => {
     const db = channelDb();
     const clk = clock("2026-09-03T12:00:00.000Z");
+    db.now = () => clk.now().toISOString();
     const adapters = fakeAdapters();
     const fresh = seedLink(db, { channel: "whatsapp", external_id: "6421", last_inbound_at: "2026-09-03T11:00:00.000Z" });
     const stale = seedLink(db, { channel: "whatsapp", external_id: "6422", last_inbound_at: "2026-09-02T09:00:00.000Z" });
@@ -121,7 +125,7 @@ describe("WhatsApp 24-hour window", () => {
     const brief = await sendOnLink(deps, stale, "brief", { text: "Morning. Here's today:" }, { ref: "brief:b1", allowTemplate: true });
     expect(brief.status).toBe("sent");
     expect(adapters.whatsapp.sent[0].opts.template).toBe(true);
-    const inside = await sendOnLink(deps, fresh, "brief", { text: "Morning." }, { ref: "brief:b1", allowTemplate: true });
+    const inside = await sendOnLink(deps, fresh, "brief", { text: "Morning." }, { ref: "brief:b2", allowTemplate: true });
     expect(inside.status).toBe("sent");
     expect(adapters.whatsapp.sent[1].opts.template).toBe(false);
 
@@ -132,9 +136,11 @@ describe("WhatsApp 24-hour window", () => {
     expect((await listThread(db, ACCT)).map((m) => m.body)).toEqual(["Morning. Here's today:", "Morning."]); // nothing in the thread until it is actually sent
 
     // the founder writes back → the window opens → the queue drains
+    await db.from("channel_links").update({ last_inbound_at: clk.now().toISOString() }).eq("id", stale.id);
     const flushed = await flushQueued(deps, { ...stale, lastInboundAt: clk.now().toISOString() });
     expect(flushed).toBe(1);
     expect(adapters.whatsapp.sent[2].payload.text).toBe("One decision needs you.");
+    expect(adapters.whatsapp.sent[2].payload.buttons).toEqual(approvalButtons(AP));
     const ledger = await listOutbound(db, ACCT);
     expect(ledger.find((l) => l.kind === "approval")).toMatchObject({ status: "sent", externalMsgId: "whatsapp-out-3" });
     expect(await flushQueued(deps, stale)).toBe(0);
