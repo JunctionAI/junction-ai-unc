@@ -189,7 +189,7 @@ function receiptToRow(r: Receipt): Row {
     created_at: r.createdAt,
   };
 }
-function rowToReceipt(row: Row): Receipt {
+export function rowToReceipt(row: Row): Receipt {
   const { spend, ...payload } = (row.payload as Row | null) ?? {};
   return compact({
     id: row.id as string,
@@ -306,8 +306,9 @@ function artifactToRow(a: Artifact): Row {
     created_at: a.createdAt,
   };
 }
-function rowToArtifact(row: Row): Artifact {
+export function rowToArtifact(row: Row): Artifact {
   return compact({
+    revision: (row.revision as number) ?? 0,
     id: row.id as string,
     accountId: row.account_id as string,
     runId: row.run_id as string,
@@ -548,6 +549,13 @@ export class SupabaseStore implements Store {
     }
   }
   async listArtifacts(accountId: string, opts: ListArtifactsOptions = {}) {
+    if (opts.contextGeneration !== undefined) {
+      const rows = await unwrap<Row[]>("artifacts.context", this.db.rpc("list_context_artifacts", {
+        acct: accountId, generation: opts.contextGeneration, requested_run: opts.runId ?? null,
+        requested_routine: opts.routineId ?? null, requested_status: opts.status ?? null, max_rows: opts.limit ?? 100,
+      }));
+      return rows.map(rowToArtifact);
+    }
     let q = this.db.from("artifacts").select("*").eq("account_id", accountId);
     if (opts.runId) q = q.eq("run_id", opts.runId);
     if (opts.routineId) q = q.eq("routine_id", opts.routineId);

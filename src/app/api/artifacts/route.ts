@@ -14,6 +14,9 @@ import { requireAccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { captureArtifactContext, artifactFailure } from "@/lib/artifacts/context";
+import { assertRuntimeContext } from "@/lib/db/runtimeContext";
+import type { DbClient } from "@/lib/db/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,21 +30,28 @@ async function handleGET(req: Request) {
 
   let accountId = (url.searchParams.get("accountId") ?? "demo").trim().slice(0, 128);
   let channels: string[] = [];
-  if (isDbConfigured()) {
-    const session = await requireAccountSession();
-    if (session instanceof Response) return session;
-    accountId = session.accountId;
-    try {
-      channels = [...new Set((await verifiedLinks(session.service, accountId)).map((l) => l.channel))];
-    } catch {
-      channels = [];
-    }
-  }
+  let contextGeneration: number | undefined;
+  let db: DbClient | undefined;
   try {
-    const artifacts = await listArtifactsForAccount({ store: getStore() }, accountId, { routineId, limit });
-    return Response.json({ artifacts, channels }, { headers: { "cache-control": "no-store" } });
+    if (isDbConfigured()) {
+      const session = await requireAccountSession();
+      if (session instanceof Response) return session;
+      accountId = session.accountId;
+      db = session.service;
+      const identity = await captureArtifactContext(db, accountId, req);
+      if (identity instanceof Response) return identity;
+      contextGeneration = identity.contextGeneration;
+      try {
+        channels = [...new Set((await verifiedLinks(session.service, accountId)).filter(l => l.userId === session.userId && l.channel !== "apple").map((l) => l.channel))];
+      } catch {
+        channels = [];
+      }
+    }
+    const artifacts = await listArtifactsForAccount({ store: getStore(), contextGeneration }, accountId, { routineId, limit });
+    if (db) await assertRuntimeContext(db, { accountId, contextGeneration }, { allowPaused: true });
+    return Response.json({ accountId, contextGeneration, artifacts, channels }, { headers: { "cache-control": "no-store" } });
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "listing failed" }, { status: 500 });
+    return artifactFailure(err);
   }
 }
 

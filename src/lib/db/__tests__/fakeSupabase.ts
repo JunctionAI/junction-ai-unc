@@ -171,6 +171,13 @@ export class FakeSupabase implements DbClient {
   now: () => string = () => new Date().toISOString();
 
   constructor(readonly schema: Schema = migrationSchema()) {
+    this.rpcs.list_context_artifacts = args => this.rows("artifacts").filter(f =>
+      f.account_id === args.acct && this.rows("accounts").some(a => a.id === args.acct && a.context_generation === args.generation) &&
+      this.rows("routine_runs").some(r => r.id === f.run_id && r.account_id === f.account_id && r.context_generation === args.generation) &&
+      (!args.requested_run || f.run_id === args.requested_run) && (!args.requested_routine || f.routine_id === args.requested_routine) &&
+      (!args.requested_status || f.status === args.requested_status))
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || String(b.id).localeCompare(String(a.id)))
+      .slice(0, Math.min(Number(args.max_rows ?? 12), 100));
     this.rpcs.write_decision_style_context = args => {
       const a = this.rows("accounts").find(a => a.id === args.p_account);
       if (!a || a.context_generation !== args.p_generation || a.automation_paused !== false) throw new Error("Captured style context unavailable");
@@ -345,6 +352,7 @@ export class FakeSupabase implements DbClient {
     if (t.columns.has("context_generation") && !("context_generation" in row) && table !== "outbound_messages") out.context_generation = 0;
     if (table === "channel_links" && !("binding_version" in row)) out.binding_version = 0;
     if (table === "routine_commands" && !("notification_revision" in row)) out.notification_revision = 0;
+    if (table === "artifacts" && !("revision" in row)) out.revision = 0;
     if (table === "chat_messages" && !("external_scope" in row)) out.external_scope = "";
     if (table === "accounts" && !("automation_paused" in row)) out.automation_paused = false;
     if (t.columns.has("id") && out.id === null) out.id = fakeUuid();
@@ -402,6 +410,7 @@ export class FakeSupabase implements DbClient {
       // immutability, locks and permission boundaries are tested with PostgreSQL.
       if (table === "routine_commands" && (patch.status !== undefined && patch.status !== r.status || patch.reply !== undefined && patch.reply !== r.reply))
         Object.assign(r, { notification_revision: Number(r.notification_revision ?? 0) + 1, notification_status: "pending", notification_checked_at: null });
+      if (table === "artifacts" && Object.entries(patch).some(([k, v]) => v !== r[k])) r.revision = Number(r.revision ?? 0) + 1;
       Object.assign(r, patch);
     }
     return rows;

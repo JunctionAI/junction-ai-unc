@@ -10,6 +10,7 @@ import type { Artifact } from "../types";
 const ACCT = "00000000-0000-4000-8000-00000000aaaa";
 const RUN = "00000000-0000-4000-8000-00000000bbbb";
 const artifact = (id: string, over: Partial<Artifact> = {}): Artifact => ({
+  revision: 0,
   id,
   accountId: ACCT,
   runId: RUN,
@@ -48,7 +49,7 @@ describe("artifacts on both stores", () => {
     expect((await store.listArtifacts(ACCT, { routineId: "D05-W02" })).map((a) => a.id)).toEqual([a2.id]);
     expect((await store.listArtifacts(ACCT, { runId: RUN, limit: 1 })).map((a) => a.id)).toEqual([a2.id]);
     const edited = await store.updateArtifact(a1.id, { status: "edited", editedBody: "mine" });
-    expect(edited).toEqual({ ...a1, status: "edited", editedBody: "mine" });
+    expect(edited).toEqual({ ...a1, revision: 1, status: "edited", editedBody: "mine" });
     await expect(store.updateArtifact(a1.id, { status: "approved" }, "draft")).rejects.toThrow(/changed from draft to edited/);
     expect((await store.getArtifact(a1.id))!.status).toBe("edited");
     expect((await store.listArtifacts(ACCT, { status: "edited" })).map((a) => a.id)).toEqual([a1.id]);

@@ -154,7 +154,19 @@ export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: Ou
   if (!adapter) return { status: "skipped", reason: "no_adapter" };
   if (!adapter.configured) return { status: "skipped", reason: "not_configured" };
   const queued = await enqueueOutbound(deps.db, link, kind, payload, opts);
-  const claim = await claimOutbound(deps.db, String(queued.id));
+  return deliverOutbound(deps, String(queued.id));
+}
+
+/** Resume a durable operation by ID. Never reselect destinations or re-enqueue it. */
+export async function deliverOutbound(deps: OutboundDeps, outboundId: string): Promise<SendOutcome> {
+  if (messagingDisabled(process.env)) return { status: "skipped", reason: "messaging_disabled" };
+  await deps.guard?.();
+  const original = await unwrap<Row | null>("channel.original", deps.db.from("outbound_messages").select("*").eq("id", outboundId).maybeSingle());
+  if (!original?.binding) throw new Error("Original outbound operation missing");
+  const adapter = deps.adapters[original.channel as Channel];
+  if (!adapter) return { status: "skipped", reason: "no_adapter" };
+  if (!adapter.configured) return { status: "skipped", reason: "not_configured" };
+  const claim = await claimOutbound(deps.db, outboundId);
   let row = claim.row;
   if (claim.claimed) {
     try {
@@ -173,7 +185,7 @@ export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: Ou
   const ledgerId = String(row.id);
   if (row.status === "sent") {
     try { await projectOutbound(deps.db, ledgerId); }
-    catch { deps.log?.("channels.thread_projection_pending", { accountId: link.accountId, ledgerId }); }
+    catch { deps.log?.("channels.thread_projection_pending", { accountId: original.account_id, ledgerId }); }
     return { status: "sent", ledgerId, externalMsgId: row.external_msg_id ? String(row.external_msg_id) : null };
   }
   if (row.status === "queued") return { status: "queued", ledgerId };

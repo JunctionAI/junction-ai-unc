@@ -39,6 +39,8 @@ No persistent DDL, app/worker deployment, provider/model request, live message, 
 
 ## Next work / honest boundaries
 
+**Subsequent source update:** [Batch 18 artifact context/delivery](ARTIFACT-DELIVERY-2026-09-05.md) addresses the artifact chain described below. It is verified in source/rollback tests, not deployed or live-phone acceptance.
+
 The command path is now covered in source and rollback tests; it is not production phone acceptance. A request already in flight cannot be recalled by a later revocation. Simultaneous multi-session PostgreSQL/load and real provider reconciliation remain release evidence.
 
 The next concrete work is artifact delivery. Inspection confirms three linked gaps: the route makes a fresh timestamp send reference, retries reselect today's destinations, and DraftCard labels queued as sent. Artifact views/listing also lack a captured account/generation envelope and can display archived run material. Fix the full chain: current-generation listing/decision/send binding, stable browser operation, a durable first-acceptance destination set, unchanged content/source verification, and honest queued/uncertain UI. Do not fix only the timestamp or only the wording and call delivery safe.

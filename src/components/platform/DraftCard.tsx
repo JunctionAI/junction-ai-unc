@@ -7,10 +7,11 @@
    Every action POSTs /api/artifacts/<id>; approve/hold/edit write a taste_event (+ a memory
    in accounts mode) so Unc learns what gets through. Amber only where a decision waits. */
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { ArtifactView } from "@/lib/artifacts/handlers";
 import { markdownToPlain, parseMarkdown, type Block, type InlineRun } from "@/lib/artifacts/markdown";
 import { CHANNEL_LABEL, isChannel } from "@/lib/channels/types";
+import { artifactHeaders, deliveryNotice } from "@/lib/artifacts/client";
 
 export type { ArtifactView };
 
@@ -131,7 +132,15 @@ export interface DraftCardProps {
 
 type Reply = { artifact?: ArtifactView; memory?: string | null; sent?: { channel: string; status: string }[]; error?: string };
 
-export default function DraftCard({ artifact: initial, defaultOpen = false, channels = [], onChange, onOpenRoutine, persisted = true }: DraftCardProps) {
+export default function DraftCard(props: DraftCardProps) {
+  const a = props.artifact;
+  return <BoundDraftCard key={`${a.accountId}:${a.contextGeneration}:${a.id}:${a.revision}`} {...props} />;
+}
+
+function BoundDraftCard({ artifact: initial, defaultOpen = false, channels = [], onChange, onOpenRoutine, persisted = true }: DraftCardProps) {
+  const alive = useRef(true);
+  const posting = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [a, setA] = useState(initial);
   const [open, setOpen] = useState(defaultOpen);
   const [editing, setEditing] = useState(false);
@@ -148,25 +157,31 @@ export default function DraftCard({ artifact: initial, defaultOpen = false, chan
   const plain = () => `${a.title}\n\n${markdownToPlain(body)}${a.items.length ? `\n\n${a.items.map((it, i) => `${i + 1}. ${it.title}\n${markdownToPlain(it.body)}`).join("\n\n")}` : ""}`;
 
   async function post(payload: Record<string, unknown>): Promise<Reply | null> {
+    if (posting.current || !alive.current) return null;
+    posting.current = true;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/artifacts/${encodeURIComponent(a.id)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      const res = await fetch(`/api/artifacts/${encodeURIComponent(a.id)}`, { method: "POST", headers: { "content-type": "application/json", ...artifactHeaders(a.accountId, a.contextGeneration) }, body: JSON.stringify({ ...payload, expectedRevision: a.revision ?? 0 }) });
       const data = (await res.json().catch(() => ({}))) as Reply;
+      if (!alive.current) return null;
       if (!res.ok) {
         setError(data.error ?? `couldn’t do that (${res.status})`);
         return null;
       }
       if (data.artifact) {
+        if (data.artifact.id !== a.id || data.artifact.accountId !== a.accountId || data.artifact.contextGeneration !== a.contextGeneration)
+          throw new Error("Draft context changed. Reload before continuing.");
         setA(data.artifact);
         onChange?.(data.artifact);
       }
       return data;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (alive.current) setError(e instanceof Error ? e.message : String(e));
       return null;
     } finally {
-      setBusy(false);
+      posting.current = false;
+      if (alive.current) setBusy(false);
     }
   }
 
@@ -203,7 +218,7 @@ export default function DraftCard({ artifact: initial, defaultOpen = false, chan
   };
   const send = async (channel: string) => {
     const r = await post({ action: "send", channel });
-    if (r?.sent) setNote(r.sent.some((s) => s.status === "sent" || s.status === "queued") ? `Sent to your ${CHANNEL_LABEL[channel as keyof typeof CHANNEL_LABEL] ?? channel}.` : `Couldn’t send it (${r.sent.map((s) => s.status).join(", ")}).`);
+    if (r?.sent) setNote(deliveryNotice(r.sent, CHANNEL_LABEL[channel as keyof typeof CHANNEL_LABEL] ?? channel));
   };
 
   const using = Array.isArray(a.meta.using) ? (a.meta.using as unknown[]).filter((u): u is string => typeof u === "string") : [];

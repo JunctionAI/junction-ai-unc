@@ -306,6 +306,8 @@ export interface ArtifactDraft {
 
 /** A stored artifact (table `artifacts`, migration 0013). */
 export interface Artifact extends ArtifactDraft {
+  /** Database-owned content/decision revision; legacy/demo defaults to zero. */
+  revision?: number;
   id: string;
   accountId: string;
   runId: string;

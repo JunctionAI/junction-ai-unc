@@ -209,8 +209,9 @@ export class MemoryStore implements Store {
 
   // ----- artifacts -----
   async putArtifact(artifact: Artifact) {
-    this.artifacts.set(artifact.id, clone(artifact));
-    return clone(artifact);
+    const saved = { ...clone(artifact), revision: 0 };
+    this.artifacts.set(artifact.id, saved);
+    return clone(saved);
   }
   async getArtifact(artifactId: string) {
     const a = this.artifacts.get(artifactId);
@@ -221,12 +222,17 @@ export class MemoryStore implements Store {
     if (!a) throw new Error(`artifact ${artifactId} not found`);
     if (expectedStatus && a.status !== expectedStatus) throw new Error(`artifact ${artifactId} changed from ${expectedStatus} to ${a.status}`);
     const next = { ...a, ...clone(patch) };
+    if (Object.entries(patch).some(([k, v]) => v !== a[k as keyof Artifact])) next.revision = (a.revision ?? 0) + 1;
     for (const k of Object.keys(patch) as (keyof typeof patch)[]) if (patch[k] === undefined) delete next[k];
     this.artifacts.set(artifactId, next);
     return clone(next);
   }
   async listArtifacts(accountId: string, opts: ListArtifactsOptions = {}) {
     let out = [...this.artifacts.values()].filter((a) => a.accountId === accountId);
+    if (opts.contextGeneration !== undefined) out = out.filter(a => {
+      const run = this.runs.get(a.runId);
+      return run?.accountId === accountId && (run.contextGeneration ?? 0) === opts.contextGeneration;
+    });
     if (opts.runId) out = out.filter((a) => a.runId === opts.runId);
     if (opts.routineId) out = out.filter((a) => a.routineId === opts.routineId);
     if (opts.status) out = out.filter((a) => a.status === opts.status);

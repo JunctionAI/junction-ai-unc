@@ -11,8 +11,15 @@ import { newId } from "../runtime/context";
 import type { Store } from "../runtime/store/interface";
 import type { Artifact, ArtifactStatus, Receipt, TasteAction } from "../runtime/types";
 import { firstLines } from "./markdown";
+import { assertRuntimeContext } from "../db/runtimeContext";
+import { contextMemoryDb } from "../db/contextGeneration";
+import { rowToArtifact, rowToReceipt } from "../runtime/store/supabase";
+import type { Row } from "../db/types";
 
 export interface ArtifactView {
+  accountId?: string;
+  contextGeneration?: number;
+  revision?: number;
   id: string;
   runId: string;
   routineId: string;
@@ -32,9 +39,12 @@ export interface ArtifactView {
 
 const catalogById = new Map(ALL_SYSTEMS.map((s) => [s.id, s]));
 
-export function artifactView(a: Artifact): ArtifactView {
+export function artifactView(a: Artifact, contextGeneration?: number): ArtifactView {
   const def = catalogById.get(a.routineId);
   return {
+    accountId: a.accountId,
+    contextGeneration,
+    revision: a.revision ?? 0,
     id: a.id,
     runId: a.runId,
     routineId: a.routineId,
@@ -54,6 +64,7 @@ export function artifactView(a: Artifact): ArtifactView {
 }
 
 export interface ArtifactsDeps {
+  contextGeneration?: number;
   store: Store;
   /** Service-role client for the memory; null = no memory (demo). */
   db?: DbClient | null;
@@ -63,19 +74,24 @@ export interface ArtifactsDeps {
 export const RECENT_ARTIFACTS = 12;
 
 export async function listArtifactsForAccount(deps: ArtifactsDeps, accountId: string, opts: { routineId?: string; limit?: number } = {}): Promise<ArtifactView[]> {
-  const rows = await deps.store.listArtifacts(accountId, { routineId: opts.routineId, limit: opts.limit ?? RECENT_ARTIFACTS });
-  return rows.map(artifactView);
+  const rows = await deps.store.listArtifacts(accountId, { contextGeneration: deps.contextGeneration, routineId: opts.routineId, limit: opts.limit ?? RECENT_ARTIFACTS });
+  return rows.map(a => artifactView(a, deps.contextGeneration));
 }
 
 export async function getArtifactForAccount(deps: ArtifactsDeps, accountId: string | null, artifactId: string): Promise<ArtifactView | null> {
   const a = await deps.store.getArtifact(artifactId);
   if (!a || (accountId && a.accountId !== accountId)) return null;
-  return artifactView(a);
+  if (deps.contextGeneration !== undefined) {
+    const run = await deps.store.getRun(a.runId);
+    if (!run || run.accountId !== accountId || (run.contextGeneration ?? 0) !== deps.contextGeneration) return null;
+  }
+  return artifactView(a, deps.contextGeneration);
 }
 
 export type ArtifactAction = "approve" | "hold" | "edit" | "why" | "use";
 
 export interface ArtifactDecision {
+  expectedRevision?: number;
   accountId: string | null;
   artifactId: string;
   action: ArtifactAction;
@@ -88,7 +104,7 @@ export interface ArtifactDecision {
 
 export class ArtifactError extends Error {
   constructor(
-    readonly code: "not_found" | "invalid" | "conflict",
+    readonly code: "not_found" | "invalid" | "conflict" | "unavailable",
     message: string,
   ) {
     super(message);
@@ -131,11 +147,39 @@ export function decisionMemoryText(a: Artifact, action: ArtifactAction, reason?:
 }
 
 export async function decideArtifact(deps: ArtifactsDeps, input: ArtifactDecision): Promise<{ artifact: ArtifactView; memory: string | null; receipt: Receipt }> {
+  input = Object.freeze({ ...input });
   const a = await deps.store.getArtifact(input.artifactId);
   if (!a || (input.accountId && a.accountId !== input.accountId)) throw new ArtifactError("not_found", `artifact ${input.artifactId} not found`);
   const now = (deps.now ?? (() => new Date()))().toISOString();
   const reason = (input.reason ?? "").replace(/\s+/g, " ").trim().slice(0, 600) || undefined;
   if (input.action === "edit" && !(input.editedBody ?? "").trim()) throw new ArtifactError("invalid", "editedBody is required for edit");
+
+  if (deps.db) {
+    if (deps.contextGeneration === undefined || !input.decidedBy || input.expectedRevision === undefined)
+      throw new ArtifactError("conflict", "Captured draft context and revision required. Reload this draft.");
+    const identity = { accountId: a.accountId, contextGeneration: deps.contextGeneration };
+    await assertRuntimeContext(deps.db, identity);
+    const result = await deps.db.rpc("decide_context_artifact", {
+      acct: a.accountId, generation: deps.contextGeneration, actor: input.decidedBy, artifact_id: a.id,
+      expected_revision: input.expectedRevision, decision: input.action, reason: reason ?? null,
+      edited_body: input.action === "edit" ? input.editedBody!.trim().slice(0, 12_000) : null,
+    });
+    if (result.error) throw new ArtifactError(result.error.code === "P0002" ? "not_found" : "conflict", result.error.message);
+    const data = result.data as { artifact: Row; receipt: Row };
+    const text = decisionMemoryText(a, input.action, reason);
+    let memory: string | null = null;
+    if (text) {
+      try {
+        await addMemory(contextMemoryDb(deps.db, a.accountId, deps.contextGeneration), {
+          accountId: a.accountId, kind: "decision", text, source: "receipt", sourceRef: `artifact:${a.id}:${input.action}`,
+          confidence: 0.9, importance: input.action === "hold" ? 4 : 3, tags: ["artifact", a.kind, a.routineId],
+        }, { now: deps.now });
+        memory = text;
+      } catch { /* Atomic decision/receipt stands; no rebased memory on reset. */ }
+    }
+    await assertRuntimeContext(deps.db, identity, { allowPaused: true });
+    return { artifact: artifactView(rowToArtifact(data.artifact), deps.contextGeneration), receipt: rowToReceipt(data.receipt), memory };
+  }
 
   const patch: Partial<Pick<Artifact, "status" | "editedBody">> = {};
   const status = STATUS_BY_ACTION[input.action];
@@ -191,15 +235,5 @@ export async function decideArtifact(deps: ArtifactsDeps, input: ArtifactDecisio
     createdAt: now,
   };
   await deps.store.appendReceipt(receipt);
-  let memory: string | null = null;
-  const text = decisionMemoryText(a, input.action, reason);
-  if (text && deps.db) {
-    try {
-      await addMemory(deps.db, { accountId: a.accountId, kind: "decision", text, source: "receipt", sourceRef: `artifact:${a.id}:${input.action}`, confidence: 0.9, importance: input.action === "hold" ? 4 : 3, tags: ["artifact", a.kind, a.routineId] }, { now: deps.now });
-      memory = text;
-    } catch {
-      memory = null; // the decision stands without the memory
-    }
-  }
-  return { artifact: artifactView(updated), memory, receipt };
+  return { artifact: artifactView(updated), memory: null, receipt };
 }

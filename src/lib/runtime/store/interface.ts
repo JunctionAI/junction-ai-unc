@@ -210,6 +210,7 @@ export interface RunSnapshot {
 }
 
 export interface ListArtifactsOptions {
+  contextGeneration?: number;
   runId?: string;
   routineId?: RoutineId;
   status?: ArtifactStatus;

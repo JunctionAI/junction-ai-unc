@@ -15,6 +15,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "action_ledger",
       "app_errors",
       "approvals",
+      "artifact_deliveries",
       "artifacts",
       "backend_leases",
       "benchmark_optins",
@@ -79,6 +80,8 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     // Schema-qualified ALTER must extend routine_runs, not invent a "public" table.
     expect(s.routine_runs.columns.has("context_generation")).toBe(true);
     expect(s).not.toHaveProperty("public");
+    expect(s.artifacts.columns.has("revision")).toBe(true);
+    expect(s.artifact_deliveries.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "context_generation", "user_id", "artifact_id", "artifact_revision", "channel"] }));
     expect([...s.chat_messages.columns]).toEqual(expect.arrayContaining(["thread", "position", "meta"])); // 0003
     expect(s.team_members.columns.has("position")).toBe(true);
     expect(s.approvals.columns.has("client_key")).toBe(true);

@@ -10,7 +10,17 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 17, 5 September 2026, approximately 07:22 UTC
+## Latest state — Batch 18, 5 September 2026, approximately 07:39 UTC
+
+**Verified source and rollback-only database progress; no production rollout.** The preceding Nguyen reply was a handoff/status turn, not backend progress. This continuation revalidated and pushed the pending command-delivery batch as `7503b1ddb567b9ea72548d6582ead3be0b4300dc`, then completed the artifact context/decision/delivery source slice.
+
+- Artifact lists bind the captured account/generation and actual parent run before limits. Database-owned revisions protect same-status edits; owner decisions, taste events and receipts commit atomically. Optional memory keeps the original generation.
+- One durable founder-requested copy per artifact version/channel captures its original owner-only destination set and payload. Reload/retry never select replacement links. Outbox claims check current source revision/hold/owner; original acceptance survives reset without entering new-context history.
+- UI requests carry account/generation/revision, reject stale/disposed callbacks and distinguish queued/uncertain/provider-accepted delivery. **193 files / 2,339 tests**, app/worker TypeScript, production build and diff checks pass; lint zero errors / 39 existing warnings. Hook fixtures do not constitute browser acceptance.
+- Four real PostgreSQL rollback canaries pass together. **07:37:33 UTC independent readback:** no synthetic accounts/staged artifact columns/table/commands/outbound rows; AVGAR generation 1, paused. Live advisors unchanged at six WARN/eight INFO. No persistent DDL, deployment, provider/model call, message, workflow change, plan or key creation.
+- [Exact semantics, migration dependency and remaining gates](ARTIFACT-DELIVERY-2026-09-05.md). Next: OAuth-init/callback identity, anonymous replies, remaining queued-source/delayed-writer protections and coordinated release. n8n authority/reader/admission/registration, actual phone/browser and second-client acceptance remain unproven. Full B01–B24 goal remains active.
+
+## Batch 17, 5 September 2026, approximately 07:22 UTC
 
 **Verified command-delivery source and rollback database progress; no production rollout.** The preceding goal turn was progress (Batch 16 pushed). This continuation started from a clean checkout and closed the captured command-notification path, while inspecting the artifact path's remaining acceptance gaps.
 

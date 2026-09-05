@@ -905,7 +905,7 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
 
         {/* ---- what I drafted (real artifacts; receipt previews as the fallback) ---- */}
         <div id={DRAFTED_ID}>
-          <Drafts accountMode paused={paused} initial={artifactsInitial ?? (isLive ? [] : undefined)} fallback={isLive ? drafts : []} refreshKey={draftsRefreshKey + (turnOnTick)} anyOn={anyOn} onOpenRoutine={V.openRoutineById} onNoDrafts={() => go("#setting-up-next")} slideFirst={slide} />
+          <Drafts accountMode accountId={V.accountId} contextGeneration={V.contextGeneration} paused={paused} initial={artifactsInitial ?? (isLive ? [] : undefined)} fallback={isLive ? drafts : []} refreshKey={draftsRefreshKey + (turnOnTick)} anyOn={anyOn} onOpenRoutine={V.openRoutineById} onNoDrafts={() => go("#setting-up-next")} slideFirst={slide} />
         </div>
       </section>
 

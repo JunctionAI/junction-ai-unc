@@ -9,6 +9,7 @@ import { readPlatforms, requiredPlatforms } from "@/lib/runtime/availability";
 import type { KpiContract, Node, RoutineSpec } from "@/lib/runtime/types";
 import RunNowPanel, { type RunNowProps } from "./RunNowPanel";
 import DraftCard, { type ArtifactView } from "./DraftCard";
+import { artifactHeaders } from "@/lib/artifacts/client";
 import RoutineInspector, { type ParamsView } from "./RoutineInspector";
 import { agoLabel, runStatusLabel, type RoutinesLive, type RoutineStateView } from "./useRoutinesState";
 
@@ -143,10 +144,10 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/artifacts?routineId=${encodeURIComponent(routineId)}&limit=1`, { cache: "no-store" });
-        const body = (await res.json().catch(() => ({}))) as { artifacts?: ArtifactView[]; channels?: string[]; fallback?: boolean };
+        const res = await fetch(`/api/artifacts?routineId=${encodeURIComponent(routineId)}&limit=1`, { cache: "no-store", headers: artifactHeaders(V.accountId, V.contextGeneration) });
+        const body = (await res.json().catch(() => ({}))) as { accountId?: string; contextGeneration?: number; artifacts?: ArtifactView[]; channels?: string[]; fallback?: boolean };
         if (cancelled) return;
-        if (res.ok && Array.isArray(body.artifacts)) {
+        if (res.ok && body.accountId === V.accountId && body.contextGeneration === V.contextGeneration && Array.isArray(body.artifacts)) {
           setLastArtifact(body.artifacts[0] ?? null);
           setChannels(Array.isArray(body.channels) ? body.channels : []);
         } else setLastArtifact(null);
@@ -157,7 +158,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
     return () => {
       cancelled = true;
     };
-  }, [accounts, routineId, tick]);
+  }, [accounts, routineId, tick, V.accountId, V.contextGeneration]);
 
   const refresh = () => {
     setTick((n) => n + 1);
@@ -350,7 +351,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
               Nothing drafted by this routine yet{minimum ? ` — it needs ${minimum.summary}.` : "."} Run it now and the draft lands here.
             </div>
           )}
-          {lastArtifact && <DraftCard artifact={lastArtifact} defaultOpen channels={channels} onChange={(a) => setLastArtifact(a)} />}
+          {lastArtifact && lastArtifact.accountId === V.accountId && lastArtifact.contextGeneration === V.contextGeneration && lastArtifact.routineId === routineId && <DraftCard artifact={lastArtifact} defaultOpen channels={channels} onChange={(a) => setLastArtifact(a)} />}
         </div>
       )}
 

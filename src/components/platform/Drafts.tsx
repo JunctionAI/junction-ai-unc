@@ -9,11 +9,14 @@ import type { ArtifactView } from "@/lib/artifacts/handlers";
 import type { DraftRow } from "@/lib/platform/approvals";
 import { HOME_COPY } from "@/lib/setup/home";
 import DraftCard from "./DraftCard";
+import { artifactHeaders } from "@/lib/artifacts/client";
 
 const sysTag: React.CSSProperties = { fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: "var(--cyan-link)", background: "var(--cyan-wash)", borderRadius: 5, padding: "2px 7px" };
 const smallMascot: React.CSSProperties = { width: 26, height: 28, objectFit: "contain", flex: "none" };
 
 export interface DraftsProps {
+  accountId?: string | null;
+  contextGeneration?: number;
   accountMode: boolean;
   /** Server render / tests: the listing in hand (null = none yet; undefined = fetch). */
   initial?: ArtifactView[] | null;
@@ -31,25 +34,32 @@ export interface DraftsProps {
   persisted?: boolean;
 }
 
-type Listing = { artifacts?: ArtifactView[]; channels?: string[]; fallback?: boolean; error?: string };
+type Listing = { accountId?: string; contextGeneration?: number; artifacts?: ArtifactView[]; channels?: string[]; fallback?: boolean; error?: string };
 
-export default function Drafts({ accountMode, initial, initialChannels = [], fallback = [], refreshKey = 0, anyOn, paused = false, onOpenRoutine, onNoDrafts, slideFirst = false, persisted = true }: DraftsProps) {
-  const [artifacts, setArtifacts] = useState<ArtifactView[] | null>(initial === undefined ? null : initial);
+export default function Drafts(props: DraftsProps) {
+  return <ContextDrafts key={`${props.accountId}:${props.contextGeneration}`} {...props} />;
+}
+
+function ContextDrafts({ accountId, contextGeneration, accountMode, initial, initialChannels = [], fallback = [], refreshKey = 0, anyOn, paused = false, onOpenRoutine, onNoDrafts, slideFirst = false, persisted = true }: DraftsProps) {
+  const [artifacts, setArtifacts] = useState<ArtifactView[] | null>(initial === undefined ? null : initial?.filter(a => !accountId || a.accountId === accountId && a.contextGeneration === contextGeneration) ?? null);
   const [channels, setChannels] = useState<string[]>(initialChannels);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(initial !== undefined);
 
   useEffect(() => {
-    if (!accountMode) return;
+    if (!accountMode || !accountId || contextGeneration === undefined) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/artifacts", { cache: "no-store" });
+        const res = await fetch("/api/artifacts", { cache: "no-store", headers: artifactHeaders(accountId, contextGeneration) });
         const data = (await res.json().catch(() => ({}))) as Listing;
         if (cancelled) return;
-        if (!res.ok || data.fallback || !Array.isArray(data.artifacts)) setError(data.error ?? (data.fallback ? null : `couldn’t load drafts (${res.status})`));
+        if (!res.ok || data.accountId !== accountId || data.contextGeneration !== contextGeneration || data.fallback || !Array.isArray(data.artifacts)) {
+          setArtifacts([]); setChannels([]);
+          setError(data.error ?? `couldn’t load drafts for this context (${res.status})`);
+        }
         else {
-          setArtifacts(data.artifacts);
+          setArtifacts(data.artifacts.filter(a => a.accountId === accountId && a.contextGeneration === contextGeneration));
           setChannels(Array.isArray(data.channels) ? data.channels : []);
           setError(null);
         }
@@ -62,7 +72,7 @@ export default function Drafts({ accountMode, initial, initialChannels = [], fal
     return () => {
       cancelled = true;
     };
-  }, [accountMode, refreshKey]);
+  }, [accountMode, accountId, contextGeneration, refreshKey]);
 
   const list = artifacts ?? [];
   /* The receipt previews are real rows already in hand: show them whenever no artifact is. */

@@ -12,6 +12,8 @@ import { FakeProducer, SAMPLE_ARTIFACT } from "../../runtime/__tests__/helpers";
 import { setProducerForTests } from "../../../worker/service";
 import { sign } from "../signing";
 import { decideArtifact, decisionMemoryText } from "../handlers";
+import { installArtifactFixture } from "./deliveryFixture";
+import { SupabaseStore } from "../../runtime/store/supabase";
 import { FakeSupabase } from "../../db/__tests__/fakeSupabase";
 import { listMemories } from "../../brain/memory";
 
@@ -93,8 +95,13 @@ describe("GET/POST /api/artifacts/<id>", () => {
   it("decideArtifact writes the decision memory when a database is in hand", async () => {
     const run = await runOne();
     const db = new FakeSupabase();
+    installArtifactFixture(db);
     db.seed("accounts", [{ id: "demo", name: "Demo", currency: "NZD" }]);
-    const out = await decideArtifact({ store: getStore(), db }, { accountId: null, artifactId: run.artifact.id, action: "hold", reason: "wrong tone" });
+    db.seed("account_members", [{ account_id: "demo", user_id: "owner", role: "owner" }]);
+    db.seed("routine_runs", [{ id: run.runId, account_id: "demo", context_generation: 0 }]);
+    const store = new SupabaseStore(db);
+    await store.putArtifact((await getStore().getArtifact(run.artifact.id))!);
+    const out = await decideArtifact({ store, db, contextGeneration: 0 }, { accountId: "demo", decidedBy: "owner", expectedRevision: 0, artifactId: run.artifact.id, action: "hold", reason: "wrong tone" });
     expect(out.memory).toBe("Held a post set from Founder content engine (“3 founder posts: why we ship from Auckland”): wrong tone.");
     const mem = await listMemories(db, "demo");
     expect(mem).toHaveLength(1);
