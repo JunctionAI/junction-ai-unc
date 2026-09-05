@@ -9,6 +9,8 @@ const { MemoryStore } = require('/app/dist/worker/lib/runtime/store/memory.js');
 const { SupabaseStore } = require('/app/dist/worker/lib/runtime/store/supabase.js');
 const { runDatasetSyncTick, scheduledDatasetsReady, inspectAccountDatasets } = require('/app/dist/worker/worker/datasets.js');
 const { WorkerConnectorReader, DEFAULT_TOTAL_READ_TIMEOUT_MS } = require('/app/dist/worker/worker/providers/connectorReader.js');
+const { readCampaignHistory } = require('/app/dist/worker/worker/readers/klaviyoCampaigns.js');
+const { storedDataEnabled, datasetSyncEnabled } = require('/app/dist/worker/lib/data/datasets.js');
 
 (async () => {
   const expected = process.env.EXPECTED_UNC_BUILD_SHA;
@@ -18,7 +20,7 @@ const { WorkerConnectorReader, DEFAULT_TOTAL_READ_TIMEOUT_MS } = require('/app/d
   assert.equal(process.env.NEXT_PUBLIC_SUPABASE_URL, origin);
   for (const key of ['UNC_COMMANDS_ENABLED', 'UNC_MESSAGING_ENABLED', 'LIVE_MODE_ENABLED', 'TNZ_SMS_ENABLED', 'APPLE_MESSAGES_ENABLED'])
     assert.equal(process.env[key], 'false');
-  for (const key of ['UNC_DATA_SYNC_ENABLED', 'UNC_DATA_SYNC_ACCOUNTS', 'UNC_STORED_DATA_ACCOUNTS'])
+  for (const key of ['UNC_DATA_SYNC_ENABLED', 'UNC_DATA_SYNC_ACCOUNTS', 'UNC_STORED_DATA_ACCOUNTS', 'UNC_KLAVIYO_CAMPAIGN_SYNC_ACCOUNTS', 'UNC_KLAVIYO_CAMPAIGN_STORED_ACCOUNTS'])
     assert.ok(!process.env[key] || process.env[key] === 'false');
   const accountId = 'aa5cfc84-2569-4c99-9b40-67003ae55eda';
   let databaseGets = 0, forbiddenAttempts = 0;
@@ -55,6 +57,18 @@ const { WorkerConnectorReader, DEFAULT_TOTAL_READ_TIMEOUT_MS } = require('/app/d
   await new Promise(resolve => setTimeout(resolve, 250));
   assert.equal(bodyCompleted, true);
   assert.equal(syntheticFetches, 1);
+  const campaignQuery = { resource: 'campaigns', window: '90d' };
+  const legacy = { UNC_STORED_DATA_ACCOUNTS: 'synthetic', UNC_DATA_SYNC_ACCOUNTS: 'synthetic', UNC_DATA_SYNC_ENABLED: 'true' };
+  assert.equal(storedDataEnabled('synthetic', 'klaviyo', legacy, campaignQuery), false);
+  assert.equal(datasetSyncEnabled('synthetic', 'klaviyo', legacy, campaignQuery), false);
+  let syntheticCampaignFetches = 0;
+  const campaign = await readCampaignHistory(campaignQuery, {}, { now: () => new Date('2026-09-06T00:00:00Z'),
+    fetch: async () => { syntheticCampaignFetches++; return Response.json({ data: [{ id: 'synthetic', attributes: {
+      name: 'Synthetic campaign', status: 'Sent', send_time: '2026-09-05T00:00:00Z', revenue: 999,
+    } }], links: { next: null } }); } });
+  assert.equal(campaign.ok, true); assert.equal(campaign.metrics.revenue, null); assert.equal(campaign.rows[0].subject, null);
+  assert.equal(campaign.metrics.campaign_history_contract, 'unc.klaviyo-campaign-history.v1');
+  assert.equal(syntheticCampaignFetches, 1);
   const db = createClient(origin, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: async (input, init) => {
@@ -82,6 +96,7 @@ const { WorkerConnectorReader, DEFAULT_TOTAL_READ_TIMEOUT_MS } = require('/app/d
     actualPausedAccountExcluded: true, actualRuntimeSyncOff: true, scopedReadinessRefuses: true,
     syntheticMissingConnectionIsolation: true,
     syntheticWholeReadDeadline: true,
+    syntheticCampaignMetadata: true,
     queryReadiness: report.queries.map(q => ({ availability: q.availability, maxAgeMs: q.maxAgeMs })),
     providerCalls: 0, credentialResolutions: 0, writes: 0, liveScheduleAcceptance: false }));
 })().catch(() => { console.error('Read-only worker schedule check failed; details suppressed'); process.exitCode = 1; });

@@ -203,7 +203,7 @@ export async function readForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, { o
 
   try {
     await assertProxyRuntimeContext(deps, run);
-    const stored = storedDataEnabled(claims.accountId, platform, deps.dataEnv ?? {});
+    const stored = storedDataEnabled(claims.accountId, platform, deps.dataEnv ?? {}, query);
     const creds = stored ? null : await deps.credentials.get(claims.accountId, platform);
     if (!stored && !creds) {
       const secretStore = deps.credentialsKind === "none";

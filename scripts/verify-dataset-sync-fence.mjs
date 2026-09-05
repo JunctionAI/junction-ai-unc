@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const dependencyDir = process.argv[2];
+const platform = process.argv[3] ?? 'meta_ads';
+if (!['meta_ads', 'klaviyo'].includes(platform)) throw Error('Unsupported test platform');
 if (!dependencyDir?.startsWith('/tmp/unc-manual-pg.')) throw Error('Explicit isolated PostgreSQL dependency directory required');
 const dependencies = createRequire(join(dependencyDir, 'package.json'));
 const { default: EmbeddedPostgres } = await import(dependencies.resolve('embedded-postgres'));
@@ -39,8 +41,9 @@ try {
     grant select,insert,update,delete on public.accounts,public.connectors to service_role;`);
   await admin.query(await migration('20260905021314_backend_data_foundation.sql'));
   await admin.query(await migration('20260905165333_dataset_sync_commit_fence.sql'));
+  await admin.query(await migration('20260905180145_klaviyo_campaign_dataset_completion.sql'));
   await admin.query('insert into accounts values($1,1,false)', [account]);
-  await admin.query("insert into connectors values($1,$2,'meta_ads','act_SYNTHETIC','connected')", [connector, account]);
+  await admin.query("insert into connectors values($1,$2,$3,'act_SYNTHETIC','connected')", [connector, account, platform]);
   const acl = (await admin.query(`select prosecdef,proconfig,
     has_function_privilege('anon',oid,'execute') anon,
     has_function_privilege('authenticated',oid,'execute') member,
@@ -67,9 +70,10 @@ try {
     const holder = randomUUID(), now = new Date().toISOString();
     assert.equal((await a.query('select claim_backend_lease($1,$2,120) ok', [key, holder])).rows[0].ok, true);
     return { holder, snapshot: { id: randomUUID(), account_id: account, connector_id: connector,
-      platform: 'meta_ads', external_ref: 'act_SYNTHETIC', query_hash: hash, query: { resource: 'insights' },
+      platform, external_ref: 'act_SYNTHETIC', query_hash: hash, query: { resource: platform === 'klaviyo' ? 'campaigns' : 'insights' },
       source_fetched_at: now, stored_at: '2099-01-01T00:00:00Z',
-      result: { rows: [{ spend: 17 }], metrics: { spend: 17 }, provenance: 'ok', fetchedAt: now } } };
+      result: { rows: platform === 'klaviyo' ? [{ id: 'synthetic', name: 'Campaign', subject: null }] : [{ spend: 17 }],
+        metrics: platform === 'klaviyo' ? { campaign_history_contract: 'unc.klaviyo-campaign-history.v1', revenue: null, sends: null, clicks: null } : { spend: 17 }, provenance: 'ok', fetchedAt: now } } };
   }
   let f = await fixture();
   const stored = await commit(a, f.snapshot, f.holder);
@@ -177,7 +181,22 @@ try {
   assert(await commit(b, f.snapshot, successor));
   checks.push('waiter cannot accept or delete successor lease; successor still completes');
 
-  console.log(JSON.stringify({ status: 'PASS', checks, total: checks.length, fixture: 'isolated synthetic PostgreSQL',
+  if (platform === 'klaviyo') {
+    for (const [name, change] of [
+      ['unsupported Klaviyo resource', s => { s.query.resource = 'flows'; }],
+      ['uncertified campaign normalization', s => { delete s.result.metrics.campaign_history_contract; }],
+      ['fabricated campaign revenue', s => { s.result.metrics.revenue = 0; }],
+      ['unsupported campaign tag', s => { s.query.filter = { tag: 'winback' }; }],
+      ['unsupported campaign aggregation', s => { s.query.groupBy = ['week']; }],
+    ]) {
+      f = await fixture(); change(f.snapshot);
+      await assert.rejects(commit(a, f.snapshot, f.holder));
+      assert.equal(await count(), 0);
+      checks.push(name + ' rejected without insertion');
+    }
+  }
+
+  console.log(JSON.stringify({ status: 'PASS', platform, checks, total: checks.length, fixture: 'isolated synthetic PostgreSQL',
     directory, remoteDatabaseCalls: 0, providerCalls: 0, n8nCalls: 0 }, null, 2));
 } finally {
   for (const c of clients) { await c.query('rollback').catch(() => {}); await c.end().catch(() => {}); }

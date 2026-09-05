@@ -48,7 +48,7 @@ export async function inspectDatasetReadiness(store: DatasetStore, accountId: st
     const visible = availability === "identity_mismatch" ? null : snapshot;
     queries.push({ platform, queryHash, routineIds: [...routineIds].sort(), availability,
       snapshotId: visible?.id ?? null, sourceFetchedAt: visible?.result.fetchedAt ?? null, storedAt: visible?.storedAt ?? null,
-      readerEnabled: storedDataEnabled(accountId, platform, env), syncAdmitted: datasetSyncEnabled(accountId, platform, env), maxAgeMs });
+      readerEnabled: storedDataEnabled(accountId, platform, env, requirement.query), syncAdmitted: datasetSyncEnabled(accountId, platform, env, requirement.query), maxAgeMs });
   }
   const checked = now();
   if (started.toISOString().slice(0, 10) !== checked.toISOString().slice(0, 10)) throw new Error("dataset inspection reporting day changed; repeat inspection");

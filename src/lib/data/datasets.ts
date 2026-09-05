@@ -3,12 +3,14 @@ import { unwrap, type DbClient } from "../db/types";
 import { getConnector } from "../connectors/store";
 import { claimLease, releaseLease } from "../connectors/lease";
 import { META_BUDGET_CONTRACT } from "./metaBudgets";
+import { KLAVIYO_CAMPAIGN_CONTRACT, campaignHistoryQueryProblem } from "./klaviyoCampaigns";
 import type { ConnectorReader, Platform, ReadQuery, ReadResult, RunContext } from "../runtime/types";
 
 export const DATASET_MAX_AGE_MS = 60 * 60_000;
 export const DATASET_SYNC_INTERVAL_MS = 15 * 60_000;
 
 export function datasetNormalizationCurrent(platform: Platform, query: ReadQuery, result: ReadResult): boolean {
+  if (platform === "klaviyo" && query.resource === "campaigns") return !campaignHistoryQueryProblem(query) && result.metrics.campaign_history_contract === KLAVIYO_CAMPAIGN_CONTRACT;
   return platform !== "meta_ads" || !["adsets", "campaigns"].includes(query.resource) || result.metrics.budget_metric_contract === META_BUDGET_CONTRACT;
 }
 
@@ -20,17 +22,25 @@ function stable(value: unknown): unknown {
 
 /** Exact query/UTC reporting day: never substitute a different grain, filter or window. */
 export function datasetQueryHash(query: ReadQuery, now: Date, platform: Platform = "meta_ads"): string {
-  const normalization = platform === "meta_ads" && ["adsets", "campaigns"].includes(query.resource) ? META_BUDGET_CONTRACT : undefined;
+  const normalization = platform === "meta_ads" && ["adsets", "campaigns"].includes(query.resource) ? META_BUDGET_CONTRACT
+    : platform === "klaviyo" && query.resource === "campaigns" ? KLAVIYO_CAMPAIGN_CONTRACT : undefined;
   return createHash("sha256").update(JSON.stringify(stable({ version: 1, normalization, day: now.toISOString().slice(0, 10), query: { ...query, ...(query.fields ? { fields: [...new Set(query.fields)].sort() } : {}) } }))).digest("hex");
 }
 
-export function storedDataEnabled(accountId: string, platform: Platform, env: Record<string, string | undefined>): boolean {
+export function supportedDatasetQuery(platform: Platform, query: ReadQuery): boolean {
+  return platform === "meta_ads" || (platform === "klaviyo" && !campaignHistoryQueryProblem(query));
+}
+const listed = (accountId: string, value: string | undefined) => !!accountId && (value ?? "").split(",").map(x => x.trim()).filter(Boolean).includes(accountId);
+
+export function storedDataEnabled(accountId: string, platform: Platform, env: Record<string, string | undefined>, query?: ReadQuery): boolean {
+  if (platform === "klaviyo") return !!query && supportedDatasetQuery(platform, query) && listed(accountId, env.UNC_KLAVIYO_CAMPAIGN_STORED_ACCOUNTS);
   return platform === "meta_ads" && (env.UNC_STORED_DATA_ACCOUNTS ?? "").split(",").map(x => x.trim()).filter(Boolean).includes(accountId);
 }
 
 /** Producer admission is independent of reader cutover: warm and verify first.
  * The reader allowlist must never implicitly authorize scheduled provider calls. */
-export function datasetSyncEnabled(accountId: string, platform: Platform, env: Record<string, string | undefined>): boolean {
+export function datasetSyncEnabled(accountId: string, platform: Platform, env: Record<string, string | undefined>, query?: ReadQuery): boolean {
+  if (platform === "klaviyo") return env.UNC_DATA_SYNC_ENABLED === "true" && !!query && supportedDatasetQuery(platform, query) && listed(accountId, env.UNC_KLAVIYO_CAMPAIGN_SYNC_ACCOUNTS);
   return env.UNC_DATA_SYNC_ENABLED === "true" && platform === "meta_ads" &&
     (env.UNC_DATA_SYNC_ACCOUNTS ?? "").split(",").map(x => x.trim()).filter(Boolean).includes(accountId);
 }
@@ -118,7 +128,7 @@ export class StoredDatasetReader implements ConnectorReader {
 export function accountDataReader(direct: ConnectorReader, db: DbClient | null, env: Record<string, string | undefined>, now = () => new Date()): ConnectorReader {
   const stored = db ? new StoredDatasetReader(new DbDatasetStore(db), now) : null;
   return { read: (platform, query, ctx) => {
-    if (!storedDataEnabled(ctx.account.accountId, platform, env)) return direct.read(platform, query, ctx);
+    if (!storedDataEnabled(ctx.account.accountId, platform, env, query)) return direct.read(platform, query, ctx);
     if (!stored) throw new Error("stored dataset database is not configured");
     return stored.read(platform, query, ctx);
   } };

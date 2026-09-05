@@ -1,6 +1,6 @@
 import { CATALOG_SPECS } from "../lib/runtime/catalog-specs";
 import { effectiveSpec } from "../lib/runtime/versioning";
-import { DATASET_SYNC_INTERVAL_MS, DatasetConnectionUnavailableError, DbDatasetStore, datasetQueryHash, datasetSyncEnabled, storedDataEnabled, syncDataset } from "../lib/data/datasets";
+import { DATASET_SYNC_INTERVAL_MS, DatasetConnectionUnavailableError, DbDatasetStore, datasetQueryHash, datasetSyncEnabled, storedDataEnabled, supportedDatasetQuery, syncDataset } from "../lib/data/datasets";
 import { inspectDatasetReadiness, type DatasetRequirement } from "../lib/data/readiness";
 import { assertSameRuntimeContext } from "../lib/runtime/contextFence";
 import type { ReadNode, RoutineSpec, RunContext } from "../lib/runtime/types";
@@ -10,7 +10,7 @@ import type { ServiceDeps } from "./service";
 
 /** Inspect enabled demand, or explicitly proposed routines, without enabling them.
  * This remains an internal operator read, never a grant or a scheduler receipt. */
-export async function inspectAccountDatasets(deps: ServiceDeps, accountId: string, proposedRoutineIds?: string[], env: Record<string, string | undefined> = process.env, options: { requiredOnly?: boolean } = {}) {
+export async function inspectAccountDatasets(deps: ServiceDeps, accountId: string, proposedRoutineIds?: string[], env: Record<string, string | undefined> = process.env, options: { requiredOnly?: boolean; storedOnly?: boolean } = {}) {
   if (!deps.db) throw new Error("dataset inspection database unavailable");
   const account = await deps.accounts.getAccount(accountId);
   if (!account) throw new Error("dataset inspection account unavailable");
@@ -22,7 +22,8 @@ export async function inspectAccountDatasets(deps: ServiceDeps, accountId: strin
     if (!proposedRoutineIds && !state?.enabled) continue;
     const spec = state ? effectiveSpec(state, catalog) : catalog;
     for (const node of spec.nodes) {
-      if (node.kind === "read" && node.source === "meta_ads" && !(options.requiredOnly && node.optional))
+      if (node.kind === "read" && supportedDatasetQuery(node.source, node.query) && !(options.requiredOnly && node.optional) &&
+          !(options.storedOnly && !storedDataEnabled(accountId, node.source, env, node.query)))
         requirements.push({ platform: node.source, query: node.query, routineId: spec.id,
           ...(node.freshnessMinutes !== undefined ? { maxAgeMs: node.freshnessMinutes * 60_000 } : {}) });
     }
@@ -32,15 +33,15 @@ export async function inspectAccountDatasets(deps: ServiceDeps, accountId: strin
   if (!after || !!after.automationPaused !== !!account.automationPaused) throw new Error("dataset inspection account changed");
   assertSameRuntimeContext(account.account, after.account);
   return { ...report, accountPaused: !!account.automationPaused, contextGeneration: account.account.contextGeneration ?? 0,
-    selection: proposedRoutineIds ? "proposed" : "enabled", coverage: "meta_ads_only" as const };
+    selection: proposedRoutineIds ? "proposed" : "enabled", coverage: "meta_ads_and_klaviyo_campaigns" as const };
 }
 
 /** A missing snapshot is a dependency wait, not a served cron slot. This only
  * inspects opted-in stored reads; optional reads retain their existing semantics.
  * The actual run still rechecks context, switches and source freshness. */
 export async function scheduledDatasetsReady(deps: ServiceDeps, accountId: string, routineId: string, env: Record<string, string | undefined> = process.env): Promise<boolean> {
-  if (!storedDataEnabled(accountId, "meta_ads", env)) return true;
-  const report = await inspectAccountDatasets(deps, accountId, [routineId], env, { requiredOnly: true });
+  if (!storedDataEnabled(accountId, "meta_ads", env) && !storedDataEnabled(accountId, "klaviyo", env, { resource: "campaigns" })) return true;
+  const report = await inspectAccountDatasets(deps, accountId, [routineId], env, { requiredOnly: true, storedOnly: true });
   return !report.accountPaused && (report.queries.length === 0 || report.ready);
 }
 
@@ -51,23 +52,26 @@ export async function runDatasetSyncTick(deps: ServiceDeps, env: Record<string, 
   if (env.UNC_DATA_SYNC_ENABLED !== "true" || !deps.db) return report;
   const now = deps.now ?? (() => new Date());
   const direct = new WorkerConnectorReader({ credentials: deps.credentials ?? defaultCredentialProvider(env), now, fetch: deps.fetch, log: deps.log });
-  accounts: for (const acct of await deps.accounts.listAccounts()) {
-    if (acct.automationPaused || !datasetSyncEnabled(acct.account.accountId, "meta_ads", env)) continue;
+  for (const acct of await deps.accounts.listAccounts()) {
+    if (acct.automationPaused || (!datasetSyncEnabled(acct.account.accountId, "meta_ads", env) &&
+        !datasetSyncEnabled(acct.account.accountId, "klaviyo", env, { resource: "campaigns" }))) continue;
     const demand = new Map<string, { node: ReadNode; spec: RoutineSpec; refreshAfterMs: number }>();
     for (const catalog of CATALOG_SPECS) {
       const state = await deps.store.getRoutineState(acct.account.accountId, catalog.id);
       if (!state?.enabled) continue;
       const spec = effectiveSpec(state, catalog);
       for (const node of spec.nodes) {
-        if (node.kind !== "read" || node.source !== "meta_ads") continue;
-        const key = datasetQueryHash(node.query, now(), node.source);
+        if (node.kind !== "read" || !datasetSyncEnabled(acct.account.accountId, node.source, env, node.query)) continue;
+        const key = `${node.source}:${datasetQueryHash(node.query, now(), node.source)}`;
         const refreshAfterMs = Math.min(DATASET_SYNC_INTERVAL_MS, (node.freshnessMinutes ?? 15) * 60_000);
         const existing = demand.get(key);
         if (existing) existing.refreshAfterMs = Math.min(existing.refreshAfterMs, refreshAfterMs);
         else demand.set(key, { node, spec, refreshAfterMs });
       }
     }
+    const unavailablePlatforms = new Set<string>();
     for (const [key, { node, spec, refreshAfterMs }] of demand) {
+      if (unavailablePlatforms.has(node.source)) continue;
       const ctx: RunContext = { runId: `dataset-sync:${key}`, routineId: spec.id, version: spec.version, mode: "dry_run",
         startedAt: now().toISOString(), account: acct.account, caps: { currency: acct.account.currency, perDay: 0, perMonth: 0 },
         triggeredBy: "schedule", vars: acct.vars ?? {}, inputs: {}, reads: {}, checks: {} };
@@ -80,11 +84,11 @@ export async function runDatasetSyncTick(deps: ServiceDeps, env: Record<string, 
       } catch (error) {
         report.failed++;
         if (error instanceof DatasetConnectionUnavailableError) {
-          // No credential, lease or provider call occurred. All Meta queries on
-          // this account share that unavailable connection. Do not let its setup
-          // block other admitted clients or borrow another client's connection.
-          deps.log?.warn("dataset.connection_unavailable", { accountId: acct.account.accountId, platform: "meta_ads" });
-          continue accounts;
+          // No credential/lease/provider call occurred. Skip this connection,
+          // not healthy platforms on the same client or other admitted clients.
+          unavailablePlatforms.add(node.source);
+          deps.log?.warn("dataset.connection_unavailable", { accountId: acct.account.accountId, platform: node.source });
+          continue;
         }
         deps.log?.warn("dataset.sync_failed", { accountId: acct.account.accountId, queryHash: key, routineId: spec.id });
         // Later queries can still progress; provider calls remain bounded to one failure.

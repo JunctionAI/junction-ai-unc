@@ -21,6 +21,7 @@ import type { ReadQuery } from "../../lib/runtime/types";
 import type { PlatformCredential } from "../credentials";
 import { fetchJson, num, round2, sum, windowStartIso } from "./http";
 import { fail, ok, type Metrics, type ReaderOptions, type ReaderResult, type Row } from "./types";
+import { readCampaignHistory } from "./klaviyoCampaigns";
 
 export const KLAVIYO_REVISION = "2025-07-15";
 const BASE = "https://a.klaviyo.com/api";
@@ -305,6 +306,7 @@ export async function read(query: ReadQuery, creds: PlatformCredential, opts: Re
     return ok(PLATFORM, rows, klaviyoMetrics(query.resource, rows), now().toISOString(), "fixture", "fixture rows; no request made");
   }
   if (creds.kind !== "klaviyo") return fail(`klaviyo reader was given ${creds.kind} credentials`);
+  if (query.resource === "campaigns") return readCampaignHistory(query, klaviyoHeaders(creds.apiKey), opts);
   if (query.resource === "metrics") return readMetrics(query, creds.apiKey, now(), opts);
   const shaped = klaviyoRequest(query, creds.apiKey, now());
   if ("error" in shaped) return fail(shaped.error);

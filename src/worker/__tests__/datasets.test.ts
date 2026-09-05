@@ -75,7 +75,7 @@ describe("bounded dataset background job", () => {
 describe("account dataset inspection", () => {
   it("does not make all-off accounts look ready", async () => {
     const d = deps();
-    expect(await inspectAccountDatasets(d, "demo", undefined, env)).toMatchObject({ ready: false, queries: [], selection: "enabled", coverage: "meta_ads_only" });
+    expect(await inspectAccountDatasets(d, "demo", undefined, env)).toMatchObject({ ready: false, queries: [], selection: "enabled", coverage: "meta_ads_and_klaviyo_campaigns" });
     expect(syncDataset).not.toHaveBeenCalled();
   });
   it("inspects proposed Meta demand while paused without changing any switch", async () => {
