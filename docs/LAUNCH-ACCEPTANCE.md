@@ -6,6 +6,15 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
+**Batch 66 overlay:** [plain-language customer acceptance](integration/KEYWORD-NATURAL-LANGUAGE-ACCEPTANCE-2026-09-06.md)
+passes the signed-in US request → ordinary command worker → verified execution 84
+→ automatic conversation completion → saved draft/receipt reload → switch-off
+refusal journey. One new provider task, eight total saved results; shared-dispatch
+duplicate returned the original ID. Lost-response HTTP recovery, useful page
+recommendations, other lanes/channels/clients and full launch remain incomplete.
+Temporary test release was restored; AVGAR paused, zero enabled routines, commands
+and all outward actions off. Next is the Codex-owned calendar receiver/binding.
+
 **Batch 65 overlay:** [corrected-revision live acceptance](integration/KEYWORD-REVIEWED-LIVE-PILOT-2026-09-06.md)
 passes actual US/NZ/AU operator round trips (#81–83), independent saved-execution
 versus artifact/receipt comparison, and customer UI US market save. Seven total

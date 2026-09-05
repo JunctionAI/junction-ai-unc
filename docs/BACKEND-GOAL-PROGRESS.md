@@ -13,7 +13,28 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 65, 6 September NZ / 5 September UTC
+## Latest state — Batch 66, 6 September NZ / 5 September UTC
+
+**Plain-language customer keyword request now has live success and switch-off
+proof.** [Authority, release, original IDs and readback](integration/KEYWORD-NATURAL-LANGUAGE-ACCEPTANCE-2026-09-06.md).
+The signed-in Ask request created exactly one new command/run, execution **84**,
+and a verified US artifact/five receipts on the frozen reviewed revision. The
+ordinary worker tick completed it in about 47 seconds from enqueue; conversation
+completion appeared automatically. Shared-dispatch replay did not reclassify or
+enqueue. After the actual customer switch-off, the same plain-language request
+was refused without another run. Conversation, result and receipts survived full
+reload. This does not prove lost-HTTP-response recovery or all markets/channels.
+
+Temporary same-code app/config release was restored to `dpl_2nmd4t7GiyKmbRubE7MEzbLv4Xef`;
+worker image/source remain `aa3fba4`, direct machine config restored commands false
+and scopes empty. AVGAR paused, zero enabled routines/unresolved permits, eight
+done runs/artifacts, 40 receipts, two total commands. No Nguyen workflow/credential
+change or outward action. This turn is **progress**, following a contractor-advice
+turn with no backend progress. Next: live calendar credential/receiver integration
+and remaining delivered lanes, while durable customer recovery and useful-output
+quality remain open. Full B01–B24/all-client/launch objective unchanged.
+
+## Previous state — Batch 65, 6 September NZ / 5 September UTC
 
 **Corrected keyword revision has real US/NZ/AU round trips and a saved customer
 market.** [Exact execution/result/authority evidence](integration/KEYWORD-REVIEWED-LIVE-PILOT-2026-09-06.md).
