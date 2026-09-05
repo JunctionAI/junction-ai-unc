@@ -10,7 +10,19 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 13, 5 September 2026, approximately 06:10 UTC
+## Latest state — Batch 14, 5 September 2026, approximately 06:34 UTC
+
+**Live integration-configuration progress; full goal remains active.** Verified Vercel's existing signing root against the live authority endpoint, provisioned that same root and canonical data/receiver URLs to the worker, and read back a matching HMAC challenge without exposing secrets. Configured the URLs in Vercel Production and redeployed the existing production deployment, not the dirty source.
+
+- The first Vercel configuration redeploy exposed a dropped commit fingerprint (`sha:null`). Corrective deployment `dpl_4zqqARcoMhiUZCagcLusCJvM6cHZ` was built from a clean detached checkout of exact source `00fc57cfd07b175bc0d0c452c94f32ecd2d1e735`, with per-deployment build/runtime SHA supplied. READY / 43.9-second build; candidate health reports correct SHA, DB healthy/worker fresh, account-state 401 and reserved Apple 503. Fly release 14 retains the same machine/image. Commands/messaging/live/SMS/Apple remain off; execution reader remains disabled. No project-wide stale SHA override was added.
+- Actual worker environment inspection found the receiver token present but only **21 characters**, which the existing bridge correctly refuses. Its equality with n8n/Vercel is unverified. No receiver credential was replaced or printed. Reconcile the existing intended value securely before deciding on rotation.
+- Fresh n8n UI inspection confirms trial / nine days left / no API settings. Owner-visible plans are Starter €24/month and Pro €60/month, monthly billing before tax. No plan selected/key created. Non-Enterprise API keys are broad, so commercial/key-scope approval remains explicit.
+- **81 focused tests / three files pass**, including short/whitespace receiver denial; helper syntax/diff checks pass. Production signature acceptance plus nonexistent-run refusal (404), altered-signature refusal (401), and worker signing readback pass. No live n8n/provider execution was made.
+- SQL at 06:27:26 UTC: AVGAR generation 1, revision 15, paused; enabled routines/runs/registrations all zero. Post-restart health is healthy/fresh. New-deployment error/fatal scan to 06:29:10 returned no entries; ongoing alert delivery remains unverified.
+- Corrected candidate promoted; canonical-origin check at **06:34:35 UTC** proves the restored app/worker SHA match, signing match, healthy database/fresh worker and disabled action flags. Corrected-deployment error/fatal scan through **06:34:42 UTC** is empty; fresh drain inventory is **0**. This does not prove n8n dispatch or ongoing alert delivery.
+- [Full evidence and updated Nguyen handoff](integration/N8N-CONFIGURATION-READBACK-2026-09-05.md). Still required: final configured revision, receiver reconciliation, supported reader access/live proof, account-scoped registration and bounded admission/uncertainty controls, then the actual provider/result E2E. Channel/chat changes remain unreleased and require further work. Full B01–B24 scope is unchanged.
+
+## Batch 13, 5 September 2026, approximately 06:10 UTC
 
 **Further verified, source-only progress; full goal remains active.** Connected authenticated webhook intake and app/worker consumption to immutable arrival identity. Accepted events are durable before acknowledgement; storage failure returns 503 without raw-event fallback. Code transfer, opt-out and handoff now use an atomic captured-control transaction. One database preflight checks the original account/generation/link/member/scope, including pause, without four serial REST reads.
 

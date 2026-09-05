@@ -2,6 +2,8 @@
 
 Checked 5 September 2026, approximately 04:43 UTC. This records Nguyen's delivery and Codex's independent browser inspection. It is not an execution attestation or permission to start paid provider calls.
 
+**Later configuration update, approximately 06:29 UTC:** matching app/worker signing is now verified and canonical data/receiver URLs are configured; live source remains `00fc57cfd07b`. The worker's receiver credential fails the minimum-length requirement, and supported execution API access is still unavailable on the observed trial. [Current configuration/access readback and handoff](N8N-CONFIGURATION-READBACK-2026-09-05.md) supersedes the missing-signing observations below. Final wrapper revision, registration, admission/reconciliation and successful E2E remain unproven.
+
 Runtime update at approximately 05:09 UTC: both app and worker now run `3b001703b65fe3dd0edeb421b2eef9a6ae43ccdb`, including captured-context command fencing. See [latest release evidence](../COMMAND-CONTEXT-RELEASE-2026-09-05.md). The n8n contract, final-revision requirement and configuration/access gates below are unchanged; no keyword execution is claimed.
 
 ## Confirmed identifiers

@@ -65,7 +65,9 @@ describe("AVGAR keyword shadow contract", () => {
   it("requires separate URL-pinned receiver auth and never sends it to an edited destination", async () => {
     let calls = 0;
     const fetch = async () => { calls++; return new Response(JSON.stringify(reply()), { status: 200 }); };
-    await expect(new HttpN8nBridge({ env: { ...env, N8N_SHADOW_RECEIVER_TOKEN: "" }, fetch }).call(node, ctx, workflow)).rejects.toThrow("separate scoped");
+    for (const token of ["", "x".repeat(21), "x".repeat(23), "x".repeat(24) + "\ninvalid"]) {
+      await expect(new HttpN8nBridge({ env: { ...env, N8N_SHADOW_RECEIVER_TOKEN: token }, fetch }).call(node, ctx, workflow)).rejects.toThrow("separate scoped");
+    }
     await expect(new HttpN8nBridge({ env: { ...env, N8N_SIGNING_SECRET: env.N8N_SHADOW_RECEIVER_TOKEN }, fetch }).call(node, ctx, workflow)).rejects.toThrow("separate scoped");
     await expect(new HttpN8nBridge({ env, fetch }).call(node, ctx, { ...workflow, webhookUrl: "https://other.test/hook" })).rejects.toThrow("not pinned");
     expect(calls).toBe(0);

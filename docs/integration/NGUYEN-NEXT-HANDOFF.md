@@ -1,5 +1,7 @@
 # Nguyen: next Unc integration delivery
 
+**Latest Codex configuration update (5 September, approximately 06:29 UTC):** [verified signing/URL setup and remaining access gates](N8N-CONFIGURATION-READBACK-2026-09-05.md). Worker signing is no longer missing. A worker receiver-token format mismatch and the trial's public-API restriction were confirmed. Keep the current receipt shape and return the final configured revision; do not start paid tests until registration/admission/access verification is complete. This does not request another wrapper redesign.
+
 This brief supersedes the earlier architecture suggestions. Keep the useful workflows and existing authorized credentials; do not rebuild everything or make a workflow for every combination of switches. Codex owns the Unc backend, account data, dispatch, adapters and receipt storage. Tom supplies business choices and unavoidable owner consents, not integration schemas.
 
 **Latest business decision:** Tom confirmed US, NZ and AU, with maximum CPA equal to 50% of the relevant product price. Use `docs/integration/AVGAR-PILOT-POLICY.md`. This does not set a new scaling target or authorize ad changes. Keep each market's search results separate and use verified product/price/currency mappings.
