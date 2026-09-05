@@ -1,0 +1,236 @@
+{
+  "schema": "unc.existing-client-rollout.v1",
+  "observedAt": "2026-09-05T21:57:00Z",
+  "status": "inventory_partial_not_runtime_registration",
+  "ownerDirection": "Hyperagent is reference configuration/history/channel inventory, not target execution. Junction owns runtime identity, permissions, routing, stored data and approved structured routine execution; preserve the same client Slack channels through controlled cutover.",
+  "sources": {
+    "nativeRoster": "https://hyperagent.com/agents",
+    "priorAudit": "docs/integration/NATIVE-CLIENT-SYSTEMS-2026-09-06.md",
+    "uncDatabaseReadAt": "2026-09-05T21:54:47.921082Z",
+    "h1WarehouseReadAt": "2026-09-05T21:54:58.597027Z"
+  },
+  "authority": {
+    "activate": false,
+    "send": false,
+    "publish": false,
+    "spend": false,
+    "createClientMembership": false,
+    "changeNativeAgent": false
+  },
+  "sharedGaps": [
+    "Unc has zero Slack channel_links",
+    "channel_links UNIQUE(channel,external_id) cannot represent one Slack user across client channels",
+    "Slack parsing drops thread_ts and outbound adapter always targets installer DM",
+    "Five seeded non-AVGAR clients have zero login memberships",
+    "Native attachments do not prove access for Junction's approved routines",
+    "Do not build a Hyperagent execution dependency; verify methods and replace runtime through Junction"
+  ],
+  "clients": [
+    {
+      "name": "AVGAR",
+      "uncAccountCandidates": [
+        "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+        "a37ddf37-489c-491f-8d30-23a4f1f38fc4"
+      ],
+      "acceptedPilotAccountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+      "nativeAgentsObserved": [
+        "AVGAR Paid Ads",
+        "AVGAR Content",
+        "AVGAR Email",
+        "AVGAR SEO",
+        "AVGAR Web Design & Development",
+        "AVGAR Editor",
+        "AVGAR Pod Lead"
+      ],
+      "routineInventoryComplete": false,
+      "uncAcceptance": "keyword_app_journey_proven_other_lanes_partial",
+      "next": "Reuse verified AVGAR account for first Unc Slack request/result pilot; do not merge second account by name."
+    },
+    {
+      "name": "Home1nvasion",
+      "uncAccountCandidates": [
+        "1620999d-ee8e-4490-bfd6-b908a9fa86dc"
+      ],
+      "acceptedPilotAccountId": null,
+      "loginMembers": 0,
+      "nativeAgentsObserved": [
+        "H1 Email",
+        "Paid Ads",
+        "H1 Pod Lead",
+        "H1 Analyst",
+        "Content-Agent"
+      ],
+      "routineInventoryComplete": false,
+      "nativeEmail": {
+        "id": "cmsy916yd05w707adv5m542qh",
+        "source": "https://hyperagent.com/agents/cmsy916yd05w707adv5m542qh",
+        "mode": "Ask first",
+        "slack": {
+          "channelName": "home-invasion-email",
+          "channelIdFromSavedRun": "C0BRFLSQ9GW",
+          "workspaceId": null,
+          "enabled": true,
+          "respondsTo": "All relevant messages",
+          "defaultChannelPermissions": "No permissions",
+          "duplicateNamedPermissionRows": 2,
+          "newDeliveryTest": false
+        },
+        "schedules": [
+          {
+            "name": "H1 Email Daily Source and Learning Review",
+            "enabled": true,
+            "displayedCadence": "Every day at 7",
+            "displayedNext": "Mon Sep 7 2026 7:10 AM",
+            "timezoneVerified": false,
+            "writePosture": "Write-limited",
+            "destination": "scheduled Hyperagent thread only",
+            "prohibits": [
+              "Klaviyo writes",
+              "email send or schedule",
+              "Slack messages",
+              "automatic learning"
+            ],
+            "latestRun": "cmtore7cl0aqr07adv64lv605",
+            "latestRunStatus": "success",
+            "latestRunDisplayedDuration": "5.2m"
+          },
+          {
+            "name": "H1 Email · Monday Campaign Brief",
+            "enabled": false,
+            "displayedCadence": "Every week on Monday at 9",
+            "writePosture": "Write-limited",
+            "definitionNotYetInspected": true
+          }
+        ],
+        "savedReview": {
+          "url": "https://hyperagent.com/thread/cmtore7cl0aqr07adv64lv605",
+          "runLocal": "2026-09-06 07:11–07:16 NZST",
+          "result": "PASS / NO_NEW_APPROVED_LEARNING",
+          "klaviyoAccount": "SThdQK",
+          "campaignRows": 86,
+          "metricsAt": "2026-09-05T19:08:11.737Z",
+          "shopifyShop": "50697207962",
+          "shopifyDomain": "home1nvasionstore.myshopify.com",
+          "shopifyReconciliationClaim": "71/71 over 30 days; saved-run claim, not independently repeated"
+        },
+        "independentWarehouse": {
+          "project": "ebcatvidixdjjwmmades",
+          "table": "h1.email_campaigns",
+          "rows": 86,
+          "latestMetricsAt": "2026-09-05T19:08:11.737281Z",
+          "missingMetrics": 13
+        }
+      },
+      "next": "Preserve current service until controlled cutover; establish canonical Unc owner/account binding and implement the verified business routines through Junction. Do not change Ask first to Auto or use Hyperagent execution as the default backend."
+    },
+    {
+      "name": "Deep Blue Health",
+      "uncAccountCandidates": [
+        "4fae2ad8-194f-49c4-9954-39a6b6d35b14"
+      ],
+      "acceptedPilotAccountId": null,
+      "loginMembers": 0,
+      "nativeAgentsObserved": [
+        "DBH Email",
+        "DBH Search"
+      ],
+      "routineInventoryComplete": false,
+      "next": "Read exact existing invocations and reconcile owner/provider assets; reuse prior audit rather than inventing new schedules."
+    },
+    {
+      "name": "Aerspan Airdomes",
+      "uncAccountCandidates": [
+        "f206666f-ac52-4508-a508-3535a8f229a3"
+      ],
+      "acceptedPilotAccountId": null,
+      "loginMembers": 0,
+      "nativeAgentsObserved": [
+        "Domes Sales"
+      ],
+      "routineInventoryComplete": false,
+      "liveWarning": "Outlook mike.ht@aerspanairdomes.com reconnect by 2026-09-11; not proof already disconnected",
+      "next": "Reconcile existing sales routines/Slack/owner; mailbox consent and prior research entitlement failure remain distinct."
+    },
+    {
+      "name": "Unity MMA",
+      "uncAccountCandidates": [
+        "083d6e9f-4697-4845-8869-952c0e1f9d83"
+      ],
+      "acceptedPilotAccountId": null,
+      "loginMembers": 0,
+      "nativeAgentsObserved": [
+        "Unity MMA Operations",
+        "Unity MMA Content",
+        "Unity MMA Paid Ads"
+      ],
+      "routineInventoryComplete": false,
+      "next": "Map supervised operations and verified source/Slack route; do not replay historical roster delivery."
+    },
+    {
+      "name": "Ribbon Rose",
+      "uncAccountCandidates": [],
+      "acceptedPilotAccountId": null,
+      "nativeAgentsObserved": [
+        "Ribbon Rose Email"
+      ],
+      "routineInventoryComplete": false,
+      "nativeEmail": {
+        "id": "cmsy91uaw05g207ad4370roas",
+        "source": "https://hyperagent.com/agents/cmsy91uaw05g207ad4370roas",
+        "mode": "Ask first",
+        "knowledge": "Curated; does not learn",
+        "slack": {
+          "channelName": "ribbon-rose-email",
+          "workspaceId": null,
+          "channelId": null,
+          "botDisplay": "Hyperagent",
+          "enabled": true,
+          "respondsTo": "All relevant messages",
+          "newDeliveryTest": false
+        },
+        "schedules": [],
+        "liveMode": false,
+        "lastVisibleRun": "last week; historical audits, not fresh acceptance"
+      },
+      "next": "Preserve native route; confirm canonical account/owner and existing monthly on-demand routine before importing."
+    },
+    {
+      "name": "NZ Pure Health",
+      "uncAccountCandidates": [],
+      "acceptedPilotAccountId": null,
+      "nativeAgentsObserved": [
+        "NZPH Search",
+        "NZPH Email"
+      ],
+      "routineInventoryComplete": false,
+      "next": "Resolve exact agent IDs, intended owners/assets and actual routines; roster titles do not establish active operation."
+    },
+    {
+      "name": "Own Your Energy",
+      "uncAccountCandidates": [],
+      "acceptedPilotAccountId": null,
+      "nativeAgentsObserved": [
+        "Own Your Energy Content Strategist"
+      ],
+      "routineInventoryComplete": false,
+      "nativeDescriptionStatus": "DRAFT; supervised; awaiting Meta authorization and client intake",
+      "next": "Confirm scope/owner and intake; do not represent this draft as an existing working routine."
+    },
+    {
+      "name": "Rory O'Keefe",
+      "uncAccountCandidates": [
+        "b6c1749a-8604-4d9c-92a3-6995f6c40fa7"
+      ],
+      "acceptedPilotAccountId": null,
+      "loginMembers": 0,
+      "nativeAgentsObserved": [],
+      "routineInventoryComplete": false,
+      "next": "Resolve actual client/system identity; no visible roster match is not proof of absence."
+    }
+  ],
+  "sharedAgentsNotAutomaticallyClientBound": [
+    "Health Email Pod",
+    "DBH NZPH Search"
+  ],
+  "internalJunctionAgentsAndGenericTeamTemplates": "Observed in roster; not automatically imported or counted as client routines."
+}

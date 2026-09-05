@@ -1,5 +1,82 @@
 # Native client-system audit and integration boundary
 
+## 6 September 09:54–09:57 NZ refresh — continuity-first rollout
+
+**Subsequent owner direction:** Tom says all existing agents are in Hyperagent
+but their access/routine behavior is not the desired setup. This audit supplies
+reference configuration and channel destinations only. Do not build a Hyperagent
+invocation dependency as the default migration path. Junction's verified identity,
+permissions, stored data, queue and newly approved structured routines own target
+execution; preserve client channels through a controlled listener cutover. Native
+OAuth/Ask-first constraints below matter only if optional historical access is
+later explicitly selected, not as a prerequisite for replacing execution.
+
+[Machine-readable rollout inventory](existing-client-rollout.v1.json) records the
+current observed client roster, exact inspected routine definitions and remaining
+identity gaps. It is **not** an import, production registration or complete list
+of routines. No native agent, schedule, Slack setting, credential or membership
+was changed. DOCUMENT_EXISTING mode preserved existing working systems.
+
+Important correction to the older audit below: **H1 is no longer evidenced as
+stopped at the model limit.** Its active daily review's Run History shows success
+on 6 September at 07:11, duration 5.2 minutes. The actual saved review
+`cmtore7cl0aqr07adv64lv605` returns PASS / NO_NEW_APPROVED_LEARNING, with 86 Klaviyo
+campaign rows and source timestamp 5 September 19:08:11.737 UTC. Independent
+Mission Control SQL at 21:54:58.597027 UTC confirms 86 rows and that timestamp
+(microsecond precision .737281); 13 rows still lack metrics timestamps. The
+Shopify 71/71 reconciliation is a saved-run claim, not a new independent provider
+reconciliation here. Preserve the September 5 failure as history, not current state.
+
+H1's native `#home-invasion-email` invocation is enabled for all relevant messages.
+Default channel access is No permissions; the settings show two same-named rows
+(one active/responding, one read/write only). Their underlying IDs/workspaces are
+not exposed in that view, so **do not merge or delete by name**. Daily source review
+is active and explicitly thread-only/no Slack send; Monday Campaign Brief is off.
+The agent remains Ask first. No fresh Slack request or delivery test occurred.
+
+Ribbon Rose's exact existing agent is `cmsy91uaw05g207ad4370roas`. Its
+`#ribbon-rose-email` invocation is enabled for all relevant messages under
+`@Hyperagent`; Ask first, curated knowledge, no schedule and Live mode off.
+Historical audit summaries are not current provider/delivery acceptance. The live
+roster also includes NZPH Email/Search, Own Your Energy (explicitly DRAFT),
+multiple AVGAR/H1/Unity specialists and shared health pods. These are not covered
+by the seven Unc seed records and must not be silently omitted.
+
+### Concrete Codex-owned Slack routing gap
+
+At 21:54:47.921082 UTC the Unc database still has **zero Slack links**, and five
+seeded non-AVGAR accounts still have zero members. Existing native routes are not
+Unc routes. The real constraint remains `UNIQUE(channel, external_id)`.
+
+Source inspection of `channels/links.ts`, `adapters/slack.ts`, the applied inbox
+and control migrations, and `outbox.ts` establishes that Unc currently resolves
+a Slack sender to one account, can move that link on reinstall, drops Slack's
+`thread_ts`, and sends to the installer's DM. This cannot satisfy a founder
+working in several client channels with same-thread replies. Workspace identity
+checks do not replace a client-channel binding. **Do not just enable messaging.**
+
+Next coherent implementation: explicit workspace + client channel binding,
+separate authorized sender identity, original conversation/thread capture,
+immutable account/routine/delivery correlation across enqueue and completion,
+and same-thread result delivery without an implicit DM fallback. Reuse the
+existing inbox/outbox and command registry. Include two clients sharing the same
+Slack user, wrong-room refusal, unlink/rebind, queued-result expiry/recovery and
+one real bounded owner-only Slack pilot. Do not duplicate working native bots
+or let both systems reply to the same live client request during cutover.
+
+Native reuse is conditional: the [current official MCP documentation](https://www.hyperagent.com/docs/concepts/agents/invocations/mcp-server)
+describes account-wide OAuth and says Ask-first agents cannot be started through
+MCP. The live UI instead mentions Ask first over MCP; this discrepancy is not
+permission to switch agents to Auto. Keep existing native Slack working while
+confirming the supported scoped integration and approval behavior. No native
+OAuth client or invocation was created in this refresh. The connected Slack tool
+currently exposes Junction AI `T0BMD3LMWUQ`; searches did not return the H1/DBH
+channels, so that connector is not proof of access to their native routes.
+
+This refresh changes the next action; it does not close all-client acceptance.
+First Unc Slack pilot should use the already verified AVGAR owner/account, while
+H1 is the first independently observed existing-operation continuity case.
+
 **PARTIAL — 6 September NZ / 5 September 2026 UTC.** Read-only native Hyperagent inspection and scoped warehouse/schema reads. This advances the all-client reconciliation; it does not establish that the clients are connected to Unc or that their next runs will succeed.
 
 No agent was invoked, retried, edited, duplicated or rescheduled. No connection, subscription, OAuth grant, model, autonomy setting, workflow, membership or customer delivery was changed. Attached writer capabilities are reported as existing native configuration, not permission for Unc to use them. The Hyperagent setup skill's DOCUMENT_EXISTING mode kept this an audit, not a repair or new setup.

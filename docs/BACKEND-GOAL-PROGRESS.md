@@ -13,7 +13,32 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 71, 6 September NZ / 5 September UTC
+## Latest state — Batch 72, 6 September NZ / 5 September UTC
+
+**Matched calendar setup release complete; existing-client continuity inventory
+now identifies the next integration gap.** [Release evidence](CALENDAR-CUSTOMER-PREFERENCES-2026-09-06.md)
+and [fresh native/client inventory](integration/NATIVE-CLIENT-SYSTEMS-2026-09-06.md).
+H1's morning scheduled review succeeded and its source timestamp/86-row warehouse
+are independently reconciled; do not keep reporting yesterday's model limit as
+its current blocker. H1 and Ribbon Rose already have native Slack routes. No
+native configuration or customer message was changed.
+
+Unc has zero Slack links and five seeded clients without members. Its current
+sender-only link/DM delivery model does not meet multi-client channel/thread
+routing. Fix that shared path before enabling Slack, reuse the verified AVGAR
+pilot account for the first new route, and preserve existing native client bots.
+The machine-readable inventory separates observed agents from accepted routines
+and registrations; broader native routine/owner mapping remains incomplete.
+Tom then clarified that Hyperagent's access/routine setup is not the desired
+runtime. Its configuration/history/channels are reference inputs only: Junction
+must own execution using the approved structured routines while retaining client
+Slack channels. This overrides the earlier suggestion to use native invocation
+as the integration shortcut. Existing listeners remain until controlled cutover;
+do not create a Hyperagent runtime OAuth prerequisite or change agents to Auto.
+This is deployment plus evidence that changes the next action, not a wait or a
+full-launch PASS. All B01–B24/all-client requirements remain active.
+
+## Previous state — Batch 71, 6 September NZ / 5 September UTC
 
 **Owner calendar timezone setup released on matched app/worker; database verified.**
 [Exact scope, tests and release status](CALENDAR-CUSTOMER-PREFERENCES-2026-09-06.md).

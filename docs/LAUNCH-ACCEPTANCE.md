@@ -8,6 +8,22 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ### 6 September, 09:52 NZ — existing-client continuity first
 
+**Tom's subsequent clarification overrides the native-execution reuse assumption
+below.** All current agents are in Hyperagent, but Tom explicitly questions their
+access and routine selection. Hyperagent is a source for client configuration,
+instructions/history and existing channel destinations, not the target execution
+backend or evidence that its permissions are correct. Build on Junction's own
+identity/permission/queue/data/receipt infrastructure and the newly approved
+structured routines. Preserve the same Slack channels and threads; do not require
+customers to stay on Hyperagent. Retaining a channel does not imply reusing the
+vendor-owned bot identity or copying its credentials. Keep current listeners
+untouched until an exact replacement route is tested and its cutover approved.
+No automatic memory/prompt import, native OAuth dependency, MCP execution bridge,
+Ask-first-to-Auto change, bot removal or parallel responding is authorized by this
+inventory. Reuse verified business methods and data rails, not an unverified native
+agent execution design. "Edit AI" is the user's wording; do not infer a new
+provider endpoint, credential or contract from that label.
+
 Tom explicitly asked to make the remaining goal more direct and efficient, then
 asked when existing clients, their current routines and Slack would work together.
 The full B01–B24/all-screen/all-client scope and action boundaries remain intact.
@@ -22,9 +38,10 @@ Change the execution order, not the definition of completion:
    failure and exact next owner. Include existing clients outside the seeded seven;
    do not invent owners or silently omit Ribbon Rose/NZPH/other verified clients.
    Reuse the native audit; refresh only facts needed to bind or resume a journey.
-3. Deliver one existing client's complete request-to-result path through supported
-   integration with its current working routines. Preserve existing systems and
-   history; do not rebuild proven routines merely to make everything n8n-native.
+3. Deliver one existing client's complete request-to-result path through Junction
+   and the approved structured routines. Reuse verified methods/data sources from
+   existing systems and preserve history, but do not delegate execution back to
+   Hyperagent merely because an agent already exists there.
    Test correct identity, a useful read/draft request, one execution, persisted
    result, Slack correlation, reload, switch-off and recovery. Slack sends remain
    disabled until the exact test recipient/channel/action window is authorized.
