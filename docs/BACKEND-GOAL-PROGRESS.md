@@ -13,7 +13,13 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 44, 6 September NZ / 5 September UTC
+## Latest state — Batch 45, 6 September NZ / 5 September UTC
+
+**Customer command rollout scoping implemented in source; not yet deployed or activated.** [Behavior, verification and remaining customer keyword work](COMMAND-RELEASE-SCOPE-2026-09-06.md). The global command flag is now insufficient by itself: server-controlled exact account/generation/channel/routine/spec/workflow scopes are also required. Worker execution rechecks owner, switch and selected revision through engine steps; changes during a read stop later provider work/acceptance. Explicit slash requests while disabled get a deterministic refusal. The keyword operator allowance remains separate and cannot be used through generic chat dispatch.
+
+Full 211-file / 2,687-test suite passes, including 40 new fake-provider tests for an actual dispatcher/queue/engine round trip, deduplication, selections and revocation. Application/worker typechecks and focused lint pass. No production mutation, flags, switches, pause, provider call, n8n edit or deployment. B03 is still partial: customer-bound atomic keyword issuance, compatible release and live signed-in acceptance remain next. The prior user-advice turn did not change implementation state; this turn revalidated the code and made concrete progress. The full B01–B24/all-client goal remains active.
+
+## Previous state — Batch 44, 6 September NZ / 5 September UTC
 
 **First real three-market keyword round trip completed and independently verified.** [Full live receipt and precise remaining limits](integration/KEYWORD-LIVE-PILOT-2026-09-06.md). Matching source `12b93528b26f9acdf3e3b99a9a2d47babf9c3335`, Vercel `dpl_8Ybx7cqot5wX3WfUF1Z8LArVpBSs`, Fly release 25 (same revision-24 image; read-only execution reader enabled). Actual receiver-auth refusal #76 runs no provider. Separate US/NZ/AU allowances produce n8n #77/#78/#79, three done Unc runs, three real artifacts and 15 correlated receipts. Actual saved executing revisions and DataForSEO task/input/output were independently read. Today/inbox/history restore all three after reload. No external-action flags or routine switches enabled; AVGAR setup pause restored.
 

@@ -7,7 +7,8 @@ import { RuntimeContextError } from "../runtime/contextFence";
 
 /** Both app and verified channels enter here. Never leak database/provider errors to chat. */
 export async function routeCommand(db: DbClient, store: Store, actor: CommandActor, text: string): Promise<DispatchReply | null> {
-  if (!commandsEnabled()) return null;
+  if (!commandsEnabled()) return /^\s*\/run\b/i.test(text)
+    ? { reply: "Routine requests aren’t enabled here yet. Nothing was queued or started." } : null;
   try { return await dispatchMessage(dispatchDeps(db, store, actor.accountId), actor, text); }
   catch (error) {
     // Ordinary account chat remains available during a setup pause. Explicit slash

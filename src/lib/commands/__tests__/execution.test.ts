@@ -4,12 +4,13 @@ import { adapters as makeAdapters, FakeProducer, SAMPLE_ARTIFACT } from "../../r
 import { StaticAccountsSource } from "../../../worker/accounts";
 import { executeRoutineCommand, notifyCommand, runCommandsTick } from "../../../worker/commands";
 import { routeCommand } from "../message";
-import { DbCommandQueue } from "../queue";
+import { DbCommandQueue, digest } from "../queue";
+import { workflowFingerprint } from "../releaseScope";
 import type { RoutineCommand } from "../types";
 import type { N8nBridge, RoutineSpec } from "../../runtime/types";
 import { CATALOG_SPEC_BY_ID } from "../../runtime/catalog-specs";
 
-const A = "account-a", B = "account-b";
+const A = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa", B = "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb";
 const spec: RoutineSpec = { id: "D01-W01", name: "Founder content engine", version: 1, wave: 1, mutates: false, nodes: [{ id: "trigger", kind: "trigger", cadence: "manual" }, { id: "produce", kind: "produce", skill: "D01-W01" }, { id: "receipt", kind: "receipt", summary: "Draft ready" }] };
 const cmd = (id: string): RoutineCommand => ({ id, contextGeneration: 0, actor: { accountId: A, userId: "owner-a", channel: "app", requestId: id }, request: "Run founder content", requestHash: "", specHash: "", workflowHash: "", routineId: spec.id, version: 1, status: "running", reply: "", runId: id, createdAt: "2026-09-04T01:00:00Z", updatedAt: "2026-09-04T01:00:00Z" });
 afterEach(() => vi.unstubAllEnvs());
@@ -63,6 +64,9 @@ describe("command-to-existing-runtime integration", () => {
   });
   it("runs two customers through the same catalog routine without mixing identities", async () => {
     vi.stubEnv("UNC_COMMANDS_ENABLED", "true");
+    vi.stubEnv("UNC_COMMAND_RELEASE_SCOPES", JSON.stringify([A, B].map(accountId => ({ accountId, contextGeneration: 0,
+      channel: "app", routineId: spec.id, specHash: digest(CATALOG_SPEC_BY_ID[spec.id]), workflowHash: workflowFingerprint(null),
+      expiresAt: new Date(Date.now() + 60_000).toISOString() }))));
     const db = new FakeSupabase();
     db.seed("accounts", [A, B].map(id => ({ id, context_generation: 0, automation_paused: false })));
     const producer = new FakeProducer();
@@ -72,7 +76,7 @@ describe("command-to-existing-runtime integration", () => {
     db.seed("account_members", [A, B].map((id) => ({ account_id: id, user_id: `owner-${id}`, role: "owner" })));
     for (const id of [A, B]) {
       await h.store.putRoutineState({ accountId: id, routineId: spec.id, enabled: true, version: 1, liveSpec: CATALOG_SPEC_BY_ID[spec.id], draftSpec: null, updatedAt: "2026-09-04T01:00:00Z" });
-      const response = await routeCommand(db, h.store, { accountId: id, userId: `owner-${id}`, channel: "app", requestId: "same-message-id" }, "/run D01-W01");
+      const response = await routeCommand(db, h.store, { accountId: id, contextGeneration: 0, userId: `owner-${id}`, channel: "app", requestId: "same-message-id" }, "/run D01-W01");
       expect(response?.status).toBe("queued");
     }
     await runCommandsTick({ store: h.store, accounts, db }, h.adapters);

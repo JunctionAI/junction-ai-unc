@@ -18,11 +18,21 @@ import { messagingDisabled } from "../lib/channels/releaseGate";
 import { assertRuntimeContext } from "../lib/db/runtimeContext";
 import { assertSameRuntimeContext, RuntimeContextError } from "../lib/runtime/contextFence";
 import { freezeCommandActor } from "../lib/commands/binding";
+import { assertCommandSelection } from "../lib/commands/selectionGuard";
+import { digest } from "../lib/commands/queue";
+import { workflowFingerprint } from "../lib/commands/releaseScope";
 
 export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapters, c: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null) {
   c = Object.freeze({ ...c, actor: freezeCommandActor(c.actor) });
+  spec = structuredClone(spec);
+  workflow = workflow ? structuredClone(workflow) : null;
   const identity = Object.freeze({ accountId: c.actor.accountId, contextGeneration: c.contextGeneration });
   if (deps.db) await assertRuntimeContext(deps.db, identity);
+  if (deps.db) {
+    if (digest(spec) !== c.specHash || workflowFingerprint(workflow) !== c.workflowHash || spec.id !== c.routineId || spec.version !== c.version)
+      throw new Error("Command execution differs from the queued selection.");
+    await assertCommandSelection(deps.db, deps.store, c);
+  }
   const account = await resolveAccount(deps, c.actor.accountId);
   assertSameRuntimeContext(identity, account.account);
   if (deps.db) await assertRuntimeContext(deps.db, identity);
@@ -34,6 +44,11 @@ export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapter
   } }) as Store;
   const result = await runRoutine(spec, { account: account.account, triggeredBy: "manual", vars: account.vars ?? {}, inputs: { request: c.request } }, {
     ...adapters, store: pinned,
+    assertContext: async current => {
+      assertSameRuntimeContext(identity, current);
+      await adapters.assertContext?.(current);
+      if (deps.db) await assertCommandSelection(deps.db, deps.store, c);
+    },
     // A selected external workflow never silently falls back to a different implementation.
     ...(workflow ? { producer: undefined } : {}),
   }, { mode: "dry_run", runId: c.id });

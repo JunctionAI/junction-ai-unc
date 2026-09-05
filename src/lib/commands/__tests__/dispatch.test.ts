@@ -19,7 +19,7 @@ async function setup(routineId = "D01-W01") {
   const store = new MemoryStore();
   const queue = new DbCommandQueue(db);
   await store.putRoutineState({ accountId: actor.accountId, routineId, enabled: true, version: 1, liveSpec: null, draftSpec: null, updatedAt: T0 });
-  const deps: DispatchDeps = { store, queue, assertContext: (accountId, contextGeneration) => assertRuntimeContext(db, { accountId, contextGeneration }), isOwner: vi.fn(async () => true), connected: async () => ["meta_ads", "shopify", "search_console", "ga4", "klaviyo"], business: async () => null, budget: vi.fn(async () => true), interpret: vi.fn(async () => ({ kind: "run" as const, routineId })), now: () => new Date(T0) };
+  const deps: DispatchDeps = { store, queue, selectionReleased: () => true, assertContext: (accountId, contextGeneration) => assertRuntimeContext(db, { accountId, contextGeneration }), isOwner: vi.fn(async () => true), connected: async () => ["meta_ads", "shopify", "search_console", "ga4", "klaviyo"], business: async () => null, budget: vi.fn(async () => true), interpret: vi.fn(async () => ({ kind: "run" as const, routineId })), now: () => new Date(T0) };
   const enqueue = async (text = "Run the founder content routine") => {
     await dispatchMessage(deps, actor, text);
     return (await queue.get(actor.accountId, commandId(actor)))!;

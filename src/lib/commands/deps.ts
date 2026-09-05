@@ -9,6 +9,7 @@ import { DbCommandQueue } from "./queue";
 import type { CommandActor } from "./types";
 import { assertRuntimeContext } from "../db/runtimeContext";
 import { commandChannelBinding } from "./binding";
+import { commandSelectionReleased } from "./releaseScope";
 
 export async function commandOwner(db: DbClient, actor: CommandActor): Promise<boolean> {
   const member = await unwrap<{ role: string } | null>("commands.owner", db.from("account_members").select("role").eq("account_id", actor.accountId).eq("user_id", actor.userId).maybeSingle());
@@ -28,6 +29,7 @@ export async function commandOwner(db: DbClient, actor: CommandActor): Promise<b
 export function dispatchDeps(db: DbClient, store: Store, accountId: string): DispatchDeps {
   return {
     store, queue: new DbCommandQueue(db),
+    selectionReleased: (actor, spec, workflow) => commandSelectionReleased(actor, spec, workflow),
     isOwner: (actor) => commandOwner(db, actor),
     assertContext: (id, contextGeneration) => assertRuntimeContext(db, { accountId: id, contextGeneration }),
     connected: async (id) => {

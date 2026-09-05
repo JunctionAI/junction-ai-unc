@@ -9,6 +9,8 @@ import type { Capability, Interpreter } from "./interpret";
 import type { CommandActor, CommandQueue, DispatchReply } from "./types";
 import { assertSameRuntimeContext, runtimeGeneration } from "../runtime/contextFence";
 import { freezeCommandActor } from "./binding";
+import { workflowFingerprint } from "./releaseScope";
+export { workflowFingerprint } from "./releaseScope";
 
 export interface DispatchDeps {
   store: Store;
@@ -19,10 +21,9 @@ export interface DispatchDeps {
   business(accountId: string): Promise<BusinessModel | null>;
   budget(accountId: string): Promise<boolean>;
   interpret: Interpreter;
+  selectionReleased(actor: CommandActor, spec: RoutineSpec, workflow: N8nWorkflow | null): boolean;
   now?: () => Date;
 }
-
-export const workflowFingerprint = (w: N8nWorkflow | null) => digest(w ? { id: w.id, accountId: w.accountId, webhookUrl: w.webhookUrl, active: w.active } : null);
 
 export async function eligible(deps: DispatchDeps, actor: CommandActor, routineId: string): Promise<{ ok: true; spec: RoutineSpec; workflow: N8nWorkflow | null } | { ok: false; reply: string }> {
   if (!await deps.isOwner(actor)) return { ok: false, reply: "Only the verified account owner can start a routine. Nothing was started." };
@@ -30,12 +31,15 @@ export async function eligible(deps: DispatchDeps, actor: CommandActor, routineI
   if (!catalog) return { ok: false, reply: "That routine is not in the supported library. Nothing was started." };
   const state = await deps.store.getRoutineState(actor.accountId, routineId);
   if (!state?.enabled) return { ok: false, reply: `${catalog.name} is switched off. Enable it in Routines before asking me to run it.` };
+  if (routineId === "D03-W01") return { ok: false, reply: "Keyword requests still need the customer authorization connection. This routine requires a separate one-use allowance; nothing was started." };
   const spec = effectiveSpec(state, catalog);
+  const workflow = await deps.store.findN8nWorkflow(actor.accountId, routineId);
+  if (!deps.selectionReleased(actor, spec, workflow)) return { ok: false, reply: `${catalog.name} is not released for requests on this account and channel yet. Nothing was started.` };
   const [connected, business] = await Promise.all([deps.connected(actor.accountId), deps.business(actor.accountId)]);
   const availability = routineAvailability(spec, connected, business);
   if (!canEnable(availability)) return { ok: false, reply: `${catalog.name}: ${availabilityCopy(availability)}. Nothing was started.` };
   if (!await deps.budget(actor.accountId)) return { ok: false, reply: "I can’t start this within the account’s verified model budget. Nothing was started." };
-  return { ok: true, spec, workflow: await deps.store.findN8nWorkflow(actor.accountId, routineId) };
+  return { ok: true, spec, workflow };
 }
 
 /** null means ordinary conversation. Anything uncertain stays non-executable. */
