@@ -58,5 +58,6 @@ export function fileSink(dataDir = path.join(process.cwd(), ".data")): Sink {
 }
 
 export function defaultSinks(): WaitlistSinks {
-  return { db: dbSink(), email: emailSink(), file: fileSink() };
+  // Public capture never sends a message or relies on an instance-local file.
+  return { db: dbSink(), email: null, file: null };
 }

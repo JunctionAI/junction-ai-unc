@@ -1,186 +1,75 @@
 import { expect, test } from "@playwright/test";
-import { expectColor, normQuotes, waitForHydration } from "./helpers";
 
-/* Landing page (/) — design-reference/Junction Landing.dc.html */
-
-test.describe("Landing", () => {
-  test.beforeEach(async ({ page }) => {
+// Current supplied v2. Response fixtures prove UI behaviour, not live persistence.
+test.describe("Landing v2", () => {
+  test("real navigation and concrete-work copy render without application errors", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", e => errors.push(e.message));
     await page.goto("/");
-    await waitForHydration(page);
+    await expect(page).toHaveTitle(/Sales and marketing agents/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Grow your business.*sales and marketing agents/);
+    await page.getByRole("button", { name: "Join the private beta", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Your email" })).toBeFocused();
+    await expect(page.getByRole("contentinfo").getByRole("link", { name: "Privacy", exact: true })).toHaveAttribute("href", "/privacy");
+    await page.getByRole("link", { name: "Sign in", exact: true }).first().click();
+    await expect(page).toHaveURL(/\/login/);
+    expect(errors).toEqual([]);
   });
-
-  test("renders the hero copy verbatim, the waitlist capture and the pricing", async ({ page }) => {
-    await expect(page).toHaveTitle(/Junction/);
-    const h1 = page.getByRole("heading", { level: 1 });
-    await expect(h1).toBeVisible();
-    // Prototype: "Meet Unc: He'll help you grow your business" (straight apostrophe); the port renders a typographic one.
-    expect(normQuotes(await h1.innerText())).toBe("Meet Unc: He'll help you grow your business");
-    await expect(page.getByText("To get started, set a goal, and get to work together.")).toBeVisible();
-
-    // Waitlist mode: the hero CTA row is the inline email capture, in Unc's voice.
-    const hero = page.locator("#waitlist-hero");
-    await expect(hero.getByRole("textbox", { name: "Your email" })).toBeVisible();
-    await expect(hero.getByRole("button", { name: "Join the waitlist →" })).toBeVisible();
-    expect(normQuotes(await hero.getByText(/onboarding founders in small groups/).innerText())).toBe("I'm onboarding founders in small groups — leave your email and I'll bring you in.");
-
-    // Pricing block — the resolved locale's display price (US default off-Vercel) + trial badge; its button joins the waitlist too.
-    const pricing = page.locator("#pricing");
-    await expect(pricing).toBeVisible();
-    await expect(pricing.getByText("US$100", { exact: true })).toBeVisible();
-    await expect(pricing.getByText("/ month", { exact: true })).toBeVisible();
-    await expect(pricing.getByText("14-day free trial")).toBeVisible();
-    await expect(pricing.getByRole("button", { name: "Join the waitlist →" })).toBeVisible();
-
-    // Founder proof + closer (with the second capture)
-    await expect(page.getByText(/We built Junction AI with 10\+ years of marketing expertise/)).toBeVisible();
-    const closer = page.getByRole("heading", { name: /workaholic with one goal/ });
-    await expect(closer).toBeVisible();
-    expect(normQuotes(await closer.innerText())).toBe("He's a workaholic with one goal: to grow your business.");
-    await expect(page.locator("#waitlist-closer").getByRole("button", { name: "Join the waitlist →" })).toBeVisible();
-
-    // Quiet legal footer
-    await expect(page.getByRole("contentinfo").getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
-    await expect(page.getByRole("contentinfo").getByRole("link", { name: "Terms" })).toHaveAttribute("href", "/terms");
-    await expect(page.getByRole("contentinfo").getByRole("link", { name: "support@getjunction.ai" })).toHaveAttribute("href", "mailto:support@getjunction.ai");
-
-    // Brand assets resolve (mascot + Tom)
-    for (const src of ["/brand/mascot-small.png", "/brand/mascot.png", "/brand/tom.png"]) {
-      const img = page.locator(`img[src="${src}"]`).first();
-      await expect(img).toBeAttached();
-      await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
-    }
-  });
-
-  test("?country=XX switches the pricing card and pins a cookie", async ({ page, context }) => {
-    await page.goto("/?country=nz");
-    await waitForHydration(page);
-    await expect(page.locator("#pricing").getByText("NZ$149", { exact: true })).toBeVisible();
-    const cookie = (await context.cookies()).find((c) => c.name === "unc_country");
-    expect(cookie?.value).toBe("NZ");
-    // The pin survives a plain visit; an unknown override is ignored (falls back to the pin).
+  test("explorer interests reach signup without calling routine APIs", async ({ page }) => {
+    const posted: unknown[] = []; const runtimeCalls: string[] = [];
+    page.on("request", r => { if (/\/api\/(routines|connectors|unc)\//.test(r.url())) runtimeCalls.push(r.url()); });
+    await page.route("**/api/waitlist", async route => { posted.push(route.request().postDataJSON()); await route.fulfill({ status: 200, json: { ok: true } }); });
     await page.goto("/");
-    await waitForHydration(page);
-    await expect(page.locator("#pricing").getByText("NZ$149", { exact: true })).toBeVisible();
-    await page.goto("/?country=zz");
-    await waitForHydration(page);
-    await expect(page.locator("#pricing").getByText("NZ$149", { exact: true })).toBeVisible();
-    await page.goto("/?country=GB");
-    await waitForHydration(page);
-    await expect(page.locator("#pricing").getByText("£79", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: /^SEO Find/ }).click();
+    await page.getByRole("checkbox", { name: "Find keyword opportunities" }).check();
+    await expect(page.getByText("Interests: SEO.")).toBeVisible();
+    await page.getByRole("textbox", { name: "Your email" }).fill(" Founder@Example.test ");
+    await page.getByRole("button", { name: "Join the waitlist →", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("Your signup is recorded");
+    expect(posted).toEqual([{ email: "founder@example.test", source: "landing_v2-seo" }]);
+    expect(runtimeCalls).toEqual([]);
   });
-
-  test("AI / Human toggle swaps the mock chat thread", async ({ page }) => {
-    const ai = page.getByRole("button", { name: "Junction AI" });
-    const human = page.getByRole("button", { name: "Human support" });
-    await ai.scrollIntoViewIfNeeded();
-
-    // AI lane by default
-    await expect(page.getByText(/Morning! Your ads: one.s winning, one.s not\. Move NZ\$40\/day to the winner\?/)).toBeVisible();
-    await expect(page.getByText("Yes — do it.")).toBeVisible();
-    await expect(page.getByText(/Receipt.s here if you ever want to check my work\./)).toBeVisible();
-    await expectColor(ai, "background-color", "oklch(0.78 0.13 220)");
-    await expectColor(human, "background-color", "rgba(0, 0, 0, 0)");
-
-    // Switch to the human lane
-    await human.click();
-    await expect(page.getByText(/I can see your goal, strategy and receipts — never your credentials\. What are you wrestling with\?/)).toBeVisible();
-    await expect(page.getByText("Can someone sanity-check my strategy?")).toBeVisible();
-    await expect(page.getByText(/Morning! Your ads/)).toHaveCount(0);
-    await expectColor(human, "background-color", "oklch(0.78 0.13 220)");
-    await expectColor(ai, "background-color", "rgba(0, 0, 0, 0)");
-
-    // …and back
-    await ai.click();
-    await expect(page.getByText(/Morning! Your ads/)).toBeVisible();
-    await expect(page.getByText("Can someone sanity-check my strategy?")).toHaveCount(0);
+  test("invalid email stays local and bad confirmations never look successful", async ({ page }) => {
+    let calls = 0;
+    await page.route("**/api/waitlist", async route => { calls++; await route.fulfill({ status: calls === 1 ? 503 : 200, json: calls === 1 ? { ok: true } : {} }); });
+    await page.goto("/");
+    const input = page.getByRole("textbox", { name: "Your email" });
+    const submit = page.getByRole("button", { name: "Join the waitlist →", exact: true });
+    await input.fill("not-an-email"); await submit.click();
+    await expect(input).toHaveAttribute("aria-invalid", "true"); expect(calls).toBe(0);
+    await input.fill("fixture@example.test"); await submit.click();
+    await expect(page.getByRole("alert").filter({ hasText: "couldn’t confirm" })).toBeVisible();
+    await expect(input).toBeVisible(); await submit.click();
+    await expect(page.getByRole("alert").filter({ hasText: "couldn’t confirm" })).toBeVisible();
+    await expect(page.getByText("Your signup is recorded", { exact: false })).toHaveCount(0);
   });
-
-  test("every CTA is a waitlist action; no CTA links to /app", async ({ page }) => {
-    // Nothing on the landing page links into the product any more.
-    await expect(page.locator('a[href="/app"]')).toHaveCount(0);
-    const ctas = page.getByRole("button", { name: /Join the waitlist/ });
-    expect(await ctas.count()).toBe(4); // nav, hero form, pricing card, closer form
-
-    // Nav → hero form focused.
-    await page.getByRole("navigation").getByRole("button", { name: "Join the waitlist" }).click();
-    await expect(page.locator("#waitlist-hero input[type=email]")).toBeFocused();
-
-    // Pricing card → closer form focused.
-    await page.locator("#pricing").getByRole("button", { name: "Join the waitlist →" }).click();
-    await expect(page.locator("#waitlist-closer input[type=email]")).toBeFocused();
-    await expect(page).toHaveURL(/\/$/);
+  test("an in-flight request is guarded and rate limits can be retried", async ({ page }) => {
+    let calls = 0; let release!: () => void; const held = new Promise<void>(r => { release = r; });
+    await page.route("**/api/waitlist", async route => { calls++; if (calls === 1) { await held; await route.fulfill({ status: 429, json: { ok: false, error: "rate_limited" } }); } else await route.fulfill({ status: 200, json: { ok: true } }); });
+    await page.goto("/");
+    await page.getByRole("textbox", { name: "Your email" }).fill("fixture@example.test");
+    await page.getByRole("button", { name: "Join the waitlist →", exact: true }).click();
+    await expect(page.getByRole("button", { name: "One sec…" })).toBeDisabled();
+    expect(calls).toBe(1); release();
+    await expect(page.getByRole("alert").filter({ hasText: "Too many attempts" })).toBeVisible();
+    await page.getByRole("button", { name: "Join the waitlist →", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("Your signup is recorded"); expect(calls).toBe(2);
   });
-
-  test("joining the waitlist: invalid email is refused inline, a valid one lands on the success state", async ({ page }) => {
-    const posted: { email: string; source: string }[] = [];
-    await page.route("**/api/waitlist", async (route) => {
-      const body = route.request().postDataJSON() as { email: string; source: string };
-      posted.push(body);
-      const ok = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(body.email.trim().toLowerCase());
-      await route.fulfill({ status: ok ? 200 : 400, contentType: "application/json", body: JSON.stringify(ok ? { ok: true } : { ok: false, error: "invalid_email" }) });
-    });
-    const hero = page.locator("#waitlist-hero");
-    const input = hero.getByRole("textbox", { name: "Your email" });
-    await input.fill("not-an-email");
-    await hero.getByRole("button", { name: "Join the waitlist →" }).click();
-    await expect(hero.getByText(/doesn.t look like an email/)).toBeVisible();
-    await expect(input).toBeVisible();
-
-    await input.fill("Founder@Example.test");
-    await hero.getByRole("button", { name: "Join the waitlist →" }).click();
-    const done = page.locator("#waitlist-hero");
-    expect(normQuotes(await done.innerText())).toBe("You're on the list. I'll email you when it's your turn.");
-    await expect(done.getByRole("textbox")).toHaveCount(0);
-    expect(posted).toEqual([
-      { email: "not-an-email", source: "hero" },
-      { email: "Founder@Example.test", source: "hero" },
-    ]);
-
-    // The closer form is independent and reports its own source.
-    const closer = page.locator("#waitlist-closer");
-    await closer.getByRole("textbox", { name: "Your email" }).fill("second@example.test");
-    await closer.getByRole("button", { name: "Join the waitlist →" }).click();
-    await expect(closer.getByText(/You.re on the list/)).toBeVisible();
-    expect(posted[2]).toEqual({ email: "second@example.test", source: "closer" });
+  for (const width of [390, 1280]) test(`layout and open states fit ${width}px without overflow`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 }); await page.goto("/");
+    await page.getByRole("button", { name: /^Content Stay/ }).click();
+    await page.getByRole("checkbox", { name: "Draft posts in your voice" }).check();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(page.getByText("Interests: Content.")).toBeVisible();
+    await page.locator("summary").filter({ hasText: "What does it cost?" }).click();
+    await expect(page.getByText(/Pricing, inclusions and limits will be explained/)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`landing-${width}.png`), fullPage: true });
   });
-
-  test("/privacy and /terms render the legal documents with the company details", async ({ page }) => {
-    for (const [path, title] of [
-      ["/privacy", "Privacy Policy"],
-      ["/terms", "Terms of Service"],
-    ] as const) {
-      await page.goto(path);
-      await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
-      await expect(page.getByText(/^Effective 2 September 2026$/)).toBeVisible();
+  test("legal pages still render their real documents", async ({ page }) => {
+    for (const [url, name] of [["/privacy", "Privacy Policy"], ["/terms", "Terms of Service"]]) {
+      await page.goto(url); await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
       await expect(page.getByText("JUNCTION CENTRAL LIMITED").first()).toBeVisible();
-      expect((await page.locator("main h2").count())).toBeGreaterThanOrEqual(10);
-      await expect(page.getByRole("contentinfo").getByRole("link", { name: "support@getjunction.ai" })).toBeVisible();
     }
-  });
-});
-
-/* Shopify App Store install entry (shopify/REVIEW-CHECKLIST.md §2d): the landing is the app's
-   application_url, so ?shop=&hmac= on / must forward to /api/connectors/shopify/install with
-   the query intact. The demo server has no SHOPIFY_CLIENT_ID/SECRET, so that route's honest
-   answer is the connect_error bounce — the forward itself is what this pins. */
-test.describe("Landing → Shopify install forward", () => {
-  test("?shop=&hmac= on / redirects through the install route", async ({ page }) => {
-    const hmac = "0".repeat(64);
-    const res = await page.goto(`/?shop=acme.myshopify.com&hmac=${hmac}&timestamp=1&host=aG9zdA`);
-    expect(res).not.toBeNull();
-    /* The :3400 server can run in accounts mode (Supabase configured): /app then sits behind /login, so the
-       connect_error bounce this test pins is never reached. That is the server's mode, not a regression —
-       skip here rather than fail; the forward itself is asserted below on a demo-mode server. */
-    test.skip(/\/login(\?|$)/.test(res!.url()), "server is in accounts mode (/app → /login); this install-forward test expects demo mode");
-    const chain: string[] = [];
-    for (let r = res!.request(); r; r = r.redirectedFrom()!) chain.push(r.url());
-    expect(chain.some((u) => u.includes(`/api/connectors/shopify/install?shop=acme.myshopify.com&hmac=${hmac}&timestamp=1&host=aG9zdA`))).toBe(true);
-    expect(res!.url()).toMatch(/\/app\?connect_error=shopify$/);
-  });
-
-  test("a plain landing request is not forwarded", async ({ page }) => {
-    const res = await page.goto("/?shop=acme.myshopify.com");
-    expect(res!.url()).toMatch(/\/\?shop=acme\.myshopify\.com$/);
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 });

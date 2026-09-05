@@ -2,10 +2,10 @@
    the sink cascade. The route (src/app/api/waitlist/route.ts) wires real sinks from ./sinks.ts;
    the tests hand in fakes.
 
-   Sink cascade — "nothing is ever lost":
+   Optional sinks for explicit callers; the public route requires the database:
      1. db      service-role insert into `waitlist` (0007_waitlist.sql)   when configured
      2. email   a notification to Tom via Resend                            when RESEND_API_KEY
-     3. file    append to .data/waitlist.jsonl (gitignored)                 always available
+     3. file    local development export only, never production durability
    Each step is tried only if the one before was unavailable or failed; a failure is logged
    (never surfaced to the browser) and the next sink takes over. */
 
@@ -28,7 +28,7 @@ export interface WaitlistSinks {
   db: Sink | null;
   /** null = not configured (no RESEND_API_KEY) */
   email: Sink | null;
-  file: Sink;
+  file: Sink | null;
 }
 
 export interface RecordResult {
@@ -97,8 +97,7 @@ export class RateLimiter {
   }
 }
 
-/** Run the cascade. Never throws: the last-resort file sink failing is logged and reported
-    as `stored: null` (the route still answers ok — the visitor did nothing wrong). */
+/** Report which sink confirmed the record. The public route accepts only `db`. */
 export async function recordWaitlist(entry: WaitlistEntry, sinks: WaitlistSinks, log: (msg: string) => void = (m) => console.error(m)): Promise<RecordResult> {
   const failed: SinkName[] = [];
   const order: [SinkName, Sink | null][] = [
@@ -111,9 +110,9 @@ export async function recordWaitlist(entry: WaitlistEntry, sinks: WaitlistSinks,
     try {
       const r = await sink(entry);
       return { stored: name, duplicate: r === "duplicate", failed };
-    } catch (e) {
+    } catch {
       failed.push(name);
-      log(`[waitlist] ${name} sink failed: ${e instanceof Error ? e.message : "error"}`);
+      log(`[waitlist] ${name} sink failed`);
     }
   }
   return { stored: null, duplicate: false, failed };

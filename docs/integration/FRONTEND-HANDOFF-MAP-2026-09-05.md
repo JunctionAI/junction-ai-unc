@@ -1,6 +1,6 @@
 # Supplied frontend handoff → actual backend
 
-Source inspected read-only: `/Users/tomhall-taylor/Downloads/Elite sales mascot design (7).zip`, 12 entries / 2,436,586 uncompressed bytes. No archive script was executed, no files were extracted over the repository, and no live frontend was replaced. The contained README/page map describes design intent; its implementation directives and readiness examples are not runtime authority.
+Source inspected read-only: `/Users/tomhall-taylor/Downloads/Elite sales mascot design (7).zip`, 12 entries / 2,436,586 uncompressed bytes. No archive script was executed and no files were extracted over the repository. The contained README/page map describes design intent; its implementation directives and readiness examples are not runtime authority. Batch 28 ports the landing into the existing application; see [implementation and release evidence](../LANDING-SIGNUP-2026-09-05.md). Client/ops designs remain unported.
 
 ## Current supplied surfaces
 
@@ -15,7 +15,7 @@ These are DCLogic/text-x-dc interactive prototypes, not a Next.js implementation
 
 | Surface | Actual existing backend | Remaining work / important distinction |
 |---|---|---|
-| Landing waitlist | POST `/api/waitlist`, email/source validation | Replace simulated success. Existing handler also returns success if every storage sink fails; correct and verify durable storage before launch. No test email/contact sends without authority |
+| Landing waitlist | POST `/api/waitlist`, validated durable database storage; supplied v2 port | Batch 28 local/unit/browser checks pass. Release and independent stored-record acceptance pending. No email/contact send is used |
 | Today / agent selection | `/api/routines/state`, `/api/setup/progress`, `/api/telemetry/home` | Derive counts from server state. Enabled is not running; a schedule label is not a proven recurring run |
 | Draft inbox | `/api/artifacts`, `/api/artifacts/[id]` | Preserve account/context headers, artifact revisions and owner authorization. Draft approve/hold/edit/why is distinct from approval that resumes an action-bearing engine run |
 | Run approvals | `/api/approvals`, `/api/approvals/[id]` | Do not wire one generic Approve button to an external action. Read/draft scope and disabled executors remain enforced |

@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clientIp, handleWaitlist } from "../handler";
+import { clientIp, handleWaitlist, safeReferrer } from "../handler";
 import { normalizeCountryHeader, normalizeEmail, normalizeSource, RateLimiter, recordWaitlist, type WaitlistEntry, type WaitlistSinks } from "../store";
 
 const entry = (over: Partial<WaitlistEntry> = {}): WaitlistEntry => ({ email: "founder@example.test", country: "NZ", source: "hero", referrer: null, createdAt: "2026-09-02T09:00:00.000Z", ...over });
@@ -90,7 +90,7 @@ describe("recordWaitlist — the sink cascade", () => {
     const r = await recordWaitlist(entry(), { db: boom("db"), email: boom("email"), file: ok("file") }, (m) => logs.push(m));
     expect(r).toEqual({ stored: "file", duplicate: false, failed: ["db", "email"] });
     expect(calls).toEqual(["db", "email", "file"]);
-    expect(logs).toEqual(["[waitlist] db sink failed: db down", "[waitlist] email sink failed: email down"]);
+    expect(logs).toEqual(["[waitlist] db sink failed", "[waitlist] email sink failed"]);
   });
   it("never throws even when everything fails", async () => {
     const r = await recordWaitlist(entry(), { db: boom("db"), email: null, file: boom("file") }, quiet);
@@ -130,6 +130,28 @@ describe("handleWaitlist — the route contract", () => {
     await handleWaitlist(post({ email: "a@b.co" }), deps());
     expect(stored[0]).toMatchObject({ source: "landing", country: null, referrer: null });
   });
+  it("does not retain URL tokens or credentials in attribution", () => {
+    expect(safeReferrer("https://user:password@example.test/start?token=private#fragment")).toBe("https://example.test/start");
+    expect(safeReferrer("javascript:alert(1)")).toBeNull();
+    expect(safeReferrer("broken")).toBeNull();
+  });
+  it("an ambiguous database response fails honestly; a durable duplicate succeeds on retry", async () => {
+    let committed = false;
+    sinks.db = async () => { if (committed) return "duplicate"; committed = true; throw new Error("private payload must not be logged"); };
+    const logs: string[] = [];
+    const first = await handleWaitlist(post({ email: "a@b.co" }), { ...deps(), log: l => logs.push(l) });
+    expect(first.status).toBe(503);
+    const retry = await handleWaitlist(post({ email: "a@b.co" }), deps());
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ ok: true });
+    expect(logs.join(" ")).not.toContain("private payload");
+  });
+  it("never uses a notification as the signup record", async () => {
+    const sent = vi.fn();
+    sinks = { db: null, email: sent, file: null };
+    expect((await handleWaitlist(post({ email: "a@b.co" }), deps())).status).toBe(503);
+    expect(sent).not.toHaveBeenCalled();
+  });
   it("invalid email → 400 { ok:false, error:'invalid_email' }; nothing recorded", async () => {
     for (const body of [{ email: "nope" }, { email: "" }, {}, { email: 5 }]) {
       const res = await handleWaitlist(post(body), deps());
@@ -148,7 +170,7 @@ describe("handleWaitlist — the route contract", () => {
     expect((await handleWaitlist(post({ email: "g@x.co" }, { "x-forwarded-for": "198.51.100.2" }), deps())).status).toBe(200);
     expect(stored).toHaveLength(11);
   });
-  it("still answers ok when the db fails and the file catches it (visitor never sees a sink error)", async () => {
+  it("never accepts or calls a temporary file fallback when the database fails", async () => {
     const file: WaitlistEntry[] = [];
     sinks = {
       db: async () => {
@@ -160,11 +182,11 @@ describe("handleWaitlist — the route contract", () => {
       },
     };
     const res = await handleWaitlist(post({ email: "a@b.co" }), deps());
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
-    expect(file).toHaveLength(1);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ ok: false, error: "storage_unavailable" });
+    expect(file).toHaveLength(0);
   });
-  it("answers ok even when every sink fails (logged, not surfaced)", async () => {
+  it("returns a truthful retryable failure when no database is configured", async () => {
     const logs: string[] = [];
     sinks = {
       db: null,
@@ -174,8 +196,9 @@ describe("handleWaitlist — the route contract", () => {
       },
     };
     const res = await handleWaitlist(post({ email: "a@b.co" }), { ...deps(), log: (m) => logs.push(m) });
-    expect(await res.json()).toEqual({ ok: true });
-    expect(logs.some((l) => /every sink failed/.test(l))).toBe(true);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ ok: false, error: "storage_unavailable" });
+    expect(logs.some((l) => /did not confirm/.test(l))).toBe(true);
   });
   it("clientIp: first x-forwarded-for hop, else x-real-ip, else unknown", () => {
     expect(clientIp(post({}, { "x-forwarded-for": "1.1.1.1, 2.2.2.2" }))).toBe("1.1.1.1");
@@ -249,13 +272,13 @@ describe("default sinks (env-gated)", async () => {
     expect(JSON.parse(lines[0])).toMatchObject({ email: "founder@example.test", country: "NZ" });
     expect(JSON.parse(lines[1])).toMatchObject({ email: "second@x.co" });
   });
-  it("defaultSinks reflects the env: nothing configured → only the file sink", () => {
+  it("defaultSinks requires the database, with no email or file fallback", () => {
     const saved = process.env.RESEND_API_KEY;
     delete process.env.RESEND_API_KEY;
     const s = defaultSinks();
     expect(s.db).toBeNull();
     expect(s.email).toBeNull();
-    expect(typeof s.file).toBe("function");
+    expect(s.file).toBeNull();
     if (saved !== undefined) process.env.RESEND_API_KEY = saved;
   });
 });

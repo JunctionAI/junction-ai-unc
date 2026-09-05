@@ -1,5 +1,5 @@
 /* POST /api/waitlist — join the waitlist from the landing page. Contract + logic live in
-   src/lib/waitlist/handler.ts (rate limit, validation, the db → Resend → file cascade). */
+   src/lib/waitlist/handler.ts (rate limit, validation, confirmed database storage). */
 
 import { handleWaitlist } from "@/lib/waitlist/handler";
 import { defaultSinks } from "@/lib/waitlist/sinks";

@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
-import Landing from "@/components/landing/Landing";
+import type { Metadata } from "next";
+import LandingV2 from "@/components/landing/LandingV2";
 import { shopifyInstallForward } from "@/lib/connectors/installForward";
-import { toLocalePricing } from "@/lib/locale/countries";
-import { resolveLocaleForRequest } from "@/lib/locale/server";
+export const metadata: Metadata = {
+  title: "Junction AI | Sales and marketing agents for your business",
+  description: "Explore business-specific sales and marketing workflows. Join Junction’s private-beta waitlist for research, recommendations and drafts ready for review.",
+};
 
-/* getjunction.ai — the waitlist landing. Server wrapper: resolves the visitor's pricing
-   locale (x-vercel-ip-country → cookie → ?country=XX override, see src/lib/locale) and hands
-   the client-safe slice to the pixel-ported page in src/components/landing/Landing.tsx.
+/* Supplied v2 waitlist landing. Paid pricing is not advertised before confirmation;
+   billing locale resolution remains in the existing checkout/settings routes.
 
    One detour: this URL is also the Shopify app's application_url, so a request carrying
    ?shop=&hmac= is a merchant arriving from the App Store — forward it, query intact, to the
@@ -16,7 +18,5 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   const params = await searchParams;
   const install = shopifyInstallForward(params);
   if (install) redirect(install);
-  const country = typeof params.country === "string" ? params.country : undefined;
-  const locale = await resolveLocaleForRequest(country);
-  return <Landing pricing={toLocalePricing(locale)} />;
+  return <LandingV2 />;
 }
