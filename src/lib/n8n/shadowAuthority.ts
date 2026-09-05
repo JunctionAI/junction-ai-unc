@@ -1,10 +1,14 @@
 import { stableHash } from "../runtime/context";
 import { validateSpec } from "../runtime/validate";
 import { assertProxyRuntimeContext, authenticate, type ProxyDeps } from "./proxy";
-import { RuntimeContextError } from "../runtime/contextFence";
+import { RuntimeContextError, runtimeGeneration } from "../runtime/contextFence";
 import { assertShadowRequest, type KeywordShadowContract } from "./shadowContract";
+import { DbShadowAdmission, shadowTokenDigest } from "./shadowAdmission";
+import { bearerToken } from "./dataToken";
 
-/** Read-only preflight, NOT a one-use provider-spend permit or execution attestation.
+/** Consumes one existing run-bound provider allowance; never creates an allowance.
+ * GET is retained for the frozen receiver contract. It is no-store, authenticated and
+ * deliberately non-repeatable. A lost response must be reconciled, not replayed.
  * The receiver must use the canonical client returned here, never webhook body overrides.
  * Call only an independently pinned Junction origin, with redirects disabled.
  */
@@ -59,6 +63,16 @@ export async function shadowAuthority(deps: ProxyDeps, req: Request, receiverUrl
   } catch (error) {
     return deny(error instanceof RuntimeContextError && error.code === "context_changed" ? 409 : 503,
       "The stored run's business context is stale, paused or unavailable");
+  }
+  const admission = deps.shadowAdmission ?? (deps.db ? new DbShadowAdmission(deps.db) : undefined);
+  if (!admission) return deny(503, "Durable shadow admission is unavailable");
+  try {
+    const allowed = await admission.authorize({ accountId: run.accountId, contextGeneration: runtimeGeneration(run.contextGeneration),
+      runId: run.id, registrationId: registration.id, contract, specHash: run.specHash,
+      tokenDigest: shadowTokenDigest(bearerToken(req.headers.get("authorization"))!) });
+    if (!allowed) return deny(409, "No unused shadow provider allowance; reconcile the existing dispatch");
+  } catch {
+    return deny(503, "Shadow allowance could not be confirmed; do not call the provider");
   }
   return Response.json({ ok: true, shadow,
     run: { id: run.id, accountId: run.accountId, routineId: run.routineId, mode: run.mode, status: run.status, startedAt: run.startedAt },

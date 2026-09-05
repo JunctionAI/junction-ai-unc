@@ -38,6 +38,7 @@ import { DbProducerContext, EmptyProducerContext, PLAYBOOKS_PER_PRODUCE, renderP
 import type { Reader } from "../../worker/readers/types";
 import type { CredentialsKind } from "../../worker/wiring";
 import { bearerToken, hasScope, RateLimiter, scopesAreSubset, scopesForSpec, tokenKey, verifyDataToken, type DataTokenClaims } from "./dataToken";
+import type { ShadowAdmission } from "./shadowAdmission";
 
 export const READ_LIMIT_MAX = 500;
 export const ACTION_EXPIRY_HOURS = 24 * 7;
@@ -58,6 +59,8 @@ export interface ProxyDeps {
   idGen?: () => string;
   fetch?: typeof fetch;
   dataEnv?: Record<string, string | undefined>;
+  /** Test seam; real authority resolves its durable admission from the service DB. */
+  shadowAdmission?: ShadowAdmission;
   /** Playbook recall; undefined = recallPlaybooks (env-gated), null = none. */
   playbooks?: ((query: string, domains: Skill["domain"][] | null, limit: number) => Promise<Playbook[]>) | null;
 }

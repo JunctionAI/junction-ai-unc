@@ -1,5 +1,7 @@
 # Nguyen: next Unc integration delivery
 
+**Latest handoff, 5 September approximately 07:48 UTC:** origin correction received and independently visible. New frozen wrapper revision is `1bce8c54-637e-4770-af90-2da36f38369a`; [final pin and remaining Codex gates](D03-W01-FINAL-PIN-2026-09-05.md). The requests below to replace the placeholder are historical and satisfied. Do not republish again or use the superseded pin. Execution-reader access, receiver reconciliation, durable admission and registration are still Codex-owned; no authorised provider run yet.
+
 **Latest Codex configuration update (5 September, approximately 06:29 UTC):** [verified signing/URL setup and remaining access gates](N8N-CONFIGURATION-READBACK-2026-09-05.md). Worker signing is no longer missing. A worker receiver-token format mismatch and the trial's public-API restriction were confirmed. Keep the current receipt shape and return the final configured revision; do not start paid tests until registration/admission/access verification is complete. This does not request another wrapper redesign.
 
 This brief supersedes the earlier architecture suggestions. Keep the useful workflows and existing authorized credentials; do not rebuild everything or make a workflow for every combination of switches. Codex owns the Unc backend, account data, dispatch, adapters and receipt storage. Tom supplies business choices and unavoidable owner consents, not integration schemas.

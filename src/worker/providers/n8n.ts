@@ -25,6 +25,8 @@ import type { Logger } from "../log";
 import { pinnedWebhookFetch, type WebhookFetch, type WebhookResponse } from "./pinnedWebhookFetch";
 import { createShadowExecutionReader, type ShadowExecutionReader } from "./n8nExecutionReader";
 import { shadowRequestDigest } from "../../lib/n8n/executionEvidence";
+import { shadowTokenDigest, type ShadowAdmission } from "../../lib/n8n/shadowAdmission";
+import { runtimeGeneration } from "../../lib/runtime/contextFence";
 
 export const N8N_DEFAULT_TIMEOUT_MS = 60_000;
 export const N8N_SECRET_ENV = "N8N_SIGNING_SECRET";
@@ -120,6 +122,8 @@ export interface HttpN8nBridgeOptions {
   readShadowExecution?: ShadowExecutionReader;
   /** Separate test seam: the execution API key never goes through the webhook transport. */
   executionFetch?: WebhookFetch;
+  /** Durable operator-issued permit; required for every paid shadow dispatch. */
+  shadowAdmission?: ShadowAdmission;
 }
 
 export class HttpN8nBridge implements N8nBridge {
@@ -143,7 +147,7 @@ export class HttpN8nBridge implements N8nBridge {
     const identity = { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, mode: ctx.mode, startedAt: ctx.startedAt };
     if (shadow) {
       assertShadowRequest(shadow, identity);
-      if (workflow && (workflow.accountId !== shadow.accountId || workflow.routineId !== shadow.routineId || !workflow.active))
+      if (!workflow || workflow.accountId !== shadow.accountId || workflow.routineId !== shadow.routineId || !workflow.active)
         throw new Error("shadow integration requires an active account-specific workflow registration");
     }
     const url = this.resolveUrl(node, workflow);
@@ -172,47 +176,76 @@ export class HttpN8nBridge implements N8nBridge {
     const ts = String(this.now().getTime());
     const f = this.opts.fetch ?? pinnedWebhookFetch;
     const timeoutMs = node.kind === "n8n" && node.timeoutMs ? node.timeoutMs : (this.opts.timeoutMs ?? N8N_DEFAULT_TIMEOUT_MS);
-    let res: WebhookResponse;
-    try {
-      res = await f(target.url.toString(), { method: "POST", redirect: "manual", headers: { "content-type": "application/json", [SIGNATURE_HEADER]: sign(secret, body, ts), [TIMESTAMP_HEADER]: ts, ...receiverHeaders }, body, signal: AbortSignal.timeout(timeoutMs) }, target.pin);
-    } catch (err) {
-      this.opts.log?.warn("n8n.call_failed", { runId: ctx.runId, routineId: ctx.routineId, error: err instanceof Error ? err.name : "unknown" });
-      throw new Error(`n8n webhook unreachable (${err instanceof Error ? err.name : "error"})`);
+    let permitId: string | undefined;
+    let observedExecutionId: string | undefined;
+    if (shadow) {
+      if (!this.opts.shadowAdmission || !payload.dataToken || !workflow)
+        throw new Error("Durable shadow admission is not configured; provider dispatch is disabled");
+      permitId = await this.opts.shadowAdmission.claim({ accountId: identity.accountId,
+        contextGeneration: runtimeGeneration(ctx.account.contextGeneration), runId: identity.runId,
+        registrationId: workflow.id, contract: shadow, receiverUrl: target.url.toString(),
+        requestDigest: shadowRequestDigest(JSON.parse(body)), tokenDigest: shadowTokenDigest(payload.dataToken) });
     }
-    if (res.status >= 300 && res.status < 400) throw new Error(`n8n webhook redirect refused (${res.status})`);
-    if (res.status === 202) {
-      if (shadow) throw new Error("shadow integration requires a synchronous result and execution receipt");
-      this.opts.log?.info("n8n.accepted", { runId: ctx.runId, routineId: ctx.routineId });
-      return { kind: "accepted" };
-    }
-    if (!res.ok) throw new Error(`n8n webhook answered ${res.status}`);
-    let parsed: unknown;
-    try {
-      parsed = await res.json();
-    } catch {
-      throw new Error("n8n webhook answered with a body that is not JSON");
-    }
-    const out = parseN8nReply(parsed, payload.kind, node.kind === "produce" ? node.maxItems : SKILL_BY_ID[ctx.routineId]?.maxItems);
-    if (shadow && out.kind === "artifact") {
-      const reported = validateShadowReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now());
-      const controller = new AbortController();
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      let observation: unknown;
+    const perform = async (): Promise<N8nCallResult> => {
+      let res: WebhookResponse;
       try {
-        observation = await Promise.race([
-          readExecution!({ workflowId: shadow.workflowId, executionId: String(reported.executionId), signal: controller.signal }),
-          new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("execution verification timed out")); }, 10_000); }),
-        ]);
+        res = await f(target.url.toString(), { method: "POST", redirect: "manual", headers: { "content-type": "application/json", [SIGNATURE_HEADER]: sign(secret, body, ts), [TIMESTAMP_HEADER]: ts, ...receiverHeaders }, body, signal: AbortSignal.timeout(timeoutMs) }, target.pin);
+      } catch (err) {
+        this.opts.log?.warn("n8n.call_failed", { runId: ctx.runId, routineId: ctx.routineId, error: err instanceof Error ? err.name : "unknown" });
+        throw new Error(`n8n webhook unreachable (${err instanceof Error ? err.name : "error"})`);
+      }
+      if (res.status >= 300 && res.status < 400) throw new Error(`n8n webhook redirect refused (${res.status})`);
+      if (res.status === 202) {
+        if (shadow) throw new Error("shadow integration requires a synchronous result and execution receipt");
+        this.opts.log?.info("n8n.accepted", { runId: ctx.runId, routineId: ctx.routineId });
+        return { kind: "accepted" };
+      }
+      if (!res.ok) throw new Error(`n8n webhook answered ${res.status}`);
+      let parsed: unknown;
+      try {
+        parsed = await res.json();
       } catch {
-        // Do not leak API response bodies/credentials or retry the paid provider call.
-        throw new Error(`n8n execution could not be independently verified; reconcile the execution before rerunning (workflow=${shadow.workflowId}, execution=${reported.executionId})`);
-      } finally { clearTimeout(timer); }
-      const receipt = verifyShadowExecution(reported, observation, shadow, identity, this.now(), shadowRequestDigest(JSON.parse(body)));
-      const ref = `https://junctionai8.app.n8n.cloud/workflow/${shadow.workflowId}/executions/${receipt.executionId}`;
-      out.artifact.meta = { executionReceipt: receipt, approval_status: "pending_approval", executed_action: "none" };
-      out.artifact.evidence = [...(out.artifact.evidence ?? []), { source: "n8n_execution", ref }];
+        throw new Error("n8n webhook answered with a body that is not JSON");
+      }
+      const out = parseN8nReply(parsed, payload.kind, node.kind === "produce" ? node.maxItems : SKILL_BY_ID[ctx.routineId]?.maxItems);
+      if (shadow && out.kind === "artifact") {
+        const reported = validateShadowReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now());
+        observedExecutionId = String(reported.executionId);
+        // Persist the known execution before the next network wait. A crash here
+        // must leave a named execution to inspect, not a reason to call n8n again.
+        await this.opts.shadowAdmission!.observe(permitId!, observedExecutionId);
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let observation: unknown;
+        try {
+          observation = await Promise.race([
+            readExecution!({ workflowId: shadow.workflowId, executionId: String(reported.executionId), signal: controller.signal }),
+            new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("execution verification timed out")); }, 10_000); }),
+          ]);
+        } catch {
+          // Do not leak API response bodies/credentials or retry the paid provider call.
+          throw new Error(`n8n execution could not be independently verified; reconcile the execution before rerunning (workflow=${shadow.workflowId}, execution=${reported.executionId})`);
+        } finally { clearTimeout(timer); }
+        const receipt = verifyShadowExecution(reported, observation, shadow, identity, this.now(), shadowRequestDigest(JSON.parse(body)));
+        const ref = `https://junctionai8.app.n8n.cloud/workflow/${shadow.workflowId}/executions/${receipt.executionId}`;
+        out.artifact.meta = { executionReceipt: receipt, approval_status: "pending_approval", executed_action: "none" };
+        out.artifact.evidence = [...(out.artifact.evidence ?? []), { source: "n8n_execution", ref }];
+      }
+      this.opts.log?.info("n8n.replied", { runId: ctx.runId, routineId: ctx.routineId, kind: out.kind });
+      return out;
+    };
+    try {
+      const result = await perform();
+      if (permitId) await this.opts.shadowAdmission!.finish(permitId, result.kind === "artifact" ? "verified" : "refused", observedExecutionId, result);
+      return result;
+    } catch (error) {
+      // A crash after claim also leaves a non-reusable dispatching row. Neither an
+      // uncertain network outcome nor failed receipt persistence refunds the permit.
+      if (permitId) {
+        try { await this.opts.shadowAdmission!.finish(permitId, "uncertain", observedExecutionId); }
+        catch { this.opts.log?.warn("n8n.reconciliation_required", { runId: identity.runId, permitId }); }
+      }
+      throw error;
     }
-    this.opts.log?.info("n8n.replied", { runId: ctx.runId, routineId: ctx.routineId, kind: out.kind });
-    return out;
   }
 }

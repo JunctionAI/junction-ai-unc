@@ -1,3 +1,4 @@
+import { syntheticAdmission } from "./admissionFixture";
 import { describe, expect, it, vi } from "vitest";
 import { AVGAR_PILOT_ACCOUNT, AVGAR_SEO_WORKFLOW, KEYWORD_SHADOW_CONTRACT, assertShadowRequest, validateShadowReceipt, verifyShadowExecution, type KeywordShadowContract } from "../shadowContract";
 import { keywordShadowSpec } from "../keywordShadowSpec";
@@ -40,7 +41,7 @@ function reply() {
 function bridge(body: unknown, status = 200) {
   let count = 0;
   const sent: unknown[] = [];
-  const b = new HttpN8nBridge({ env, now: () => now, readShadowExecution,
+  const b = new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env, now: () => now, readShadowExecution,
     fetch: async (_url, init) => { count++; sent.push(JSON.parse(String(init.body))); return new Response(JSON.stringify(body), { status }); } });
   return { b, sent, count: () => count };
 }
@@ -66,13 +67,13 @@ describe("AVGAR keyword shadow contract", () => {
     let calls = 0;
     const fetch = async () => { calls++; return new Response(JSON.stringify(reply()), { status: 200 }); };
     for (const token of ["", "x".repeat(21), "x".repeat(23), "x".repeat(24) + "\ninvalid"]) {
-      await expect(new HttpN8nBridge({ env: { ...env, N8N_SHADOW_RECEIVER_TOKEN: token }, fetch }).call(node, ctx, workflow)).rejects.toThrow("separate scoped");
+      await expect(new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env: { ...env, N8N_SHADOW_RECEIVER_TOKEN: token }, fetch }).call(node, ctx, workflow)).rejects.toThrow("separate scoped");
     }
-    await expect(new HttpN8nBridge({ env: { ...env, N8N_SIGNING_SECRET: env.N8N_SHADOW_RECEIVER_TOKEN }, fetch }).call(node, ctx, workflow)).rejects.toThrow("separate scoped");
-    await expect(new HttpN8nBridge({ env, fetch }).call(node, ctx, { ...workflow, webhookUrl: "https://other.test/hook" })).rejects.toThrow("not pinned");
+    await expect(new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env: { ...env, N8N_SIGNING_SECRET: env.N8N_SHADOW_RECEIVER_TOKEN }, fetch }).call(node, ctx, workflow)).rejects.toThrow("separate scoped");
+    await expect(new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env, fetch }).call(node, ctx, { ...workflow, webhookUrl: "https://other.test/hook" })).rejects.toThrow("not pinned");
     expect(calls).toBe(0);
     let headers: HeadersInit | undefined;
-    await new HttpN8nBridge({ env, now: () => now, readShadowExecution, fetch: async (_url, init) => { headers = init.headers; return fetch(); } }).call(node, ctx, workflow);
+    await new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env, now: () => now, readShadowExecution, fetch: async (_url, init) => { headers = init.headers; return fetch(); } }).call(node, ctx, workflow);
     expect(new Headers(headers).get("authorization")).toBe(`Bearer ${env.N8N_SHADOW_RECEIVER_TOKEN}`);
   });
   it("rejects unbound, missing, failed or stale evidence", () => {
@@ -112,7 +113,7 @@ describe("AVGAR keyword shadow contract", () => {
     await store.putN8nWorkflow(workflow);
     let observedRunId = "";
     let observedDigest = "";
-    const b = new HttpN8nBridge({ env, now: () => now,
+    const b = new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env, now: () => now,
       readShadowExecution: async () => ({ ...observation(), request: { ...observation().request, runId: observedRunId }, requestDigest: observedDigest }),
       fetch: async (_url, init) => {
         const request = JSON.parse(String(init.body));
@@ -138,7 +139,7 @@ describe("AVGAR keyword shadow contract", () => {
 
   it("requires an independent reader BEFORE sending a paid-provider request", async () => {
     const fetch = vi.fn();
-    await expect(new HttpN8nBridge({ env, fetch }).call(node, ctx, workflow)).rejects.toThrow("verification is not configured");
+    await expect(new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env, fetch }).call(node, ctx, workflow)).rejects.toThrow("verification is not configured");
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -159,7 +160,7 @@ describe("AVGAR keyword shadow contract", () => {
 
   it("does not accept a webhook-supplied verification object or silently retry when independent lookup fails", async () => {
     let calls = 0;
-    const b = new HttpN8nBridge({ env, now: () => now,
+    const b = new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env, now: () => now,
       readShadowExecution: async () => { throw new Error("private-provider-error"); },
       fetch: async () => { calls++; return Response.json({ ...reply(), revisionVerification: observation() }); } });
     await expect(b.call(node, ctx, workflow)).rejects.toThrow("could not be independently verified");

@@ -13,6 +13,7 @@ import { AVGAR_PILOT_ACCOUNT, AVGAR_SEO_WORKFLOW, KEYWORD_SHADOW_CONTRACT, type 
 const mocked = vi.hoisted(() => ({ deps: null as unknown }));
 vi.mock("@/lib/n8n/routeDeps", () => ({ proxyDeps: () => mocked.deps }));
 import { GET } from "@/app/api/n8n/shadow-authority/route";
+import { syntheticAdmission } from "./admissionFixture";
 
 // Synthetic fixtures only. No real accounts, providers or deployed secrets are accessed.
 const NOW = new Date("2026-09-04T08:00:00.000Z");
@@ -59,6 +60,7 @@ beforeEach(async () => {
     active: true, webhookUrl: URL_PIN };
   await store.putN8nWorkflow(registration);
   deps = { store, secret: SECRET, credentials: new NoCredentialsProvider(), credentialsKind: "none", db: null,
+    shadowAdmission: syntheticAdmission(),
     now: () => NOW, limiter: new RateLimiter(60, 60_000, () => NOW), playbooks: null };
   mocked.deps = deps;
   vi.stubEnv("N8N_SHADOW_RECEIVER_URL", URL_PIN);
@@ -66,6 +68,25 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("keyword shadow receiver authority", () => {
+  it("does not turn read-only authority into an implicit provider permit", async () => {
+    deps.shadowAdmission = undefined;
+    await expectDenied(request(), 503);
+  });
+  it("returns a single allowance and denies replay without changing the response contract", async () => {
+    let unused = true;
+    const authorize = vi.fn(async () => { const allowed = unused; unused = false; return allowed; });
+    deps.shadowAdmission = { ...syntheticAdmission(), authorize };
+    expect((await GET(request())).status).toBe(200);
+    await expectDenied(request(), 409);
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(authorize.mock.calls[0]).toEqual([expect.objectContaining({ runId: run.id, registrationId: registration.id,
+      contract: CONTRACT, specHash: run.specHash, contextGeneration: 0, tokenDigest: expect.stringMatching(/^[a-f0-9]{64}$/) })]);
+    expect(JSON.stringify(authorize.mock.calls)).not.toContain('unc_dt.');
+  });
+  it("refuses an uncertain admission response rather than exposing provider authority", async () => {
+    deps.shadowAdmission = { ...syntheticAdmission(), authorize: async () => { throw new Error('private store error'); } };
+    await expectDenied(request(), 503);
+  });
   it("rechecks captured context after registration lookup before disclosing authority", async () => {
     const db = new FakeSupabase();
     db.seed("accounts", [{ id: run.accountId, context_generation: 0, automation_paused: false }]);

@@ -37,6 +37,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "llm_spend_reservations",
       "llm_usage",
       "memories",
+      "n8n_shadow_permits",
       "n8n_workflows",
       "oauth_states",
       "outbound_messages",
@@ -57,6 +58,16 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "worker_heartbeats",
     ]);
     // 0014 launch hardening
+    expect(s.n8n_shadow_permits.primaryKey).toEqual(["id"]);
+    expect([...s.n8n_shadow_permits.columns]).toEqual(expect.arrayContaining([
+      "account_id", "context_generation", "run_id", "registration_id", "authorized_by", "idempotency_key",
+      "spec", "contract", "request_digest", "token_digest", "execution_id", "result", "authorized_at",
+    ]));
+    expect(s.n8n_shadow_permits.uniques).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columns: ["run_id"] }),
+      expect.objectContaining({ columns: ["account_id", "context_generation", "idempotency_key"] }),
+    ]));
+    expect(s.n8n_shadow_permits.enums.status).toEqual(new Set(["reserved", "dispatching", "provider_authorized", "verifying", "verified", "refused", "uncertain"]));
     expect(s.accounts.columns.has("monthly_llm_cap_usd")).toBe(true);
     expect([...s.app_errors.columns]).toEqual(expect.arrayContaining(["scope", "message", "stack", "account_id", "context"]));
     expect(s.worker_heartbeats.primaryKey).toEqual(["worker"]);

@@ -1,3 +1,4 @@
+import { syntheticAdmission } from "./admissionFixture";
 import { describe, expect, it, vi } from "vitest";
 import { projectShadowExecution, shadowRequestDigest } from "../executionEvidence";
 import { createShadowExecutionReader, N8N_EXECUTION_API_BASE } from "../../../worker/providers/n8nExecutionReader";
@@ -18,6 +19,7 @@ const env = { NODE_ENV: "production", N8N_EXECUTION_READER_ENABLED: "true", N8N_
   N8N_EXECUTION_API_KEY: "synthetic-independent-execution-api-key", N8N_SHADOW_WORKFLOW_ID: binding.workflowId,
   N8N_SHADOW_TRIGGER_NODE_ID: binding.triggerNodeId, N8N_SIGNING_SECRET: "synthetic-signing-root", N8N_SHADOW_RECEIVER_TOKEN: "synthetic-separate-receiver-key",
   N8N_SHADOW_RECEIVER_URL: "https://junctionai8.app.n8n.cloud/webhook/test-keyword", N8N_DATA_BASE_URL: "https://unc.example.com" };
+const workflow = { id: "synthetic-registration", accountId: AVGAR_PILOT_ACCOUNT, routineId: "D03-W01", active: true, webhookUrl: env.N8N_SHADOW_RECEIVER_URL };
 const node: N8nNode = { id: "keyword", kind: "n8n", shadowContract: contract, webhookUrl: env.N8N_SHADOW_RECEIVER_URL };
 const payload = () => JSON.parse(JSON.stringify(buildN8nPayload(node, ctx, { env, secret: env.N8N_SIGNING_SECRET, now: () => now }))) as Record<string, unknown>;
 function saved(body = payload()): Record<string, unknown> {
@@ -138,8 +140,8 @@ describe("bridge uses the real reader adapter, not a webhook-supplied observatio
   it("accepts correlated independent API evidence and keeps the two credentials separate", async () => {
     const fetch = vi.fn(async () => Response.json(reply()));
     const executionFetch = vi.fn(async () => Response.json(saved()));
-    const bridge = new HttpN8nBridge({ env, fetch, executionFetch, lookup: dns, now: () => now });
-    const result = await bridge.call(node, ctx, null);
+    const bridge = new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env, fetch, executionFetch, lookup: dns, now: () => now });
+    const result = await bridge.call(node, ctx, workflow);
     expect(result).toMatchObject({ kind: "artifact", artifact: { meta: { executionReceipt: { workflowVersion: contract.workflowVersion, revisionEvidence: "verified_execution_record" } } } });
     expect(JSON.stringify(fetch.mock.calls)).not.toContain(env.N8N_EXECUTION_API_KEY);
     expect(JSON.stringify(executionFetch.mock.calls)).not.toContain(env.N8N_SHADOW_RECEIVER_TOKEN);
@@ -147,7 +149,7 @@ describe("bridge uses the real reader adapter, not a webhook-supplied observatio
   it("rejects changed saved business inputs even when execution/account/run IDs match", async () => {
     const fetch = vi.fn(async () => Response.json(reply()));
     const executionFetch = vi.fn(async () => Response.json(saved({ ...payload(), vars: { seed: "wrong-market" } })));
-    await expect(new HttpN8nBridge({ env, fetch, executionFetch, lookup: dns, now: () => now }).call(node, ctx, null)).rejects.toThrow("digest mismatch");
+    await expect(new HttpN8nBridge({ shadowAdmission: syntheticAdmission(), env, fetch, executionFetch, lookup: dns, now: () => now }).call(node, ctx, workflow)).rejects.toThrow("digest mismatch");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -31,6 +31,7 @@ import { LlmDecisionProvider, StorePersonalisation, type LlmClient } from "./pro
 import { RulesDecisionProvider, type PresetSource } from "../lib/actions";
 import { presetSource } from "../lib/runtime/presets/store";
 import { HttpN8nBridge } from "./providers/n8n";
+import { DbShadowAdmission } from "../lib/n8n/shadowAdmission";
 import { createProducerClient, DbProducerContext, LlmProducer } from "./providers/producer";
 import type { ScheduleCandidate } from "./scheduler";
 import { defaultCredentialProvider, serviceDb } from "./wiring";
@@ -99,7 +100,8 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
   const db = deps.db === undefined ? serviceDb() : deps.db;
   const chosen = producerOverride !== undefined ? producerOverride : deps.producer;
   const producer = chosen === undefined ? new LlmProducer(createProducerClient(), { context: new DbProducerContext(db, deps.store, { now, log: deps.log }), log: deps.log, now }) : (chosen ?? undefined);
-  const n8n = deps.n8n === undefined ? new HttpN8nBridge({ env: process.env, fetch: deps.fetch, now, log: deps.log }) : (deps.n8n ?? undefined);
+  const n8n = deps.n8n === undefined ? new HttpN8nBridge({ env: process.env, fetch: deps.fetch, now, log: deps.log,
+    shadowAdmission: db ? new DbShadowAdmission(db) : undefined }) : (deps.n8n ?? undefined);
   const presets = deps.presets === undefined ? presetSource(db) : deps.presets;
   const credentials = deps.credentials ?? defaultCredentialProvider(process.env, deps.log ? (line) => deps.log?.info("credentials", { line }) : undefined);
   const personalisation = new StorePersonalisation(deps.store, db, { now });

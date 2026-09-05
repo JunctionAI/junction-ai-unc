@@ -10,7 +10,17 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 18, 5 September 2026, approximately 07:39 UTC
+## Latest state — Batch 19, 5 September 2026, approximately 07:58 UTC
+
+**Verified source, rollback database and live handoff progress; no production rollout.** The preceding user-facing handoff answer did not change backend state. This continuation started OAuth inspection, then prioritized Nguyen's newly configured revision and the remaining keyword admission gate. Full B01–B24 scope is unchanged.
+
+- Independently observed the exact origin, saved revision `1bce8c54-637e-4770-af90-2da36f38369a`, and refusal traces 73–75 without DataForSEO. Provider node shows a single keyword, 30-second timeout and no Retry On Fail. Nguyen needs no further redesign/origin change. [Final handoff](integration/D03-W01-FINAL-PIN-2026-09-05.md).
+- Added server-issued one-use keyword permits and wired the shared app/worker bridge and existing authority GET to atomic dispatch/provider claims. Captured run/account/generation/owner/spec/registration, expiry and approved-key uniqueness prevent reuse; execution ID is checkpointed before independent verification. Uncertain outcomes never refund a paid-call allowance; validated results persist before returning to the engine.
+- **194 files / 2,350 tests**, app/worker TypeScript, production build and diff checks pass. Lint zero errors / 39 existing warnings. Real PostgreSQL rollback canary passes, including expiry and cross-run duplicate approval denial. Live advisors unchanged at six WARN/eight INFO.
+- Independent **07:57:38 UTC** readback: staged permit table absent, zero synthetic accounts, AVGAR generation 1 / paused, zero registrations/enabled routines/AVGAR runs. Canonical **07:57:39 UTC** health remains `00fc57cfd07b`, healthy DB/fresh worker. No persistent DDL/deployment/provider/model/message/workflow change/plan purchase/API-key creation.
+- The actual Cloud account still shows a nine-day trial with no API settings. Fresh plan screen: Starter €24/month or Pro €60/month before tax. No plan selected. Supported API entitlement and non-Enterprise broad-key approval are owner/provider gates, alongside receiver reconciliation. Automated permit issuance/budget policy, uncertainty reconciliation, coordinated rollout and real E2E remain Codex work. [Exact implementation and remaining limits](KEYWORD-ADMISSION-2026-09-05.md).
+
+## Batch 18, 5 September 2026, approximately 07:39 UTC
 
 **Verified source and rollback-only database progress; no production rollout.** The preceding Nguyen reply was a handoff/status turn, not backend progress. This continuation revalidated and pushed the pending command-delivery batch as `7503b1ddb567b9ea72548d6582ead3be0b4300dc`, then completed the artifact context/decision/delivery source slice.
 

@@ -1,5 +1,7 @@
 # D03-W01 shadow integration — implementation and remaining activation gate
 
+**Latest 5 September update:** configured wrapper revision `1bce8c54-637e-4770-af90-2da36f38369a` and refusals 73–75 are independently visible; [final pin](integration/D03-W01-FINAL-PIN-2026-09-05.md). [Durable admission source](KEYWORD-ADMISSION-2026-09-05.md) now requires an operator-issued one-use permit: the frozen wrapper's existing authenticated authority GET consumes that allowance once, with unchanged response JSON. Repeated/lost requests do not grant another paid call. This source is not deployed and does not remove API access, receiver reconciliation, issuance or E2E gates.
+
 Status: bridge, authority and concrete independent execution-reader code exist; **revision-evidence clarification below supersedes the earlier receipt requirement**. The reader is off by default and not live-proven. Public API access and acceptance remain Unc-owned activation gates. No pilot is registered or activated. See `integration/N8N-EXECUTION-READER.md` for the precise source/configuration/access boundary.
 The integration owner is Codex/Unc, not Tom. Tom should not have to invent routine mappings,
 relay schema decisions, or manually join execution receipts.
