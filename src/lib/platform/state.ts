@@ -77,6 +77,8 @@ export interface ObAnswered {
 export interface PlatformState {
   /** Server-owned business identity version. Never written through client_state. */
   contextGeneration?: number;
+  /** Server-owned maintenance hold, never persisted from browser input. */
+  automationPaused?: boolean;
   view: View;
   selCat: string;
   sel: RoutineDef | null;
@@ -156,6 +158,7 @@ export type Setter = (patch: Patch | ((s: PlatformState) => Patch)) => void;
 
 export const initialState: PlatformState = {
   contextGeneration: 0,
+  automationPaused: false,
   view: "today",
   selCat: "All",
   sel: null,

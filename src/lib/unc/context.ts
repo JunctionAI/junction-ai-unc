@@ -88,7 +88,7 @@ export function buildUncContext(S: PlatformState, opts: ContextOptions = {}) {
   const factEnabled = facts ? new Set(facts.routineStates.filter((r) => r.enabled).map((r) => r.name)) : null;
   // demo: the catalog's default "Active" flags stand in; account: only what is actually enabled
   const isOn = (n: string) => (account ? (factEnabled ? factEnabled.has(n) : S.routineOn[n] === true) : (S.routineOn[n] ?? ALL_SYSTEMS.find((x) => x.name === n)?.state === "Active"));
-  const phaseDefs = account && facts?.plan?.phases?.length ? facts.plan.phases.map((p, i) => ({ n: p.n ?? String(i + 1), name: p.name, routines: p.routines ?? [], you: p.from_you ?? "" })) : pd.phases.map((ph, pi) => ({ n: ph.n, name: ph.name, routines: S.routineEdits[`${S.posture}.${pi}`] ?? ph.routines, you: ph.you, st: ph.st }));
+  const phaseDefs = account ? (facts?.plan?.phases ?? []).map((p, i) => ({ n: p.n ?? String(i + 1), name: p.name, routines: p.routines ?? [], you: p.from_you ?? "" })) : pd.phases.map((ph, pi) => ({ n: ph.n, name: ph.name, routines: S.routineEdits[`${S.posture}.${pi}`] ?? ph.routines, you: ph.you, st: ph.st }));
   const phases = phaseDefs.map((ph, i) => {
     const onHere = ph.routines.filter(isOn).length;
     const status = account ? (onHere ? "active" : i === 0 ? "start here" : "ready when you are") : ((ph as { st?: string }).st ?? "");
@@ -115,6 +115,7 @@ export function buildUncContext(S: PlatformState, opts: ContextOptions = {}) {
 
   return {
     today: account ? now.toISOString().slice(0, 10) : DEMO_TODAY.slice(0, 10),
+    automation: { paused: account && S.automationPaused === true, actionsEnabled: false },
     business: {
       website: S.website || null,
       profile: S.scan.status === "done" ? S.scan.profile : null,

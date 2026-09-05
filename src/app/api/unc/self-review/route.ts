@@ -20,6 +20,7 @@ import { homeTelemetryForAccount } from "@/lib/telemetry/home";
 import { afterSelfReview } from "@/lib/brain/hooks";
 import { generateSelfReview, SELF_REVIEW_EFFORT, SELF_REVIEW_MAX_TOKENS, type SelfReviewLlm } from "@/lib/telemetry/selfReview";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { automationPauseResponse } from "@/lib/db/automationPause";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +43,8 @@ async function handleGET() {
 async function handlePOST() {
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
+  const paused = await automationPauseResponse(session.service, session.accountId);
+  if (paused) return paused;
   try {
     const store = getStore();
     const g = await generateSelfReview({ store, accountId: session.accountId, llm: reviewLlm(session.accountId, session.service) });

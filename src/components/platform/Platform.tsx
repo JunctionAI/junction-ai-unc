@@ -122,16 +122,19 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
   useEffect(() => {
     if (setupData && S.planAgreedAt !== setupData.agreedAt) setPlanAgreedAt(setupData.agreedAt);
   }, [setupData, S.planAgreedAt, setPlanAgreedAt]);
-  /* "Agree the plan →" for real: plans.agreed_at. Fires once per session when an onboarded
-     account has no agreed_at yet — the fresh agreement, or a backfill for an account that
-     agreed before the column was written. */
+  /* Only a fresh onboarding transition requests agreement. Hydration/reload must
+     never re-agree a plan that an operator deliberately cleared during a repair. */
+  const previousOnboarded = useRef(S.onboarded);
+  const agreementRequested = useRef(false);
   const agreeFired = useRef(false);
   const setupRefresh = setup.refresh;
   const setAccountName = persistence.setAccountName;
   useEffect(() => {
-    if (!inAccount || !S.onboarded || !setupData || setupData.agreedAt || agreeFired.current) return;
+    if (!previousOnboarded.current && S.onboarded) agreementRequested.current = true;
+    previousOnboarded.current = S.onboarded;
+    if (!agreementRequested.current || S.automationPaused || !inAccount || !S.onboarded || !setupData || setupData.agreedAt || agreeFired.current) return;
     agreeFired.current = true;
-    fetch("/api/setup/agree", { method: "POST" })
+    fetch("/api/setup/agree", { method: "POST", headers: { "x-unc-context-generation": String(S.contextGeneration ?? 0) } })
       .then((r) => r.json().catch(() => ({})))
       .then((body: { agreedAt?: string; accountName?: string | null }) => {
         if (typeof body.agreedAt === "string") setPlanAgreedAt(body.agreedAt);
@@ -139,7 +142,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
         setupRefresh();
       })
       .catch(() => {});
-  }, [inAccount, S.onboarded, setupData, setPlanAgreedAt, setupRefresh, setAccountName]);
+  }, [inAccount, S.onboarded, S.automationPaused, S.contextGeneration, setupData, setPlanAgreedAt, setupRefresh, setAccountName]);
   const showGuided = inAccount && S.onboarded && S.setupFlow !== "home";
   const phaseOne = phaseChannels(S)[0];
   const liveRefresh = live.refresh;
@@ -245,6 +248,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
     >
       {V.notOnboarding && !showGuided && <Sidebar V={V} account={persistence.mode === "account" ? persistence : null} billing={gated} onModels={inAccount ? () => setModelsOpen(true) : undefined} onSkills={inAccount ? () => setSkillsOpen(true) : undefined} onWhatUncKnows={inAccount ? () => setKnowsOpen(true) : undefined} />}
       <main style={{ flex: 1, minWidth: 0 }}>
+        {inAccount && S.automationPaused && <aside role="status" style={{ padding: "12px 16px", background: "var(--amber-wash)", color: "var(--amber-text)", fontSize: 13 }}>Automation paused for setup verification. Your connections are preserved. Account chat is available; routines and briefs will stay paused until the backend is verified.</aside>}
         {process.env.NEXT_PUBLIC_READINESS_PREVIEW === "true" && <aside role="note" style={{ padding: "12px 16px", background: "#082B45", color: "white", fontSize: 13 }}>Demo-only preview — sample data and replies. No AVGAR connections, real workflow execution, or Apple Messages delivery.</aside>}
         {gated?.state === "past_due" && <BillingBanner />}
         {V.isOnboarding && <Onboarding V={V} />}

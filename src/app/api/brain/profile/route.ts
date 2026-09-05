@@ -8,6 +8,7 @@
 import { requireAccountSession } from "@/lib/db/session";
 import { unwrap } from "@/lib/db/types";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { automationPauseResponse } from "@/lib/db/automationPause";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,8 @@ async function handleGET() {
 async function handlePATCH(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
+  const paused = await automationPauseResponse(session.service, session.accountId);
+  if (paused) return paused;
   let body: { founderNotes?: unknown };
   try {
     body = await req.json();

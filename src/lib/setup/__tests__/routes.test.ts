@@ -48,13 +48,13 @@ describe("demo mode + auth", () => {
   it("no database → { fallback: true } on every route", async () => {
     clearBillingEnv();
     expect(await (await getProgress()).json()).toEqual({ fallback: true });
-    expect(await (await postAgree()).json()).toEqual({ fallback: true });
+    expect(await (await postAgree(post("/api/setup/agree", {}))).json()).toEqual({ fallback: true });
     expect(await (await postEnable(post("/api/setup/enable", { routineId: "D01-W01" }))).json()).toEqual({ fallback: true });
   });
   it("401 without a session, 503 without the service role", async () => {
     user = null;
     expect((await getProgress()).status).toBe(401);
-    expect((await postAgree()).status).toBe(401);
+    expect((await postAgree(post("/api/setup/agree", {}))).status).toBe(401);
     user = { id: USER };
     serviceRole = false;
     expect((await getProgress()).status).toBe(503);
@@ -62,15 +62,28 @@ describe("demo mode + auth", () => {
 });
 
 describe("the spine through the routes", () => {
+  it("a cleared plan cannot be agreed or enabled from a held account or stale browser", async () => {
+    db.rows("accounts")[0].automation_paused = true;
+    expect((await postAgree(post("/api/setup/agree", {}))).status).toBe(503);
+    expect((await postEnable(post("/api/setup/enable", { routineId: "D01-W01" }))).status).toBe(503);
+    expect(db.rows("plans")[0].agreed_at).toBeFalsy();
+    expect(db.rows("routine_states")).toHaveLength(0);
+    db.rows("accounts")[0].automation_paused = false;
+    db.rows("accounts")[0].context_generation = 1;
+    expect((await postAgree(post("/api/setup/agree", {}))).status).toBe(409);
+    const req = post("/api/setup/agree", {});
+    req.headers.set("x-unc-context-generation", "1");
+    expect((await postAgree(req)).status).toBe(200);
+  });
   it("progress → agree → enable moves the steps, idempotently", async () => {
     let p = await (await getProgress()).json();
     expect(p.done).toBe(0);
     expect(p.channel).toBe("Content");
 
-    const a1 = await (await postAgree()).json();
+    const a1 = await (await postAgree(post("/api/setup/agree", {}))).json();
     expect(a1).toMatchObject({ created: false, accountName: "Example Co" });
     expect(a1.agreedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    const a2 = await (await postAgree()).json();
+    const a2 = await (await postAgree(post("/api/setup/agree", {}))).json();
     expect(a2.agreedAt).toBe(a1.agreedAt);
     expect(db.rows("plans")).toHaveLength(1);
 
@@ -96,7 +109,7 @@ describe("the spine through the routes", () => {
   it("members may read routine state but cannot enable or toggle routines", async () => {
     db.rows("account_members")[0].role = "member";
     expect((await getRoutineState(new Request("http://unc.test/api/routines/state"))).status).toBe(200);
-    expect((await postAgree()).status).toBe(403);
+    expect((await postAgree(post("/api/setup/agree", {}))).status).toBe(403);
     expect((await postEnable(post("/api/setup/enable", { routineId: "D01-W01" }))).status).toBe(403);
     const toggle = new Request("http://unc.test/api/routines/state", {
       method: "POST",

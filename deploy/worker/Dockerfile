@@ -17,6 +17,8 @@ RUN ! grep -rl 'require("@/' dist/worker
 FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production
+ARG UNC_BUILD_SHA
+ENV UNC_BUILD_SHA=${UNC_BUILD_SHA}
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist/worker ./dist/worker

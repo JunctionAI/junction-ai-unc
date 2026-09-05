@@ -166,10 +166,9 @@ describe("buildUncContext in account mode — no demo furniture", () => {
     expect(buildUncContext(initialState).strategy.agreedAt).toBeNull();
   });
 
-  it("no plan row yet: the current play's phases, phase 1 'start here' when nothing is on", () => {
+  it("no plan row yet: no template phases are presented as this account's plan", () => {
     const acct = buildUncContext({ ...S, routineOn: {} }, { mode: "account", facts: facts({ plan: null, routineStates: [] }), now: NOW });
-    expect(acct.strategy.phases[0]).toMatchObject({ name: "Organic brand engine", status: "start here" });
-    expect(acct.strategy.phases[2].status).toBe("ready when you are");
-    expect(JSON.stringify(acct.strategy.phases)).not.toContain("GATED");
+    expect(acct.strategy.phases).toEqual([]);
+    expect(acct.strategy.agreedAt).toBeNull();
   });
 });

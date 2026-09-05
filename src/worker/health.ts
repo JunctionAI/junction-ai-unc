@@ -39,7 +39,8 @@ export function startHealthServer(port: number, read: () => Heartbeat | null, op
     const hb = read();
     const fresh = heartbeatIsFresh(hb, now(), opts.maxAgeMs);
     res.writeHead(fresh ? 200 : 503, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: fresh, heartbeat: hb }));
+    const sha = /^[a-f0-9]{40}$/.test(process.env.UNC_BUILD_SHA ?? "") ? process.env.UNC_BUILD_SHA : null;
+    res.end(JSON.stringify({ ok: fresh, build: { sha }, heartbeat: hb }));
   });
   return new Promise((resolve, reject) => {
     server.once("error", reject);

@@ -70,6 +70,15 @@ describe("demo mode + auth", () => {
 });
 
 describe("the brief", () => {
+  it("a held account blocks generation before a model call or any write, but can read", async () => {
+    db.rows("accounts")[0].automation_paused = true;
+    const result = await post({ force: true });
+    expect(result.status).toBe(503);
+    expect(await result.json()).toMatchObject({ code: "automation_paused" });
+    expect(db.rows("daily_briefs")).toHaveLength(0);
+    expect(db.rows("llm_usage")).toHaveLength(0);
+    expect((await GET()).status).toBe(200);
+  });
   it("lets members read but blocks generation before any brief or model usage is written", async () => {
     db.rows("account_members")[0].role = "member";
     expect((await GET()).status).toBe(200);

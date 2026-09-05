@@ -52,6 +52,7 @@ export const CLIENT_STATE_SCHEMA_VERSION = 1;
 
 export interface AccountRow {
   context_generation?: number;
+  automation_paused?: boolean;
   id: string;
   currency: string;
   /** accounts.name — read for the sidebar header; written once at plan agreement (src/lib/db/accountState.ts ensureAccountName). */
@@ -67,8 +68,8 @@ export interface GoalRow {
 }
 export interface ResourceProfileRow {
   account_id: string;
-  budget_monthly: number;
-  hours_weekly: number;
+  budget_monthly: number | null;
+  hours_weekly: number | null;
   reinvestment: "steady" | "balanced" | "all_in";
   gross_margin_pct: number | null;
   website: string | null;
@@ -258,8 +259,8 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
 
   const resourceProfile: ResourceProfileRow = {
     account_id: accountId,
-    budget_monthly: S.budgetMo,
-    hours_weekly: S.hoursWk,
+    budget_monthly: S.obAnswered.budget ? S.budgetMo : null,
+    hours_weekly: S.obAnswered.hours ? S.hoursWk : null,
     reinvestment: REINVEST_TO_DB[S.reinvest] ?? "balanced",
     gross_margin_pct: S.marginPct,
     website: S.website || null,
@@ -280,9 +281,9 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
 
   const plan: PlanRow = {
     account_id: accountId,
-    title: (postureDefs[S.posture] ?? postureDefs.brand).label,
-    phases: planPhases(S.posture, S.routineEdits),
-    narrative: narrativeProse(S.narrative.value),
+    title: S.obAnswered.budget && S.obAnswered.hours ? (postureDefs[S.posture] ?? postureDefs.brand).label : "",
+    phases: S.obAnswered.budget && S.obAnswered.hours ? planPhases(S.posture, S.routineEdits) : [],
+    narrative: S.obAnswered.budget && S.obAnswered.hours ? narrativeProse(S.narrative.value) : null,
   };
 
   const businessProfile: BusinessProfileRow = {
@@ -360,6 +361,7 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
 export function rowsToState(rows: LoadedRows, base: PlatformState = initialState): PlatformState {
   const S: PlatformState = { ...base };
   S.contextGeneration = rows.account?.context_generation ?? 0;
+  S.automationPaused = rows.account?.automation_paused === true;
   const cs = rows.stateMeta?.client_state;
 
   if (rows.account?.currency) S.currency = rows.account.currency;
@@ -402,6 +404,10 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
   if (rp) {
     S.budgetMo = Number(rp.budget_monthly);
     S.hoursWk = Number(rp.hours_weekly);
+    // UI inputs keep numeric placeholders, but null storage always wins over an
+    // old answered flag and renders/saves as unknown until explicitly supplied.
+    if (rp.budget_monthly == null) S.obAnswered = { ...S.obAnswered, budget: false };
+    if (rp.hours_weekly == null) S.obAnswered = { ...S.obAnswered, hours: false };
     S.reinvest = REINVEST_FROM_DB[rp.reinvestment] ?? base.reinvest;
     S.marginPct = rp.gross_margin_pct === null || rp.gross_margin_pct === undefined ? null : Number(rp.gross_margin_pct);
     S.website = rp.website ?? "";

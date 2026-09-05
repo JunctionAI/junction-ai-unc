@@ -17,6 +17,7 @@ import { createTextClient } from "@/lib/llm/router";
 import { requireAccountOwnerSession, requireAccountSession, type AccountSession } from "@/lib/db/session";
 import { getStore } from "@/lib/runtime/store";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { automationPauseResponse } from "@/lib/db/automationPause";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,8 @@ async function handleGET() {
 async function handlePOST(req: Request) {
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
+  const paused = await automationPauseResponse(session.service, session.accountId);
+  if (paused) return paused;
   let force = false;
   try {
     const body = (await req.json().catch(() => ({}))) as { force?: unknown };

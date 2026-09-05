@@ -9,13 +9,19 @@
 import { requireAccountOwnerSession } from "@/lib/db/session";
 import { agreePlan } from "@/lib/setup/progress";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { captureMemoryContext } from "@/lib/db/contextGeneration";
+import { automationPauseResponse } from "@/lib/db/automationPause";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function handlePOST() {
+async function handlePOST(req: Request) {
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
+  const context = await captureMemoryContext(session.service, session.accountId, req);
+  if (context instanceof Response) return context;
+  const paused = await automationPauseResponse(session.service, session.accountId);
+  if (paused) return paused;
   try {
     return Response.json(await agreePlan(session.service, session.accountId));
   } catch (err) {

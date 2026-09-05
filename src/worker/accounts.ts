@@ -15,6 +15,7 @@ import type { AccountContext } from "../lib/runtime/types";
 
 export interface WorkerAccount {
   account: AccountContext;
+  automationPaused?: boolean;
   /** Free-form template variables (vars.<key>) — e.g. niche, hashtags, competitorDomains. */
   vars?: Record<string, unknown>;
 }
@@ -52,13 +53,13 @@ export class DbAccountsSource implements AccountsSource {
     const out: WorkerAccount[] = [];
     for (const id of ids) {
       const acct = await this.getAccount(id);
-      if (acct) out.push(acct);
+      if (acct && !acct.automationPaused) out.push(acct);
     }
     return out;
   }
 
   async getAccount(accountId: string): Promise<WorkerAccount | null> {
-    const account = await unwrap<{ id: string; currency: string } | null>("accounts.select", this.db.from("accounts").select("id, currency").eq("id", accountId).maybeSingle());
+    const account = await unwrap<{ id: string; currency: string; automation_paused?: boolean } | null>("accounts.select", this.db.from("accounts").select("id, currency, automation_paused").eq("id", accountId).maybeSingle());
     if (!account) return null;
     const [profile, team] = await Promise.all([
       unwrap<{ budget_monthly: number | string | null; website: string | null } | null>(
@@ -71,6 +72,6 @@ export class DbAccountsSource implements AccountsSource {
     const approver = team.find((m) => (m.approves ?? "").trim() && m.name.trim())?.name.trim() ?? DEFAULT_APPROVER;
     const vars: Record<string, unknown> = {};
     if (profile?.website) vars.website = profile.website;
-    return { account: { accountId: account.id, currency: account.currency || "NZD", budgetMonthly: Number.isFinite(budgetMonthly) ? budgetMonthly : 0, approver }, vars };
+    return { account: { accountId: account.id, currency: account.currency || "NZD", budgetMonthly: Number.isFinite(budgetMonthly) ? budgetMonthly : 0, approver }, vars, ...(account.automation_paused ? { automationPaused: true } : {}) };
   }
 }

@@ -15,6 +15,7 @@ import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import type { RoutineId } from "@/lib/runtime/types";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { automationPauseResponse } from "@/lib/db/automationPause";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +32,8 @@ async function handlePOST(req: Request) {
   if (!CATALOG_SPEC_BY_ID[routineId as RoutineId]) return Response.json({ error: `unknown routine ${routineId}` }, { status: 404 });
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
+  const paused = await automationPauseResponse(session.service, session.accountId);
+  if (paused) return paused;
   try {
     const store = getStore();
     const now = new Date().toISOString();

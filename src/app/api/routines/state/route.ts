@@ -19,6 +19,7 @@ import { routinesStateForAccount, setRoutineEnabled } from "@/lib/runtime/routin
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { automationPauseResponse } from "@/lib/db/automationPause";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +49,10 @@ async function handlePOST(req: Request) {
   if (typeof body.enabled !== "boolean") return Response.json({ error: "enabled must be true or false" }, { status: 400 });
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
+  if (body.enabled) {
+    const paused = await automationPauseResponse(session.service, session.accountId);
+    if (paused) return paused;
+  }
   try {
     const routine = await setRoutineEnabled({ store: getStore(), db: session.service }, session.accountId, routineId, body.enabled);
     return Response.json({ routine });

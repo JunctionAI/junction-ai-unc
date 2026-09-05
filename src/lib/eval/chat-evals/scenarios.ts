@@ -53,6 +53,7 @@ type Ctx = Record<string, unknown>;
 export function baseContext(): Ctx {
   return {
     today: "2026-08-31",
+    automation: { paused: false, actionsEnabled: false },
     business: { website: null, profile: null },
     goal: {
       title: "NZ$60,000 MRR",

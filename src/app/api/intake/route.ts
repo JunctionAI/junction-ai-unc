@@ -20,6 +20,7 @@ import { authenticateIntakeKey, bearerFromHeader, hashIntakeKey, touchIntakeKey 
 import { checkRateLimit } from "@/lib/intake/rateLimit";
 import { MAX_BODY_BYTES, parseIntakePayload } from "@/lib/intake/schema";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { automationPauseResponse } from "@/lib/db/automationPause";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,8 @@ async function handlePOST(req: Request) {
     return json({ error: err instanceof Error ? err.message : "key lookup failed" }, 500);
   }
   if (!auth) return json({ error: "invalid or revoked key" }, 401);
+  const paused = await automationPauseResponse(service, auth.accountId);
+  if (paused) return paused;
 
   const rate = checkRateLimit(auth.keyId);
   if (!rate.allowed) return json({ error: "rate limit — try again shortly" }, 429, { "retry-after": String(rate.retryAfterSec) });

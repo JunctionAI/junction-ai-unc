@@ -48,7 +48,7 @@ const DAY_MS = 86_400_000;
 async function targets(deps: TelemetryDeps, accountId?: string): Promise<WorkerAccount[]> {
   if (accountId) {
     const a = await deps.accounts.getAccount(accountId);
-    return a ? [a] : [];
+    return a && !a.automationPaused ? [a] : [];
   }
   return deps.accounts.listAccounts();
 }

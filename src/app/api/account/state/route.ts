@@ -48,7 +48,7 @@ async function handlePUT(req: Request) {
     return json({ error: "Invalid account draft." }, 400);
   const resource = rows.resourceProfile as Record<string, unknown>;
   const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value);
-  if (!finite(resource.budget_monthly) || !finite(resource.hours_weekly)
+  if ((resource.budget_monthly !== null && !finite(resource.budget_monthly)) || (resource.hours_weekly !== null && !finite(resource.hours_weekly))
     || (resource.gross_margin_pct !== null && !finite(resource.gross_margin_pct))
     || (rows.goals as unknown[]).some(goal => !object(goal) || (goal.baseline !== null && !finite(goal.baseline))))
     return json({ error: "Account numbers must be finite numbers or explicit unknowns." }, 400);

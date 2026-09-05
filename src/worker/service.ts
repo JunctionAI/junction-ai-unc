@@ -35,6 +35,7 @@ import { createProducerClient, DbProducerContext, LlmProducer } from "./provider
 import type { ScheduleCandidate } from "./scheduler";
 import { defaultCredentialProvider, serviceDb } from "./wiring";
 import { accountDataReader } from "../lib/data/datasets";
+import { AUTOMATION_PAUSED_MESSAGE } from "../lib/db/automationPause";
 
 /** Hard constant. See the box above — flipping it is founder-gated (Wave 2). */
 export const LIVE_MODE_ENABLED: boolean = false;
@@ -148,6 +149,7 @@ export function assertModeAllowed(mode: RunMode | undefined): RunMode {
 
 export async function resolveAccount(deps: ServiceDeps, accountId: string, fallback?: Omit<AccountContext, "accountId">): Promise<WorkerAccount> {
   const known = await deps.accounts.getAccount(accountId);
+  if (known?.automationPaused) throw new WorkerError("invalid_request", AUTOMATION_PAUSED_MESSAGE);
   if (known) return known;
   if (fallback) return { account: { ...fallback, accountId } };
   throw new WorkerError("unknown_account", `account "${accountId}" is not known to the worker`);
