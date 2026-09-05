@@ -10,7 +10,7 @@
    Reads GET /api/routines/params?routineId=; `initial` lets a server render / test start with the
    view in hand (no fetch). */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { artifactHeaders } from "@/lib/artifacts/client";
 import type { AgentContext } from "@/lib/agents/client";
 import { formatValue, industryLine } from "@/lib/runtime/presets/industry";
@@ -24,7 +24,7 @@ export interface ParamsField extends PresetField {
 }
 
 export interface ParamsView {
-  accountId?:string;contextGeneration?:number;role?:"owner"|"member";stateUpdatedAt?:string|null;
+  accountId?:string;contextGeneration?:number;role?:"owner"|"member";stateUpdatedAt?:string|null;configurationRevision?:string;
   routineId: string;
   domain: string;
   currency: string;
@@ -58,10 +58,13 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
   const [busy, setBusy] = useState<"save" | "validate" | "promote" | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [tick,setTick]=useState(0);
+  const inFlight=useRef(false);
+  const mounted=useRef(true);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const accountId=context?.accountId, contextGeneration=context?.contextGeneration;
   const matches=useCallback((b:Body)=>!!accountId && b.accountId===accountId && b.contextGeneration===contextGeneration && b.routineId===routineId && Array.isArray(b.fields) && !!b.version,[accountId,contextGeneration,routineId]);
   const headers={"content-type":"application/json",...artifactHeaders(context?.accountId,context?.contextGeneration)};
-  const blocked=blockReason || (!context || view?.role!=="owner" ? "Only a verified account owner can change these settings." : null);
+  const blocked=blockReason || (!context || view?.role!=="owner" ? "Only a verified account owner can change these settings." : !view.configurationRevision ? "Refresh settings before changing this configuration." : null);
 
   useEffect(() => {
     if (initial !== undefined || !routineId) return;
@@ -95,13 +98,15 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
   };
 
   async function save() {
-    if (!view || busy || blocked) return;
+    if (!view || busy || inFlight.current || blocked) return;
+    inFlight.current=true;
     setBusy("save");
     setError(null);
     setNote(null);
     try {
-      const res = await fetch("/api/routines/params", { method: "PATCH", headers, body: JSON.stringify({ routineId, params: edits, steps: stepEdits, version:view.version.live,stateUpdatedAt:view.stateUpdatedAt }) });
+      const res = await fetch("/api/routines/params", { method: "PATCH", headers, body: JSON.stringify({ routineId, params: edits, steps: stepEdits, version:view.version.live,stateUpdatedAt:view.stateUpdatedAt,configurationRevision:view.configurationRevision }) });
       const body = (await res.json().catch(() => ({}))) as Body;
+      if(!mounted.current)return;
       if (!res.ok || !matches(body)) {setError(body.issues?.length ? body.issues.map((i)=>i.message).join(" · ") : "Save not confirmed. Refresh to inspect the saved settings; no automatic retry.");}
       else {
         apply(body);
@@ -113,30 +118,34 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(null);
+      inFlight.current=false;
+      if(mounted.current)setBusy(null);
     }
   }
 
   async function act(action: "validate" | "promote" | "discard") {
-    if(!view || busy || blocked || action!=="discard" && runBlockReason)return;
+    if(!view || busy || inFlight.current || blocked || action!=="discard" && runBlockReason)return;
+    inFlight.current=true;
     setBusy(action === "discard" ? "save" : action);
     setError(null);
     setNote(null);
     try {
-      const res = await fetch("/api/routines/params", { method: "POST", headers, body: JSON.stringify({ routineId, action,version:view.version.live,stateUpdatedAt:view.stateUpdatedAt }) });
+      const res = await fetch("/api/routines/params", { method: "POST", headers, body: JSON.stringify({ routineId, action,version:view.version.live,stateUpdatedAt:view.stateUpdatedAt,configurationRevision:view.configurationRevision }) });
       const body = (await res.json().catch(() => ({}))) as Body;
+      if(!mounted.current)return;
       if (!res.ok || !matches(body)) setError("Outcome not confirmed. Refresh to inspect the saved settings; no automatic retry.");
       else {
         apply(body);
         if (action === "validate") setNote(body.passed ? `Dry run passed (${body.run?.summary ?? "no incident"}). Promote when you’re happy.` : `Dry run did not pass: ${body.run?.summary ?? body.run?.status ?? "no summary"}. Nothing promoted.`);
         if (action === "promote") setNote(`Configured version v${body.version?.live ?? "?"} saved. This does not enable a routine or verify a schedule.`);
-        if (action === "discard") setNote("Draft discarded. The live version stands.");
+        if (action === "discard") setNote("Draft workflow discarded. The configured version is unchanged; saved editor values remain until you change them.");
         onSaved?.();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(null);
+      inFlight.current=false;
+      if(mounted.current)setBusy(null);
     }
   }
 

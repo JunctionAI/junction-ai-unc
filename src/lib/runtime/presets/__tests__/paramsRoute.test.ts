@@ -30,9 +30,9 @@ const url = (q = "") => `http://unc.test/api/routines/params${q}`;
 const headers={"content-type":"application/json","x-unc-account-id":ACCT,"x-unc-context-generation":"0"};
 const get=(q:string)=>GET(new Request(url(q),{headers}));
 // Simulate a fresh settings GET before each sequential UI edit. Stale-request cases below retain their old revision explicitly.
-const revision=(body:unknown)=>{const b=body as {routineId?:string};const r=db.rows("routine_states").find(r=>r.routine_id===b.routineId);return {version:r?.version??1,stateUpdatedAt:r?.updated_at??null,...b};};
-const patch=(body:unknown)=>PATCH(new Request(url(),{method:"PATCH",headers,body:JSON.stringify(revision(body))}));
-const post=(body:unknown)=>POST(new Request(url(),{method:"POST",headers,body:JSON.stringify(revision(body))}));
+const revision=async(body:unknown)=>{const b=body as {routineId?:string};const v=await (await get(`?routineId=${b.routineId}`)).json();return {version:v.version?.live??1,stateUpdatedAt:v.stateUpdatedAt??null,configurationRevision:v.configurationRevision,...b};};
+const patch=async(body:unknown)=>PATCH(new Request(url(),{method:"PATCH",headers,body:JSON.stringify(await revision(body))}));
+const post=async(body:unknown)=>POST(new Request(url(),{method:"POST",headers,body:JSON.stringify(await revision(body))}));
 
 interface View {
   routineId: string;
@@ -120,6 +120,7 @@ describe("PATCH — save creates routine_params + a draft version; refusals writ
     const body = (await res.json()) as View;
     expect(body.issues?.[0]).toMatchObject({ key: "roasFloor" });
     expect(db.tables.get("routine_params") ?? []).toHaveLength(0);
+    expect(db.rows("routine_states")).toHaveLength(0);
     expect((await (await get("?routineId=D02-W01")).json()).version).toEqual({ live: 1, draft: null });
     expect((await patch({ routineId: "D02-W01", steps: { read_x: "yes" } })).status).toBe(400);
   });
@@ -162,6 +163,37 @@ describe("PATCH — save creates routine_params + a draft version; refusals writ
   });
 });
 
+it("rejects a second tab's unbound edit even when the version and timestamp did not change",async()=>{
+  const old=await revision({routineId:"D01-W01",params:{postsPerWeek:5}});
+  expect((await patch({routineId:"D01-W01",params:{postsPerWeek:4}})).status).toBe(200);
+  const res=await PATCH(new Request(url(),{method:"PATCH",headers,body:JSON.stringify(old)}));
+  expect(res.status).toBe(409);expect(db.rows("routine_params")[0].params).toEqual({postsPerWeek:4});
+});
+
+it("rechecks owner, generation and profile changes at commit, after candidate preparation",async()=>{
+  for(const change of [()=>{db.rows("account_members")[0].role="member";},()=>{db.rows("accounts")[0].context_generation=1;},()=>{db.rows("resource_profiles")[0].budget_monthly=1200;}]) {
+    const original=db.rpcs.commit_routine_editor;
+    db.rpcs.commit_routine_editor=p=>{change();return original(p);};
+    const res=await patch({routineId:"D01-W01",params:{postsPerWeek:4}});
+    expect([403,409]).toContain(res.status);expect(db.rows("routine_states")).toHaveLength(0);expect(db.rows("routine_params")).toHaveLength(0);
+    db.rpcs.commit_routine_editor=original;db.rows("account_members")[0].role="owner";db.rows("accounts")[0].context_generation=0;
+  }
+});
+
+it("does not confirm malformed or wrong-account transaction output",async()=>{
+  const original=db.rpcs.commit_routine_editor;
+  db.rpcs.commit_routine_editor=async p=>({...await original(p) as object,accountId:"another-account"});
+  expect((await patch({routineId:"D01-W01",params:{postsPerWeek:4}})).status).toBe(503);
+  expect(db.rows("routine_params")).toHaveLength(1); // uncertain response, not a false rollback claim
+});
+
+it("sets private no-store on unauthenticated and failed settings responses",async()=>{
+  user=null;const denied=await get("?routineId=D01-W01");
+  expect(denied.status).toBe(401);expect(denied.headers.get("cache-control")).toBe("private, no-store");
+  user={id:USER};db.rpcs.read_routine_editor=()=>{throw new Error("offline");};
+  const unavailable=await get("?routineId=D01-W01");expect(unavailable.status).toBe(503);expect(unavailable.headers.get("cache-control")).toBe("private, no-store");
+});
+
 describe("POST — validate then promote (the existing versioning, unchanged)", () => {
   it("promote before a dry run → 409; validate records the run; promote then bumps live to v2", async () => {
     await patch({ routineId: "D01-W01", steps: { read_posts: false } });
@@ -179,6 +211,12 @@ describe("POST — validate then promote (the existing versioning, unchanged)", 
     const state = (db.tables.get("routine_states") ?? [])[0];
     expect(state.version).toBe(2);
     expect((state.live_spec as RoutineSpec).nodes.map((n) => n.id)).not.toContain("read_posts");
+    const reopened=await (await get("?routineId=D01-W01")).json();
+    expect(reopened.steps.find((s:{id:string})=>s.id==="read_posts").included).toBe(false);
+    const restored=await patch({routineId:"D01-W01",steps:{read_posts:true}});
+    expect(restored.status).toBe(200);
+    const next=db.rows("routine_states")[0].draft_spec as RoutineSpec;
+    expect(next.version).toBe(3);expect(next.nodes.some(n=>n.id==="read_posts")).toBe(true);
   });
 
   it("discard drops the draft; a re-save after promote makes v3", async () => {

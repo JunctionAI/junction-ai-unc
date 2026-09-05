@@ -48,7 +48,13 @@ export async function accountResolveInput(db: DbClient, accountId: string): Prom
     unwrap<{ value: number | string }[]>("kpi_snapshots.select", db.from("kpi_snapshots").select("value").eq("account_id", accountId).eq("metric_key", "aov_28d").order("window_end", { ascending: false }).limit(1)),
     listMemories(db, accountId, { kinds: ["fact"], limit: 200 }).catch(() => []),
   ]);
-  const p = (profileRow?.profile && typeof profileRow.profile === "object" ? profileRow.profile : {}) as Record<string, unknown>;
+  return resolveInputFromRows({ currency: account?.currency, profile: profileRow?.profile, resources, aov: aovRows?.[0]?.value, memories });
+}
+
+/** Also used by the transactional editor snapshot; no secondary reads. */
+export function resolveInputFromRows(rows: { currency?: string | null; profile?: unknown; resources?: { budget_monthly: unknown; gross_margin_pct: unknown } | null; aov?: unknown; memories?: { text: string; tags: string[] }[] }): ResolveInput {
+  const { resources } = rows;
+  const p = (rows.profile && typeof rows.profile === "object" ? rows.profile : {}) as Record<string, unknown>;
   const model = modelFromProfile(p);
   const num = (v: unknown): number | null => {
     const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
@@ -61,9 +67,9 @@ export async function accountResolveInput(db: DbClient, accountId: string): Prom
     storefront: model.storefront,
     category: typeof p.category === "string" ? p.category : null,
     descriptor: [typeof p.name === "string" ? p.name : "", typeof p.oneLiner === "string" ? p.oneLiner : "", ...products].filter(Boolean).join(" · ") || null,
-    nicheBand: nicheBandFromMemories(memories.filter((m) => m.tags.includes(NICHE_TAG))),
-    currency: account?.currency ?? "NZD",
-    aov: num(aovRows?.[0]?.value),
+    nicheBand: nicheBandFromMemories((rows.memories ?? []).filter((m) => m.tags.includes(NICHE_TAG))),
+    currency: rows.currency ?? "NZD",
+    aov: num(rows.aov),
     grossMarginPct: num(resources?.gross_margin_pct),
     budgetMonthly: num(resources?.budget_monthly),
   };
@@ -147,12 +153,21 @@ export interface SetRoutineParamsInput {
 /** Validate + persist the routine's own values and switched-off steps. `spec` (the routine's
     effective spec) is what the step ids are checked against. */
 export async function setRoutineParams(db: DbClient, accountId: string, spec: RoutineSpec, input: SetRoutineParamsInput, opts: { source?: PresetSource; now?: () => Date } = {}): Promise<RoutineParamsRecord> {
+  const existing = await getRoutineParams(db, accountId, spec.id);
+  const result = prepareRoutineParams(spec, input, existing, opts);
+  await unwrap("routine_params.upsert", db.from("routine_params").upsert({ account_id: accountId, routine_id: spec.id, domain: result.domain, params: result.params, disabled_steps: result.disabledSteps, source: result.source, updated_at: result.updatedAt }, { onConflict: "account_id,routine_id" }));
+  return result;
+}
+
+/** Pure candidate construction: invalid settings never initialize or partially write rows. */
+export function prepareRoutineParams(spec: RoutineSpec, input: SetRoutineParamsInput, existing: RoutineParamsRecord | null, opts: { source?: PresetSource; now?: () => Date } = {}): RoutineParamsRecord {
   const domain = domainOf(spec.id);
   if (!domain) throw new PresetValidationError([{ key: "", message: `routine ${spec.id} has no preset domain` }]);
   const params = input.params === undefined ? {} : validated(domain, input.params);
-  const existing = await getRoutineParams(db, accountId, spec.id);
   const merged: PresetParams = { ...(existing?.params ?? {}), ...params };
   for (const k of Object.keys(merged)) if (merged[k] === null) delete merged[k];
+  const cross = crossFieldIssues(domain, merged);
+  if (cross.length) throw new PresetValidationError(cross);
   const optional = new Set(optionalSteps(spec).map((s) => s.id));
   const off = new Set(existing?.disabledSteps.filter((id) => optional.has(id)) ?? []);
   for (const [id, included] of Object.entries(input.steps ?? {})) {
@@ -163,7 +178,6 @@ export async function setRoutineParams(db: DbClient, accountId: string, spec: Ro
   const disabledSteps = [...off];
   const now = (opts.now ?? (() => new Date()))().toISOString();
   const source = opts.source ?? "founder";
-  await unwrap("routine_params.upsert", db.from("routine_params").upsert({ account_id: accountId, routine_id: spec.id, domain, params: merged, disabled_steps: disabledSteps, source, updated_at: now }, { onConflict: "account_id,routine_id" }));
   return { routineId: spec.id, domain, params: merged, disabledSteps, source, updatedAt: now };
 }
 
