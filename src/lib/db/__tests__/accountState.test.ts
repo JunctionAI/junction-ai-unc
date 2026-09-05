@@ -85,7 +85,7 @@ describe("first sign-in bootstrap", () => {
     expect(db.calls.filter((c) => ["insert", "upsert", "update", "delete"].includes(c.op))).toHaveLength(0);
   });
 
-  it("selects an owned account before an older member-only account", async () => {
+  it("requires explicit selection when the user owns one account and belongs to another", async () => {
     const memberAccount = db.insertRow("accounts", { name: "Old client account", currency: "NZD" }).id as string;
     const ownerAccount = db.insertRow("accounts", { name: "Founder's account", currency: "NZD" }).id as string;
     db.seed("account_members", [
@@ -96,7 +96,9 @@ describe("first sign-in bootstrap", () => {
       { accountId: ownerAccount, role: "owner" },
       { accountId: memberAccount, role: "member" },
     ]);
-    expect((await ensureAccount(db, initialState, { userId: "user-1" })).accountId).toBe(ownerAccount);
+    await expect(ensureAccount(db, initialState, { userId: "user-1" })).rejects.toThrow("account_selection_required");
+    expect((await ensureAccount(db, initialState, { userId: "user-1", requestedAccountId: ownerAccount })).accountId).toBe(ownerAccount);
+    expect((await ensureAccount(db, initialState, { userId: "user-1", requestedAccountId: memberAccount })).role).toBe("member");
   });
 });
 
@@ -146,7 +148,7 @@ describe("beta invites (0009) — attach on first login", () => {
     expect(fixed.accountId).toBe(seededId);
   });
 
-  it("an unconfirmed email attaches nothing; two invites for one address attach both (the first one is home)", async () => {
+  it("an unconfirmed email attaches nothing; two invites attach both without choosing a home implicitly", async () => {
     const a = await seeded("heather@example.com", "AVGAR Sport");
     db.userEmail = null;
     await expect(ensureAccount(db, initialState, { userId: "user-1" })).rejects.toThrow(/not been invited/i);
@@ -154,7 +156,8 @@ describe("beta invites (0009) — attach on first login", () => {
     const b = db.insertRow("accounts", { name: "Second Co", currency: "NZD" }).id as string;
     db.seed("beta_invites", [{ account_id: b, email: "heather@example.com", role: "member", created_at: "2026-09-02T10:00:00.000Z" }]);
     db.userEmail = "heather@example.com";
-    const res = await ensureAccount(db, initialState, { userId: "user-1" });
+    await expect(ensureAccount(db, initialState, { userId: "user-1" })).rejects.toThrow("account_selection_required");
+    const res = await ensureAccount(db, initialState, { userId: "user-1", requestedAccountId: a });
     expect(res.accountId).toBe(a);
     expect(await listMemberships(db, "user-1")).toEqual([
       { accountId: a, role: "owner" },

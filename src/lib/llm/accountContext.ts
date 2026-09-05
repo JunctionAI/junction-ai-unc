@@ -22,7 +22,7 @@ const unavailable = () => Response.json({ error: "account storage is required fo
 
 export async function requireModelAccountContext(req?: Request): Promise<ModelAccountContext | Response | null> {
   if (!isDbConfigured()) return process.env.NODE_ENV === "production" ? unavailable() : null;
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   const requestedAccount = req?.headers.get("x-unc-account-id");
   if (requestedAccount && requestedAccount !== session.accountId)

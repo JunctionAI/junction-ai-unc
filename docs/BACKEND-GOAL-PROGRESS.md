@@ -13,7 +13,50 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 84, 6 September NZ
+## Latest state — Batch 85, 6 September NZ
+
+**Shared client-selection foundation implemented in source. Not deployed and not
+an all-client migration.** Junction remains the intended runtime; Hyperagent is
+only the inventory/history reference. Production and the staged AVGAR Slack
+route remain at the Batch 83 state; no native listener, workflow, membership,
+provider grant, action flag or external delivery was changed in this batch.
+
+The shared `selectAccountMembership` policy accepts an explicit
+`x-unc-account-id` only against the verified caller's memberships. Single-client
+callers retain the compatible default; multiple memberships require a choice.
+Malformed, foreign or revoked selections never fall back to a different client,
+and a member does not borrow owner access from another membership. Session-bound
+API handlers now pass the actual request through to selection, including model
+settings, agent/routine operations, approvals, artifacts and channel setup.
+Billing entitlement, connector start/manual/select/disconnect/state and legacy
+account bootstrap use the same selection policy. OAuth completion still uses
+the persisted original account and rechecks owner authority.
+
+Autosave captures its account header with its original payload, including retry.
+The browser facts store no longer chooses the first membership: changing or losing
+the selected client clears facts immediately, starts a separate read, and discards
+late results/errors from earlier identities, including A-to-B-to-A transitions.
+An earlier membership lookup cannot overwrite a subsequently published selection.
+
+Tests cover concurrent selections, owner/member distinctions, revocation, denied
+connector operations before credential/provider access, OAuth completion after a
+different tab selection, retained save identity, and overlapping facts reads.
+The full-suite migration exposed legacy tests that invoked handlers without a
+Request; those fixtures now pass real Request objects instead of bypassing the
+account-selection policy. Final verification: **3,200 tests / 236 files passed**;
+app TypeScript and changed-file lint pass. No production build or deployment was
+attempted for this deliberately incomplete browser-selection slice.
+
+**Next coherent release slice, still required:** authorized account listing and
+picker; per-tab URL selection wired into browser hydration and server-rendered
+billing; captured headers on the remaining browser API consumers; original-client
+OAuth/billing return URLs; browser/two-tab acceptance and production build/release.
+Do not deploy this foundation alone or create owner memberships to bypass the
+remaining agency-access decisions. Account/source mapping, provider access,
+routine acceptance and approved Slack cutover still need their own evidence.
+Continue implementation here, not another unchanged inventory audit.
+
+## Previous state — Batch 84, 6 September NZ
 
 **Existing-client source/agency identity reconciliation advanced. No new access,
 runtime activation, data import or deployment.** Previous turn was progress

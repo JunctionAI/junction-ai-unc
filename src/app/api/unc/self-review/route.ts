@@ -29,8 +29,8 @@ function reviewLlm(accountId: string, db: AccountSession["service"]): SelfReview
   return createTextClient("self_review", { maxTokens: SELF_REVIEW_MAX_TOKENS, effort: SELF_REVIEW_EFFORT, jsonMode: true }, { accountId, db });
 }
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   try {
     const t = await homeTelemetryForAccount(getStore(), session.accountId);
@@ -40,8 +40,8 @@ async function handleGET() {
   }
 }
 
-async function handlePOST() {
-  const session = await requireAccountOwnerSession();
+async function handlePOST(req: Request) {
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   const paused = await automationPauseResponse(session.service, session.accountId);
   if (paused) return paused;

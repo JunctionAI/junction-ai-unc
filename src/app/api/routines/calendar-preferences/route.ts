@@ -8,7 +8,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 const failure = () => json({ error: "Couldn’t confirm calendar settings. Refresh to check what is saved before changing them again." }, 503);
 async function handle(req: Request, save: boolean) {
   try {
-    const session = await requireAccountOwnerSession();
+    const session = await requireAccountOwnerSession(req);
     if (session instanceof Response) {
       session.headers.set("cache-control", "private, no-store"); return session.status === 200 ? failure() : session;
     }

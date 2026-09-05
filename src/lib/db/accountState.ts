@@ -18,6 +18,7 @@ import { rowsToState, stateToRows, type AccountRows, type LoadedRows } from "./m
 import { unwrap, type DbClient } from "./types";
 import { assertRuntimeContext } from "./runtimeContext";
 import { runtimeGeneration } from "../runtime/contextFence";
+import { selectAccountMembership } from "./accountSelection";
 
 export type MembershipRole = "owner" | "member";
 
@@ -26,8 +27,9 @@ export interface Membership {
   role: MembershipRole;
 }
 
-/** The accounts this exact signed-in user belongs to, in the canonical server selection order:
-    owned accounts first, then oldest membership. The explicit user filter is required because
+/** The accounts this exact signed-in user belongs to, in display order:
+    owned accounts first, then oldest membership. This order is not account selection.
+    The explicit user filter is required because
     account_members RLS also lets members see peers on the same account. */
 export async function listMemberships(db: DbClient, userId: string): Promise<Membership[]> {
   const rows = await unwrap<{ account_id: string; role: "owner" | "member" }[]>(
@@ -204,12 +206,14 @@ export async function acceptBetaInvites(db: DbClient): Promise<string[]> {
 export async function ensureAccount(
   db: DbClient,
   seed: PlatformState,
-  opts: { userId: string; allowCreate?: boolean },
+  opts: { userId: string; allowCreate?: boolean; requestedAccountId?: string | null },
 ): Promise<{ accountId: string; created: boolean; state: PlatformState; name: string; role: MembershipRole }> {
   await acceptBetaInvites(db);
   const memberships = await listMemberships(db, opts.userId);
+  const selection = selectAccountMembership(memberships, opts.requestedAccountId);
   if (memberships.length) {
-    const membership = memberships[0];
+    if (!selection.ok) throw new Error(selection.code);
+    const membership = selection.membership;
     const accountId = membership.accountId;
     const { state, found, name } = await loadAccountState(db, accountId, seed);
     // A member may read the account through RLS but cannot seed or autosave it. Hydrate the
@@ -220,6 +224,7 @@ export async function ensureAccount(
     }
     return { accountId, created: false, state, name, role: membership.role };
   }
+  if (opts.requestedAccountId !== undefined && opts.requestedAccountId !== null) throw new Error("account_access_denied");
   if (!opts.allowCreate) throw new Error("This address has not been invited to the Unc private beta.");
   const name = accountDisplayName({ profileName: seed.scan.profile?.name ?? null, website: seed.website, goalTitle: seed.goalTitle });
   const accountId = await createAccount(db, { name, currency: seed.currency });

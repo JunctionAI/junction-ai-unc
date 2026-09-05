@@ -5,6 +5,7 @@ import type Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
 import { clearBillingEnv, restoreEnv, setFakeEnv } from "./env";
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 
 let db: FakeSupabase;
 let user: { id: string; email?: string } | null = null;
@@ -35,6 +36,7 @@ import { POST as portal } from "@/app/api/billing/portal/route";
 import { GET as ret } from "@/app/api/billing/return/route";
 import { checkoutParams } from "../checkout";
 import { FAKE_ENV } from "./env";
+import { getBillingForRequest } from "../server";
 
 const ACCT = "00000000-0000-4000-8000-00000000acc1";
 const USER = "00000000-0000-4000-8000-00000000u5e1";
@@ -55,6 +57,18 @@ beforeEach(() => {
 afterEach(() => restoreEnv());
 
 describe("POST /api/billing/checkout", () => {
+  it("page entitlement uses the selected client's subscription and never another client's paid plan", async () => {
+    const other = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    db.insertRow("accounts", { id: other, name: "Other client" });
+    db.insertRow("account_members", { account_id: other, user_id: USER, role: "member" });
+    db.insertRow("subscriptions", { account_id: ACCT, status: "active" });
+    db.insertRow("subscriptions", { account_id: other, status: "canceled" });
+    expect((await getBillingForRequest(ACCT)).entitlement.state).toBe("active");
+    expect((await getBillingForRequest(other)).entitlement.state).toBe("canceled");
+    expect((await getBillingForRequest()).entitlement.state).toBe("none");
+    expect((await getBillingForRequest("cccccccc-cccc-4ccc-8ccc-cccccccccccc")).entitlement.state).toBe("none");
+    expect(stripeCalls).toEqual([]);
+  });
   it("returns { fallback: true } when billing isn't configured — Stripe is never touched", async () => {
     clearBillingEnv();
     const res = await checkout();

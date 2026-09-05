@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function handleGET(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   const config = slackConfig(process.env);
   if (!config) return Response.json({ error: "Slack is not switched on yet" }, { status: 503 });

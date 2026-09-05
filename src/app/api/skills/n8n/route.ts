@@ -29,8 +29,8 @@ async function who(session: AccountSession) {
   return { owner, admin };
 }
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const { owner, admin } = await who(session);
   const store = getStore();
@@ -52,7 +52,7 @@ async function handleGET() {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const { owner, admin } = await who(session);
   if (!owner && !admin) return json({ error: "only the account owner can register a workflow", code: "owner_only" }, 403);
@@ -77,7 +77,7 @@ async function handlePOST(req: Request) {
 }
 
 async function handlePATCH(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const { owner, admin } = await who(session);
   if (!owner && !admin) return json({ error: "only the account owner can change a workflow", code: "owner_only" }, 403);

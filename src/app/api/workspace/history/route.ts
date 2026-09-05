@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const privateResponse = (r: Response) => { r.headers.set("cache-control", "private, no-store"); r.headers.set("vary", "Cookie, Authorization"); return r; };
 async function handleGET(req: Request) {
   try {
-    const session = await requireAccountSession();
+    const session = await requireAccountSession(req);
     if (session instanceof Response) return privateResponse(session);
     const identity = await captureArtifactContext(session.service, session.accountId, req);
     if (identity instanceof Response) return privateResponse(identity);

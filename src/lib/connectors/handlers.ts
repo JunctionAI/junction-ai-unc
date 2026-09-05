@@ -48,6 +48,9 @@ export interface HandlerDeps {
   db: DbClient | null;
   /** Session user id; null when there is no session. */
   userId: string | null;
+  /** Untrusted request selector; membership is rechecked before credential access.
+   * OAuth callbacks deliberately use their persisted original account instead. */
+  requestedAccountId?: string | null;
   fetch: FetchLike;
   now: () => Date;
   /** Diagnostics only — receives codes, never values. */
@@ -93,7 +96,7 @@ export async function handleStart(deps: HandlerDeps, platform: string, body: unk
   if (!deps.config.keyring) return fallback("secret_store_not_configured");
   if (!deps.config.dbConfigured || !deps.db) return fallback("accounts_not_configured");
   if (!deps.userId) return err(401, "sign in first");
-  const accountId = await accountForUser(deps.db, deps.userId);
+  const accountId = await accountForUser(deps.db, deps.userId, deps.requestedAccountId);
   if (!accountId) return err(403, "no account for this user");
   if ((await memberRole(deps.db, deps.userId, accountId)) !== "owner") return err(403, "only the account owner can connect a platform");
 
@@ -253,7 +256,7 @@ export async function handleDisconnect(deps: HandlerDeps, platform: string): Pro
   if (!entry) return { status: 404, body: { error: "unknown platform" } };
   if (!deps.config.dbConfigured || !deps.db) return { status: 200, body: { fallback: true, reason: "accounts_not_configured" } };
   if (!deps.userId) return { status: 401, body: { error: "sign in first" } };
-  const accountId = await accountForUser(deps.db, deps.userId);
+  const accountId = await accountForUser(deps.db, deps.userId, deps.requestedAccountId);
   if (!accountId) return { status: 403, body: { error: "no account for this user" } };
   if ((await memberRole(deps.db, deps.userId, accountId)) !== "owner") return { status: 403, body: { error: "only the account owner can disconnect a platform" } };
   const row = await getConnector(deps.db, accountId, entry.id);
@@ -359,7 +362,7 @@ async function pickerGate(deps: HandlerDeps, platform: string, opts: { ownerOnly
   if (!hasPicker(entry.id)) return { ok: false, result: { status: 404, body: { error: "this platform has no account picker" } } };
   if (!deps.config.dbConfigured || !deps.db) return { ok: false, result: { status: 200, body: { fallback: true, reason: "accounts_not_configured" } } };
   if (!deps.userId) return { ok: false, result: { status: 401, body: { error: "sign in first" } } };
-  const accountId = await accountForUser(deps.db, deps.userId);
+  const accountId = await accountForUser(deps.db, deps.userId, deps.requestedAccountId);
   if (!accountId) return { ok: false, result: { status: 403, body: { error: "no account for this user" } } };
   if (opts.ownerOnly && (await memberRole(deps.db, deps.userId, accountId)) !== "owner") {
     return { ok: false, result: { status: 403, body: { error: "only the account owner can choose a platform account" } } };

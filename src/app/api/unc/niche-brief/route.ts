@@ -44,8 +44,8 @@ function coerceProfile(raw: unknown): ProfileLike | null {
   };
 }
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const context = await captureMemoryContext(session.service, session.accountId);
   if (context instanceof Response) return context;
@@ -59,7 +59,7 @@ async function handleGET() {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   const context = await captureMemoryContext(session.service, session.accountId, req);
   if (context instanceof Response) return context;

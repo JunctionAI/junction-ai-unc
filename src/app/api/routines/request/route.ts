@@ -12,7 +12,7 @@ const json=(body:unknown,status=200)=>Response.json(body,{status,headers:{"cache
 /** Read only: even a prepared or stalled request never starts work through GET. */
 export async function GET(req:Request) {
   try {
-    const session=await requireAccountOwnerSession();
+    const session=await requireAccountOwnerSession(req);
     if(session instanceof Response){session.headers.set("cache-control","private, no-store");return session;}
     if(req.headers.get("x-unc-actor-id")!==session.userId)return json({error:"Signed-in owner changed. Refresh before recovery."},409);
     const ctx=await captureArtifactContext(session.service,session.accountId,req);
@@ -31,7 +31,7 @@ export async function GET(req:Request) {
 /** Cancellation never executes. Explicit continuation uses only the server's original body. */
 export async function POST(req:Request) {
   try {
-    const session=await requireAccountOwnerSession();
+    const session=await requireAccountOwnerSession(req);
     if(session instanceof Response){session.headers.set("cache-control","private, no-store");return session;}
     if(req.headers.get("x-unc-actor-id")!==session.userId)return json({error:"Signed-in owner changed. Refresh before recovery."},409);
     const ctx=await captureArtifactContext(session.service,session.accountId,req);

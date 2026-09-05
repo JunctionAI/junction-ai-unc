@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function handleGET(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   const requestedAccount = req.headers.get("x-unc-account-id");
   if (requestedAccount && requestedAccount !== session.accountId) return contextChangedResponse();

@@ -6,6 +6,17 @@ const state = accountInitialState("NZD");
 const reply = (revision: number, accountId = "account-a") => Response.json({ ok: true, accountId, revision });
 
 describe("versioned account save client", () => {
+  it("captures separate account headers for concurrent tabs and preserves them on an uncertain retry", async () => {
+    const a = vi.fn().mockRejectedValueOnce(new Error("lost")).mockResolvedValueOnce(reply(1));
+    const b = vi.fn().mockResolvedValue(reply(1, "account-b"));
+    const saverA = createAccountStateSaver("account-a", 0, { fetch: a });
+    const saverB = createAccountStateSaver("account-b", 0, { fetch: b });
+    await expect(saverA.save(state)).rejects.toThrow("lost");
+    await saverB.save(state); await saverA.save(state);
+    expect(a.mock.calls.map(c => c[1].headers["x-unc-account-id"])).toEqual(["account-a", "account-a"]);
+    expect(b.mock.calls[0][1].headers["x-unc-account-id"]).toBe("account-b");
+    expect(a.mock.calls[0][1].body).toBe(a.mock.calls[1][1].body);
+  });
   it("does not write or bump revision on hydration, view changes or a duplicate acknowledged save", async () => {
     const request = vi.fn().mockResolvedValue(reply(4));
     const saver = createAccountStateSaver("account-a", 3, { initialState: state, fetch: request });

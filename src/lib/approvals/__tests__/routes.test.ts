@@ -70,25 +70,25 @@ afterEach(() => {
 describe("GET /api/approvals", () => {
   it("demo mode (no database) → { fallback: true }", async () => {
     clearBillingEnv();
-    expect(await (await list()).json()).toEqual({ fallback: true });
+    expect(await (await list(new Request("https://unc.test/api/approvals", { method: "GET" }))).json()).toEqual({ fallback: true });
   });
   it("401 without a session; 503 without the service role; 403 without an account", async () => {
     user = null;
-    expect((await list()).status).toBe(401);
+    expect((await list(new Request("https://unc.test/api/approvals", { method: "GET" }))).status).toBe(401);
     user = { id: USER };
     serviceRole = false;
-    expect((await list()).status).toBe(503);
+    expect((await list(new Request("https://unc.test/api/approvals", { method: "GET" }))).status).toBe(503);
     serviceRole = true;
     // RLS would hide other people's memberships from this user; the fake has no RLS, so empty the table.
     user = { id: "00000000-0000-4000-8000-00000000u5e9" };
     db.tables.set("account_members", []);
-    expect((await list()).status).toBe(403);
+    expect((await list(new Request("https://unc.test/api/approvals", { method: "GET" }))).status).toBe(403);
   });
   it("lists only the caller's pending approvals + recent receipts", async () => {
     const store = new SupabaseStore(db);
     const mine = await seedPaused(store, ACCT);
     await seedPaused(store, OTHER);
-    const res = await list();
+    const res = await list(new Request("https://unc.test/api/approvals", { method: "GET" }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.approvals.map((a: { id: string }) => a.id)).toEqual([mine.approval!.id]);

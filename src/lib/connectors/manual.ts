@@ -50,7 +50,7 @@ export async function handleManualConnect(deps: HandlerDeps, platform: string, b
   if (!deps.config.dbConfigured || !deps.db) return err(503, "account storage isn't configured", "accounts_not_configured");
   if (!deps.userId) return err(401, "sign in first");
   const db = deps.db;
-  const accountId = await accountForUser(db, deps.userId);
+  const accountId = await accountForUser(db, deps.userId, deps.requestedAccountId);
   if (!accountId) return err(403, "no account for this user");
   const role = await memberRole(db, deps.userId, accountId);
   if (role !== "owner") return err(403, "only the account owner can paste a key", "owner_only");

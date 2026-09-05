@@ -38,7 +38,7 @@ async function shape(snapshot:EditorSnapshot,routineId:string) {
 }
 
 async function handle(req:Request,method:"GET"|"PATCH"|"POST") {
-  const session=await (method==="GET"?requireAccountSession():requireAccountOwnerSession());
+  const session=await (method==="GET"?requireAccountSession(req):requireAccountOwnerSession(req));
   if(session instanceof Response)return session.status===200?bad("Settings require a saved account.",503):session;
   const ctx=await captureArtifactContext(session.service,session.accountId,req);if(ctx instanceof Response)return ctx;
   const identity={...ctx,userId:session.userId};

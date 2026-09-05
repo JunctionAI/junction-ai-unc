@@ -16,6 +16,8 @@ import { asDb, isDbConfigured } from "./client";
 import { acceptBetaInvites, listMemberships } from "./accountState";
 import { getServerSupabase, getServiceSupabase, isServiceRoleConfigured } from "./server";
 import type { DbClient } from "./types";
+import { headers } from "next/headers";
+import { ACCOUNT_SELECTION_HEADER, selectAccountMembership } from "./accountSelection";
 
 export interface AccountSession {
   userId: string;
@@ -31,7 +33,7 @@ export interface AccountSession {
 
 const json = (body: unknown, status: number) => Response.json(body, { status });
 
-export async function requireAccountSession(): Promise<AccountSession | Response> {
+export async function requireAccountSession(request?: Request): Promise<AccountSession | Response> {
   if (!isDbConfigured()) return json({ fallback: true }, 200);
   if (!isServiceRoleConfigured()) return json({ error: "account storage is not configured" }, 503);
   const supabase = await getServerSupabase();
@@ -47,15 +49,18 @@ export async function requireAccountSession(): Promise<AccountSession | Response
     memberships = await listMemberships(db, user.id);
   }
   if (!memberships.length) return json({ error: "this address has not been invited to the private beta", code: "invite_required" }, 403);
-  const accountId = memberships[0].accountId;
-  const role = memberships[0].role;
+  const requestHeaders = request?.headers ?? await headers();
+  const selection = selectAccountMembership(memberships, requestHeaders.get(ACCOUNT_SELECTION_HEADER));
+  if (!selection.ok) return Response.json({ error: "Choose an account you can access, then reload.", code: selection.code },
+    { status: selection.code === "account_access_denied" ? 403 : 409, headers: { "cache-control": "private, no-store" } });
+  const { accountId, role } = selection.membership;
   return { userId: user.id, email: user.email ?? null, accountId, role, db, service: asDb(getServiceSupabase()) };
 }
 
 /** Sensitive account actions are owner-only in private beta. This check is intentionally
     server-side: hiding the control in React is only a usability affordance. */
-export async function requireAccountOwnerSession(): Promise<AccountSession | Response> {
-  const session = await requireAccountSession();
+export async function requireAccountOwnerSession(request?: Request): Promise<AccountSession | Response> {
+  const session = await requireAccountSession(request);
   if (session instanceof Response) return session;
   if (session.role !== "owner") return json({ error: "only the account owner can do that", code: "owner_only" }, 403);
   return session;

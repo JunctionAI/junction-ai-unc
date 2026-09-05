@@ -6,6 +6,7 @@
 
 import { unwrap, type DbClient } from "../db/types";
 import type { SealedSecret } from "./crypto";
+import { selectAccountMembership } from "../db/accountSelection";
 
 export type ConnectorStatus = "disconnected" | "connecting" | "connected" | "needs_reconnect" | "error";
 
@@ -69,15 +70,16 @@ export async function failNativeOauth(db: DbClient, state: string, context: Nati
 
 const CONNECTOR_COLS = "id, account_id, platform, status, external_ref, last_sync_at, last_sync_result, sync_ref";
 
-/** Canonical account selection: oldest owned account first, otherwise oldest membership.
-    Keep this in lockstep with db/accountState.listMemberships (session/UI selection). */
-export async function accountForUser(db: DbClient, userId: string): Promise<string | null> {
+/** Resolve an explicit client against the caller's memberships. Single-account
+    callers remain compatible; ambiguous/stale selection never picks another client. */
+export async function accountForUser(db: DbClient, userId: string, requestedAccountId?: string | null): Promise<string | null> {
   const rows = await unwrap<{ account_id: string; role: string }[]>(
     "account_members.select",
     db.from("account_members").select("account_id, role").eq("user_id", userId).order("created_at", { ascending: true }),
   );
-  if (!rows.length) return null;
-  return (rows.find((r) => r.role === "owner") ?? rows[0]).account_id;
+  const selection = selectAccountMembership(rows.filter(r => r.role === "owner" || r.role === "member")
+    .map(r => ({ accountId: r.account_id, role: r.role as "owner" | "member" })), requestedAccountId);
+  return selection.ok ? selection.membership.accountId : null;
 }
 
 export async function isMember(db: DbClient, userId: string, accountId: string): Promise<boolean> {

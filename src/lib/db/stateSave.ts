@@ -35,7 +35,7 @@ export function createAccountStateSaver(accountId: string, initialRevision: numb
           pending ??= { projection, body: JSON.stringify({ accountId, revision, saveId: id(), rows: stateSaveRows(accountId, state) }) };
           if (new TextEncoder().encode(pending.body).byteLength > STATE_SAVE_MAX_BYTES) throw new Error("This account draft is too large to save. Please contact support.");
           const response = await request("/api/account/state", { method: "PUT", credentials: "same-origin",
-            headers: { "content-type": "application/json", "x-unc-account-save": "1" }, body: pending.body });
+            headers: { "content-type": "application/json", "x-unc-account-save": "1", "x-unc-account-id": accountId }, body: pending.body });
           if (response.status === 409) throw new Error(STATE_CONFLICT_MESSAGE);
           if (!response.ok) throw new Error(response.status === 401 ? "Your session expired. Sign in again before saving." : "Couldn't save your account. Your edits are still here; try again.");
           const result = await response.json() as { ok?: boolean; accountId?: string; revision?: number };

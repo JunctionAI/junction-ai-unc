@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   const context = await captureMemoryContext(session.service, session.accountId, req);
   if (context instanceof Response) return context;

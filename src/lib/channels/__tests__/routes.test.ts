@@ -107,7 +107,7 @@ describe("/api/channels/links", () => {
     const values = { SMS_PROVIDER: "tnz", TNZ_SMS_ENABLED: "true", TNZ_AUTH_TOKEN: "fixture", TNZ_WEBHOOK_AUTHORIZATION: "Basic fixture-webhook-secret-012345", TNZ_SENDER: "unc@example.test", TNZ_FROM: "800123", TNZ_PILOT_PHONE: "+64210000001", TNZ_PILOT_ACCOUNT_ID: "00000000-0000-4000-8000-00000000acc2" };
     try {
       for (const [k, v] of Object.entries(values)) vi.stubEnv(k, v);
-      const data = await (await GET()).json();
+      const data = await (await GET(new Request("https://unc.test/api/channels/links", { method: "GET" }))).json();
       expect(data.channels.find((c: { channel: string }) => c.channel === "sms")).toMatchObject({ configured: false, number: null });
       expect(JSON.stringify(data)).not.toContain(values.TNZ_PILOT_ACCOUNT_ID);
       expect((await POST(req("POST", { channel: "sms" }))).status).toBe(403);
@@ -120,15 +120,15 @@ describe("/api/channels/links", () => {
   });
   it("demo mode → fallback; no session → 401", async () => {
     clearBillingEnv();
-    expect(await (await GET()).json()).toEqual({ fallback: true });
+    expect(await (await GET(new Request("https://unc.test/api/channels/links", { method: "GET" }))).json()).toEqual({ fallback: true });
     restoreEnv();
     setFakeEnv();
     user = null;
-    expect((await GET()).status).toBe(401);
+    expect((await GET(new Request("https://unc.test/api/channels/links", { method: "GET" }))).status).toBe(401);
   });
 
   it("GET lists links + which channels are on (no tokens); POST issues a code with the deep link; unconfigured → honest fallback", async () => {
-    const listing = await (await GET()).json();
+    const listing = await (await GET(new Request("https://unc.test/api/channels/links", { method: "GET" }))).json();
     expect(listing.links).toEqual([]);
     expect(listing.channels.map((c: { channel: string; configured: boolean }) => [c.channel, c.configured])).toEqual([
       ["telegram", true],
@@ -151,7 +151,7 @@ describe("/api/channels/links", () => {
     expect(await (await POST(req("POST", { channel: "whatsapp" }))).json()).toEqual({ fallback: true, reason: "not_configured", channel: "whatsapp" });
     expect((await POST(req("POST", { channel: "fax" }))).status).toBe(400);
 
-    const after = await (await GET()).json();
+    const after = await (await GET(new Request("https://unc.test/api/channels/links", { method: "GET" }))).json();
     expect(after.links.map((l: { channel: string; verified: boolean }) => [l.channel, l.verified])).toEqual([
       ["telegram", false],
       ["sms", false],
@@ -178,7 +178,7 @@ describe("/api/channels/links", () => {
   it("lets members read channel state but not create, change, or remove account links", async () => {
     const mine = seedLink(db, { channel: "telegram", external_id: "555" });
     db.rows("account_members")[0].role = "member";
-    expect((await GET()).status).toBe(200);
+    expect((await GET(new Request("https://unc.test/api/channels/links", { method: "GET" }))).status).toBe(200);
     expect((await POST(req("POST", { channel: "telegram" }))).status).toBe(403);
     expect((await PATCH(req("PATCH", { linkId: mine.id, prefs: { brief: false } }))).status).toBe(403);
     expect((await DELETE(req("DELETE", { linkId: mine.id }))).status).toBe(403);

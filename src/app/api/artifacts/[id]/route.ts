@@ -18,7 +18,7 @@ const headers = { "cache-control": "no-store" };
 
 async function bind(req: Request, ownerOnly = false): Promise<{ accountId: string | null; contextGeneration?: number; decidedBy?: string; db: DbClient | null } | Response> {
   if (!isDbConfigured()) return { accountId: null, db: null };
-  const session = ownerOnly ? await requireAccountOwnerSession() : await requireAccountSession();
+  const session = ownerOnly ? await requireAccountOwnerSession(req) : await requireAccountSession(req);
   if (session instanceof Response) return session;
   const identity = await captureArtifactContext(session.service, session.accountId, req);
   if (identity instanceof Response) return identity;

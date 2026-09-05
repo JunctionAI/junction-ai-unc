@@ -35,7 +35,7 @@ function briefError(err: unknown, fallback: string) {
 }
 
 async function handleGET(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   try {
     const contextGeneration = await accountContextGeneration(session.service, session.accountId);
@@ -51,7 +51,7 @@ async function handleGET(req: Request) {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   let force = false;
   try {

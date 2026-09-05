@@ -9,6 +9,7 @@ import { keyringFromEnv } from "./crypto";
 import { readNowAfterConnect } from "./firstRead";
 import type { ConnectorConfig, HandlerDeps } from "./handlers";
 import { getProvisioner } from "./provisioning";
+import { ACCOUNT_SELECTION_HEADER } from "../db/accountSelection";
 
 /** APP_URL wins (must match the registered redirect URIs exactly); the request origin is the
     local-dev fallback. */
@@ -52,6 +53,7 @@ export async function handlerDeps(req: Request): Promise<HandlerDeps> {
     config,
     db,
     userId,
+    requestedAccountId: req.headers.get(ACCOUNT_SELECTION_HEADER),
     fetch: fetchFn,
     now,
     log,

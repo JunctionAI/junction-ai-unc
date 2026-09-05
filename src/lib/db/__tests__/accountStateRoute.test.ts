@@ -45,7 +45,7 @@ describe("account state API", () => {
   it("retains session and owner denial", async () => {
     session.current = Response.json({ error: "sign in" }, { status: 401 });
     expect((await put(body())).status).toBe(401);
-    expect((await GET()).status).toBe(401);
+    expect((await GET(new Request("https://unc.test/api/account/state", { method: "GET" }))).status).toBe(401);
     session.current = { accountId: ACCT, userId: "member", role: "member", service: { rpc } };
     expect((await put(body())).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
@@ -66,7 +66,7 @@ describe("account state API", () => {
   it("loads one coherent row snapshot and revision, with honest defaults", async () => {
     rpc.mockResolvedValue({ data: { account: { id: ACCT, name: "AVGAR", currency: "NZD" }, goals: [], resourceProfile: null,
       teamMembers: [], businessProfile: null, routineStates: [], connectors: [], chatMessages: [], stateMeta: null }, error: null });
-    const response = await GET();
+    const response = await GET(new Request("https://unc.test/api/account/state", { method: "GET" }));
     expect(response.status).toBe(200);
     expect(rpc).toHaveBeenCalledExactlyOnceWith("load_account_state_snapshot", { p_account_id: ACCT });
     const result = await response.json();
@@ -74,8 +74,8 @@ describe("account state API", () => {
   });
   it("fails closed on unavailable or mismatched snapshots", async () => {
     rpc.mockResolvedValueOnce({ data: null, error: { message: "offline" } });
-    expect((await GET()).status).toBe(503);
+    expect((await GET(new Request("https://unc.test/api/account/state", { method: "GET" }))).status).toBe(503);
     rpc.mockResolvedValueOnce({ data: { account: { id: "other" } }, error: null });
-    expect((await GET()).status).toBe(404);
+    expect((await GET(new Request("https://unc.test/api/account/state", { method: "GET" }))).status).toBe(404);
   });
 });

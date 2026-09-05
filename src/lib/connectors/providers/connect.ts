@@ -54,7 +54,7 @@ export async function startViaProvider(deps: HandlerDeps, platform: string, body
   if (!deps.config.keyring) return fallback("secret_store_not_configured");
   if (!deps.config.dbConfigured || !deps.db) return fallback("accounts_not_configured");
   if (!deps.userId) return err(401, "sign in first");
-  const accountId = await accountForUser(deps.db, deps.userId);
+  const accountId = await accountForUser(deps.db, deps.userId, deps.requestedAccountId);
   if (!accountId) return err(403, "no account for this user");
   if ((await memberRole(deps.db, deps.userId, accountId)) !== "owner") return err(403, "only the account owner can connect a platform");
 

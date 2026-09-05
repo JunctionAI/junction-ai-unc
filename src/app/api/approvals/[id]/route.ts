@@ -41,7 +41,7 @@ async function handlePOST(req: Request, ctx: { params: Promise<{ id: string }> }
   let accountId: string | null = null;
   let decidedBy: string | undefined;
   if (isDbConfigured()) {
-    const session = await requireAccountOwnerSession();
+    const session = await requireAccountOwnerSession(req);
     if (session instanceof Response) return session;
     accountId = session.accountId;
     decidedBy = session.userId;

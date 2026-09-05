@@ -23,8 +23,8 @@ function resolvedFor(prefs: Partial<Record<LlmTask, string>>) {
   return Object.fromEntries(LLM_TASKS.map((t) => [t, summary(resolveModel(t, { accountOverride: prefs[t] ?? null }))])) as Record<LlmTask, ReturnType<typeof summary>>;
 }
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   try {
     const prefs = await listModelPrefs(session.db, session.accountId);
@@ -36,7 +36,7 @@ async function handleGET() {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   let body: { task?: unknown; modelId?: unknown };
   try {

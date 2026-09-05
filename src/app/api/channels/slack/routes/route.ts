@@ -11,7 +11,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 const failure = () => json({ error: "Slack setup not confirmed. Refresh to read what is saved before changing it again." }, 503);
 async function handle(req: Request, save: boolean, transition = false) {
   try {
-    const session = await requireAccountOwnerSession();
+    const session = await requireAccountOwnerSession(req);
     if (session instanceof Response) {
       session.headers.set("cache-control", "private, no-store"); return session.status === 200 ? failure() : session;
     }

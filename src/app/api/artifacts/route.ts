@@ -34,7 +34,7 @@ async function handleGET(req: Request) {
   let db: DbClient | undefined;
   try {
     if (isDbConfigured()) {
-      const session = await requireAccountSession();
+      const session = await requireAccountSession(req);
       if (session instanceof Response) return session;
       accountId = session.accountId;
       db = session.service;

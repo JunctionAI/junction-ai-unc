@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const owner = await isAccountOwner(session.db, session.accountId, session.userId);
   if (!owner && !isAdminEmail(session.email)) return json({ error: "only the account owner can test a workflow", code: "owner_only" }, 403);

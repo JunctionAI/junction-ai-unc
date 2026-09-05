@@ -7,8 +7,8 @@
    Mode resolution (docs/PRODUCT-EXPERIENCE.md — "Demo sandbox stays only for … when not signed in"):
      - no Supabase env                     → "demo", synchronously, never touches the network
      - Sidebar publishes the app's own persistence (publishPersistence) when it has an account
-     - otherwise the session decides: a signed-in user is "account" (the proxy already keeps
-       /app behind /login), no session is "demo"
+     - otherwise a single session membership may resolve the client; ambiguous membership or
+       lost auth leaves empty account mode, never demo data in a configured deployment
 
    Reads run in the browser under RLS with the founder's own session (the same pattern as
    src/lib/db/accountState.ts). Every failure degrades to `facts: null` + `error` — a view then
@@ -17,6 +17,7 @@
 import { useSyncExternalStore } from "react";
 import { connectorHasRealSync } from "../connectors/sync";
 import { listMemberships } from "../db/accountState";
+import { selectAccountMembership } from "../db/accountSelection";
 import { asDb, getBrowserSupabase, isDbConfigured } from "../db/client";
 import type { PlanPhaseJson } from "../db/mapping";
 import type { DbClient } from "../db/types";
@@ -110,6 +111,8 @@ let fetching: Promise<void> | null = null;
 let lastFetchAt = 0;
 let published: { mode: string; accountId: string | null } | null = null;
 let visibilityHooked = false;
+let identityRevision = 0;
+let publicationRevision = 0;
 
 function emit(next: Partial<AccountFactsState>) {
   state = { ...state, ...next };
@@ -120,27 +123,41 @@ function db(): DbClient {
   return asDb(getBrowserSupabase());
 }
 
-/** Sidebar hands in the app's own persistence (authoritative when it has an account). Passing
-    null or a non-account persistence leaves the session fallback in charge. */
+function setIdentity(mode: AccountMode, accountId: string | null): void {
+  if (state.mode === mode && state.accountId === accountId) return;
+  identityRevision++;
+  fetching = null;
+  lastFetchAt = 0;
+  emit({ mode, accountId, facts: null, loading: false, error: null });
+}
+
+/** App persistence is authoritative, including loss of account access. Only an absent
+    publisher permits the single-membership fallback; never guess among multiple clients. */
 export function publishPersistence(p: { mode: string; accountId: string | null } | null): void {
+  publicationRevision++;
   published = p;
-  if (p && p.mode === "account" && p.accountId) {
-    if (state.mode !== "account" || state.accountId !== p.accountId) emit({ mode: "account", accountId: p.accountId });
+  if (p) {
+    setIdentity(p.mode === "demo" ? "demo" : "account", p.mode === "account" ? p.accountId : null);
     void fetchFacts();
+  } else {
+    setIdentity(initialMode(), null);
+    ensureResolved();
   }
 }
 
 async function resolveMode(): Promise<void> {
   if (state.mode === "demo") return;
-  if (published && published.mode === "account" && published.accountId) {
-    emit({ mode: "account", accountId: published.accountId });
+  if (published) {
+    setIdentity(published.mode === "demo" ? "demo" : "account", published.mode === "account" ? published.accountId : null);
     return;
   }
+  const revision = publicationRevision;
   try {
     const supabase = getBrowserSupabase();
     const { data } = await supabase.auth.getSession();
+    if (revision !== publicationRevision) return;
     if (!data.session) {
-      emit({ mode: "demo", accountId: null });
+      setIdentity("account", null);
       return;
     }
     // Signed in ⇒ accounts mode even before the membership row exists (a brand-new account is
@@ -148,13 +165,14 @@ async function resolveMode(): Promise<void> {
     let accountId: string | null = null;
     try {
       const memberships = await listMemberships(db(), data.session.user.id);
-      accountId = memberships[0]?.accountId ?? null;
+      const selection = selectAccountMembership(memberships);
+      accountId = selection.ok ? selection.membership.accountId : null;
     } catch {
       accountId = null;
     }
-    emit({ mode: "account", accountId });
+    if (revision === publicationRevision) setIdentity("account", accountId);
   } catch {
-    emit({ mode: "demo", accountId: null });
+    if (revision === publicationRevision) setIdentity("account", null);
   }
 }
 
@@ -162,6 +180,7 @@ function ensureResolved(): void {
   if (state.mode !== "unknown" || resolving) return;
   resolving = resolveMode().finally(() => {
     resolving = null;
+    if (state.mode === "unknown") ensureResolved();
     if (state.mode === "account" && state.accountId) void fetchFacts();
   });
 }
@@ -175,16 +194,19 @@ async function fetchFacts(force = false): Promise<void> {
   if (fetching) return fetching;
   if (!force && Date.now() - lastFetchAt < REFRESH_MIN_MS) return;
   const accountId = state.accountId;
+  const revision = identityRevision;
   emit({ loading: true });
   fetching = (async () => {
     try {
       const facts = await readFacts(accountId);
+      if (revision !== identityRevision) return;
       lastFetchAt = Date.now();
       emit({ facts, loading: false, error: null });
     } catch (e) {
+      if (revision !== identityRevision) return;
       emit({ loading: false, error: e instanceof Error ? e.message : String(e) });
     } finally {
-      fetching = null;
+      if (revision === identityRevision) fetching = null;
     }
   })();
   return fetching;
@@ -226,6 +248,11 @@ export function useAccountFacts(): AccountFactsState {
 
 /** Tests only: pin the store to a state (no network). */
 export function __setAccountFactsForTests(next: AccountFactsState | null): void {
+  identityRevision++;
+  publicationRevision++;
+  fetching = null;
+  lastFetchAt = 0;
+  published = null;
   state = next ?? { mode: initialMode(), accountId: null, facts: null, loading: false, error: null };
   for (const l of listeners) l();
 }

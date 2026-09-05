@@ -41,8 +41,8 @@ async function readBody<T extends object>(req: Request): Promise<T | null> {
 const MAX_TEXT = 1000;
 const cleanText = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim().slice(0, MAX_TEXT) : null);
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const context = await captureMemoryContext(session.service, session.accountId);
   if (context instanceof Response) return context;
@@ -56,7 +56,7 @@ async function handleGET() {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const body = await readBody<{ text?: unknown; kind?: unknown }>(req);
   if (!body) return json({ error: "invalid JSON body" }, 400);
@@ -77,7 +77,7 @@ async function handlePOST(req: Request) {
 }
 
 async function handlePATCH(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const body = await readBody<{ id?: unknown; text?: unknown }>(req);
   if (!body) return json({ error: "invalid JSON body" }, 400);
@@ -96,7 +96,7 @@ async function handlePATCH(req: Request) {
 }
 
 async function handleDELETE(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const body = await readBody<{ id?: unknown }>(req);
   if (!body || typeof body.id !== "string" || !body.id) return json({ error: "id required" }, 400);

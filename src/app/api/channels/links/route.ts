@@ -37,8 +37,8 @@ const wireLink = (l: Awaited<ReturnType<typeof listLinks>>[number]) => ({
   workspace: typeof l.meta.team_name === "string" ? l.meta.team_name : null,
 });
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   try {
     const links = await listLinks(session.db, session.accountId);
@@ -59,7 +59,7 @@ async function readBody<T extends object>(req: Request): Promise<T | null> {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   const body = await readBody<{ channel?: unknown }>(req);
   if (!body || !isChannel(body.channel)) return json({ error: "channel must be one of telegram | whatsapp | slack | sms" }, 400);
@@ -77,7 +77,7 @@ async function handlePOST(req: Request) {
 }
 
 async function handlePATCH(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   const body = await readBody<{ linkId?: unknown; prefs?: unknown }>(req);
   if (!body || typeof body.linkId !== "string" || !body.prefs || typeof body.prefs !== "object") return json({ error: "linkId and prefs required" }, 400);
@@ -94,7 +94,7 @@ async function handlePATCH(req: Request) {
 }
 
 async function handleDELETE(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   const body = await readBody<{ linkId?: unknown; bindingVersion?: unknown }>(req);
   if (!body || typeof body.linkId !== "string") return json({ error: "linkId required" }, 400);

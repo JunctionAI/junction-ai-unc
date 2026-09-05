@@ -95,13 +95,13 @@ describe("/api/intake/keys", () => {
     const minted = await res.json();
     expect(minted.key).toMatch(/^unc_ik_/);
     expect(minted.summary).toMatchObject({ label: "n8n prod", revokedAt: null });
-    const listed = await (await listKeys()).json();
+    const listed = await (await listKeys(new Request("https://unc.test/api/intake/keys", { method: "GET" }))).json();
     expect(listed.keys).toEqual([minted.summary]);
     expect(JSON.stringify(listed)).not.toContain(minted.key);
     expect(JSON.stringify(listed)).not.toContain("key_hash");
     res = await revokeKey(req("/api/intake/keys", "DELETE", { id: minted.summary.id }));
     expect(await res.json()).toEqual({ ok: true });
-    expect((await (await listKeys()).json()).keys[0].revokedAt).toMatch(/^20\d\d-/);
+    expect((await (await listKeys(new Request("https://unc.test/api/intake/keys", { method: "GET" }))).json()).keys[0].revokedAt).toMatch(/^20\d\d-/);
     expect((await revokeKey(req("/api/intake/keys", "DELETE", { id: minted.summary.id }))).status).toBe(404);
   });
   it("members cannot mint or revoke; no session → 401; demo mode → fallback", async () => {
@@ -109,9 +109,9 @@ describe("/api/intake/keys", () => {
     expect((await mintKey(req("/api/intake/keys", "POST", {}))).status).toBe(403);
     expect((await revokeKey(req("/api/intake/keys", "DELETE", { id: "x" }))).status).toBe(403);
     user = null;
-    expect((await listKeys()).status).toBe(401);
+    expect((await listKeys(new Request("https://unc.test/api/intake/keys", { method: "GET" }))).status).toBe(401);
     clearBillingEnv();
-    expect(await (await listKeys()).json()).toEqual({ fallback: true });
+    expect(await (await listKeys(new Request("https://unc.test/api/intake/keys", { method: "GET" }))).json()).toEqual({ fallback: true });
   });
 });
 
@@ -126,7 +126,7 @@ describe("/api/brain/memories + /api/brain/profile", () => {
     expect((await addMemory(req("/api/brain/memories", "POST", { text: "x", kind: "wish" }))).status).toBe(400);
 
     // the fake is not RLS; the route's own account_id pin is what keeps OTHER's row out
-    const listed = (await (await listMemories()).json()).memories;
+    const listed = (await (await listMemories(new Request("https://unc.test/api/brain/memories", { method: "GET" }))).json()).memories;
     expect(listed.map((m: { text: string }) => m.text)).toEqual(["Never discount the flagship"]);
 
     res = await revise(req("/api/brain/memories", "PATCH", { id: added.id, text: "Never discount the flagship below 10%" }));
@@ -139,7 +139,7 @@ describe("/api/brain/memories + /api/brain/profile", () => {
     expect((await revise(req("/api/brain/memories", "PATCH", { id: "00000000-0000-4000-8000-00000000m0a2", text: "hijack" }))).status).toBe(404);
 
     expect(await (await forget(req("/api/brain/memories", "DELETE", { id: revised.id }))).json()).toEqual({ ok: true });
-    expect((await (await listMemories()).json()).memories).toEqual([]);
+    expect((await (await listMemories(new Request("https://unc.test/api/brain/memories", { method: "GET" }))).json()).memories).toEqual([]);
     expect(db.rows("memories")).toHaveLength(3); // nothing deleted, only ended
     expect((await forget(req("/api/brain/memories", "DELETE", { id: "00000000-0000-4000-8000-00000000m0a2" }))).status).toBe(404);
   });
@@ -151,22 +151,22 @@ describe("/api/brain/memories + /api/brain/profile", () => {
       expect(response.status).toBe(409);
       expect(await response.json()).toMatchObject({ code: "context_changed" });
     }
-    expect((await (await listMemories()).json())).toMatchObject({ memories: [], contextGeneration: 1 });
+    expect((await (await listMemories(new Request("https://unc.test/api/brain/memories", { method: "GET" }))).json())).toMatchObject({ memories: [], contextGeneration: 1 });
     const response = await addMemory(req("/api/brain/memories", "POST", { text: "Current context" }, { "x-unc-context-generation": "1" }));
     expect(response.status).toBe(200);
     expect(db.rows("memories")[1]).toMatchObject({ context_generation: 1, text: "Current context", account_id: ACCT });
     expect(db.rows("memories")[0].text).toBe("Old Junction context");
   });
   it("founder notes round-trip; null clears; demo mode → fallback", async () => {
-    expect(await (await getProfile()).json()).toEqual({ founderNotes: null, tone: {}, cadence: {}, channels: {} });
+    expect(await (await getProfile(new Request("https://unc.test/api/brain/profile", { method: "GET" }))).json()).toEqual({ founderNotes: null, tone: {}, cadence: {}, channels: {} });
     let res = await patchProfile(req("/api/brain/profile", "PATCH", { founderNotes: "  Keep it short. No Sundays.  " }));
     expect(await res.json()).toEqual({ founderNotes: "Keep it short. No Sundays." });
     expect(db.rows("account_profiles")).toMatchObject([{ account_id: ACCT, founder_notes: "Keep it short. No Sundays." }]);
-    expect((await (await getProfile()).json()).founderNotes).toBe("Keep it short. No Sundays.");
+    expect((await (await getProfile(new Request("https://unc.test/api/brain/profile", { method: "GET" }))).json()).founderNotes).toBe("Keep it short. No Sundays.");
     res = await patchProfile(req("/api/brain/profile", "PATCH", { founderNotes: null }));
     expect(await res.json()).toEqual({ founderNotes: null });
     expect((await patchProfile(req("/api/brain/profile", "PATCH", { founderNotes: 5 }))).status).toBe(400);
     clearBillingEnv();
-    expect(await (await getProfile()).json()).toEqual({ fallback: true });
+    expect(await (await getProfile(new Request("https://unc.test/api/brain/profile", { method: "GET" }))).json()).toEqual({ fallback: true });
   });
 });

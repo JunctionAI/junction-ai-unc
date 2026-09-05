@@ -23,8 +23,8 @@ async function isOwner(session: AccountSession): Promise<boolean> {
   return row?.role === "owner";
 }
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   try {
     return json({ keys: await listIntakeKeys(session.db, session.accountId) }, 200);
@@ -34,7 +34,7 @@ async function handleGET() {
 }
 
 async function handlePOST(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   let body: { label?: unknown } = {};
   try {
@@ -54,7 +54,7 @@ async function handlePOST(req: Request) {
 }
 
 async function handleDELETE(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   let body: { id?: unknown };
   try {

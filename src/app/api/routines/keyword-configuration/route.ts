@@ -11,7 +11,7 @@ const privateResponse = (r: Response) => { r.headers.set("cache-control", "priva
 
 async function handle(req: Request, save: boolean) {
   try {
-    const session = await requireAccountOwnerSession();
+    const session = await requireAccountOwnerSession(req);
     if (session instanceof Response) return session.status === 200 ? failure() : privateResponse(session);
     const ctx = await captureArtifactContext(session.service, session.accountId, req);
     if (ctx instanceof Response) return privateResponse(ctx);

@@ -15,7 +15,7 @@ const json = (body: unknown, status=200) => Response.json(body,{status,headers:{
 const failure = () => json({error:"Couldn’t verify the saved agent settings. Refresh before trying again."},503);
 const noStore = (response: Response) => { response.headers.set("cache-control","private, no-store"); return response; };
 export async function agentSnapshot(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session.status===200 ? failure() : noStore(session);
   const ctx = await captureArtifactContext(session.service,session.accountId,req);
   if (ctx instanceof Response) return noStore(ctx);

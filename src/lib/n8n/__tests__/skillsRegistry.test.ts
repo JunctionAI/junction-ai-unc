@@ -135,15 +135,15 @@ describe("registry (lib)", () => {
 describe("/api/skills/n8n", () => {
   it("GET: the 35 rows, who the caller is, the secret flag, the budget; demo mode → fallback; no session → 401", async () => {
     await store.putN8nWorkflow({ id: "wf-x", accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK, active: true });
-    const out = await (await GET()).json();
+    const out = await (await GET(new Request("https://unc.test/api/skills/n8n", { method: "GET" }))).json();
     expect(out.routines).toHaveLength(35);
     expect(out.routines.find((r: { routineId: string }) => r.routineId === "D01-W01")).toMatchObject({ source: "n8n", workflow: { id: "wf-x" } });
     expect(out).toMatchObject({ owner: true, admin: false, secretConfigured: true, dataBaseUrl: "https://unc.example.test", budget: { spentUsd: 0, capUsd: 15, ok: true } });
     expect(out.accounts).toBeUndefined();
     user = null;
-    expect((await GET()).status).toBe(401);
+    expect((await GET(new Request("https://unc.test/api/skills/n8n", { method: "GET" }))).status).toBe(401);
     clearBillingEnv();
-    expect(await (await GET()).json()).toEqual({ fallback: true });
+    expect(await (await GET(new Request("https://unc.test/api/skills/n8n", { method: "GET" }))).json()).toEqual({ fallback: true });
   });
 
   it("POST / PATCH: owner registers and pauses; a member is refused; global needs an admin; bad bodies are 400", async () => {
@@ -171,7 +171,7 @@ describe("/api/skills/n8n", () => {
     user = { id: MEMBER, email: "member@example.test" };
     expect((await POST(jreq("POST", { routineId: "D01-W01", webhookUrl: HOOK }))).status).toBe(403);
     expect((await PATCH(jreq("PATCH", { id: workflow.id, active: true }))).status).toBe(403);
-    expect((await (await GET()).json()).owner).toBe(false);
+    expect((await (await GET(new Request("https://unc.test/api/skills/n8n", { method: "GET" }))).json()).owner).toBe(false);
   });
 
   it("an admin registers a global workflow, pauses it, and sees every account's spend", async () => {
@@ -183,7 +183,7 @@ describe("/api/skills/n8n", () => {
     expect((await store.findN8nWorkflow("any-account", "D01-W03"))!.id).toBe(workflow.id);
     expect((await PATCH(jreq("PATCH", { id: workflow.id, active: false }))).status).toBe(200);
     db.seed("llm_usage", [{ account_id: ACCT, task: "chat", provider: "anthropic", model: "m", input_tokens: 1, output_tokens: 1, est_cost_usd: 2.5, latency_ms: 1, stop_reason: "end", created_at: "2026-09-02T00:00:00.000Z" }]);
-    const out = await (await GET()).json();
+    const out = await (await GET(new Request("https://unc.test/api/skills/n8n", { method: "GET" }))).json();
     expect(out.admin).toBe(true);
     expect(out.accounts).toEqual([{ accountId: ACCT, name: "Example Co", spentUsd: 2.5, capUsd: 15, capSource: "default", ok: true }]);
     expect(out.budget).toMatchObject({ spentUsd: 2.5 });

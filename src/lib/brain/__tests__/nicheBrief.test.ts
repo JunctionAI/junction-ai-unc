@@ -173,11 +173,11 @@ describe("route", () => {
 
   it("demo mode → fallback; no session → 401", async () => {
     clearBillingEnv();
-    expect(await (await GET()).json()).toEqual({ fallback: true });
+    expect(await (await GET(new Request("https://unc.test/api/unc/niche-brief", { method: "GET" }))).json()).toEqual({ fallback: true });
     restoreEnv();
     setFakeEnv();
     user = null;
-    expect((await GET()).status).toBe(401);
+    expect((await GET(new Request("https://unc.test/api/unc/niche-brief", { method: "GET" }))).status).toBe(401);
     expect((await post({ profile })).status).toBe(401);
   });
 
@@ -188,13 +188,13 @@ describe("route", () => {
     expect(body.author).toBe("deterministic");
     expect(body.brief.categoryBand).toBe("dtc_supplements");
     expect(body.stored.written).toBeGreaterThan(0);
-    const got = (await (await GET()).json()) as { brief: NicheBrief | null };
+    const got = (await (await GET(new Request("https://unc.test/api/unc/niche-brief", { method: "GET" }))).json()) as { brief: NicheBrief | null };
     expect(got.brief?.categoryBand).toBe("dtc_supplements");
   });
 
   it("lets members read but blocks generation before memories or model usage are written", async () => {
     db.rows("account_members")[0].role = "member";
-    expect((await GET()).status).toBe(200);
+    expect((await GET(new Request("https://unc.test/api/unc/niche-brief", { method: "GET" }))).status).toBe(200);
     const res = await post({ profile });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ code: "owner_only" });

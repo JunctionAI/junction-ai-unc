@@ -23,8 +23,8 @@ interface ProfileRow {
   channels: Record<string, unknown>;
 }
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   try {
     const row = await unwrap<ProfileRow | null>("account_profiles.get", session.db.from("account_profiles").select("founder_notes, tone, cadence, channels").eq("account_id", session.accountId).maybeSingle());
@@ -35,7 +35,7 @@ async function handleGET() {
 }
 
 async function handlePATCH(req: Request) {
-  const session = await requireAccountSession();
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const paused = await automationPauseResponse(session.service, session.accountId);
   if (paused) return paused;

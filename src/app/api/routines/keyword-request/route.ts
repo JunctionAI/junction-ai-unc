@@ -19,7 +19,7 @@ const json=(body:unknown,status=200)=>Response.json(body,{status,headers:{"cache
 const failure=()=>json({error:"Couldn’t confirm this request. Check its original status before starting another."},503);
 async function handle(req:Request,submit:boolean) {
   try {
-    const session=await requireAccountOwnerSession();
+    const session=await requireAccountOwnerSession(req);
     if(session instanceof Response){session.headers.set("cache-control","private, no-store");return session.status===200?failure():session;}
     const ctx=await captureArtifactContext(session.service,session.accountId,req);
     if(ctx instanceof Response){ctx.headers.set("cache-control","private, no-store");return ctx;}

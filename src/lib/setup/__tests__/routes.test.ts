@@ -62,17 +62,17 @@ afterEach(() => {
 describe("demo mode + auth", () => {
   it("no database → { fallback: true } on every route", async () => {
     clearBillingEnv();
-    expect(await (await getProgress()).json()).toEqual({ fallback: true });
+    expect(await (await getProgress(new Request("https://unc.test/api/setup/progress", { method: "GET" }))).json()).toEqual({ fallback: true });
     expect(await (await postAgree(post("/api/setup/agree", {}))).json()).toEqual({ fallback: true });
     expect((await postEnable(post("/api/setup/enable", { routineId: "D01-W01" }))).status).toBe(503);
   });
   it("401 without a session, 503 without the service role", async () => {
     user = null;
-    expect((await getProgress()).status).toBe(401);
+    expect((await getProgress(new Request("https://unc.test/api/setup/progress", { method: "GET" }))).status).toBe(401);
     expect((await postAgree(post("/api/setup/agree", {}))).status).toBe(401);
     user = { id: USER };
     serviceRole = false;
-    expect((await getProgress()).status).toBe(503);
+    expect((await getProgress(new Request("https://unc.test/api/setup/progress", { method: "GET" }))).status).toBe(503);
   });
 });
 
@@ -91,7 +91,7 @@ describe("the spine through the routes", () => {
     expect((await postAgree(req)).status).toBe(200);
   });
   it("progress → agree → enable moves the steps, idempotently", async () => {
-    let p = await (await getProgress()).json();
+    let p = await (await getProgress(new Request("https://unc.test/api/setup/progress", { method: "GET" }))).json();
     expect(p.done).toBe(0);
     expect(p.channel).toBe("Content");
 
@@ -109,7 +109,7 @@ describe("the spine through the routes", () => {
     expect((await e2.json()).saved.enabled).toBe(true);
     expect(db.rows("routine_states")).toHaveLength(1);
 
-    p = await (await getProgress()).json();
+    p = await (await getProgress(new Request("https://unc.test/api/setup/progress", { method: "GET" }))).json();
     expect(p.done).toBe(1); // routine on but no run yet
     expect(p.steps[2].status).toBe("Founder content engine is on — the first dry run hasn't landed yet.");
     expect(p.nextAction).toEqual({ step: "connect", label: "Connect Instagram", anchor: "view:connectors" });

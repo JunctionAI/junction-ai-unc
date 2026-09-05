@@ -9,6 +9,7 @@ import { toLocalePricing, type LocalePricing } from "@/lib/locale/countries";
 import { resolveLocaleForRequest } from "@/lib/locale/server";
 import { isBillingConfigured } from "./config";
 import { getEntitlement, type Entitlement } from "./gate";
+import { selectAccountMembership } from "../db/accountSelection";
 
 /** What the /app page hands to <Platform>. `configured=false` ⇒ the client ignores billing
     entirely (demo), exactly as before Phase 6. */
@@ -31,7 +32,7 @@ export function isBillingActive(): boolean {
   return isBillingConfigured() && isDbConfigured();
 }
 
-export async function getBillingForRequest(): Promise<BillingProps> {
+export async function getBillingForRequest(requestedAccountId?: unknown): Promise<BillingProps> {
   if (!isBillingActive()) return DEMO_BILLING;
   const supabase = await getServerSupabase();
   if (!supabase) return DEMO_BILLING;
@@ -41,8 +42,9 @@ export async function getBillingForRequest(): Promise<BillingProps> {
   if (!user) return { configured: true, entitlement: { state: "none" } }; // the proxy sends /app → /login first
   const db = asDb(supabase);
   const memberships = await listMemberships(db, user.id);
-  if (!memberships.length) return { configured: true, entitlement: { state: "none" } };
-  return { configured: true, entitlement: await getEntitlement(db, memberships[0].accountId) };
+  const selection = selectAccountMembership(memberships, requestedAccountId);
+  if (!selection.ok) return { configured: true, entitlement: { state: "none" } };
+  return { configured: true, entitlement: await getEntitlement(db, selection.membership.accountId) };
 }
 
 /** `service` is the only writer of `subscriptions`. */

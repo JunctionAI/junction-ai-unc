@@ -16,8 +16,8 @@ import { withErrorCapture } from "@/lib/observability/errors";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   try {
     let segments: string[] = [];

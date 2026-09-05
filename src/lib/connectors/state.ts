@@ -57,7 +57,7 @@ function providerMarker(platform: string, deps: HandlerDeps): { authProvider?: "
 export async function handleConnectorsState(deps: HandlerDeps): Promise<ConnectorsStateResult> {
   if (!deps.config.dbConfigured || !deps.db) return { status: 200, body: { fallback: true, reason: "accounts_not_configured" } };
   if (!deps.userId) return { status: 401, body: { error: "sign in first" } };
-  const accountId = await accountForUser(deps.db, deps.userId);
+  const accountId = await accountForUser(deps.db, deps.userId, deps.requestedAccountId);
   if (!accountId) return { status: 403, body: { error: "no account for this user" } };
   const role = await memberRole(deps.db, deps.userId, accountId);
   if (!role) return { status: 403, body: { error: "account membership required" } };

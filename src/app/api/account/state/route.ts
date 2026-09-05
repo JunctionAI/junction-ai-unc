@@ -11,8 +11,8 @@ const object = (value: unknown): value is Record<string, unknown> => !!value && 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SECTIONS = new Set(["account", "goals", "resourceProfile", "teamMembers", "plan", "businessProfile", "chatMessages", "stateMeta"]);
 
-async function handleGET() {
-  const session = await requireAccountSession();
+async function handleGET(req: Request) {
+  const session = await requireAccountSession(req);
   if (session instanceof Response) return session;
   const { data, error } = await session.service.rpc("load_account_state_snapshot", { p_account_id: session.accountId });
   if (error) return json({ error: "Couldn't load the account. Please try again." }, 503);
@@ -26,7 +26,7 @@ async function handleGET() {
 }
 
 async function handlePUT(req: Request) {
-  const session = await requireAccountOwnerSession();
+  const session = await requireAccountOwnerSession(req);
   if (session instanceof Response) return session;
   if (req.headers.get("x-unc-account-save") !== "1" || !req.headers.get("content-type")?.startsWith("application/json"))
     return json({ error: "JSON account save required." }, 415);

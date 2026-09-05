@@ -47,7 +47,7 @@ async function handlePOST(req: Request) {
   if (body.decision !== "approved" && body.decision !== "held") return Response.json({ error: 'decision must be "approved" or "held"' }, { status: 400 });
   let decidedBy = typeof body.decidedBy === "string" ? body.decidedBy.slice(0, 128) : undefined;
   if (isDbConfigured()) {
-    const session = await requireAccountOwnerSession();
+    const session = await requireAccountOwnerSession(req);
     if (session instanceof Response) return session;
     const ctx=await captureArtifactContext(session.service,session.accountId,req);
     if(ctx instanceof Response)return ctx;

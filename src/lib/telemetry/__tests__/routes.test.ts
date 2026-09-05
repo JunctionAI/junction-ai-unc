@@ -56,23 +56,23 @@ afterEach(() => {
 describe("demo mode + auth", () => {
   it("no database → { fallback: true } on every route", async () => {
     clearBillingEnv();
-    expect(await (await getReview()).json()).toEqual({ fallback: true });
-    expect(await (await postReview()).json()).toEqual({ fallback: true });
-    expect(await (await getHome()).json()).toEqual({ fallback: true });
+    expect(await (await getReview(new Request("https://unc.test/api/unc/self-review", { method: "GET" }))).json()).toEqual({ fallback: true });
+    expect(await (await postReview(new Request("https://unc.test/api/unc/self-review", { method: "POST" }))).json()).toEqual({ fallback: true });
+    expect(await (await getHome(new Request("https://unc.test/api/telemetry/home", { method: "GET" }))).json()).toEqual({ fallback: true });
   });
   it("401 without a session, 503 without the service role", async () => {
     user = null;
-    expect((await getReview()).status).toBe(401);
-    expect((await getHome()).status).toBe(401);
+    expect((await getReview(new Request("https://unc.test/api/unc/self-review", { method: "GET" }))).status).toBe(401);
+    expect((await getHome(new Request("https://unc.test/api/telemetry/home", { method: "GET" }))).status).toBe(401);
     user = { id: USER };
     serviceRole = false;
-    expect((await postReview()).status).toBe(503);
+    expect((await postReview(new Request("https://unc.test/api/unc/self-review", { method: "POST" }))).status).toBe(503);
   });
 });
 
 describe("GET /api/telemetry/home", () => {
   it("returns the three bar inputs (published benchmark + own), the account's segment and measured hours", async () => {
-    const res = await getHome();
+    const res = await getHome(new Request("https://unc.test/api/telemetry/home", { method: "GET" }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.review).toBeNull();
@@ -87,8 +87,8 @@ describe("GET /api/telemetry/home", () => {
 describe("self-review", () => {
   it("lets members read but blocks generation before a review or model usage is written", async () => {
     db.rows("account_members")[0].role = "member";
-    expect((await getReview()).status).toBe(200);
-    const res = await postReview();
+    expect((await getReview(new Request("https://unc.test/api/unc/self-review", { method: "GET" }))).status).toBe(200);
+    const res = await postReview(new Request("https://unc.test/api/unc/self-review", { method: "POST" }));
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ code: "owner_only" });
     expect(db.rows("self_reviews")).toHaveLength(0);
@@ -96,19 +96,19 @@ describe("self-review", () => {
   });
 
   it("GET is null before any review; POST generates this week's review (deterministic without a key) and GET returns it", async () => {
-    expect(await (await getReview()).json()).toEqual({ review: null });
-    const posted = await (await postReview()).json();
+    expect(await (await getReview(new Request("https://unc.test/api/unc/self-review", { method: "GET" }))).json()).toEqual({ review: null });
+    const posted = await (await postReview(new Request("https://unc.test/api/unc/self-review", { method: "POST" }))).json();
     expect(posted.author).toBe("deterministic");
     expect(posted.review).toMatchObject({ weekStart: "2026-08-31", author: "deterministic" });
     expect(posted.review.worked).toBe("I completed 1 run and handed over 1 draft. No KPI contract has a measured actual yet.");
     expect(posted.review.ask).toBe("Is there one routine you want me to run more, or less, next week?");
     expect(db.rows("self_reviews")).toHaveLength(1);
     // idempotent per week
-    await postReview();
+    await postReview(new Request("https://unc.test/api/unc/self-review", { method: "POST" }));
     expect(db.rows("self_reviews")).toHaveLength(1);
-    const got = await (await getReview()).json();
+    const got = await (await getReview(new Request("https://unc.test/api/unc/self-review", { method: "GET" }))).json();
     expect(got.review.weekStart).toBe("2026-08-31");
-    expect((await (await getHome()).json()).review.weekStart).toBe("2026-08-31");
+    expect((await (await getHome(new Request("https://unc.test/api/telemetry/home", { method: "GET" }))).json()).review.weekStart).toBe("2026-08-31");
   });
   it("with a provider configured, the self_review task writes the review through the router (fake provider), honours the account's model pick and ledgers the call", async () => {
     clearLlmEnv({ ANTHROPIC_API_KEY: "fake", OPENAI_API_KEY: "fake" });
@@ -122,7 +122,7 @@ describe("self-review", () => {
       },
     });
     setProviderFactoryForTests((id) => fake(id));
-    const posted = await (await postReview()).json();
+    const posted = await (await postReview(new Request("https://unc.test/api/unc/self-review", { method: "POST" }))).json();
     expect(posted.author).toBe("sonnet");
     expect(posted.review.worked).toBe("I completed 1 run and handed over 1 draft.");
     expect(seen.filter((c: { maxTokens?: number }) => c.maxTokens === 4000)).toEqual([{ provider: "openai", model: "gpt-5", maxTokens: 4000, effort: "low" }]);
@@ -133,6 +133,6 @@ describe("self-review", () => {
   });
   it("is session-bound: another user's account is never read", async () => {
     db.seed("self_reviews", [{ account_id: "00000000-0000-4000-8000-00000000acc2", week_start: "2026-08-31", body: "not yours", changes: [], evidence: {} }]);
-    expect(await (await getReview()).json()).toEqual({ review: null });
+    expect(await (await getReview(new Request("https://unc.test/api/unc/self-review", { method: "GET" }))).json()).toEqual({ review: null });
   });
 });
