@@ -8,6 +8,9 @@ export const slackRoomId = z.string().regex(/^[CG][A-Z0-9]{1,63}$/);
 export const slackRouteStageRequest = z.object({ identityLinkId: z.uuid(), identityLinkVersion: version,
   workspaceId: workspace, conversationId: slackRoomId }).strict();
 export type SlackRouteStageRequest = z.infer<typeof slackRouteStageRequest>;
+export const slackRouteTransitionRequest = z.object({ routeId: z.uuid(), revision: version,
+  action: z.enum(["activate", "pause", "revoke"]) }).strict();
+export type SlackRouteTransitionRequest = z.infer<typeof slackRouteTransitionRequest>;
 export const slackRouteSetupView = z.object({
   accountId: z.uuid(), actorId: z.uuid(), contextGeneration: version, paused: z.boolean(),
   identities: z.array(z.object({ identityLinkId: z.uuid(), identityLinkVersion: version, workspaceId: workspace,
@@ -27,10 +30,26 @@ export function readSlackRouteSetup(value: unknown, ctx: AgentContext): SlackRou
   return view;
 }
 export function confirmStagedRoute(view: SlackRouteSetupView, save: SlackRouteStageRequest) {
-  const matches = view.routes.filter(r => r.workspaceId === save.workspaceId && r.conversationId === save.conversationId);
+  const matches = view.routes.filter(r => r.workspaceId === save.workspaceId && r.conversationId === save.conversationId && r.state !== "revoked");
   if (matches.length !== 1 || matches[0].state !== "staged" || !matches[0].bindingCurrent
     || matches[0].identityLinkId !== save.identityLinkId || matches[0].identityLinkVersion !== save.identityLinkVersion)
     throw Error("Saved Slack mapping not confirmed; refresh before changing it again");
+}
+export function confirmRouteTransition(view: SlackRouteSetupView, change: SlackRouteTransitionRequest) {
+  const route = view.routes.find(r => r.routeId === change.routeId);
+  const target = change.action === "activate" ? "active" : change.action === "pause" ? "staged" : "revoked";
+  if (!route || route.state !== target || (route.revision !== change.revision + 1 && !(change.action !== "activate" && route.revision === change.revision))
+    || (change.action === "activate" && (!route.bindingCurrent || view.paused))) throw Error("Route change not confirmed; refresh before retrying");
+}
+export async function slackRouteTransition(ctx: AgentContext, change: SlackRouteTransitionRequest,
+  fetcher: typeof fetch = fetch, signal?: AbortSignal): Promise<SlackRouteSetupView> {
+  if (!ctx.actorId) throw Error("Read the current owner setup before changing a channel");
+  slackRouteTransitionRequest.parse(change);
+  const res = await fetcher("/api/channels/slack/routes", { method: "PATCH", cache: "no-store", signal,
+    headers: { ...artifactHeaders(ctx.accountId, ctx.contextGeneration), "x-unc-actor-id": ctx.actorId, "content-type": "application/json" },
+    body: JSON.stringify(change) });
+  if (!res.ok) throw Error("Route change not confirmed. Refresh before making another change.");
+  const view = readSlackRouteSetup(await res.json(), ctx); confirmRouteTransition(view, change); return view;
 }
 export async function slackRouteSetupRequest(ctx: AgentContext, save?: SlackRouteStageRequest,
   fetcher: typeof fetch = fetch, signal?: AbortSignal): Promise<SlackRouteSetupView> {

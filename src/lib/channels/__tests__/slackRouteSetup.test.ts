@@ -6,10 +6,12 @@ const A="aa5cfc84-2569-4c99-9b40-67003ae55eda", U="74802c60-149a-4405-b719-dc058
 const ctx={accountId:A,actorId:U,contextGeneration:1};
 let db:FakeSupabase, session:AccountSession|Response;
 const stage=vi.hoisted(()=>vi.fn());
+const transition=vi.hoisted(()=>vi.fn());
 vi.mock("@/lib/db/session",()=>({requireAccountOwnerSession:async()=>session}));
 vi.mock("@/lib/db/runtimeContext",()=>({assertRuntimeContext:async()=>{}}));
 vi.mock("@/lib/channels/slackRoutes",()=>({stageSlackRoute:stage}));
-import {GET,POST} from "@/app/api/channels/slack/routes/route";
+vi.mock("@/lib/channels/slackRouteLifecycle",()=>({transitionSlackRoute:transition}));
+import {GET,POST,PATCH} from "@/app/api/channels/slack/routes/route";
 const identity={identityLinkId:L,identityLinkVersion:2,workspaceId:"T1",workspaceName:"Synthetic",botUserId:"UBOT",credentialStored:true};
 const save={identityLinkId:L,identityLinkVersion:2,workspaceId:"T1",conversationId:"C1"};
 const fixture=()=>({...ctx,paused:true,identities:[identity],routes:[] as Record<string,unknown>[],activationAvailable:false,executedAction:"none"});
@@ -20,6 +22,16 @@ const request=(body?:unknown,headers:Record<string,string>={},search="")=>new Re
 beforeEach(()=>{vi.clearAllMocks();stage.mockResolvedValue({});db=new FakeSupabase();db.seed("accounts",[{id:A,context_generation:1,automation_paused:true}]);
   session={accountId:A,userId:U,email:null,role:"owner",db,service:db};});
 describe("owner-only Slack route setup",()=>{
+  it("PATCH preserves owner/context/origin checks and refuses browser cutover approval",async()=>{
+    const change={routeId:U,revision:0,action:"revoke"};
+    expect((await PATCH(request(change,{"x-unc-actor-id":""}))).status).toBe(409);
+    expect((await PATCH(request(change,{origin:"https://evil.test"}))).status).toBe(403);
+    expect((await PATCH(request({...change,approval:{previousResponderStopped:true}}))).status).toBe(400);
+    expect(transition).not.toHaveBeenCalled();
+    vi.spyOn(db,"rpc").mockResolvedValue({data:{...saved(),routes:[{...saved().routes[0],state:"revoked",revision:1}]},error:null});
+    const result=await PATCH(request(change));expect(result.status).toBe(200);
+    expect(transition).toHaveBeenCalledExactlyOnceWith(expect.any(Object),ctx,change);
+  });
   it.each([200,401,403,503])("session failure %s never accesses route data",async status=>{
     session=Response.json({fallback:true},{status});const rpc=vi.spyOn(db,"rpc"),res=await GET(request());
     expect(res.status).toBe(status===200?503:status);expect(res.headers.get("cache-control")).toBe("private, no-store");expect(rpc).not.toHaveBeenCalled();expect(stage).not.toHaveBeenCalled();

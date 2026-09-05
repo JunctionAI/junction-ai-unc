@@ -44,7 +44,8 @@ try {
   for(const name of ['20260905053820_channel_inbox_identity.sql','20260905054958_channel_inbound_controls.sql',
     '20260905065409_channel_outbound_claims.sql','20260905071413_command_delivery_identity.sql',
     '20260905220557_slack_conversation_registry.sql','20260905221238_slack_routed_inbox.sql',
-    '20260905222650_slack_route_owner_setup.sql','20260905223939_slack_install_authority.sql'])await admin.query(await sql(name));
+    '20260905222650_slack_route_owner_setup.sql','20260905223939_slack_install_authority.sql',
+    '20260905230842_slack_route_lifecycle.sql'])await admin.query(await sql(name));
   await admin.query('create trigger command_context before insert or update on routine_commands for each row execute function unc_private.guard_command_context()');
   const accountA=randomUUID(),accountB=randomUUID(),owner=randomUUID(),identity=randomUUID();
   await admin.query('insert into auth.users values($1)',[owner]);
@@ -219,5 +220,68 @@ try {
     'public.unlink_slack_identity(jsonb)'::regprocedure)`)).rows[0];
   assert.deepEqual(installSecurity,{n:4,invoker_only:true,pinned_path:true});
   checks.push('real install SQL proves one current attempt, committed nonce refusal, no OAuth account transfer, context/bot/credential-race refusal and shared-token-safe revision-bound unlink with retained identity history');
+  // Real transition RPC: fixture approvals are not production cutover permission.
+  const lcA=randomUUID(),lcB=randomUUID(),lcIdentity=randomUUID();
+  await admin.query("insert into accounts(id,name) values($1,'Lifecycle A'),($2,'Lifecycle B')",[lcA,lcB]);
+  await admin.query("insert into account_members(account_id,user_id,role) values($1,$3,'owner'),($2,$3,'owner')",[lcA,lcB,installOwner]);
+  await admin.query("insert into channel_links(id,account_id,user_id,channel,external_id,verified_at,meta) values($1,$2,$3,'slack','ULC',now(),'{\"team_id\":\"TLC\",\"bot_user_id\":\"UBL\"}')",[lcIdentity,lcA,installOwner]);
+  await admin.query("insert into channel_secrets(account_id,channel,scope_id,ciphertext,iv,tag) values($1,'slack','TLC','synthetic-only','synthetic','synthetic')",[lcA]);
+  const lcInput={accountId:lcA,actorId:installOwner,contextGeneration:0,identityLinkId:lcIdentity,identityLinkVersion:0,workspaceId:'TLC',conversationId:'CLC'};
+  const lcEvidence={workspaceId:'TLC',conversationId:'CLC',botUserId:'UBL',isMember:true,isArchived:false,isShared:false,verifiedAt:new Date().toISOString()};
+  const lcRoute=(await a.query('select stage_slack_conversation_route($1,$2) r',[lcInput,lcEvidence])).rows[0].r;
+  const stamp=(await admin.query("select updated_at::text stamp from channel_secrets where scope_id='TLC'")).rows[0].stamp;
+  const lcChange={accountId:lcA,actorId:installOwner,contextGeneration:0,routeId:lcRoute.id,revision:0,action:'activate'};
+  const lcApproval={...lcChange,workspaceId:'TLC',conversationId:'CLC',botUserId:'UBL',expiresAt:new Date(Date.now()+600000).toISOString(),reference:'synthetic-cutover-only',previousResponderStopped:true};
+  delete lcApproval.action;
+  const transition=(input=lcChange,approval=lcApproval,evidence={...lcEvidence,credentialUpdatedAt:stamp},client=a)=>client.query('select transition_slack_conversation_route($1,$2,$3) r',[input,evidence,approval]).then(q=>q.rows[0].r);
+  for(const approval of [null,{...lcApproval,previousResponderStopped:false},{...lcApproval,routeId:randomUUID()},
+    {...lcApproval,expiresAt:new Date(Date.now()-1000).toISOString()},{...lcApproval,expiresAt:new Date(Date.now()+7200000).toISOString()}])
+    await assert.rejects(transition(lcChange,approval),{code:'42501'});
+  await assert.rejects(transition({...lcChange,actorId:randomUUID()}),{code:'42501'});
+  await assert.rejects(transition({...lcChange,accountId:lcB}),{code:'42501'});
+  await assert.rejects(transition({...lcChange,contextGeneration:1}),{code:'PT409'});
+  await assert.rejects(transition({...lcChange,action:null}),{code:'22023'});
+  await assert.rejects(transition(lcChange,lcApproval,{...lcEvidence,credentialUpdatedAt:'2020-01-01T00:00:00Z'}),{code:'42501'});
+  await admin.query('update accounts set automation_paused=true where id=$1',[lcA]);
+  await assert.rejects(transition(),{code:'PT409'});
+  await admin.query('update accounts set automation_paused=false where id=$1',[lcA]);
+  await b.query('set role service_role');
+  const races=await Promise.allSettled([transition(),transition(lcChange,lcApproval,{...lcEvidence,credentialUpdatedAt:stamp},b)]);
+  assert.equal(races.filter(r=>r.status==='fulfilled').length,1);assert.equal(races.find(r=>r.status==='rejected').reason.code,'PT409');
+  const lcEvent={...event('CLC','1756800050.000001'),scopeId:'TLC',externalId:'ULC'};
+  const lcInbound=await accept(lcEvent);assert.equal(lcInbound.binding.accountId,lcA);await verify(lcInbound);
+  const lcBinding={...binding(lcInbound),externalId:'ULC',scopeId:'TLC'};
+  const lcPending=(await a.query('select enqueue_channel_outbound($1) r',[{binding:lcBinding,kind:'reply',ref:'lifecycle-pending',payload:{text:'Synthetic'},appendThread:true,
+    replyContext:{live:true,inReplyTo:lcEvent.externalMsgId,conversationId:'CLC',threadId:lcEvent.threadId}}])).rows[0].r;
+  const paused=await transition({...lcChange,revision:1,action:'pause'},null,null);assert.equal(paused.state,'staged');assert.equal(paused.revision,2);
+  await assert.rejects(verify(lcInbound),{code:'40001'});
+  const stopped=(await a.query('select claim_channel_outbound($1,$2) r',[lcPending.id,randomUUID()])).rows[0].r;
+  assert.equal(stopped.claimed,false);assert.equal(stopped.row.status,'cancelled');
+  assert.equal((await accept({...lcEvent,externalMsgId:'CLC:1756800051.000001'})).binding.kind,'unlinked');
+  // Revoke still works without current identity or an unpaused account.
+  await admin.query('update channel_links set verified_at=null where id=$1',[lcIdentity]);
+  await admin.query('update accounts set automation_paused=true,context_generation=1 where id=$1',[lcA]);
+  const retired=await transition({...lcChange,contextGeneration:1,revision:2,action:'revoke'},null,null);
+  assert.equal(retired.state,'revoked');assert.equal(retired.revision,3);
+  await assert.rejects(transition({...lcChange,contextGeneration:1,revision:3}),{code:'PT409'});
+  assert.equal((await transition({...lcChange,contextGeneration:1,revision:3,action:'revoke'},null,null)).revision,3);
+  await admin.query('update channel_links set verified_at=now() where id=$1',[lcIdentity]);
+  const newVersion=Number((await admin.query('select binding_version from channel_links where id=$1',[lcIdentity])).rows[0].binding_version);
+  const replacement=(await a.query('select stage_slack_conversation_route($1,$2) r',[{...lcInput,accountId:lcB,identityLinkVersion:newVersion},lcEvidence])).rows[0].r;
+  assert.notEqual(replacement.id,lcRoute.id);assert.equal(replacement.account_id,lcB);assert.equal(replacement.state,'staged');
+  const replacementChange={...lcChange,accountId:lcB,routeId:replacement.id};
+  await transition(replacementChange,{...lcApproval,accountId:lcB,routeId:replacement.id});
+  const newInbound=await accept({...lcEvent,externalMsgId:'CLC:1756800052.000001'});
+  assert.equal(newInbound.binding.accountId,lcB);assert.notEqual(newInbound.binding.linkId,lcInbound.binding.linkId);await verify(newInbound);
+  assert.equal((await admin.query('select account_id from channel_links where id=$1',[lcIdentity])).rows[0].account_id,lcA);
+  assert.equal((await admin.query('select binding from channel_inbox where id=$1',[lcInbound.id])).rows[0].binding.accountId,lcA);
+  await assert.rejects(verify(lcInbound),{code:'40001'});
+  assert.equal((await admin.query('select count(*)::int n from unc_slack_private.route_transitions where route_id=$1',[lcRoute.id])).rows[0].n,3);
+  for(const role of ['anon','authenticated']){
+    await b.query(`set role ${role}`);
+    await assert.rejects(b.query("select transition_slack_conversation_route('{}',null,null)"),{code:'42501'});
+    await assert.rejects(b.query('select * from unc_slack_private.route_transitions'),{code:'42501'});
+  }
+  checks.push('route lifecycle: exact expiring cutover approval, one concurrent activation, stale/paused/grant refusal, pause cancels queued delivery, revoke after unlink/context repair, new binding preserves retired history, private audit and service-only access');
   console.log(JSON.stringify({status:'PASS',checks,providerCalls:0,customerMessages:0,productionChanges:0,database:directory},null,2));
 } finally {await Promise.all(clients.map(c=>c.end()));await cluster.stop();}

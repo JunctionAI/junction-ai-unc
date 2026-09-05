@@ -3,12 +3,13 @@ import { captureArtifactContext } from "@/lib/artifacts/context";
 import { keyringFromEnv } from "@/lib/connectors/crypto";
 import { slackTokenResolver } from "@/lib/channels/secrets";
 import { stageSlackRoute } from "@/lib/channels/slackRoutes";
-import { confirmStagedRoute, readSlackRouteSetup, slackRouteStageRequest } from "@/lib/channels/slackRouteSetupClient";
+import { confirmRouteTransition, confirmStagedRoute, readSlackRouteSetup, slackRouteStageRequest, slackRouteTransitionRequest } from "@/lib/channels/slackRouteSetupClient";
+import { transitionSlackRoute } from "@/lib/channels/slackRouteLifecycle";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
 const failure = () => json({ error: "Slack setup not confirmed. Refresh to read what is saved before changing it again." }, 503);
-async function handle(req: Request, save: boolean) {
+async function handle(req: Request, save: boolean, transition = false) {
   try {
     const session = await requireAccountOwnerSession();
     if (session instanceof Response) {
@@ -27,6 +28,15 @@ async function handle(req: Request, save: boolean) {
       if (req.headers.get("content-type")?.split(";")[0].trim() !== "application/json") return json({ error: "JSON setup required." }, 415);
       const body = await req.text();
       if (body.length > 2048) return json({ error: "Setup request too large." }, 413);
+      if (transition) {
+        const change = slackRouteTransitionRequest.safeParse(JSON.parse(body));
+        if (!change.success) return json({ error: "Exact route, revision and action required." }, 400);
+        await transitionSlackRoute({ db: session.service, fetch, tokenFor: slackTokenResolver(session.service, keyringFromEnv()),
+          now: () => new Date(), env: process.env }, ctx, change.data);
+        const result = await session.service.rpc("slack_route_owner_view", { input: ctx });
+        if (result.error) return failure();
+        const view = readSlackRouteSetup(result.data, ctx); confirmRouteTransition(view, change.data); return json(view);
+      }
       const parsed = slackRouteStageRequest.safeParse(JSON.parse(body));
       if (!parsed.success) return json({ error: "Choose an existing Slack identity and a valid channel ID." }, 400);
       await stageSlackRoute({ db: session.service, fetch, tokenFor: slackTokenResolver(session.service, keyringFromEnv()), now: () => new Date() }, { ...parsed.data, ...ctx });
@@ -48,3 +58,4 @@ async function handle(req: Request, save: boolean) {
 }
 export const GET = (req: Request) => handle(req, false);
 export const POST = (req: Request) => handle(req, true);
+export const PATCH = (req: Request) => handle(req, true, true);

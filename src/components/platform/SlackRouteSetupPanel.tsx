@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { AgentContext } from "@/lib/agents/client";
-import { slackRoomId, slackRouteSetupRequest, type SlackRouteSetupView } from "@/lib/channels/slackRouteSetupClient";
+import { slackRoomId, slackRouteSetupRequest, slackRouteTransition, type SlackRouteTransitionRequest, type SlackRouteSetupView } from "@/lib/channels/slackRouteSetupClient";
 
 export default function SlackRouteSetupPanel({ context }: { context: AgentContext }) {
   return <SlackRouteSetup key={`${context.accountId}:${context.contextGeneration}:${context.actorId}`} context={context} />;
@@ -10,6 +10,7 @@ function SlackRouteSetup({ context }: { context: AgentContext }) {
   const { accountId, contextGeneration, actorId } = context;
   const [view, setView] = useState<SlackRouteSetupView | null>(null);
   const [identityId, setIdentityId] = useState(""), [room, setRoom] = useState("");
+  const [retire, setRetire] = useState<string | null>(null);
   const [busy, setBusy] = useState(true), [message, setMessage] = useState(""), [refresh, setRefresh] = useState(0);
   const controller = useRef<AbortController | null>(null), locked = useRef(false);
   useEffect(() => {
@@ -40,6 +41,22 @@ function SlackRouteSetup({ context }: { context: AgentContext }) {
       if (controller.current === c) { setView(null); setMessage(`${err instanceof Error ? err.message : "Save not confirmed."} Refresh to check the saved mapping before retrying.`); }
     } finally { clearTimeout(timer); if (controller.current === c) { locked.current = false; setBusy(false); } }
   }
+  async function transition(change: SlackRouteTransitionRequest) {
+    const c = controller.current;
+    if (busy || locked.current || !view || !c || c.signal.aborted) return;
+    locked.current = true; setBusy(true); setMessage("");
+    const timer = setTimeout(() => c.abort(), 30000);
+    try {
+      const next = await slackRouteTransition({ accountId, contextGeneration, actorId: view.actorId }, change, fetch, c.signal);
+      if (controller.current === c && !c.signal.aborted) {
+        setView(next); setRetire(null);
+        setMessage(change.action === "revoke" ? "Mapping retired; its history is preserved. A replacement needs fresh verification and cutover approval."
+          : "Mapping paused. New requests cannot use it; already-sent messages cannot be recalled. No Hyperagent listener changed.");
+      }
+    } catch (err) {
+      if (controller.current === c) { setView(null); setRetire(null); setMessage(`${err instanceof Error ? err.message : "Change not confirmed."} Refresh to check the saved state.`); }
+    } finally { clearTimeout(timer); if (controller.current === c) { locked.current = false; setBusy(false); } }
+  }
   return <section aria-label="Client Slack channel setup" style={{ background: "white", border: "1px solid var(--card-border-2)", borderRadius: 18, padding: 20, maxWidth: 760 }}>
     <h3 style={{ marginTop: 0 }}>Client Slack channel</h3>
     <p>Reuse your existing Junction Slack connection for this client. Each channel has its own client mapping; your OAuth login stays where it is.</p>
@@ -61,10 +78,19 @@ function SlackRouteSetup({ context }: { context: AgentContext }) {
       </>}
       {view.routes.length > 0 && <div aria-label="Saved client channel mappings">
         <h4>Saved mappings</h4>
-        {view.routes.map(r => <p key={r.routeId} style={{ overflowWrap: "anywhere" }}>
+        {view.routes.map(r => <div key={r.routeId} style={{ overflowWrap: "anywhere", marginBottom: 12 }}>
+          <p>
           {r.workspaceId} / {r.conversationId} — {r.state} · revision {r.revision}. {r.bindingCurrent ? "Account binding current." : "Account or connection changed; reconciliation required."}
           {" "}Resource last checked: {r.verifiedAt}. This is not a delivery receipt.
-        </p>)}
+          </p>
+          {r.state === "active" && <button disabled={busy} onClick={() => transition({ routeId: r.routeId, revision: r.revision, action: "pause" })}>Pause {r.conversationId}</button>}
+          {r.state !== "revoked" && (retire === r.routeId ? <div>
+            <p>Retire this mapping? It cannot be reactivated. History stays saved; a new mapping needs fresh verification. This does not remove any Slack bot.</p>
+            <button disabled={busy} onClick={() => transition({ routeId: r.routeId, revision: r.revision, action: "revoke" })}>Confirm retire {r.conversationId}</button>
+            <button disabled={busy} onClick={() => setRetire(null)}>Cancel retirement</button>
+          </div> : <button disabled={busy} onClick={() => setRetire(r.routeId)}>Retire {r.conversationId}</button>)}
+        </div>)}
+        <p>Activation is handled by Junction after the exact channel cutover is approved and the previous responder is stopped. Pausing or retiring here does not change other apps in Slack.</p>
       </div>}
     </>}
     <button style={{ marginTop: 12, marginLeft: 8 }} disabled={busy} onClick={() => { setView(null); setIdentityId(""); setBusy(true); setMessage(""); setRefresh(n => n + 1); }}>Refresh Slack setup</button>

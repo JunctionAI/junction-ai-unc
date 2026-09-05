@@ -6,6 +6,33 @@ const identity={identityLinkId:L,identityLinkVersion:2,workspaceId:"T1",workspac
 const fixture=()=>({accountId:A,actorId:U,contextGeneration:1,paused:true,identities:[identity],routes:[] as Record<string,unknown>[],activationAvailable:false,executedAction:"none"});
 const savedRoute={identityLinkId:L,identityLinkVersion:2,workspaceId:"T1",conversationId:"C1",routeId:U,revision:0,state:"staged",bindingCurrent:true,verifiedAt:"2026-09-06T00:00:00Z"};
 const url=()=>`${base}/tests/slack-route-setup-fixture/index.html`;
+test("pause and confirmed retirement use exact revisions and survive reload",async({page})=>{
+  const saved={...fixture(),routes:[{...savedRoute,state:"active"}]},patches:unknown[]=[];
+  await page.route("**/api/channels/slack/routes",async r=>{
+    if(r.request().method()==="PATCH"){
+      const change=r.request().postDataJSON();patches.push(change);expect(change.routeId).toBe(U);expect(change.revision).toBe(saved.routes[0].revision);
+      saved.routes[0]={...saved.routes[0],revision:change.revision+1,state:change.action==="pause"?"staged":"revoked"};
+    }await r.fulfill({json:saved});
+  });
+  await page.goto(url());await page.getByRole("button",{name:"Pause C1",exact:true}).click();
+  await expect(page.getByText(/Mapping paused/)).toBeVisible();await page.reload();await expect(page.getByText(/C1 — staged · revision 1/)).toBeVisible();
+  await page.getByRole("button",{name:"Retire C1",exact:true}).click();await expect(page.getByText(/Retire this mapping\?/)).toBeVisible();expect(patches).toHaveLength(1);
+  await page.getByRole("button",{name:"Cancel retirement",exact:true}).click();expect(patches).toHaveLength(1);
+  await page.getByRole("button",{name:"Retire C1",exact:true}).click();await page.getByRole("button",{name:"Confirm retire C1",exact:true}).click();
+  await expect(page.getByText(/Mapping retired/)).toBeVisible();await page.reload();await expect(page.getByText(/C1 — revoked · revision 2/)).toBeVisible();
+  await expect(page.getByRole("button",{name:"Retire C1",exact:true})).toHaveCount(0);
+  expect(patches).toEqual([{routeId:U,revision:0,action:"pause"},{routeId:U,revision:1,action:"revoke"}]);
+});
+test("lost pause response requires readback without retrying",async({page})=>{
+  const saved={...fixture(),routes:[{...savedRoute,state:"active"}]};let patches=0;
+  await page.route("**/api/channels/slack/routes",async r=>{
+    if(r.request().method()==="PATCH"){patches++;saved.routes[0]={...saved.routes[0],state:"staged",revision:1};await r.abort("failed");}
+    else await r.fulfill({json:saved});
+  });
+  await page.goto(url());await page.getByRole("button",{name:"Pause C1",exact:true}).click();await expect(page.getByText(/Refresh to check the saved state/)).toBeVisible();
+  await expect(page.getByRole("button",{name:"Pause C1",exact:true})).toHaveCount(0);
+  await page.getByRole("button",{name:"Refresh Slack setup",exact:true}).click();await expect(page.getByText(/C1 — staged · revision 1/)).toBeVisible();expect(patches).toBe(1);
+});
 test("owner explicitly selects existing identity; stage and reload show no activation",async({page})=>{
   const saved=fixture(),posts:string[]=[],errors:string[]=[];
   page.on("pageerror",e=>errors.push(e.message));page.on("request",r=>{if(r.method()==="POST")posts.push(r.url());});

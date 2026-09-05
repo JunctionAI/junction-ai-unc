@@ -62,19 +62,7 @@ export async function stageSlackRoute(deps: { db: DbClient; fetch: FetchLike; to
     if (checked[key] !== input[key]) throw new Error("Slack route preflight identity mismatch");
   if (typeof checked.botUserId !== "string" || !/^[UW][A-Z0-9]{1,63}$/.test(checked.botUserId)
     || typeof checked.externalId !== "string" || !/^[UW][A-Z0-9]{1,63}$/.test(checked.externalId)) throw new Error("Verified Slack identity missing");
-  const token = await deps.tokenFor(input.workspaceId);
-  if (!token) throw new Error("Slack workspace connection unavailable; reconnect required");
-  const auth = await readSlack(deps.fetch, token, "auth.test", {});
-  if (auth.team_id !== input.workspaceId || auth.user_id !== checked.botUserId || typeof auth.bot_id !== "string" || !auth.bot_id)
-    throw new Error("Slack token does not belong to the registered workspace bot");
-  const info = await readSlack(deps.fetch, token, "conversations.info", { channel: input.conversationId, include_num_members: false });
-  const conversation = record(info.channel);
-  if (conversation.id !== input.conversationId || conversation.is_member !== true || conversation.is_archived !== false
-    || conversation.is_shared !== false || conversation.is_im === true || conversation.is_mpim === true
-    || conversation.is_ext_shared === true || conversation.is_org_shared === true)
-    throw new Error("Slack route requires an unarchived, non-shared client channel containing the Junction bot");
-  const evidence = { workspaceId: input.workspaceId, conversationId: input.conversationId, botUserId: checked.botUserId,
-    isMember: true, isArchived: false, isShared: false, verifiedAt: deps.now().toISOString() };
+  const evidence = await verifySlackRouteResource(deps, { workspaceId: input.workspaceId, conversationId: input.conversationId, botUserId: String(checked.botUserId) });
   const route = record(await unwrap("slack_route.stage", deps.db.rpc("stage_slack_conversation_route", { input, evidence })));
   if (route.account_id !== input.accountId || route.context_generation !== input.contextGeneration || route.workspace_id !== input.workspaceId
     || route.conversation_id !== input.conversationId || route.owner_id !== input.actorId || route.identity_link_id !== input.identityLinkId
@@ -83,4 +71,22 @@ export async function stageSlackRoute(deps: { db: DbClient; fetch: FetchLike; to
     || !Number.isSafeInteger(route.revision) || Number(route.revision) < 0) throw new Error("Persisted Slack route mismatch; reconcile before retrying");
   return Object.freeze({ routeId: route.id, revision: Number(route.revision), accountId: input.accountId,
     workspaceId: input.workspaceId, conversationId: input.conversationId, state: "staged" as const, executedAction: "none" as const });
+}
+
+/** Read-only provider evidence; caller must recheck authority when saving. */
+export async function verifySlackRouteResource(deps: { fetch: FetchLike; tokenFor: SlackTokenResolver; now: () => Date },
+  input: { workspaceId: string; conversationId: string; botUserId: string }) {
+  const token = await deps.tokenFor(input.workspaceId);
+  if (!token) throw new Error("Slack workspace connection unavailable; reconnect required");
+  const auth = await readSlack(deps.fetch, token, "auth.test", {});
+  if (auth.team_id !== input.workspaceId || auth.user_id !== input.botUserId || typeof auth.bot_id !== "string" || !auth.bot_id)
+    throw new Error("Slack token does not belong to the registered workspace bot");
+  const info = await readSlack(deps.fetch, token, "conversations.info", { channel: input.conversationId, include_num_members: false });
+  const conversation = record(info.channel);
+  if (conversation.id !== input.conversationId || conversation.is_member !== true || conversation.is_archived !== false
+    || conversation.is_shared !== false || conversation.is_im === true || conversation.is_mpim === true
+    || conversation.is_ext_shared === true || conversation.is_org_shared === true)
+    throw new Error("Slack route requires an unarchived, non-shared client channel containing the Junction bot");
+  return { workspaceId: input.workspaceId, conversationId: input.conversationId, botUserId: input.botUserId,
+    isMember: true, isArchived: false, isShared: false, verifiedAt: deps.now().toISOString() };
 }
