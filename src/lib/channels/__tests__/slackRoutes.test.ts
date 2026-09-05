@@ -12,7 +12,15 @@ function setup() {
   const rpc = vi.fn(async (fn: string) => ({ data: fn === "slack_route_preflight" ? checked : saved, error: null as { message: string; code: string } | null }));
   const auth = { ok: true, team_id: "T1", user_id: "UBOT", bot_id: "B1" };
   const info = { ok: true, channel: { id: "C1", is_member: true, is_archived: false, is_shared: false } as Record<string, unknown> };
-  const fetch = vi.fn(async (url: string) => Response.json(url.endsWith("auth.test") ? auth : info));
+  const fetch = vi.fn(async (url: string, options?: RequestInit) => {
+    if (url.endsWith("auth.test")) return Response.json(auth);
+    const request = new URL(url);
+    // Match the real Slack rejection, not just a canned successful response.
+    if (options?.method !== "GET" || options.body !== undefined || request.searchParams.get("channel") !== "C1"
+      || request.searchParams.get("include_num_members") !== "false")
+      return Response.json({ ok: false, error: "invalid_arguments" });
+    return Response.json(info);
+  });
   const tokenFor = vi.fn(async () => "synthetic-token-never-log");
   const deps = { db: { rpc } as unknown as DbClient, fetch, tokenFor, now: () => new Date("2026-09-06T00:00:00.000Z") };
   return { deps, checked, saved, rpc, auth, info, fetch, tokenFor };
@@ -39,7 +47,10 @@ describe("Slack route staging (provider/RPC fixtures, SQL independently verified
     expect(await stageSlackRoute(f.deps, input)).toMatchObject({ state: "staged", accountId: input.accountId, conversationId: "C1", executedAction: "none" });
     expect(f.rpc.mock.calls.map(c => c[0])).toEqual(["slack_route_preflight", "stage_slack_conversation_route"]);
     expect(f.rpc.mock.invocationCallOrder[0]).toBeLessThan(f.tokenFor.mock.invocationCallOrder[0]);
-    expect(f.fetch.mock.calls.map(c => c[0])).toEqual(["https://slack.com/api/auth.test", "https://slack.com/api/conversations.info"]);
+    expect(f.fetch.mock.calls.map(c => c[0])).toEqual(["https://slack.com/api/auth.test", "https://slack.com/api/conversations.info?channel=C1&include_num_members=false"]);
+    expect(f.fetch.mock.calls[1][1]).toMatchObject({ method: "GET", cache: "no-store", redirect: "error", headers: { authorization: "Bearer synthetic-token-never-log" } });
+    expect(f.fetch.mock.calls[1][1]).not.toHaveProperty("body");
+    expect(f.fetch.mock.calls[1][0]).not.toContain("synthetic-token");
     expect(f.rpc).toHaveBeenLastCalledWith("stage_slack_conversation_route", { input, evidence: {
       workspaceId: "T1", conversationId: "C1", botUserId: "UBOT", isMember: true, isArchived: false, isShared: false, verifiedAt: "2026-09-06T00:00:00.000Z",
     } });

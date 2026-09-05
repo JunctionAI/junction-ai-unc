@@ -41,8 +41,15 @@ function record(v: unknown): Row {
 async function readSlack(fetchFn: FetchLike, token: string, method: "auth.test" | "conversations.info", body: Row): Promise<Row> {
   let res: Response;
   try {
-    res = await fetchFn(`${SLACK_API}/${method}`, { method: "POST", redirect: "error", signal: AbortSignal.timeout(10_000),
-      headers: { "content-type": "application/json; charset=utf-8", authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    // conversations.info requires query arguments: the live API rejects this
+    // lookup's JSON POST with invalid_arguments. Keep credentials in headers.
+    const query = new URLSearchParams(Object.entries(body).map(([key, value]) => [key, String(value)]));
+    const channelRead = method === "conversations.info";
+    res = await fetchFn(`${SLACK_API}/${method}${channelRead ? `?${query}` : ""}`, {
+      method: channelRead ? "GET" : "POST", redirect: "error", signal: AbortSignal.timeout(10_000), cache: "no-store",
+      headers: { authorization: `Bearer ${token}`, ...(!channelRead ? { "content-type": "application/json; charset=utf-8" } : {}) },
+      ...(!channelRead ? { body: JSON.stringify(body) } : {}),
+    });
   } catch { throw new Error("Slack resource verification unavailable; no route staged"); }
   let result: Row;
   try { result = record(await res.json()); }
