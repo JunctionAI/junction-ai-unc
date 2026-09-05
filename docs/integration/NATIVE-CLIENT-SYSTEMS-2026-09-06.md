@@ -1,5 +1,48 @@
 # Native client-system audit and integration boundary
 
+## 6 September 11:24–11:27 NZ — actual channel discovery and native trigger comparison
+
+This supersedes the historical zero-Slack-link/DM-only statements below. Batches
+75–82 delivered a verified stored Slack identity, explicit workspace/channel
+mapping, same-thread routing and guarded lifecycle. They did not activate clients.
+
+Authenticated Slack listing now returns all 22 visible non-archived conversations
+in Junction AI `T0BMD3LMWUQ`, with pagination complete. The machine-readable inventory
+records nine AVGAR, five H1, one Ribbon Rose, one Aerspan and one DBH channel; the
+other five are Junction internal channels. Unity/NZPH were not found in this
+visible workspace, which does not establish absence from other workspaces.
+
+H1 remains an exact-ID reconciliation blocker: visible `#home-invasion-email`
+is `C0BRASET44B`, while the saved run references `C0BRFLSQ9GW`. Fresh native
+Configure/Channels still shows two same-named rows without IDs: one active
+read/write/respond, one read/write only. No merge or rebind is justified by name.
+The current H1 invocation says `@H1 Email`, all relevant messages; daily review
+on, Monday brief off, Ask first. The dialog was closed with Cancel.
+
+Fresh AVGAR SEO native settings show `#avgar-seo`, all relevant messages enabled,
+Ask first, Wednesday-at-9 schedule enabled, Live mode off. The UI explicitly
+describes Ask first as a behavioral preference, not isolation, and approval scopes
+as not yet wired. This is evidence for using Junction's server-enforced account,
+routine and action authority, not permission to change native autonomy.
+
+**Actual setup mutation:** existing Junction bot `U0BV96TRXK4` was invited to the
+existing private `#avgar-seo` `C0BR8UNSR26`. Independent membership readback found
+Tom, Hyperagent and Junction (three members). No text message was sent, no native
+listener/schedule was stopped, and no route was activated. Slack membership may
+produce an ordinary system join event; this batch is not zero-external-mutation.
+
+Owner UI staging initially failed. Authoritative DB reconciliation found no saved
+route; preflight passed. Direct read using Junction's sealed stored credential
+passed auth.test for the expected workspace/bot, but the old JSON POST channel
+lookup returned `invalid_arguments`. The documented GET/query call returned
+`ok=true`, exact channel, member=true, archived/shared/ext_shared/org_shared=false
+at `2026-09-05T23:24:16.148Z`. Source `6bbe07e` fixes the lookup and its request-shape
+fixture; no token was copied or rotated. Deployment/staging acceptance is tracked
+in the current execution-ledger batch, not inferred from this direct diagnostic.
+
+No native prompts, capabilities, credentials, listeners, schedules or autonomy
+were changed. Setup/onboarding skills were used in DOCUMENT_EXISTING mode only.
+
 ## 6 September 09:54–09:57 NZ refresh — continuity-first rollout
 
 **Subsequent owner direction:** Tom says all existing agents are in Hyperagent

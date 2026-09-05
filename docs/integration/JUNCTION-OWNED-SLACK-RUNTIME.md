@@ -2,12 +2,16 @@
 
 6 September 2026. Status: implementation in progress, not connected-client acceptance.
 
-**Current release:** [Batch 82 route lifecycle](SLACK-ROUTE-LIFECYCLE-2026-09-06.md)
-is deployed on matching app/worker source `1b757334b95d`, worker release 43.
-Owner pause/retirement and exact scoped operator activation are implemented;
-retired route history is retained for explicit replacement. Activation is off,
-zero routes exist, and no client delivery/cutover is claimed. Earlier sections
-below record the preceding implementation/release stages, not the latest gaps.
+**Current release:** [Batch 83 real channel staging](../BACKEND-GOAL-PROGRESS.md)
+deploys app `6bbe07e73f74` with the corrected Slack GET lookup; unchanged compatible
+worker release 43 remains at `1b757334b95d`. One actual route now exists:
+AVGAR SEO `T0BMD3LMWUQ/C0BR8UNSR26`, staged revision 0, independently read back
+from DB and owner UI. Junction's existing bot is a verified member alongside
+Hyperagent; neither responder cutover nor message delivery has occurred.
+[Batch 82 lifecycle](SLACK-ROUTE-LIFECYCLE-2026-09-06.md) remains implemented,
+including owner pause/retirement, retained history and separately scoped activation.
+All action flags stay off; operator activation scope is absent. Earlier sections
+below are historical implementation/release stages, not the latest gaps.
 
 ## Owner direction
 

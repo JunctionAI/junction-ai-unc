@@ -18,13 +18,30 @@
     "changeNativeAgent": false
   },
   "sharedGaps": [
-    "Unc has zero Slack channel_links",
-    "channel_links UNIQUE(channel,external_id) cannot represent one Slack user across client channels",
-    "Slack parsing drops thread_ts and outbound adapter always targets installer DM",
-    "Five seeded non-AVGAR clients have zero login memberships",
+    "Earlier zero-Slack-link and one-account/DM-only routing gaps are superseded by Batches 75-82; one verified Junction Slack identity and explicit client-channel/thread routing now exist",
+    "No active client channel or live same-thread delivery acceptance yet; staging is not activation",
+    "Five seeded non-AVGAR clients had zero login memberships at the recorded database snapshot; canonical client/owner mapping remains unaccepted",
     "Native attachments do not prove access for Junction's approved routines",
     "Do not build a Hyperagent execution dependency; verify methods and replace runtime through Junction"
   ],
+  "slackDiscoveryRefresh": {
+    "observedAt": "2026-09-05T23:24:16.148Z",
+    "workspaceId": "T0BMD3LMWUQ",
+    "nonArchivedVisibleConversations": 22,
+    "paginationComplete": true,
+    "source": "Authenticated Slack connector channel listing, not Hyperagent configuration IDs",
+    "channelsByClient": {
+      "AVGAR": {"avgar-web":"C0BRHLJMG7L","avgar-social":"C0BMCCYVAUT","avgar-editor":"C0BS3AQ62KA","avgar-content":"C0BRCL21R8C","avgar-agents":"C0BR4TEHYMT","avgar-paid-ads":"C0BL3F6NUUF","avgar-email":"C0BR57KRDFF","avgar-seo":"C0BR8UNSR26","avgar-pod-lead":"C0BR71FCBBQ"},
+      "Home1nvasion": {"home-invasion-paid-ads":"C0BRF5GQL6A","home-invasion-email":"C0BRASET44B","home-invasion-analyst":"C0BRH32EELS","home-invasion-content":"C0BRK29Q7ND","home-invasion-growth":"C0BQSHERCBZ"},
+      "Ribbon Rose": {"ribbon-rose-email":"C0BRJ88A0SF"},
+      "Aerspan": {"aerspan-airdomes-sales":"C0BR4AF9YMC"},
+      "Deep Blue Health": {"dbh-email":"C0BSCNWMP4N"}
+    },
+    "unresolved": ["Current visible H1 email C0BRASET44B differs from saved-run C0BRFLSQ9GW; never merge by name", "Unity and NZPH not found in this visible workspace listing; absence elsewhere is not established"],
+    "setupMutation": {"action":"invited_existing_junction_bot","botUserId":"U0BV96TRXK4","conversationId":"C0BR8UNSR26","independentMemberReadback":true,"hyperagentStillPresent":true,"routeActivated":false,"textMessageSent":false},
+    "storedCredentialRead": {"authTest":"passed_expected_workspace_and_bot","channelGet":"passed_exact_channel_member_unarchived_nonshared","channelJsonPost":"failed_invalid_arguments","adapterFixCommit":"6bbe07e"},
+    "stagedRoute": {"id":"44b7c9d4-02ef-4009-9687-842e8604c760","accountId":"aa5cfc84-2569-4c99-9b40-67003ae55eda","conversationId":"C0BR8UNSR26","state":"staged","revision":0,"contextGeneration":1,"verifiedAt":"2026-09-05T23:28:26.682Z","independentDatabaseReadAt":"2026-09-05T23:28:42.546766Z","liveDeliveryAccepted":false}
+  },
   "clients": [
     {
       "name": "AVGAR",

@@ -13,7 +13,67 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 82, 6 September NZ
+## Latest state — Batch 83, 6 September NZ
+
+**First actual client Slack channel verified and staged through the production
+owner UI. Not activated; no Slack request/reply acceptance yet.** Source
+`6bbe07e73f74852bac0a0b0a5339d214a22073cc` is pushed. Production application
+`dpl_3c9CdEG2LgaasGPz2Jehyz3ETnnw`, immutable URL
+`https://junction-ni0k33jyi-tom-junctionmedis-projects.vercel.app`, is READY and
+promoted to `https://junction-unc.vercel.app`. Next 16.3.4 remote build 35 seconds.
+
+Fresh Slack discovery found 22 visible conversations in Junction AI, including
+17 client channels across AVGAR, H1, Ribbon Rose, Aerspan and DBH. Exact IDs and
+native trigger comparison are in [the updated client inventory](integration/existing-client-rollout.v1.json)
+and [native audit](integration/NATIVE-CLIENT-SYSTEMS-2026-09-06.md). H1's conflicting
+saved/current channel IDs remain unresolved; Unity/NZPH are not found in this
+workspace listing. Do not silently merge clients or channel names.
+
+Junction bot `U0BV96TRXK4` was invited to existing private AVGAR SEO
+`T0BMD3LMWUQ/C0BR8UNSR26`, with independent three-member readback (Tom,
+Hyperagent, Junction). This is a real setup membership change, not a text send.
+Hyperagent's listener and schedule remain unchanged. Native skills were used
+in DOCUMENT_EXISTING mode; Ask first is not treated as server authority.
+
+The first owner staging attempt failed with no persisted route. DB preflight
+and stored-token auth.test passed; the adapter's JSON POST conversations.info
+returned `invalid_arguments`. Documented GET/query arguments succeed with the
+same credential and exact bot/channel. The fix now tests request shape, header-only
+credential, no GET body and no-store behavior, preserving all fail-closed checks.
+**3,171 tests / 233 files**, app and worker TypeScript, focused lint and production
+build pass. No schema or permission changes were needed.
+
+Production owner staging then succeeded once: route
+`44b7c9d4-02ef-4009-9687-842e8604c760`, state staged, revision 0, AVGAR generation 1,
+link `781b8885-8b1d-4181-894a-a3c9e977ccf7` revision 0, verified
+`2026-09-05T23:28:26.682Z`. Independent database read at 23:28:42.546766Z confirms
+the exact row; zero lifecycle transitions. Owner refresh preserves the mapping.
+AVGAR remains paused with eight saved runs. No routine was enabled/executed.
+Actual worker environment at 23:29:15.430Z confirms commands, messaging, live
+mode, TNZ SMS and Apple Messages false; route activation unset, scope absent.
+
+Candidate and canonical health pass; canonical read at 23:27:57.238Z returns
+source `6bbe07e73f74`, DB healthy, worker fresh and lastError null. Unauthenticated
+staging was refused with 401. Worker release 43/source `1b757334b95d` is retained:
+this application-only provisioning helper is not in the emitted worker closure;
+there is no worker behavior/contract/schema change. This is compatible, not a claim
+of matching app/worker SHAs. The first candidate `dpl_GD5yUDa4cVQaDLLaZTL5rK9cGUgp`
+was not promoted because its health lacked the source marker; the final candidate
+adds only a deployment-scoped verified source marker, not a credential.
+
+Rollback application: Batch 82 `dpl_AJoYyAigYvmqhSeeCYnh7KstSgbj`, preserving the
+new staged row and audit history. Post-release error/fatal scan found no entries;
+previously recorded no-drain/unverified alert-delivery gap remains open.
+
+**Next:** limited owner-only AVGAR SEO same-channel cutover/pilot, with explicit
+temporary scope, previous responder stopped and independently verified, exact
+routine authority, same-thread result receipt and rollback. A 30-minute pilot
+approval question was sent to Tom; do not treat its preselected answer as approval.
+Other clients need canonical owner/account and channel reconciliation, current
+data/credential evidence and routine-by-routine acceptance. Full launch goal stays
+active; do not repeat synthetic lifecycle tests instead of these real acceptance tasks.
+
+## Previous state — Batch 82, 6 September NZ
 
 **Slack channel lifecycle is implemented, tested and released; no client channel
 is activated.** Source `1b757334b95dd87976eaa5d01a7e5caf0e3a2fba`, production
