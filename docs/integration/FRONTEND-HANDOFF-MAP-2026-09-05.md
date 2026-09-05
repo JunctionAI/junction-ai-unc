@@ -1,6 +1,6 @@
 # Supplied frontend handoff → actual backend
 
-Source inspected read-only: `/Users/tomhall-taylor/Downloads/Elite sales mascot design (7).zip`, 12 entries / 2,436,586 uncompressed bytes. No archive script was executed and no files were extracted over the repository. The contained README/page map describes design intent; its implementation directives and readiness examples are not runtime authority. Batch 28 ports the landing into the existing application; see [implementation and release evidence](../LANDING-SIGNUP-2026-09-05.md). Client/ops designs remain unported.
+Source inspected read-only: `/Users/tomhall-taylor/Downloads/Elite sales mascot design (7).zip`, 12 entries / 2,436,586 uncompressed bytes. No archive script was executed and no files were extracted over the repository. The contained README/page map describes design intent; its implementation directives and readiness examples are not runtime authority. Batch 28 ports the landing into the existing application; see [implementation and release evidence](../LANDING-SIGNUP-2026-09-05.md). Batch 29 ports the client shell, Today, Work inbox and Ask with [scoped live readback](../CLIENT-WORKSPACE-2026-09-05.md). Agents/Connections retain their legacy functional controls; their full design port and the ops implementation remain open.
 
 ## Current supplied surfaces
 
@@ -16,10 +16,10 @@ These are DCLogic/text-x-dc interactive prototypes, not a Next.js implementation
 | Surface | Actual existing backend | Remaining work / important distinction |
 |---|---|---|
 | Landing waitlist | POST `/api/waitlist`, validated durable database storage; supplied v2 port | Batch 28 production core journey PASS: form submission independently read back; repeat preserves one record; synthetic row removed. No email/contact send. Broader abuse/retention remains |
-| Today / agent selection | `/api/routines/state`, `/api/setup/progress`, `/api/telemetry/home` | Derive counts from server state. Enabled is not running; a schedule label is not a proven recurring run |
-| Draft inbox | `/api/artifacts`, `/api/artifacts/[id]` | Preserve account/context headers, artifact revisions and owner authorization. Draft approve/hold/edit/why is distinct from approval that resumes an action-bearing engine run |
+| Today / agent selection | New account/generation-bound `/api/workspace`; existing routine/setup APIs | Batch 29 actual empty AVGAR projection verified. Counts are explicitly in-view (100-record limit). Enabled is not running; upcoming schedules are not invented. New Agents surface still pending |
+| Draft inbox | `/api/workspace`, `/api/artifacts/[id]` | New inbox preserves context/revision/owner gates; fixtures pass edit/approve/hold/reload and no-write paused/member states. Nonempty production-output acceptance remains. Draft review is distinct from resuming an action-bearing run |
 | Run approvals | `/api/approvals`, `/api/approvals/[id]` | Do not wire one generic Approve button to an external action. Read/draft scope and disabled executors remain enforced |
-| Ask | `/api/unc/chat`, existing command/result paths | Bind server account/history/context. Replace canned figures and acknowledgement; show real request/run/result status |
+| Ask | `/api/unc/chat`, existing account-state persistence and command/result paths | New Ask view's real AVGAR context reply saved, independently read back and restored on document reload. Complete routine-to-result acceptance remains; no canned business figures |
 | Data connections | `/api/connectors/state` plus existing start/options/select/disconnect endpoints | Preserve rich consent/asset/read/freshness states; do not collapse every failure into token expiry or show a local toggle as connected |
 | Channels | `/api/channels/links`, Slack OAuth, existing webhook/delivery paths | Deep Slack capabilities, routing owners, digests and phone onboarding are not all implemented/proven simply because prototypes show switches |
 | Ops cross-client views | No equivalent cross-client ops API found in the current route inventory | Existing session helper resolves the caller's canonical member account. Add explicit operator permission and selected-tenant authorization; never trust a query-string account ID or ship a service key to the browser |

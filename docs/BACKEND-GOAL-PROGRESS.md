@@ -12,7 +12,16 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 28, 5 September 2026
+## Latest state — Batch 29, 5 September 2026
+
+**Client workspace implementation and acceptance progress.** The previous turn was Batch 28's verified landing/signup release, not a blocked/no-progress turn. The full goal remains active.
+
+- Supplied client shell, Today, Work inbox and full-page Ask ported into the existing authenticated app. The account-bound saved-work projection, receipt/run identity, review versus run-approval distinction, failure/read-only states and existing legacy controls are wired. No prototype metrics or enabled-as-running claims.
+- 202 files / 2,557 tests, app/worker type checks and production build pass. Eight isolated browser cases pass, including edit/approve/hold/reload/conflict, headers, failure, read-only, navigation/back and mobile layout. New code has zero lint errors; two native same-document-navigation warnings are added to 39 existing warnings. No rule suppression.
+- Source pushed/live `cd35a7e4d4d3a0382d5a25d465188f68a9e7c183`; Vercel `dpl_DPUX275KL9hw4VHpt2BPkk5YcB35` READY/promoted, 64.871-second build-to-ready. Candidate/canonical health, anonymous workspace 401, actual AVGAR Today/inbox and persisted Ask readback pass. One owner-only context chat produced two saved messages, independently read back and restored after full document reload; no workflow ran. AVGAR stays generation 1/paused with zero current runs/artifacts/receipts/enabled routines. No migration, n8n modification, business-provider call or worker restart; compatible Batch 27 worker remains healthy. No error/fatal logs in the bounded release window.
+- [Exact behavior, release receipts and remaining acceptance](CLIENT-WORKSPACE-2026-09-05.md). History pagination, full Agents/Connections design and catalog mapping, management console, canonical-client/existing-system reconciliation and the original auth/data/channel/runtime acceptance remain open. n8n supported-read/receiver approval is unchanged and was not repeatedly inspected. Next independent batch: explicit ops authorization and existing-client/system mapping, or the remaining client catalog/connection surfaces; do not spend another release on cosmetic landing tweaks.
+
+## Batch 28, 5 September 2026
 
 **Supplied landing and durable signup journey.** The goal stays active with the all-screen/all-client acceptance overlay. No new numeric token budget or n8n purchase/key authorization is inferred.
 
