@@ -2,10 +2,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { unwrap, type DbClient } from "../db/types";
 import { getConnector } from "../connectors/store";
 import { claimLease, releaseLease } from "../connectors/lease";
+import { META_BUDGET_CONTRACT } from "./metaBudgets";
 import type { ConnectorReader, Platform, ReadQuery, ReadResult, RunContext } from "../runtime/types";
 
 export const DATASET_MAX_AGE_MS = 60 * 60_000;
 export const DATASET_SYNC_INTERVAL_MS = 15 * 60_000;
+
+export function datasetNormalizationCurrent(platform: Platform, query: ReadQuery, result: ReadResult): boolean {
+  return platform !== "meta_ads" || !["adsets", "campaigns"].includes(query.resource) || result.metrics.budget_metric_contract === META_BUDGET_CONTRACT;
+}
 
 function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable);
@@ -14,8 +19,9 @@ function stable(value: unknown): unknown {
 }
 
 /** Exact query/UTC reporting day: never substitute a different grain, filter or window. */
-export function datasetQueryHash(query: ReadQuery, now: Date): string {
-  return createHash("sha256").update(JSON.stringify(stable({ version: 1, day: now.toISOString().slice(0, 10), query: { ...query, ...(query.fields ? { fields: [...new Set(query.fields)].sort() } : {}) } }))).digest("hex");
+export function datasetQueryHash(query: ReadQuery, now: Date, platform: Platform = "meta_ads"): string {
+  const normalization = platform === "meta_ads" && ["adsets", "campaigns"].includes(query.resource) ? META_BUDGET_CONTRACT : undefined;
+  return createHash("sha256").update(JSON.stringify(stable({ version: 1, normalization, day: now.toISOString().slice(0, 10), query: { ...query, ...(query.fields ? { fields: [...new Set(query.fields)].sort() } : {}) } }))).digest("hex");
 }
 
 export function storedDataEnabled(accountId: string, platform: Platform, env: Record<string, string | undefined>): boolean {
@@ -71,8 +77,10 @@ export class DbDatasetStore implements DatasetStore {
       throw new Error("dataset sync returned stale or invalid source timestamp");
     // Relative windows can change at UTC midnight while the provider is in flight.
     // Never label yesterday's request as today's reporting query (or vice versa).
-    if (queryHash !== datasetQueryHash(query, now) || queryHash !== datasetQueryHash(query, new Date(result.fetchedAt)))
+    if (queryHash !== datasetQueryHash(query, now, identity.platform) || queryHash !== datasetQueryHash(query, new Date(result.fetchedAt), identity.platform))
       throw new Error("dataset reporting day changed during data sync");
+    if (!datasetNormalizationCurrent(identity.platform, query, result))
+      throw new Error("dataset budget normalization contract is not current");
     const id = randomUUID();
     await unwrap("save account dataset", this.db.from("account_dataset_snapshots").insert({ id, account_id: identity.accountId,
       connector_id: identity.connectorId, external_ref: identity.externalRef, platform: identity.platform, query_hash: queryHash,
@@ -87,14 +95,16 @@ export class StoredDatasetReader implements ConnectorReader {
   async read(platform: Platform, query: ReadQuery, ctx: RunContext): Promise<ReadResult> {
     const identity = await this.store.connection(ctx.account.accountId, platform);
     if (!identity) throw new Error(`stored data unavailable: ${platform} connection identity is not verified`);
-    const queryHash = datasetQueryHash(query, this.now());
+    const queryHash = datasetQueryHash(query, this.now(), platform);
     const snapshot = await this.store.latest(identity, queryHash);
     const availability = datasetAvailability(snapshot, identity, queryHash, this.now(), this.maxAgeMs);
     if (!snapshot || availability === "missing") throw new Error(`stored data unavailable: ${platform} ${query.resource} has not synchronized for this query`);
     if (availability === "identity_mismatch") throw new Error("stored data identity or query mismatch");
     if (availability === "unverified") throw new Error("stored data has no verified provider provenance");
     if (availability === "stale") throw new Error("stored data is stale or has an invalid source timestamp; synchronization required");
-    if (queryHash !== datasetQueryHash(query, this.now())) throw new Error("stored data reporting day changed; synchronization required");
+    if (queryHash !== datasetQueryHash(query, this.now(), platform)) throw new Error("stored data reporting day changed; synchronization required");
+    if (!datasetNormalizationCurrent(platform, query, snapshot.result))
+      throw new Error("stored data budget normalization contract is not current");
     return { ...snapshot.result, dataset: { id: snapshot.id, servedFrom: "stored", storedAt: snapshot.storedAt } };
   }
 }
@@ -114,7 +124,7 @@ export async function syncDataset(db: DbClient, direct: ConnectorReader, platfor
   const store = new DbDatasetStore(db);
   const identity = await store.connection(ctx.account.accountId, platform);
   if (!identity) throw new Error("dataset sync has no verified connection identity");
-  const hash = datasetQueryHash(query, now());
+  const hash = datasetQueryHash(query, now(), platform);
   const key = `dataset:${identity.accountId}:${identity.connectorId}:${hash}`;
   const holder = await claimLease(db, key, 120);
   if (!holder) return "busy";
@@ -122,7 +132,7 @@ export async function syncDataset(db: DbClient, direct: ConnectorReader, platfor
   try {
     const previous = await store.latest(identity, hash);
     const age = previous ? now().getTime() - Date.parse(previous.result.fetchedAt) : Infinity;
-    if (age >= 0 && age < DATASET_SYNC_INTERVAL_MS && datasetAvailability(previous, identity, hash, now()) === "ready") { completed = true; return "fresh"; }
+    if (age >= 0 && age < DATASET_SYNC_INTERVAL_MS && previous && datasetAvailability(previous, identity, hash, now()) === "ready" && datasetNormalizationCurrent(platform, query, previous.result)) { completed = true; return "fresh"; }
     const result = await direct.read(platform, query, ctx);
     const current = await store.connection(ctx.account.accountId, platform);
     if (!current || !sameIdentity(current, identity)) throw new Error("connection changed during data sync");

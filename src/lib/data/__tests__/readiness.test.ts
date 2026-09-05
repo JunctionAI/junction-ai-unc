@@ -34,6 +34,11 @@ describe("read-only dataset cutover coverage", () => {
     expect(await inspect(s, [])).toMatchObject({ ready: false, queries: [] });
     expect(s.connection).not.toHaveBeenCalled();
   });
+  it("does not certify a recent budget snapshot with an old normalization marker", async () => {
+    const budget = { ...requirement, query: { resource: "adsets" } };
+    const s = store({ ...snapshot, queryHash: datasetQueryHash(budget.query, time) });
+    expect(await inspect(s, [budget])).toMatchObject({ ready: false, queries: [{ availability: "normalization_outdated" }] });
+  });
   it.each(["missing", "unverified", "stale", "identity_mismatch"] as const)("reports %s as not ready", async availability => {
     const value = availability === "missing" ? null : availability === "unverified" ? { ...snapshot, result: { ...snapshot.result, provenance: "fixture" as const } } :
       availability === "stale" ? { ...snapshot, result: { ...snapshot.result, fetchedAt: "2026-09-05T10:00:00Z" } } :

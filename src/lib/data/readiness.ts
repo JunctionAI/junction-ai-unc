@@ -1,4 +1,4 @@
-import { DATASET_MAX_AGE_MS, datasetAvailability, datasetQueryHash, datasetSyncEnabled, storedDataEnabled, type DatasetAvailability, type DatasetStore } from "./datasets";
+import { DATASET_MAX_AGE_MS, datasetAvailability, datasetNormalizationCurrent, datasetQueryHash, datasetSyncEnabled, storedDataEnabled, type DatasetAvailability, type DatasetStore } from "./datasets";
 import type { Platform, ReadQuery } from "../runtime/types";
 
 export interface DatasetRequirement { platform: Platform; query: ReadQuery; routineId: string }
@@ -10,7 +10,7 @@ export interface DatasetReadiness {
     platform: Platform;
     queryHash: string;
     routineIds: string[];
-    availability: DatasetAvailability | "connection_unverified";
+    availability: DatasetAvailability | "connection_unverified" | "normalization_outdated";
     snapshotId: string | null;
     sourceFetchedAt: string | null;
     storedAt: string | null;
@@ -27,7 +27,7 @@ export async function inspectDatasetReadiness(store: DatasetStore, accountId: st
   const started = now();
   const grouped = new Map<string, { requirement: DatasetRequirement; queryHash: string; routineIds: Set<string> }>();
   for (const requirement of requirements) {
-    const queryHash = datasetQueryHash(requirement.query, started);
+    const queryHash = datasetQueryHash(requirement.query, started, requirement.platform);
     const key = `${requirement.platform}:${queryHash}`;
     const existing = grouped.get(key);
     if (existing) existing.routineIds.add(requirement.routineId);
@@ -39,7 +39,8 @@ export async function inspectDatasetReadiness(store: DatasetStore, accountId: st
     const identity = await store.connection(accountId, platform);
     if (identity && (identity.accountId !== accountId || identity.platform !== platform)) throw new Error("dataset inspection connection identity mismatch");
     const snapshot = identity ? await store.latest(identity, queryHash) : null;
-    const availability = identity ? datasetAvailability(snapshot, identity, queryHash, now()) : "connection_unverified";
+    let availability: DatasetReadiness["queries"][number]["availability"] = identity ? datasetAvailability(snapshot, identity, queryHash, now()) : "connection_unverified";
+    if (availability === "ready" && snapshot && !datasetNormalizationCurrent(platform, requirement.query, snapshot.result)) availability = "normalization_outdated";
     // Do not surface metadata from an injected/misbound foreign result.
     const visible = availability === "identity_mismatch" ? null : snapshot;
     queries.push({ platform, queryHash, routineIds: [...routineIds].sort(), availability,

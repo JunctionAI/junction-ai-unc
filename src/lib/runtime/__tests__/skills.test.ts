@@ -17,6 +17,11 @@ function sctx(over: Partial<SkillContext> = {}): SkillContext {
 }
 
 describe("skill cards", () => {
+  it.each([undefined, null, NaN, Infinity, -1, "32.61"])("pacing refuses configuration-only data with forecast %j", projected_daily_spend => {
+    const c = SKILL_BY_ID["D02-W07"].check(sctx({ reads: { meta: { ...read([{ spend: 50 }]), metrics: { projected_daily_spend: projected_daily_spend as number, daily_budget_total: 173.67, active_daily_budget_total: 32.61 } } } }));
+    expect(c.ok).toBe(false);
+    if (!c.ok) expect(c.needs[0].input).toBe("verified_daily_spend_projection");
+  });
   it("one per catalog routine, each stating its kind, prompt, output shape, minimum and skill file", () => {
     expect(SKILLS).toHaveLength(35);
     expect(SKILLS.map((s) => s.id).sort()).toEqual(CATALOG_SPECS.map((s) => s.id).sort());

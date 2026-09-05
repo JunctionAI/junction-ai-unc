@@ -189,7 +189,7 @@ describe("meta — first live contact", () => {
     const res = await meta.read({ resource: "campaigns" }, creds, { now });
     expect(res.ok && res.rows[0]).toMatchObject({ id: "c1", daily_budget: 100 });
     expect(res.ok && res.rows[1]).toMatchObject({ id: "c2", lifetime_budget: 2500 });
-    expect(res.ok && res.metrics).toEqual({ daily_budget_total: 100, count: 2 });
+    expect(res.ok && res.metrics).toMatchObject({ daily_budget_total: null, projected_daily_spend: null, active_daily_budget_total: 100, active_lifetime_budget_count: 1, count: 2, budget_metric_contract: "unc.meta-budget.v2" });
   });
 
   it("rejects capped pagination rather than returning partial totals", async () => {

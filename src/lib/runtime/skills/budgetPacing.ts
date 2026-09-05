@@ -26,7 +26,7 @@ export const budgetPacing: Skill = {
   domain: "paid",
   prompt: `CRAFT — budget pacing:
 - One item. Verdict is cut (pull the largest ad set back under the cap) or fine (pacing inside the cap). Meta rows alone are enough; Google Ads is helpful only when those rows exist.
-- Cite only numbers present on the meta / mtd / adsets (and google, when answered) reads: spend, daily_budget_total, projected_daily_spend, largest_adset_*. Name the cap only if it is in vars or caps-equivalent material; otherwise say "the daily cap" without a figure. Never invent spend, a pacing %, ROAS, CPA or frequency.
+- Cite only numbers present on the meta / mtd / adsets (and google, when answered) reads: spend, projected_daily_spend, largest_adset_*. active_daily_budget_total is an active-object configuration subset, never a whole-account cap or a projected spend value. Never substitute it or the retired daily_budget_total for a forecast. Name the cap only if it is in vars or caps-equivalent material; otherwise do not claim a cut-or-fine comparison. Never invent spend, a pacing %, ROAS, CPA or frequency.
 - If Google rows are missing or provenance is unavailable, do not mention Google spend. Do not invent a blended number.
 - Rollback named: restore the previous daily budget. This is a Would-card; Unc never spends and never cuts live.
 - meta: { action: "cut" | "fine", adset_id: "<largest, from the row or null>", adset_name: "…", rollback: "restore the previous daily budget" }.`,
@@ -35,6 +35,10 @@ export const budgetPacing: Skill = {
     if (!readAnswered(ctx, "meta")) return { ok: false, needs: [need.platform("meta_ads", "today's account spend vs daily budget — I don't invent pacing")] };
     const meta = rows(ctx, "meta").length;
     if (!meta) return { ok: false, needs: [need.platform("meta_ads", "today's account spend vs daily budget — I don't invent pacing")], note: "No Meta spend to pace against." };
+    const projection = ctx.reads.meta.metrics.projected_daily_spend;
+    if (ctx.reads.meta.provenance !== "ok" || typeof projection !== "number" || !Number.isFinite(projection) || projection < 0) {
+      return { ok: false, needs: [need.input("verified_daily_spend_projection", "a verified account spend forecast, not the sum of configured ad-set budgets")], note: "Budget configurations alone do not establish spend pacing." };
+    }
     const using = [`${meta} Meta account rows`];
     if (rows(ctx, "google").length) using.push("Google Ads campaigns");
     if (rows(ctx, "mtd").length) using.push("month-to-date spend");

@@ -13,7 +13,15 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 51, 6 September NZ / 5 September UTC
+## Latest state — Batch 52, 6 September NZ / 5 September UTC
+
+**Verified source and production saved-data correction.** [Semantics, SQL/readback and tests](META-BUDGET-CORRECTION-2026-09-06.md). `unc.meta-budget.v2` excludes paused/ineligible targets, separates daily/lifetime/unknown configurations and retires misleading aliases. Versioned hashes plus reader/save/readiness/reuse reject old normalization. Native pacing refuses configuration-only data without a verified forecast; broader cap/projection/catalog work remains.
+
+Saved AVGAR data was reprocessed without provider calls into snapshot `a1223279-93b6-59fe-a6a2-089222fe77f3`. Its 62 normalized rows and original source time are preserved. Active daily subset NZD 32.61, largest eligible target daily 22.61. One insert, independent SQL/stored-reader readback and repeated apply with zero additional writes pass. History untouched, account paused, four runs/one command unchanged. Full 216-file/2,820-test suite, ten operator tests, app/worker TypeScript, production build and lint pass. Matched release is next; sync/cutover/action flags stay off.
+
+The preceding conversational turn was advice, not implementation progress. This continuation changes source and stored state with readback evidence. Full B01–B24/all-client goal remains active; no Nguyen workflow or external action changed.
+
+## Batch 51, 6 September NZ / 5 September UTC
 
 **Matched release and actual two-query AVGAR Meta ingestion/reuse pass.** [Deployment, runtime, saved-data receipts and limits](DATASET-LIVE-RELEASE-2026-09-06.md). Source `7cf363cadee7e1c72e86a014812550f7b000fee0`, Vercel `dpl_5jXKUjsrnTgYCK6c9Kt1qr6EydZC`, Fly release 29/image `aa617890ce47dce3d2d45bf848a157ff12f9fd7fc1e209449857b3545b2f6e7f`. Canonical health, actual worker SHA, anonymous denial and signed-in AVGAR/reload pass. Error/fatal scans empty; zero drains/alert-delivery gap retained.
 

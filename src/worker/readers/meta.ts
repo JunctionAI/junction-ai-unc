@@ -18,6 +18,7 @@
 
 import type { ReadQuery } from "../../lib/runtime/types";
 import type { PlatformCredential } from "../credentials";
+import { metaBudgetMetrics, metaBudgetMinorUnits } from "../../lib/data/metaBudgets";
 import { dateRange, fetchJson, num, round2, sum, windowDays } from "./http";
 import { fail, ok, type Metrics, type ReaderOptions, type ReaderResult, type Row } from "./types";
 
@@ -63,17 +64,7 @@ const FIELD_ALIASES: Record<string, string | null> = {
 
 export function metaMetrics(resource: string, rows: Row[]): Metrics {
   if (resource !== "insights") {
-    if (resource === "campaigns") return { daily_budget_total: sum(rows, "daily_budget"), count: rows.length };
-    if (resource === "adsets") {
-      const largest = [...rows].sort((a, b) => num(b.daily_budget) - num(a.daily_budget))[0];
-      return {
-        daily_budget_total: sum(rows, "daily_budget"),
-        count: rows.length,
-        largest_adset_id: largest ? String(largest.id ?? "") : null,
-        largest_adset_name: largest ? String(largest.name ?? "") : null,
-        largest_daily_budget: largest ? num(largest.daily_budget) : null,
-      };
-    }
+    if (resource === "campaigns" || resource === "adsets") return metaBudgetMetrics(resource, rows);
     return { count: rows.length };
   }
   const spend = sum(rows, "spend");
@@ -203,8 +194,7 @@ export function normaliseInsightRow(r: Row): Row {
 
 /** Budgets arrive as minor-unit strings ("10000" = 100.00). */
 export function normaliseBudgetRow(r: Row): Row {
-  const cents = (v: unknown) => (v === undefined || v === null || v === "" ? undefined : round2(num(v) / 100));
-  return { ad_id: r.id, ...r, ...(r.daily_budget !== undefined ? { daily_budget: cents(r.daily_budget) } : {}), ...(r.lifetime_budget !== undefined ? { lifetime_budget: cents(r.lifetime_budget) } : {}) };
+  return { ad_id: r.id, ...r, ...(r.daily_budget !== undefined ? { daily_budget: metaBudgetMinorUnits(r.daily_budget) } : {}), ...(r.lifetime_budget !== undefined ? { lifetime_budget: metaBudgetMinorUnits(r.lifetime_budget) } : {}) };
 }
 
 /** Our own URL shape with the next cursor (Meta's paging.next carries the token in its query — never re-request it). */
@@ -250,7 +240,7 @@ export async function read(query: ReadQuery, creds: PlatformCredential, opts: Re
   if (url) return fail(`Meta pagination is incomplete after ${MAX_PAGES} pages; narrow the query or use a complete ingestion job`);
   const rows = query.resource === "insights" ? raw.map(normaliseInsightRow) : raw.map(normaliseBudgetRow);
   const missing = query.resource === "insights" ? missingInsightFields(rows) : [];
-  const note = `${shaped.note} (${pages} page${pages === 1 ? "" : "s"})${missing.length ? `; fields absent from every row: ${missing.join(", ")}; purchase metrics require source validation` : ""}${query.resource === "campaigns" || query.resource === "adsets" ? "; budgets converted from minor units" : ""}`;
+  const note = `${shaped.note} (${pages} page${pages === 1 ? "" : "s"})${missing.length ? `; fields absent from every row: ${missing.join(", ")}; purchase metrics require source validation` : ""}${query.resource === "campaigns" || query.resource === "adsets" ? "; budgets converted from minor units; active daily configurations only, excluding lifetime budgets; not whole-account budget or projected spend; unknown ownership remains unknown" : ""}`;
   if (query.resource === "insights" && raw.some(r => r.spend === undefined || r.spend === null || r.spend === "" || !Number.isFinite(Number(r.spend)))) return fail("Meta insights are incomplete: spend is missing or invalid");
   const metrics = metaMetrics(query.resource, rows);
   if (query.resource === "insights") {

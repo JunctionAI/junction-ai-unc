@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { META_BUDGET_CONTRACT, metaBudgetMetrics } from "../metaBudgets";
 import { seededDb, NOW } from "../../connectors/__tests__/helpers";
 import { upsertConnector } from "../../connectors/store";
 import type { ConnectorReader, ReadQuery, ReadResult, RunContext } from "../../runtime/types";
@@ -14,6 +16,18 @@ function memoryStore(over: Partial<DatasetSnapshot> = {}): DatasetStore {
 }
 
 describe("exact reporting snapshots", () => {
+  it("versions Meta budget normalization without invalidating unrelated insights", () => {
+    const budgetQuery = { resource: "adsets" };
+    const legacyHash = createHash("sha256").update(JSON.stringify({ day: NOW.toISOString().slice(0, 10), query: budgetQuery, version: 1 })).digest("hex");
+    expect(datasetQueryHash(budgetQuery, NOW)).not.toBe(legacyHash);
+    expect(datasetQueryHash(budgetQuery, NOW, "shopify")).toBe(legacyHash);
+    expect(datasetQueryHash(query, NOW, "meta_ads")).toBe(datasetQueryHash(query, NOW, "shopify"));
+  });
+  it("will not serve legacy budget metrics even if they are placed under a current hash", async () => {
+    const budgetQuery = { resource: "adsets" };
+    const s = memoryStore({ queryHash: datasetQueryHash(budgetQuery, NOW), result: { ...result, metrics: { daily_budget_total: 173.67 } } });
+    await expect(new StoredDatasetReader(s, () => NOW).read("meta_ads", budgetQuery, ctx)).rejects.toThrow("normalization contract");
+  });
   it("canonicalizes property order and requested field order, not reporting grain", () => {
     expect(datasetQueryHash(query, NOW)).toBe(datasetQueryHash({ fields: ["roas", "spend", "spend"], window: "7d", resource: "insights" }, NOW));
     for (const other of [{ ...query, window: "1d" }, { ...query, filter: { level: "ad" } }, { ...query, limit: 1 }, { ...query, groupBy: ["campaign_id"] }]) expect(datasetQueryHash(query, NOW)).not.toBe(datasetQueryHash(other, NOW));
@@ -124,5 +138,18 @@ describe("database snapshot synchronization", () => {
     });
     await expect(syncDataset(seeded.db, direct, "meta_ads", query, run, () => time)).rejects.toThrow("reporting day changed");
     expect(seeded.db.rows("account_dataset_snapshots")).toHaveLength(0);
+  });
+  it("requires current budget normalization at persistence and does not reuse a malformed legacy row", async () => {
+    const budgetQuery = { resource: "adsets" };
+    const store = new DbDatasetStore(seeded.db);
+    const id = (await store.connection(seeded.accountId, "meta_ads"))!;
+    await expect(store.save(id, budgetQuery, datasetQueryHash(budgetQuery, NOW), result, NOW)).rejects.toThrow("normalization contract");
+    seeded.db.insertRow("account_dataset_snapshots", { id: "legacy", account_id: id.accountId, connector_id: id.connectorId,
+      external_ref: id.externalRef, platform: id.platform, query_hash: datasetQueryHash(budgetQuery, NOW), result,
+      source_fetched_at: NOW.toISOString(), stored_at: NOW.toISOString() });
+    direct.read = vi.fn(async () => ({ ...result, rows: [], metrics: metaBudgetMetrics("adsets", []) }));
+    expect(await syncDataset(seeded.db, direct, "meta_ads", budgetQuery, run, () => NOW)).toBe("synced");
+    expect(direct.read).toHaveBeenCalledTimes(1);
+    expect(seeded.db.rows("account_dataset_snapshots").at(-1)?.result).toMatchObject({ metrics: { budget_metric_contract: META_BUDGET_CONTRACT } });
   });
 });

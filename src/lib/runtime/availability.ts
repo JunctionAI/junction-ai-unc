@@ -66,12 +66,12 @@ export const WORKER_LIVE_READ_CAPABILITIES: Readonly<Partial<Record<Platform, Re
     adsets: Object.freeze({
       fields: Object.freeze(["id", "ad_id", "name", "status", "effective_status", "campaign_id", "daily_budget", "lifetime_budget"]),
       filters: Object.freeze(["status"]),
-      metrics: Object.freeze(["daily_budget_total", "largest_adset_id", "largest_adset_name", "largest_daily_budget"]),
+      metrics: Object.freeze(["active_daily_budget_total", "active_daily_budget_count", "active_lifetime_budget_count", "active_unknown_budget_count", "unknown_status_count", "identity_issue_count", "largest_adset_id", "largest_adset_name", "largest_daily_budget"]),
     }),
     campaigns: Object.freeze({
       fields: Object.freeze(["id", "ad_id", "name", "status", "effective_status", "objective", "daily_budget", "lifetime_budget"]),
       filters: Object.freeze(["status"]),
-      metrics: Object.freeze(["daily_budget_total"]),
+      metrics: Object.freeze(["active_daily_budget_total", "active_daily_budget_count", "active_lifetime_budget_count", "active_unknown_budget_count", "unknown_status_count", "identity_issue_count"]),
     }),
   }),
   hubspot: Object.freeze({ contacts: {}, deals: {} }),

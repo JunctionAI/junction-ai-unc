@@ -49,7 +49,7 @@ export async function runDatasetSyncTick(deps: ServiceDeps, env: Record<string, 
       const spec = effectiveSpec(state, catalog);
       for (const node of spec.nodes) {
         if (node.kind !== "read" || node.source !== "meta_ads") continue;
-        const key = datasetQueryHash(node.query, now());
+        const key = datasetQueryHash(node.query, now(), node.source);
         if (seen.has(key)) continue;
         seen.add(key);
         const ctx: RunContext = { runId: `dataset-sync:${key}`, routineId: spec.id, version: spec.version, mode: "dry_run",
