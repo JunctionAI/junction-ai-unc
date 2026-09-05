@@ -10,7 +10,7 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price. Seed keyword, product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Batch 1 — context integrity (source changes, not deployed)
+## Batch 1 — context integrity (source changes; subsequently deployed in Batch 3)
 
 Fresh database inspection confirmed the mixed identity goes beyond the business name: the stored website, scan, plan narrative, commercial baseline and onboarding memories describe Junction. The stored goal also has a past year-2000 deadline. These are **not verified AVGAR settings**. No live context rows were overwritten during this inspection.
 
@@ -46,10 +46,26 @@ Local validation: **177 test files / 2,077 tests pass**, application/worker type
 
 **Release order:** deploy and smoke-test the new app, revoke legacy client writes on the protected context/chat tables and account name/currency columns, prove legacy denial, then perform the backed-up AVGAR repair. Do not revoke the old app's save permissions before the replacement is ready. Do not claim the browser race closed until that enforcement step is live. Direct administrative `account_state_meta` edits must explicitly increment the revision and clear replay markers; the business-row triggers cover ordinary server intake changes.
 
+## Batch 3 — live application and enforced save boundary
+
+Released the app at source `5dde2407a3208d16e6a4295d457b319e87221a96` to the existing `junction-unc` project. The first unaliased candidate had no runtime SHA, so it was not promoted. The replacement candidate explicitly included the release SHA, passed health and unauthenticated-denial checks, and was promoted. The canonical URL independently reports `5dde2407a320`.
+
+- Live deployment: `dpl_2yLzCP8TqcS6Go3DeHtvRzN4qbZX`, Next.js, build completed in 32 seconds. Full release/rollback references: `LIVE-RELEASE-2026-09-05.md`.
+- Existing signed-in owner session hydrated successfully and used the atomic writer at 02:55:52 UTC. Only then was `20260905025609_account_state_server_writes_only` applied.
+- Legacy client insert/update/delete/truncate/reference/trigger grants on eight context tables are now denied; account name/currency column updates are also denied. Existing SELECT/RLS stays intact. `account_profiles` and its founder-notes endpoint were deliberately not included.
+- `verify-account-state-enforcement.sql` passed actual authenticated/anonymous role checks. The full atomic SQL canary passed again under the final grants, with zero test accounts remaining after rollback.
+- Post-enforcement chat-only canary `release check 1456` and its real model reply persisted at corner positions 4/5, row IDs `67818392-a00b-4a6e-a5da-0cc0ecacc001` / `6eba9ffe-1d29-4ab3-959c-30a3eb85f7be`. SQL readback and a browser reload both passed. Revision advanced to 4 after reload; no command was queued.
+- Pilot connector identity/status fingerprint remained `b0f66c953199427e27567b11a9024927`. No credentials were changed or transferred. Messaging returns 503 while disabled; unauthenticated account state returns 401. Publishing/ad mutations remain source-disabled.
+- No error/fatal entries were returned for the new deployment during the post-release scan. Vercel's drain API returned zero drains. Security advisors remain six WARN/seven INFO; this is not a clean security sign-off. Monitoring/alert delivery still needs acceptance.
+
+**Still incomplete:** worker replacement, AVGAR context repair and memory/history fencing, n8n handoff/registration/dispatch and the rest of B01–B24. The profile is still `Junction AI`; this release deliberately does not call mixed-account business advice correct. UI checking also found stale readiness copy: the sidebar correctly counts two usable connections but setup progress still counts five status rows and claims nightly reads; the goal/date display still applies demo-style pace semantics to a historical baseline. Fix these as part of B01/B08/B11/B24 before customer acceptance.
+
+The new revision guard safely rejects competing writers, but browser hydration currently writes an unchanged initial snapshot. Remove that unnecessary write and test two-tab editing/recovery rather than presenting the SQL canary as full browser concurrency proof. Earlier chat history, generated briefs, memories and artifacts still need a context boundary before correcting the business identity.
+
 ## Next independent work
 
-1. Release and enforce the tested atomic persistence path above. Legacy browser permissions remain unchanged pending deployment; they can still bypass the new protocol until revoked.
-2. Preserve the original Junction context in a restricted audit/restore record. Correct the pilot profile/resources and invalidate wrong-business memories, plan and cached narrative without inventing AVGAR commercial settings. Inspect chat summaries and memory extraction so old chat cannot relearn the removed business facts.
+1. The atomic app/save boundary is now live. Complete the two-tab UX/recovery checks and remove redundant initial saves; do not roll back to a browser-direct writer under the new grants.
+2. Preserve the original Junction context in a restricted audit/restore record. Correct the pilot profile/resources and invalidate wrong-business memories, plan and cached narrative without inventing AVGAR commercial settings. Inspect chat summaries, prior artifacts/briefs and memory extraction so old content cannot relearn the removed business facts. Align setup/goal UI claims with verified data.
 3. Release the compatible app/worker pair, reconcile staged receiver configuration safely, and verify no action controls changed.
 4. Continue connection/refresh-owner, stored-data, scheduler, metric and security work from the register while Nguyen delivers the first keyword wrapper.
 5. Bind D03-W01 only after actual webhook/revision/credential/receipt delivery. Then perform the real shadow round trip and expand verified lanes.
