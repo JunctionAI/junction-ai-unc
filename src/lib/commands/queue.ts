@@ -2,20 +2,29 @@ import { createHash } from "node:crypto";
 import { unwrap, type DbClient, type Row } from "../db/types";
 import type { CommandActor, CommandQueue, CommandStatus, RoutineCommand } from "./types";
 import { runtimeGeneration } from "../runtime/contextFence";
+import { commandChannelBinding } from "./binding";
 
 export const digest = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 export function commandId(actor: CommandActor): string {
-  const hash = digest([actor.accountId, actor.userId, actor.channel, actor.linkId ?? null, actor.requestId]);
+  const identity = [actor.accountId, actor.userId, actor.channel, actor.linkId ?? null, actor.requestId];
+  const hash = digest(actor.channel === "app" ? identity : [...identity, commandChannelBinding(actor)]);
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 
 function encode(c: RoutineCommand): Row {
-  return { id: c.id, context_generation: runtimeGeneration(c.contextGeneration), account_id: c.actor.accountId, user_id: c.actor.userId, channel: c.actor.channel, request_id: c.actor.requestId, link_id: c.actor.linkId ?? null, request_hash: c.requestHash, routine_id: c.routineId, spec_hash: c.specHash, workflow_hash: c.workflowHash, version: c.version, request: c.request, status: c.status, reply: c.reply, run_id: c.runId, created_at: c.createdAt, updated_at: c.updatedAt };
+  return { id: c.id, context_generation: runtimeGeneration(c.contextGeneration), notification_revision: 0,
+    channel_binding: commandChannelBinding(c.actor, c.contextGeneration), account_id: c.actor.accountId, user_id: c.actor.userId, channel: c.actor.channel, request_id: c.actor.requestId, link_id: c.actor.linkId ?? null, request_hash: c.requestHash, routine_id: c.routineId, spec_hash: c.specHash, workflow_hash: c.workflowHash, version: c.version, request: c.request, status: c.status, reply: c.reply, run_id: c.runId, created_at: c.createdAt, updated_at: c.updatedAt };
 }
 
 function decode(r: Row): RoutineCommand {
-  return { id: String(r.id), contextGeneration: runtimeGeneration(r.context_generation), actor: { accountId: String(r.account_id), userId: String(r.user_id), channel: r.channel as CommandActor["channel"], requestId: String(r.request_id), ...(r.link_id ? { linkId: String(r.link_id) } : {}) }, requestHash: String(r.request_hash), routineId: String(r.routine_id), specHash: String(r.spec_hash), workflowHash: String(r.workflow_hash), version: Number(r.version), request: String(r.request), status: r.status as CommandStatus, reply: String(r.reply), runId: r.run_id ? String(r.run_id) : null, createdAt: String(r.created_at), updatedAt: String(r.updated_at) };
+  const b = r.channel_binding as Row | null;
+  return { id: String(r.id), contextGeneration: runtimeGeneration(r.context_generation), notificationRevision: runtimeGeneration(r.notification_revision),
+    actor: { accountId: String(r.account_id), userId: String(r.user_id), channel: r.channel as CommandActor["channel"], requestId: String(r.request_id),
+      contextGeneration: runtimeGeneration(r.context_generation),
+      ...(b ? { linkId: String(b.linkId), channelBinding: { bindingVersion: runtimeGeneration(b.bindingVersion), externalId: String(b.externalId),
+        ...(typeof b.scopeId === "string" ? { scopeId: b.scopeId } : {}) } } : r.link_id ? { linkId: String(r.link_id) } : {}) },
+    requestHash: String(r.request_hash), routineId: String(r.routine_id), specHash: String(r.spec_hash), workflowHash: String(r.workflow_hash), version: Number(r.version), request: String(r.request), status: r.status as CommandStatus, reply: String(r.reply), runId: r.run_id ? String(r.run_id) : null, createdAt: String(r.created_at), updatedAt: String(r.updated_at) };
 }
 
 /** Service-side only. Browser roles have no table access; GET uses an owner-bound API. */
@@ -30,7 +39,8 @@ export class DbCommandQueue implements CommandQueue {
     if (error && error.code !== "23505") throw new Error("Command could not be saved");
     const saved = await this.get(c.actor.accountId, c.id);
     if (!saved || saved.contextGeneration !== c.contextGeneration || saved.requestHash !== c.requestHash ||
-        saved.actor.userId !== c.actor.userId || saved.actor.channel !== c.actor.channel || saved.actor.linkId !== c.actor.linkId)
+        saved.actor.userId !== c.actor.userId || saved.actor.channel !== c.actor.channel || saved.actor.linkId !== c.actor.linkId ||
+        digest(saved.actor.channelBinding ?? null) !== digest(c.actor.channelBinding ?? null))
       throw new Error("Request ID was reused with different content or context");
     return saved;
   }

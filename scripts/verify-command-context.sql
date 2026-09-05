@@ -7,11 +7,13 @@ do $$
 declare
   a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); owner_id uuid;
   old_id uuid:=gen_random_uuid(); fresh_id uuid:=gen_random_uuid(); other_id uuid:=gen_random_uuid();
+  apple_link uuid:=gen_random_uuid(); apple_binding jsonb;
   test_id uuid; denied boolean;
 begin
   select user_id into owner_id from public.account_members order by account_id limit 1;
   assert owner_id is not null,'requires an existing referenced auth user; no user is created or changed';
   insert into public.accounts(id,name) values(a,'UNC_COMMAND_CONTEXT_CANARY'),(b,'UNC_COMMAND_CONTEXT_CANARY_OTHER');
+  insert into public.account_members(account_id,user_id,role) values(a,owner_id,'owner');
   insert into public.routine_commands(id,account_id,user_id,channel,request_id,request_hash,routine_id,spec_hash,workflow_hash,version,request,status,reply)
     values(old_id,a,owner_id,'app','old','h','D01-W01','s','w',1,'synthetic old request','queued','queued');
   assert (select context_generation=0 from public.routine_commands where id=old_id),'legacy generation wrong';
@@ -38,9 +40,13 @@ begin
     values(gen_random_uuid(),a,owner_id,'app','legacy','h','D01-W01','s','w',1,'unbound request','queued','queued');
   exception when serialization_failure then denied:=true; end;
   assert denied,'missing captured generation accepted after reset';
-  insert into public.routine_commands(id,account_id,context_generation,user_id,channel,request_id,request_hash,routine_id,spec_hash,workflow_hash,version,request,status,reply)
-    values(fresh_id,a,1,owner_id,'apple','fresh','h','D01-W01','s','w',1,'fresh request','queued','queued'),
-      (other_id,b,0,owner_id,'app','other','h','D01-W01','s','w',1,'other request','queued','queued');
+  insert into public.channel_links(id,account_id,user_id,channel,external_id,verified_at)
+    values(apple_link,a,owner_id,'apple','command-canary-'||a,clock_timestamp());
+  apple_binding:=jsonb_build_object('version',1,'kind','linked','accountId',a,'contextGeneration',1,'linkId',apple_link,
+    'bindingVersion',0,'userId',owner_id,'channel','apple','externalId','command-canary-'||a);
+  insert into public.routine_commands(id,account_id,context_generation,user_id,channel,link_id,channel_binding,request_id,request_hash,routine_id,spec_hash,workflow_hash,version,request,status,reply)
+    values(fresh_id,a,1,owner_id,'apple',apple_link,apple_binding,'fresh','h','D01-W01','s','w',1,'fresh request','queued','queued'),
+      (other_id,b,0,owner_id,'app',null,null,'other','h','D01-W01','s','w',1,'other request','queued','queued');
   denied:=false;
   begin update public.routine_commands set request='different' where id=fresh_id;
   exception when check_violation then denied:=true; end;

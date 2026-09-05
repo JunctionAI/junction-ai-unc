@@ -5,6 +5,8 @@ export interface CommandActor {
   channel: import("../channels/types").MessageChannel;
   requestId: string;
   linkId?: string;
+  /** Captured from the authenticated ingress, never resolved after queueing. */
+  channelBinding?: Readonly<{ bindingVersion: number; externalId: string; scopeId?: string }>;
   /** Captured before accepting the message; omitted legacy ingress is generation zero only. */
   contextGeneration?: number;
 }
@@ -14,6 +16,7 @@ export type CommandStatus = "queued" | "running" | "waiting" | "done" | "blocked
 export interface RoutineCommand {
   id: string;
   contextGeneration: number;
+  notificationRevision?: number;
   actor: CommandActor;
   requestHash: string;
   routineId: string;

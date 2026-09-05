@@ -185,10 +185,17 @@ export class FakeSupabase implements DbClient {
       return this.rows("routine_commands").filter(c => {
         const a = this.rows("accounts").find(a => a.id === c.account_id);
         if (!a || a.automation_paused !== false || a.context_generation !== c.context_generation) return false;
-        return notifications
-          ? c.notification_status === "pending" && ["slack", "sms", "telegram", "whatsapp", "email", "apple"].includes(String(c.channel)) && ["done", "blocked", "failed", "uncertain", "waiting"].includes(String(c.status))
-          : c.status === args.command_status;
-      }).sort((a, b) => cmp(a[args.command_status === "queued" && !notifications ? "created_at" : "updated_at"], b[args.command_status === "queued" && !notifications ? "created_at" : "updated_at"]) || cmp(a.id, b.id))
+        if (!notifications) return c.status === args.command_status;
+        const b = c.channel_binding as Row | null;
+        if (!b || !["done", "blocked", "failed", "uncertain", "waiting"].includes(String(c.status))) return false;
+        return this.rows("channel_links").some(l => l.id === b.linkId && l.account_id === c.account_id && l.user_id === c.user_id &&
+          l.binding_version === b.bindingVersion && l.external_id === b.externalId && l.channel === c.channel && !!l.verified_at &&
+          (l.channel !== "slack" || (l.meta as Row)?.team_id === b.scopeId)) &&
+          this.rows("account_members").some(m => m.account_id === c.account_id && m.user_id === c.user_id && m.role === "owner") &&
+          !this.rows("outbound_messages").some(o => o.account_id === c.account_id && o.context_generation === c.context_generation &&
+            o.ref === ["command", c.id, c.notification_revision].join(":") && o.status !== "queued");
+      }).sort((a, b) => cmp(notifications ? a.notification_checked_at ?? a.updated_at : a[args.command_status === "queued" ? "created_at" : "updated_at"],
+        notifications ? b.notification_checked_at ?? b.updated_at : b[args.command_status === "queued" ? "created_at" : "updated_at"]) || cmp(a.id, b.id))
         .slice(0, Math.min(Math.max(Number(args.max_rows ?? 0), 0), 100));
     };
     this.rpcs.create_account = (args) => {
@@ -337,6 +344,7 @@ export class FakeSupabase implements DbClient {
     for (const c of t.columns) out[c] = c in row ? row[c] : null;
     if (t.columns.has("context_generation") && !("context_generation" in row) && table !== "outbound_messages") out.context_generation = 0;
     if (table === "channel_links" && !("binding_version" in row)) out.binding_version = 0;
+    if (table === "routine_commands" && !("notification_revision" in row)) out.notification_revision = 0;
     if (table === "chat_messages" && !("external_scope" in row)) out.external_scope = "";
     if (table === "accounts" && !("automation_paused" in row)) out.automation_paused = false;
     if (t.columns.has("id") && out.id === null) out.id = fakeUuid();
@@ -389,7 +397,13 @@ export class FakeSupabase implements DbClient {
       const v = this.uniqueViolation(table, merged, r);
       if (v) throw new DbErr(v, "23505");
     }
-    for (const r of rows) Object.assign(r, patch);
+    for (const r of rows) {
+      // Application fixture for the database-owned notification revision. Actual
+      // immutability, locks and permission boundaries are tested with PostgreSQL.
+      if (table === "routine_commands" && (patch.status !== undefined && patch.status !== r.status || patch.reply !== undefined && patch.reply !== r.reply))
+        Object.assign(r, { notification_revision: Number(r.notification_revision ?? 0) + 1, notification_status: "pending", notification_checked_at: null });
+      Object.assign(r, patch);
+    }
     return rows;
   }
   deleteRows(table: string, rows: Row[]) {

@@ -219,7 +219,8 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
   let reply = event.channel === "sms" ? SMS_NO_MODEL_LINE : NO_MODEL_LINE;
   let live = false;
   try {
-    const command = await routeCommand(deps.db, deps.store, { accountId, contextGeneration, userId: binding.userId, channel: event.channel, requestId: event.externalMsgId, linkId: link.id }, event.text);
+    const command = await routeCommand(deps.db, deps.store, { accountId, contextGeneration, userId: binding.userId, channel: event.channel, requestId: event.externalMsgId, linkId: link.id,
+      channelBinding: { bindingVersion: link.bindingVersion, externalId: event.externalId, ...(event.scopeId ? { scopeId: event.scopeId } : {}) } }, event.text);
     await guard();
     const r = command ? { ok: true as const, reply: command.reply } : await respond({ accountId, contextGeneration, db: deps.db, history, channel: event.channel, guard });
     await guard();

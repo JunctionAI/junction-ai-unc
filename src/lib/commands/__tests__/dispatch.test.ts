@@ -9,6 +9,7 @@ import { processCommand, reconcileCommand } from "../process";
 import { commandOwner } from "../deps";
 import type { CommandActor, RoutineCommand } from "../types";
 import { assertRuntimeContext } from "../../db/runtimeContext";
+import { installInboxFixture } from "../../channels/__tests__/inboxFixture";
 
 const actor: CommandActor = { accountId: "account-a", userId: "owner-a", channel: "app", requestId: "message-1" };
 const T0 = "2026-09-04T01:00:00.000Z";
@@ -182,14 +183,19 @@ describe("durable execution", () => {
 describe("verified channel authority", () => {
   it("requires matching account, owner, linked user and channel", async () => {
     const db = new FakeSupabase();
+    installInboxFixture(db);
+    db.seed("accounts", [{ id: actor.accountId, context_generation: 0, automation_paused: false }]);
     db.seed("account_members", [{ account_id: actor.accountId, user_id: actor.userId, role: "owner" }]);
-    db.seed("channel_links", [{ id: "link", account_id: actor.accountId, user_id: actor.userId, channel: "slack", verified_at: T0 }]);
-    const linked: CommandActor = { ...actor, channel: "slack", linkId: "link" };
+    db.seed("channel_links", [{ id: "link", account_id: actor.accountId, user_id: actor.userId, channel: "slack", verified_at: T0, external_id: "U1", meta: { team_id: "T1" } }]);
+    const linked: CommandActor = { ...actor, channel: "slack", linkId: "link", channelBinding: { bindingVersion: 0, externalId: "U1", scopeId: "T1" } };
     expect(await commandOwner(db, linked)).toBe(true);
     expect(await commandOwner(db, { ...linked, channel: "sms" })).toBe(false);
     expect(await commandOwner(db, { ...linked, userId: "other" })).toBe(false);
     expect(await commandOwner(db, { ...linked, accountId: "other" })).toBe(false);
     expect(await commandOwner(db, { ...linked, linkId: undefined })).toBe(false);
+    expect(await commandOwner(db, { ...linked, channelBinding: undefined })).toBe(false);
+    expect(await commandOwner(db, { ...linked, channelBinding: { ...linked.channelBinding!, bindingVersion: 1 } })).toBe(false);
+    expect(await commandOwner(db, { ...linked, channelBinding: { ...linked.channelBinding!, scopeId: "T2" } })).toBe(false);
   });
   it("every queued version refers to a catalog capability", () => {
     expect(CATALOG_SPEC_BY_ID["D01-W01"]).toBeDefined();

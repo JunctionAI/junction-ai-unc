@@ -178,7 +178,8 @@ begin
     template:=true;
   end if;
   update public.outbound_messages set status='sending',attempt_id=send_attempt,send_started_at=stamp where id=outbound_id returning * into saved;
-  return jsonb_build_object('claimed',true,'row',to_jsonb(saved),'link',destination,'template',template);
+  -- A later source-validity trigger may cancel a superseded queued operation.
+  return jsonb_build_object('claimed',saved.status='sending','row',to_jsonb(saved),'link',destination,'template',template);
 end $$;
 revoke all on function public.claim_channel_outbound(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.claim_channel_outbound(uuid,uuid) to service_role;

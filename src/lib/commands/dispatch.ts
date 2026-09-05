@@ -8,6 +8,7 @@ import { commandId, digest } from "./queue";
 import type { Capability, Interpreter } from "./interpret";
 import type { CommandActor, CommandQueue, DispatchReply } from "./types";
 import { assertSameRuntimeContext, runtimeGeneration } from "../runtime/contextFence";
+import { freezeCommandActor } from "./binding";
 
 export interface DispatchDeps {
   store: Store;
@@ -39,7 +40,7 @@ export async function eligible(deps: DispatchDeps, actor: CommandActor, routineI
 
 /** null means ordinary conversation. Anything uncertain stays non-executable. */
 export async function dispatchMessage(deps: DispatchDeps, actor: CommandActor, text: string): Promise<DispatchReply | null> {
-  actor = Object.freeze({ ...actor });
+  actor = freezeCommandActor(actor);
   const contextGeneration = runtimeGeneration(actor.contextGeneration);
   if (!actor.accountId || !actor.userId || !actor.requestId || actor.requestId.length > 200 || !text.trim() || text.length > 4000) return { reply: "I need a valid signed-in request before I can start work." };
   if (!await deps.isOwner(actor)) return { reply: "Only the verified account owner can request work here. Nothing was started." };

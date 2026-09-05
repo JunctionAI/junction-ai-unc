@@ -10,7 +10,17 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 16, 5 September 2026, approximately 07:12 UTC
+## Latest state — Batch 17, 5 September 2026, approximately 07:22 UTC
+
+**Verified command-delivery source and rollback database progress; no production rollout.** The preceding goal turn was progress (Batch 16 pushed). This continuation started from a clean checkout and closed the captured command-notification path, while inspecting the artifact path's remaining acceptance gaps.
+
+- Commands retain the original authenticated destination/link revision/workspace. DB-owned result revisions distinguish waiting/final replies, prepared notifications use stored content, and the atomic send claim cancels superseded results or a demoted owner's notification. Legacy commands never inherit a current connection.
+- Delivery state comes from the durable outbox; queued/uncertain is not called sent. No post-provider command write can relabel the original receipt after reset. FK-only unlinking preserves immutable command identity and historical evidence. Notification polling filters before limits and rotates queued checks.
+- **191 files / 2,320 tests**, app/worker TypeScript, production build and diff checks pass. Lint zero errors / 39 existing warnings. The outbox, prior command-context and new command-delivery SQL canaries all passed in one rollback rehearsal.
+- Independent **07:21:00 UTC** readback: zero synthetic accounts/staged delivery columns/commands/outbound rows; AVGAR generation 1 / revision 15 / paused. Live advisors unchanged: six WARN/eight INFO. No deployment, persistent migration, provider/model call, workflow change, plan/key creation or message.
+- [Detailed contract, source-migration amendment, verification and remaining work](COMMAND-DELIVERY-2026-09-05.md). Artifact send still needs a stable browser operation and persisted original destination set; its list/view/decision surfaces need account/generation binding, and its queued wording is incorrect. OAuth callbacks, anonymous replies, remaining source expiry/delayed writers, coordinated release and actual customer acceptance remain open. n8n authority/reader/admission/registration gates are unchanged. Full B01–B24 scope is active.
+
+## Batch 16, 5 September 2026, approximately 07:12 UTC
 
 **Verified source and rollback-only database progress; no production rollout.** The preceding Nguyen reply was a handoff/status turn, not backend progress. This continuation resumed the existing test handle, inspected its failures, and completed the durable linked-channel outbox implementation and real SQL rehearsal.
 

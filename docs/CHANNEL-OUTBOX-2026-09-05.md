@@ -45,7 +45,7 @@ Supabase's [function privilege guidance](https://supabase.com/docs/guides/databa
 
 ## Remaining release gates — do not activate messaging yet
 
-1. Capture command notification link revision/user/destination at command acceptance. The old command notifier still looks up a current link and incorrectly calls a queued notification sent; finish its correlation and recovery.
+1. Command notification identity, revision/source checks and outbox correlation are now covered by the subsequent [command-delivery source batch](COMMAND-DELIVERY-2026-09-05.md). They are not deployed or live phone-proven.
 2. Replace the artifact-send route's timestamp-based operation reference with a stable user operation, captured business generation and original destination. Finish the remaining delayed/runless writer fences.
 3. Capture Slack install identity at OAuth initiation through callback; the new welcome reference alone does not fix generation-zero fallback or late-install rebinding.
 4. The unlinked-sender help path still calls its adapter directly. It needs durable, anonymous-arrival-scoped attempt handling; the connected outbox does not protect that path. Provider button acknowledgements are also outside this ledger.

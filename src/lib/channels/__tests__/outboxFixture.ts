@@ -5,6 +5,7 @@ import { rowToLink } from "../links";
 import { inQuietHours, prefAllows, whatsappWindowOpen } from "../outbound";
 import { appendOutbound } from "../thread";
 import type { OutboundKind } from "../types";
+import { isDeepStrictEqual } from "node:util";
 
 export function installOutboxFixture(db: FakeSupabase) {
   const verify = (binding: Row, allowPaused: boolean) => db.rpcs.verify_channel_inbound_binding({ expected: binding,
@@ -15,8 +16,8 @@ export function installOutboxFixture(db: FakeSupabase) {
     const old = db.rows("outbound_messages").find(r => r.account_id === b.accountId && r.context_generation === b.contextGeneration &&
       r.captured_link_id === b.linkId && r.binding_version === b.bindingVersion && r.kind === op.kind && r.ref === op.ref);
     if (old) {
-      if (JSON.stringify(old.binding) !== JSON.stringify(b) || JSON.stringify(old.payload) !== JSON.stringify(op.payload)
-        || JSON.stringify(old.reply_context) !== JSON.stringify(op.replyContext ?? null)
+      if (!isDeepStrictEqual(old.binding, b) || !isDeepStrictEqual(old.payload, op.payload)
+        || !isDeepStrictEqual(old.reply_context, op.replyContext ?? null)
         || old.append_thread !== op.appendThread || old.allow_template !== op.allowTemplate || old.allow_paused !== op.allowPaused) throw new Error("Operation content changed");
       return { ...old };
     }

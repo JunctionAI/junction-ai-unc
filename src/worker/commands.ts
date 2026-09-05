@@ -3,13 +3,13 @@ import { dispatchDeps, commandOwner } from "../lib/commands/deps";
 import { processCommand, reconcileCommand } from "../lib/commands/process";
 import { commandsEnabled, type RoutineCommand } from "../lib/commands/types";
 import { DbCommandQueue } from "../lib/commands/queue";
-import { unwrap, type DbClient } from "../lib/db/types";
+import { unwrap, type DbClient, type Row } from "../lib/db/types";
 import { runRoutine, type Adapters } from "../lib/runtime/engine";
 import type { N8nWorkflow, RoutineSpec } from "../lib/runtime/types";
 import type { Store } from "../lib/runtime/store/interface";
-import { getLink } from "../lib/channels/links";
+import { rowToLink } from "../lib/channels/links";
 import { buildAdapters as channelAdapters } from "../lib/channels/adapters";
-import { sendOnLink } from "../lib/channels/outbound";
+import { sendOnLink, type AdapterRegistry } from "../lib/channels/outbound";
 import { keyringFromEnv } from "../lib/connectors/crypto";
 import { resolveAccount, type ServiceDeps } from "./service";
 import { drainInboundEvents } from "../lib/channels/inbox";
@@ -17,9 +17,10 @@ import { handleInbound } from "../lib/channels/inbound";
 import { messagingDisabled } from "../lib/channels/releaseGate";
 import { assertRuntimeContext } from "../lib/db/runtimeContext";
 import { assertSameRuntimeContext, RuntimeContextError } from "../lib/runtime/contextFence";
+import { freezeCommandActor } from "../lib/commands/binding";
 
 export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapters, c: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null) {
-  c = Object.freeze({ ...c, actor: Object.freeze({ ...c.actor }) });
+  c = Object.freeze({ ...c, actor: freezeCommandActor(c.actor) });
   const identity = Object.freeze({ accountId: c.actor.accountId, contextGeneration: c.contextGeneration });
   if (deps.db) await assertRuntimeContext(deps.db, identity);
   const account = await resolveAccount(deps, c.actor.accountId);
@@ -39,28 +40,29 @@ export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapter
   return result;
 }
 
-export async function notifyCommand(db: DbClient, c: RoutineCommand): Promise<void> {
-  c = Object.freeze({ ...c, actor: Object.freeze({ ...c.actor }) });
+export async function notifyCommand(db: DbClient, c: RoutineCommand, injected?: { adapters: AdapterRegistry; now: () => Date }): Promise<void> {
+  c = Object.freeze({ ...c, actor: freezeCommandActor(c.actor) });
   const identity = Object.freeze({ accountId: c.actor.accountId, contextGeneration: c.contextGeneration });
   const guard = () => assertRuntimeContext(db, identity);
   await guard();
-  if (c.actor.channel === "app" || !c.actor.linkId || !await commandOwner(db, c.actor)) return;
-  const link = await getLink(db, c.actor.linkId);
-  if (!link || link.accountId !== c.actor.accountId) return;
+  if (messagingDisabled(process.env) || c.actor.channel === "app" || !c.actor.linkId || !await commandOwner(db, c.actor)) return;
+  const prepared = await unwrap<{ operation: Row; link: Row } | null>("commands.prepare_notification",
+    db.rpc("prepare_command_notification", { command_id: c.id, expected_revision: c.notificationRevision ?? 0 }));
+  if (!prepared) return;
+  const link = rowToLink(prepared.link);
+  const operation = prepared.operation;
+  if (operation.account_id !== identity.accountId || operation.context_generation !== identity.contextGeneration ||
+    link.id !== c.actor.linkId || link.userId !== c.actor.userId ||
+    link.bindingVersion !== c.actor.channelBinding?.bindingVersion) throw new Error("Notification identity mismatch");
   await guard();
-  // Claim BEFORE network I/O. Ambiguous delivery is not automatically repeated.
-  const claim = await unwrap<{ id: string } | null>("commands.notify_claim", db.from("routine_commands").update({ notification_status: "claimed" }).eq("id", c.id).eq("account_id", identity.accountId).eq("context_generation", identity.contextGeneration).eq("notification_status", "pending").select("id").maybeSingle());
-  if (!claim) return;
-  let status = "failed";
-  try {
-    await guard();
-    const adapters = channelAdapters({ db, env: process.env, fetch: (url, init) => fetch(url, init), keyring: keyringFromEnv(process.env) });
-    const out = await sendOnLink({ db, adapters, now: () => new Date(), guard }, link, "reply", { text: `${c.reply} Request ${c.id.slice(0, 8)}.` }, { contextGeneration: identity.contextGeneration, ref: `command:${c.id}`, appendToThread: true });
-    if (out.status === "sent" || out.status === "queued") status = "sent";
-  } finally {
-    await guard();
-    await unwrap("commands.notify_finish", db.from("routine_commands").update({ notification_status: status }).eq("id", c.id).eq("account_id", identity.accountId).eq("context_generation", identity.contextGeneration).eq("notification_status", "claimed"));
-  }
+  const adapters = injected?.adapters ?? channelAdapters({ db, env: process.env, fetch: (url, init) => fetch(url, init), keyring: keyringFromEnv(process.env) });
+  // The immutable prepared result, not this polling caller's stale reply, owns the send.
+  // Its source revision is checked again atomically by the outbox claim.
+  await sendOnLink({ db, adapters, now: injected?.now ?? (() => new Date()), guard }, link, "reply",
+    operation.payload as unknown as import("../lib/channels/types").OutboundPayload,
+    { contextGeneration: identity.contextGeneration, ref: String(operation.ref), appendToThread: true });
+  // Delivery truth stays in the outbox, including queued/uncertain. Never write a
+  // stale command row after provider I/O or call a queued message sent.
 }
 
 export async function runCommandsTick(deps: ServiceDeps, adapters: Adapters, maxMs = 20_000): Promise<void> {

@@ -4,6 +4,7 @@ import { digest } from "./queue";
 import { eligible, workflowFingerprint, type DispatchDeps } from "./dispatch";
 import type { RoutineCommand, CommandStatus } from "./types";
 import { runtimeGeneration, RuntimeContextError } from "../runtime/contextFence";
+import { freezeCommandActor } from "./binding";
 
 export interface ProcessorDeps extends DispatchDeps {
   execute(command: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null): Promise<RunResult>;
@@ -29,7 +30,7 @@ export function commandResult(run: Pick<RunRecord, "status">): { status: Command
 }
 
 export async function processCommand(deps: ProcessorDeps, command: RoutineCommand): Promise<void> {
-  command = Object.freeze({ ...command, actor: Object.freeze({ ...command.actor }) });
+  command = Object.freeze({ ...command, actor: freezeCommandActor(command.actor) });
   const guard = () => deps.assertContext(command.actor.accountId, runtimeGeneration(command.contextGeneration));
   // Old work remains old history. Never rewrite it as a result in the new context.
   if (!await contextActive(guard)) return;
@@ -42,7 +43,7 @@ export async function processCommand(deps: ProcessorDeps, command: RoutineComman
     throw error;
   }
   if (!claimed) return;
-  claimed = Object.freeze({ ...claimed, actor: Object.freeze({ ...claimed.actor }) });
+  claimed = Object.freeze({ ...claimed, actor: freezeCommandActor(claimed.actor) });
   // Save the deterministic run ID BEFORE dispatch. Never replay a claimed request after a
   // crash: its provider call may have happened even if the response was lost.
   let started = false;
@@ -77,7 +78,7 @@ export async function processCommand(deps: ProcessorDeps, command: RoutineComman
 
 /** Reconcile callbacks and interrupted workers without repeating provider calls. */
 export async function reconcileCommand(deps: DispatchDeps, c: RoutineCommand): Promise<void> {
-  c = Object.freeze({ ...c, actor: Object.freeze({ ...c.actor }) });
+  c = Object.freeze({ ...c, actor: freezeCommandActor(c.actor) });
   const guard = () => deps.assertContext(c.actor.accountId, runtimeGeneration(c.contextGeneration));
   if (!await contextActive(guard)) return;
   const now = (deps.now ?? (() => new Date()))();

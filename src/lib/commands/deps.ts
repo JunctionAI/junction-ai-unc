@@ -8,14 +8,21 @@ import { modelInterpreter } from "./interpret";
 import { DbCommandQueue } from "./queue";
 import type { CommandActor } from "./types";
 import { assertRuntimeContext } from "../db/runtimeContext";
+import { commandChannelBinding } from "./binding";
 
 export async function commandOwner(db: DbClient, actor: CommandActor): Promise<boolean> {
   const member = await unwrap<{ role: string } | null>("commands.owner", db.from("account_members").select("role").eq("account_id", actor.accountId).eq("user_id", actor.userId).maybeSingle());
   if (member?.role !== "owner") return false;
-  if (actor.channel === "app") return !actor.linkId;
-  if (!actor.linkId) return false;
-  const link = await unwrap<{ user_id: string; channel: string; verified_at: string | null } | null>("commands.link", db.from("channel_links").select("user_id, channel, verified_at").eq("id", actor.linkId).eq("account_id", actor.accountId).maybeSingle());
-  return !!link?.verified_at && link.user_id === actor.userId && link.channel === actor.channel;
+  if (actor.channel === "app") return !actor.linkId && !actor.channelBinding;
+  let binding;
+  try { binding = commandChannelBinding(actor); } catch { return false; }
+  const result = await db.rpc("verify_channel_inbound_binding", { expected: binding,
+    inbound_event: { channel: actor.channel, externalId: actor.channelBinding!.externalId, scopeId: actor.channelBinding!.scopeId }, allow_paused: true });
+  if (result.error) {
+    if (result.error.code === "40001") return false;
+    throw new Error("Command channel authority unavailable");
+  }
+  return !!result.data;
 }
 
 export function dispatchDeps(db: DbClient, store: Store, accountId: string): DispatchDeps {
