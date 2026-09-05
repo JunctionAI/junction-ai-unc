@@ -69,7 +69,7 @@ async function handlePOST(req: Request) {
   const surface: UncSurface = body.surface === "onboarding" ? "onboarding" : "corner";
 
   if (account && surface === "corner") {
-    const command = await routeCommand(account.db, getStore(), { accountId: account.accountId, userId: account.userId ?? "", channel: "app", requestId: typeof body.requestId === "string" ? body.requestId : "" }, history[history.length - 1].content);
+    const command = await routeCommand(account.db, getStore(), { accountId: account.accountId, contextGeneration: account.contextGeneration, userId: account.userId ?? "", channel: "app", requestId: typeof body.requestId === "string" ? body.requestId : "" }, history[history.length - 1].content);
     if (command) return Response.json(command);
   }
 

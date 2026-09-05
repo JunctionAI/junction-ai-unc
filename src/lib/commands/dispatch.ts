@@ -7,11 +7,13 @@ import type { BusinessModel } from "../unc/businessType";
 import { commandId, digest } from "./queue";
 import type { Capability, Interpreter } from "./interpret";
 import type { CommandActor, CommandQueue, DispatchReply } from "./types";
+import { assertSameRuntimeContext, runtimeGeneration } from "../runtime/contextFence";
 
 export interface DispatchDeps {
   store: Store;
   queue: CommandQueue;
   isOwner(actor: CommandActor): Promise<boolean>;
+  assertContext(accountId: string, generation: number): Promise<void>;
   connected(accountId: string): Promise<string[]>;
   business(accountId: string): Promise<BusinessModel | null>;
   budget(accountId: string): Promise<boolean>;
@@ -37,19 +39,31 @@ export async function eligible(deps: DispatchDeps, actor: CommandActor, routineI
 
 /** null means ordinary conversation. Anything uncertain stays non-executable. */
 export async function dispatchMessage(deps: DispatchDeps, actor: CommandActor, text: string): Promise<DispatchReply | null> {
+  actor = Object.freeze({ ...actor });
+  const contextGeneration = runtimeGeneration(actor.contextGeneration);
   if (!actor.accountId || !actor.userId || !actor.requestId || actor.requestId.length > 200 || !text.trim() || text.length > 4000) return { reply: "I need a valid signed-in request before I can start work." };
   if (!await deps.isOwner(actor)) return { reply: "Only the verified account owner can request work here. Nothing was started." };
+  const guard = () => deps.assertContext(actor.accountId, contextGeneration);
+  await guard();
   const id = commandId(actor);
   const prior = await deps.queue.get(actor.accountId, id);
-  if (prior) return prior.requestHash === digest(text) ? { reply: prior.reply, commandId: id, status: prior.status } : { reply: "That message ID was already used for different content. Nothing new was started." };
+  await guard();
+  if (prior) {
+    assertSameRuntimeContext({ accountId: actor.accountId, contextGeneration }, { accountId: prior.actor.accountId, contextGeneration: prior.contextGeneration });
+    return prior.requestHash === digest(text) ? { reply: prior.reply, commandId: id, status: prior.status } : { reply: "That message ID was already used for different content. Nothing new was started." };
+  }
   const states = await deps.store.listRoutineStates(actor.accountId);
   const capabilities: Capability[] = CATALOG_SPECS.map((s) => ({ id: s.id, name: s.name, purpose: s.minimum?.summary ?? s.name, enabled: states.some((r) => r.routineId === s.id && r.enabled) }));
+  await guard();
   const intent = await deps.interpret(text, capabilities);
+  await guard();
   if (intent.kind === "chat") return null;
   if (intent.kind !== "run") return { reply: "Which routine would you like me to run with its saved settings? I can prepare a draft or analysis; I haven’t started anything or changed your switches." };
   const check = await eligible(deps, actor, intent.routineId);
+  await guard();
   if (!check.ok) return { reply: check.reply };
   const at = (deps.now ?? (() => new Date()))().toISOString();
-  const saved = await deps.queue.enqueue({ id, actor, requestHash: digest(text), routineId: check.spec.id, specHash: digest(check.spec), workflowHash: workflowFingerprint(check.workflow), version: check.spec.version, request: text, status: "queued", reply: `I’ve queued ${check.spec.name} using its saved settings, in draft-only mode. It hasn’t completed yet; you can check its progress in Unc.`, runId: null, createdAt: at, updatedAt: at });
+  const saved = await deps.queue.enqueue({ id, actor, contextGeneration, requestHash: digest(text), routineId: check.spec.id, specHash: digest(check.spec), workflowHash: workflowFingerprint(check.workflow), version: check.spec.version, request: text, status: "queued", reply: `I’ve queued ${check.spec.name} using its saved settings, in draft-only mode. It hasn’t completed yet; you can check its progress in Unc.`, runId: null, createdAt: at, updatedAt: at });
+  await guard();
   return { reply: saved.reply, commandId: saved.id, status: saved.status };
 }

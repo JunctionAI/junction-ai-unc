@@ -162,6 +162,19 @@ export class FakeSupabase implements DbClient {
   now: () => string = () => new Date().toISOString();
 
   constructor(readonly schema: Schema = migrationSchema()) {
+    // Query-shape/application fixture only. Real command trigger/role guarantees
+    // are verified separately by the rollback SQL canary.
+    this.rpcs.list_current_routine_commands = (args) => {
+      const notifications = args.pending_notifications === true;
+      return this.rows("routine_commands").filter(c => {
+        const a = this.rows("accounts").find(a => a.id === c.account_id);
+        if (!a || a.automation_paused !== false || a.context_generation !== c.context_generation) return false;
+        return notifications
+          ? c.notification_status === "pending" && ["slack", "sms", "telegram", "whatsapp", "email", "apple"].includes(String(c.channel)) && ["done", "blocked", "failed", "uncertain", "waiting"].includes(String(c.status))
+          : c.status === args.command_status;
+      }).sort((a, b) => cmp(a[args.command_status === "queued" && !notifications ? "created_at" : "updated_at"], b[args.command_status === "queued" && !notifications ? "created_at" : "updated_at"]) || cmp(a.id, b.id))
+        .slice(0, Math.min(Math.max(Number(args.max_rows ?? 0), 0), 100));
+    };
     this.rpcs.create_account = (args) => {
       if (!this.userId) throw new Error("not signed in");
       const id = fakeUuid();

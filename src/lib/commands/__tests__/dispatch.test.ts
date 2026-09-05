@@ -8,15 +8,17 @@ import { parseIntent } from "../interpret";
 import { processCommand, reconcileCommand } from "../process";
 import { commandOwner } from "../deps";
 import type { CommandActor, RoutineCommand } from "../types";
+import { assertRuntimeContext } from "../../db/runtimeContext";
 
 const actor: CommandActor = { accountId: "account-a", userId: "owner-a", channel: "app", requestId: "message-1" };
 const T0 = "2026-09-04T01:00:00.000Z";
 async function setup(routineId = "D01-W01") {
   const db = new FakeSupabase();
+  db.seed("accounts", [{ id: actor.accountId, context_generation: 0, automation_paused: false }]);
   const store = new MemoryStore();
   const queue = new DbCommandQueue(db);
   await store.putRoutineState({ accountId: actor.accountId, routineId, enabled: true, version: 1, liveSpec: null, draftSpec: null, updatedAt: T0 });
-  const deps: DispatchDeps = { store, queue, isOwner: vi.fn(async () => true), connected: async () => ["meta_ads", "shopify", "search_console", "ga4", "klaviyo"], business: async () => null, budget: vi.fn(async () => true), interpret: vi.fn(async () => ({ kind: "run" as const, routineId })), now: () => new Date(T0) };
+  const deps: DispatchDeps = { store, queue, assertContext: (accountId, contextGeneration) => assertRuntimeContext(db, { accountId, contextGeneration }), isOwner: vi.fn(async () => true), connected: async () => ["meta_ads", "shopify", "search_console", "ga4", "klaviyo"], business: async () => null, budget: vi.fn(async () => true), interpret: vi.fn(async () => ({ kind: "run" as const, routineId })), now: () => new Date(T0) };
   const enqueue = async (text = "Run the founder content routine") => {
     await dispatchMessage(deps, actor, text);
     return (await queue.get(actor.accountId, commandId(actor)))!;
@@ -191,5 +193,117 @@ describe("verified channel authority", () => {
   });
   it("every queued version refers to a catalog capability", () => {
     expect(CATALOG_SPEC_BY_ID["D01-W01"]).toBeDefined();
+  });
+});
+
+describe("captured command context", () => {
+  const execution = (c: RoutineCommand) => ({ runId: c.id, routineId: c.routineId, version: 1, mode: "dry_run" as const, status: "done" as const, summary: "done", receipts: [] });
+  it.each(["reset", "pause", "missing controls"])("refuses %s before intent model work", async reason => {
+    const { db, deps } = await setup();
+    if (reason === "reset") db.rows("accounts")[0].context_generation = 1;
+    if (reason === "pause") db.rows("accounts")[0].automation_paused = true;
+    if (reason === "missing controls") delete db.rows("accounts")[0].context_generation;
+    await expect(dispatchMessage(deps, actor, "run it")).rejects.toThrow();
+    expect(deps.interpret).not.toHaveBeenCalled();
+    expect(db.rows("routine_commands")).toHaveLength(0);
+  });
+  it("surfaces unavailable controls to worker health without claiming a command", async () => {
+    const { db, deps, enqueue, queue } = await setup();
+    const c = await enqueue();
+    delete db.rows("accounts")[0].automation_paused;
+    const execute = vi.fn(async () => execution(c));
+    await expect(processCommand({ ...deps, execute }, c)).rejects.toThrow("unavailable");
+    expect(execute).not.toHaveBeenCalled();
+    expect((await queue.get(actor.accountId, c.id))?.status).toBe("queued");
+  });
+  it("supports an explicitly captured nonzero generation", async () => {
+    const { db, deps, queue } = await setup();
+    db.rows("accounts")[0].context_generation = 2;
+    const response = await dispatchMessage(deps, { ...actor, contextGeneration: 2 }, "run it");
+    expect(response?.status).toBe("queued");
+    expect((await queue.get(actor.accountId, response!.commandId!))?.contextGeneration).toBe(2);
+  });
+  it.each(["interpret", "connected", "budget"])("refuses a reset during %s without enqueueing", async phase => {
+    const { db, deps } = await setup();
+    const reset = () => { db.rows("accounts")[0].context_generation = 1; };
+    if (phase === "interpret") deps.interpret = async () => { reset(); return { kind: "run", routineId: "D01-W01" }; };
+    if (phase === "connected") deps.connected = async () => { reset(); return []; };
+    if (phase === "budget") deps.budget = async () => { reset(); return true; };
+    await expect(dispatchMessage(deps, actor, "run it")).rejects.toThrow("context changed");
+    expect(db.rows("routine_commands")).toHaveLength(0);
+  });
+  it("does not disclose or re-execute an old message ID after reset", async () => {
+    const { db, deps, enqueue } = await setup();
+    await enqueue();
+    db.rows("accounts")[0].context_generation = 1;
+    await expect(dispatchMessage(deps, { ...actor, contextGeneration: 1 }, "Run the founder content routine")).rejects.toThrow("context changed");
+    expect(deps.interpret).toHaveBeenCalledTimes(1);
+    expect(db.rows("routine_commands")).toHaveLength(1);
+  });
+  it("does not rebase a caller-mutated actor while interpretation waits", async () => {
+    const { deps, queue } = await setup();
+    const mutable = { ...actor };
+    deps.interpret = async () => { mutable.accountId = "other"; return { kind: "run", routineId: "D01-W01" }; };
+    const reply = await dispatchMessage(deps, mutable, "run it");
+    expect((await queue.get(actor.accountId, reply!.commandId!))?.actor.accountId).toBe(actor.accountId);
+  });
+  it.each(["reset", "pause"])("does not claim a command after %s", async reason => {
+    const { db, deps, enqueue, queue } = await setup();
+    const c = await enqueue();
+    if (reason === "reset") db.rows("accounts")[0].context_generation = 1;
+    else db.rows("accounts")[0].automation_paused = true;
+    const execute = vi.fn(async () => execution(c));
+    await processCommand({ ...deps, execute }, c);
+    expect(execute).not.toHaveBeenCalled();
+    expect((await queue.get(actor.accountId, c.id))?.status).toBe("queued");
+  });
+  it("holds a claim if the context changes during eligibility", async () => {
+    const { db, deps, enqueue, queue } = await setup();
+    const c = await enqueue();
+    deps.budget = async () => { db.rows("accounts")[0].context_generation = 1; return true; };
+    const execute = vi.fn(async () => execution(c));
+    await processCommand({ ...deps, execute }, c);
+    expect(execute).not.toHaveBeenCalled();
+    expect((await queue.get(actor.accountId, c.id))?.status).toBe("running");
+  });
+  it.each(["return", "throw"])("does not write a new-context result or error after late execution %s", async outcome => {
+    const { db, deps, enqueue, queue } = await setup();
+    const c = await enqueue();
+    const execute = vi.fn(async () => {
+      db.rows("accounts")[0].context_generation = 1;
+      if (outcome === "throw") throw new Error("late provider failure");
+      return execution(c);
+    });
+    await processCommand({ ...deps, execute }, c);
+    await processCommand({ ...deps, execute }, c);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect((await queue.get(actor.accountId, c.id))?.status).toBe("running");
+  });
+  it("does not reconcile a run from a different generation", async () => {
+    const { deps, enqueue, queue, store } = await setup();
+    const c = await enqueue();
+    const claimed = (await queue.transition(c, "queued", { status: "running", runId: c.id }))!;
+    await store.createRun({ id: c.id, accountId: actor.accountId, contextGeneration: 1, routineId: c.routineId, version: 1, mode: "dry_run", status: "done", startedAt: T0 });
+    await reconcileCommand(deps, claimed);
+    expect((await queue.get(actor.accountId, c.id))?.status).toBe("running");
+  });
+  it("does not reconcile a reset account or expose its stale notification", async () => {
+    const { db, deps, enqueue, queue, store } = await setup();
+    const c = await enqueue();
+    const claimed = (await queue.transition(c, "queued", { status: "running", runId: c.id }))!;
+    await store.createRun({ id: c.id, accountId: actor.accountId, contextGeneration: 0, routineId: c.routineId, version: 1, mode: "dry_run", status: "done", startedAt: T0 });
+    db.rows("accounts")[0].context_generation = 1;
+    await reconcileCommand(deps, claimed);
+    expect((await queue.get(actor.accountId, c.id))?.status).toBe("running");
+    expect(await queue.notifications(20)).toEqual([]);
+  });
+  it("filters stale and paused records before limiting current candidates", async () => {
+    const { db, enqueue, queue } = await setup();
+    const old = await enqueue();
+    db.rows("accounts")[0].context_generation = 1;
+    db.seed("accounts", [{ id: "active", context_generation: 0, automation_paused: false }, { id: "paused", context_generation: 0, automation_paused: true }]);
+    await queue.enqueue({ ...old, id: "paused", actor: { ...actor, accountId: "paused" } });
+    await queue.enqueue({ ...old, id: "active", actor: { ...actor, accountId: "active" }, createdAt: "2026-09-04T02:00:00Z" });
+    expect((await queue.list("queued", 1)).map(c => c.id)).toEqual(["active"]);
   });
 });

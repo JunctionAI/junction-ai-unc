@@ -7,6 +7,7 @@ import type { DispatchDeps } from "./dispatch";
 import { modelInterpreter } from "./interpret";
 import { DbCommandQueue } from "./queue";
 import type { CommandActor } from "./types";
+import { assertRuntimeContext } from "../db/runtimeContext";
 
 export async function commandOwner(db: DbClient, actor: CommandActor): Promise<boolean> {
   const member = await unwrap<{ role: string } | null>("commands.owner", db.from("account_members").select("role").eq("account_id", actor.accountId).eq("user_id", actor.userId).maybeSingle());
@@ -21,6 +22,7 @@ export function dispatchDeps(db: DbClient, store: Store, accountId: string): Dis
   return {
     store, queue: new DbCommandQueue(db),
     isOwner: (actor) => commandOwner(db, actor),
+    assertContext: (id, contextGeneration) => assertRuntimeContext(db, { accountId: id, contextGeneration }),
     connected: async (id) => {
       const rows = await unwrap<{ platform: string; status: string; last_sync_result: string | null }[]>("commands.connectors", db.from("connectors").select("platform, status, last_sync_result").eq("account_id", id));
       return rows.filter((r) => connectorHasRealSync(r.status, r.last_sync_result)).map((r) => r.platform);

@@ -3,9 +3,19 @@ import type { RunRecord } from "../runtime/store/interface";
 import { digest } from "./queue";
 import { eligible, workflowFingerprint, type DispatchDeps } from "./dispatch";
 import type { RoutineCommand, CommandStatus } from "./types";
+import { runtimeGeneration, RuntimeContextError } from "../runtime/contextFence";
 
 export interface ProcessorDeps extends DispatchDeps {
   execute(command: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null): Promise<RunResult>;
+}
+
+async function contextActive(guard: () => Promise<void>): Promise<boolean> {
+  try { await guard(); return true; }
+  catch (error) {
+    if (error instanceof RuntimeContextError && error.code !== "context_unavailable") return false;
+    // A storage outage is not an empty/healthy queue. Surface it to worker health.
+    throw error;
+  }
 }
 
 /** No unchecked run summaries or model claims in completion messages. Artifacts stay in Unc. */
@@ -19,14 +29,27 @@ export function commandResult(run: Pick<RunRecord, "status">): { status: Command
 }
 
 export async function processCommand(deps: ProcessorDeps, command: RoutineCommand): Promise<void> {
+  command = Object.freeze({ ...command, actor: Object.freeze({ ...command.actor }) });
+  const guard = () => deps.assertContext(command.actor.accountId, runtimeGeneration(command.contextGeneration));
+  // Old work remains old history. Never rewrite it as a result in the new context.
+  if (!await contextActive(guard)) return;
   const now = () => (deps.now ?? (() => new Date()))().toISOString();
-  const claimed = await deps.queue.transition(command, "queued", { status: "running", runId: command.id, reply: "The worker has picked up your request. No completed result yet.", updatedAt: now() });
+  let claimed: RoutineCommand | null;
+  try {
+    claimed = await deps.queue.transition(command, "queued", { status: "running", runId: command.id, reply: "The worker has picked up your request. No completed result yet.", updatedAt: now() });
+  } catch (error) {
+    if (!await contextActive(guard)) return;
+    throw error;
+  }
   if (!claimed) return;
+  claimed = Object.freeze({ ...claimed, actor: Object.freeze({ ...claimed.actor }) });
   // Save the deterministic run ID BEFORE dispatch. Never replay a claimed request after a
   // crash: its provider call may have happened even if the response was lost.
   let started = false;
   try {
+    await guard();
     const check = await eligible(deps, claimed.actor, claimed.routineId);
+    await guard();
     if (!check.ok) {
       await deps.queue.transition(claimed, "running", { status: "blocked", reply: check.reply, updatedAt: now() });
       return;
@@ -35,24 +58,32 @@ export async function processCommand(deps: ProcessorDeps, command: RoutineComman
       await deps.queue.transition(claimed, "running", { status: "blocked", reply: "The routine or workflow changed while this request was queued. Please review its settings and send a new request.", updatedAt: now() });
       return;
     }
-    if (await deps.store.getRun(claimed.id)) {
+    const existing = await deps.store.getRun(claimed.id);
+    await guard();
+    if (existing) {
       await deps.queue.transition(claimed, "running", { status: "uncertain", reply: "This request already has a run record. I won’t dispatch it again; check the existing run in Unc.", updatedAt: now() });
       return;
     }
     started = true;
     const result = await deps.execute(claimed, check.spec, check.workflow);
+    await guard();
     if (result.runId !== claimed.id || result.mode !== "dry_run") throw new Error("Unexpected execution identity or mode");
     await deps.queue.transition(claimed, "running", { ...commandResult(result), updatedAt: now() });
   } catch {
+    if (!await contextActive(guard)) return;
     await deps.queue.transition(claimed, "running", { status: started ? "uncertain" : "blocked", reply: started ? "I can’t confirm the execution outcome. I won’t automatically run it again; check its run in Unc first." : "I couldn’t verify the account, connections or budget. Nothing was started.", updatedAt: now() });
   }
 }
 
 /** Reconcile callbacks and interrupted workers without repeating provider calls. */
 export async function reconcileCommand(deps: DispatchDeps, c: RoutineCommand): Promise<void> {
+  c = Object.freeze({ ...c, actor: Object.freeze({ ...c.actor }) });
+  const guard = () => deps.assertContext(c.actor.accountId, runtimeGeneration(c.contextGeneration));
+  if (!await contextActive(guard)) return;
   const now = (deps.now ?? (() => new Date()))();
   const run = c.runId ? await deps.store.getRun(c.runId) : null;
-  if (run && (run.accountId !== c.actor.accountId || run.routineId !== c.routineId)) return;
+  if (!await contextActive(guard)) return;
+  if (run && (run.accountId !== c.actor.accountId || run.routineId !== c.routineId || runtimeGeneration(run.contextGeneration) !== c.contextGeneration)) return;
   if (run && run.status !== "running") {
     const next = commandResult(run);
     await deps.queue.transition(c, c.status, { ...next, updatedAt: now.toISOString() });

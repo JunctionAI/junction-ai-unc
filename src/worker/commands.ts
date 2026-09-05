@@ -15,9 +15,16 @@ import { resolveAccount, type ServiceDeps } from "./service";
 import { drainInboundEvents } from "../lib/channels/inbox";
 import { handleInbound } from "../lib/channels/inbound";
 import { tnzConfig } from "../lib/channels/adapters/tnz";
+import { assertRuntimeContext } from "../lib/db/runtimeContext";
+import { assertSameRuntimeContext, RuntimeContextError } from "../lib/runtime/contextFence";
 
 export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapters, c: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null) {
+  c = Object.freeze({ ...c, actor: Object.freeze({ ...c.actor }) });
+  const identity = Object.freeze({ accountId: c.actor.accountId, contextGeneration: c.contextGeneration });
+  if (deps.db) await assertRuntimeContext(deps.db, identity);
   const account = await resolveAccount(deps, c.actor.accountId);
+  assertSameRuntimeContext(identity, account.account);
+  if (deps.db) await assertRuntimeContext(deps.db, identity);
   // Freeze selection for the whole run. Methods remain bound to the original Store instance.
   const pinned = new Proxy(deps.store, { get(target, key) {
     if (key === "findN8nWorkflow") return async (accountId: string, routineId: string) => accountId === c.actor.accountId && routineId === c.routineId ? workflow : null;
@@ -32,20 +39,27 @@ export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapter
   return result;
 }
 
-async function notify(db: DbClient, c: RoutineCommand): Promise<void> {
+export async function notifyCommand(db: DbClient, c: RoutineCommand): Promise<void> {
+  c = Object.freeze({ ...c, actor: Object.freeze({ ...c.actor }) });
+  const identity = Object.freeze({ accountId: c.actor.accountId, contextGeneration: c.contextGeneration });
+  const guard = () => assertRuntimeContext(db, identity);
+  await guard();
   if (c.actor.channel === "app" || !c.actor.linkId || !await commandOwner(db, c.actor)) return;
   const link = await getLink(db, c.actor.linkId);
   if (!link || link.accountId !== c.actor.accountId) return;
+  await guard();
   // Claim BEFORE network I/O. Ambiguous delivery is not automatically repeated.
-  const claim = await unwrap<{ id: string } | null>("commands.notify_claim", db.from("routine_commands").update({ notification_status: "claimed" }).eq("id", c.id).eq("account_id", c.actor.accountId).eq("notification_status", "pending").select("id").maybeSingle());
+  const claim = await unwrap<{ id: string } | null>("commands.notify_claim", db.from("routine_commands").update({ notification_status: "claimed" }).eq("id", c.id).eq("account_id", identity.accountId).eq("context_generation", identity.contextGeneration).eq("notification_status", "pending").select("id").maybeSingle());
   if (!claim) return;
   let status = "failed";
   try {
+    await guard();
     const adapters = channelAdapters({ db, env: process.env, fetch: (url, init) => fetch(url, init), keyring: keyringFromEnv(process.env) });
     const out = await sendOnLink({ db, adapters, now: () => new Date() }, link, "reply", { text: `${c.reply} Request ${c.id.slice(0, 8)}.` }, { ref: `command:${c.id}`, appendToThread: true });
     if (out.status === "sent" || out.status === "queued") status = "sent";
   } finally {
-    await unwrap("commands.notify_finish", db.from("routine_commands").update({ notification_status: status }).eq("id", c.id).eq("account_id", c.actor.accountId).eq("notification_status", "claimed"));
+    await guard();
+    await unwrap("commands.notify_finish", db.from("routine_commands").update({ notification_status: status }).eq("id", c.id).eq("account_id", identity.accountId).eq("context_generation", identity.contextGeneration).eq("notification_status", "claimed"));
   }
 }
 
@@ -67,9 +81,10 @@ export async function runCommandsTick(deps: ServiceDeps, adapters: Adapters, max
     await processCommand({ ...base, execute: (command, spec, workflow) => executeRoutineCommand(deps, adapters, command, spec, workflow) }, c);
   }
   // Query pending notifications, not the oldest already-notified terminal rows.
-  const pending = await unwrap<{ id: string; account_id: string }[]>("commands.notifications", db.from("routine_commands").select("id, account_id").in("channel", ["slack", "sms", "telegram", "whatsapp", "email"]).in("status", ["done", "blocked", "failed", "uncertain", "waiting"]).eq("notification_status", "pending").order("updated_at").limit(20));
-  for (const row of pending) {
-    const c = await queue.get(row.account_id, row.id);
-    if (c && (c.status !== "waiting" || (c.runId && (await deps.store.getRun(c.runId))?.status !== "running"))) await notify(db, c);
+  for (const c of await queue.notifications(20)) {
+    if (c.status !== "waiting" || (c.runId && (await deps.store.getRun(c.runId))?.status !== "running")) {
+      try { await notifyCommand(db, c); }
+      catch (error) { if (!(error instanceof RuntimeContextError) || error.code === "context_unavailable") throw error; }
+    }
   }
 }
