@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.worker.json",
+  "include": [
+    "src/worker/**/*.ts",
+    "src/lib/runtime/**/*.ts",
+    "src/lib/n8n/shadowAuthority.ts",
+    "src/lib/n8n/calendarShadowSpec.ts"
+  ]
+}

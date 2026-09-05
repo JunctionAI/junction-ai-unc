@@ -26,7 +26,7 @@ data:
 ```
 
 `workflowVersion` is an expected frozen revision, never an assertion from the
-executing workflow. `bindingId` is a future server-owned, verified account/asset
+executing workflow. `bindingId` is a server-owned, verified account/asset
 binding record, not a credential or a user-entered platform ID. The contract does
 not establish that such a binding already exists. Native n8n credentials stay in
 n8n; secrets do not appear in this JSON. A stored-data allowance must pin the
@@ -49,8 +49,9 @@ age is one day, not an automatic freshness policy for every customer.
    allowance through the injected calendar admission adapter. It checks the
    matching protocol, current context, spec fingerprint, registration, receiver
    pin, freshness and original `calendar_shadow` continuation. It returns only
-   canonical contract/run fields. This exported handler **has no deployed route
-   yet**; production injection must use the reviewed durable database adapter.
+   canonical contract/run fields. Batch 62 adds the separate Next route and
+   account/generation/run-bound database adapter; release evidence is recorded
+   in [the ledger implementation report](CALENDAR-SHADOW-LEDGER-2026-09-06.md).
 5. Before another network wait, the bridge checkpoints the sanitized calendar,
    reported execution receipt and SHA-256 of the original received business
    envelope. Unknown root/item metadata is excluded from the candidate.
@@ -67,8 +68,10 @@ age is one day, not an automatic freshness policy for every customer.
 
 Historical verification is implemented separately: it checks the original
 dispatch/authorization/execution window and both digests, and retains the source
-timestamp. **A database-backed recovery worker has not yet been implemented.**
-The historical verifier alone is not durable recovery acceptance.
+timestamp. Batch 62 adds database-backed archive recovery and atomic completion;
+it does not automatically poll or redispatch unfinished work. The operator must
+name the original account/generation/run/permit. Customer recovery UX and live
+failure/restart acceptance remain separate gates.
 
 ## Output and receipt semantics
 
@@ -116,14 +119,16 @@ keyword pins or reuse its receiver token.
 
 ## Acceptance still required before production dispatch
 
-**Codex owns the next implementation:** database-backed accepted credential/asset
-bindings, immutable one-use calendar run/dispatch/authority ledger, checkpoint
-and verified-result persistence, atomic completion RPC and read-only recovery.
-Test actual SQL role denial, wrong tenant/asset/scope, pause/reset/revocation,
-expiry after lock waits, concurrent duplicate claims, uncertain commits and
-single artifact/receipt projection. Do not substitute an in-memory fixture or
-the keyword RPCs. Then wire the route, worker admission/completion and explicit
-routine selection to that implementation and release a compatible app/worker.
+**Batch 62 implements the durable path:** credential/asset reference bindings,
+one-use run/dispatch/authority ledger, immutable checkpoints/results, atomic
+completion and GET-only recovery. Real isolated PostgreSQL tests exercise the
+actual engine, database adapters, authority and saved-result projection, including
+role denial, tenant/source boundaries, concurrency, expiry after locks and
+rollback. `runCalendarShadow` explicitly selects an accepted binding and requires
+owner authorization plus pinned receiver/reader configuration before issuance.
+This is not yet generic customer chat/schedule admission or live acceptance.
+Codex still owns handoff acceptance, binding/receiver packaging, customer-facing
+selection/recovery and the bounded live run with independent readback.
 
 **Handoff gate:** accept Nguyen's corrected calendar output/examples and exact
 inventory. Independently bind the native credential to the intended Klaviyo
@@ -135,7 +140,7 @@ reassign our adapter/database work to Nguyen or request a keyword redesign.
 routine enabled and account unpaused, followed by real saved-execution,
 artifact/receipt and client reload checks. No such window is opened here.
 
-## Verification boundary for this batch
+## Original Batch 61 verification boundary
 
 Final local checks at 06:48 NZ: 225 test files / 2,993 tests, including 44 calendar
 cases; production Next build and app TypeScript, standalone-worker TypeScript,
@@ -153,3 +158,9 @@ concurrency, production calendar, scheduling or second-client acceptance.
 The B01–B24/all-client launch goal remains intact and incomplete. No production
 schema, environment, registration, account pause, routine switch or workflow is
 changed by this batch.
+
+## Batch 62 continuation
+
+The database-backed path now has real SQL evidence, not just an in-memory ledger.
+See [current implementation and release status](CALENDAR-SHADOW-LEDGER-2026-09-06.md).
+The live customer calendar remains unproven until the handoff and run gates above.

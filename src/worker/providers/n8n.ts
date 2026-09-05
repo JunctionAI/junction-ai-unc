@@ -133,6 +133,7 @@ export interface HttpN8nBridgeOptions {
   shadowAdmission?: ShadowAdmission;
   /** Separate durable calendar ledger; never borrow a keyword permit/reader. */
   calendarShadowAdmission?: ShadowAdmission;
+  calendarShadowAdmissionFor?: (scope: { accountId: string; contextGeneration: number; runId: string }) => ShadowAdmission;
   readCalendarShadowExecution?: ShadowExecutionReader;
 }
 
@@ -155,7 +156,9 @@ export class HttpN8nBridge implements N8nBridge {
   async call(node: ProduceNode | N8nNode, ctx: RunContext, workflow: N8nWorkflow | null): Promise<N8nCallResult> {
     const shadow = node.kind === "n8n" ? node.shadowContract : undefined;
     const calendar = shadow ? isCalendarShadow(shadow) : false;
-    const admission = calendar ? this.opts.calendarShadowAdmission : this.opts.shadowAdmission;
+    const admission = calendar ? this.opts.calendarShadowAdmission ?? this.opts.calendarShadowAdmissionFor?.({
+      accountId: ctx.account.accountId, contextGeneration: runtimeGeneration(ctx.account.contextGeneration), runId: ctx.runId,
+    }) : this.opts.shadowAdmission;
     const identity = { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, mode: ctx.mode, startedAt: ctx.startedAt };
     if (shadow) {
       assertProtocolRequest(shadow, identity);

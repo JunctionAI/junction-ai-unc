@@ -6,12 +6,13 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
-**Batch 61 source-only overlay:** the second-lane calendar contract/runtime and
-independent result verification are prepared; the production database ledger,
-route, recovery and worker/selection wiring are still Codex-owned open work.
-[Exact boundary](CALENDAR-SHADOW-INTEGRATION.md). Synthetic round-trip tests do
-not advance any customer journey to PASS. Production and all action holds remain
-unchanged; the original full launch scope is not narrowed to this adapter.
+**Batch 62 overlay:** calendar permissions/checkpoints/completion SQL is applied,
+with real isolated PostgreSQL proof for the actual runtime path and recovery.
+Route/worker/operator-selection source is ready for matched release. [Exact
+status and remaining live gates](CALENDAR-SHADOW-LEDGER-2026-09-06.md). Synthetic
+HTTP does not advance a customer journey to PASS. Handoff acceptance, credential
+binding, receiver packaging and customer/live acceptance remain Codex work. All
+action holds remain unchanged; full launch scope is not narrowed to this adapter.
 
 1. Work by complete customer journey, not endless isolated hardening. Reuse existing contracts, code, sessions and proven infrastructure. No new architecture or provider swap without a concrete failing requirement.
 2. Maintain one status per journey/client: PASS with a live receipt, PARTIAL with the exact missing step, or BLOCKED with the dependency/owner. Do not compute completion from test count or a list of seeded accounts.

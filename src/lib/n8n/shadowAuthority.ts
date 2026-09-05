@@ -6,6 +6,7 @@ import { assertProtocolRequest, isCalendarShadow, projectProtocolContract } from
 import { CALENDAR_SHADOW_RECEIVER_URL } from "./calendarShadowContract";
 import { DbShadowAdmission, shadowTokenDigest } from "./shadowAdmission";
 import { bearerToken } from "./dataToken";
+import { DbCalendarShadowAdmission } from "./calendarAdmission";
 
 /** Consumes one existing run-bound provider allowance; never creates an allowance.
  * GET is retained for the frozen receiver contract. It is no-store, authenticated and
@@ -72,7 +73,9 @@ async function protocolAuthority(deps: ProxyDeps, req: Request, receiverUrl: str
     return deny(error instanceof RuntimeContextError && error.code === "context_changed" ? 409 : 503,
       "The stored run's business context is stale, paused or unavailable");
   }
-  const admission = calendar ? deps.calendarShadowAdmission : deps.shadowAdmission ?? (deps.db ? new DbShadowAdmission(deps.db) : undefined);
+  const admission = calendar ? deps.calendarShadowAdmission ?? (deps.db ? new DbCalendarShadowAdmission(deps.db, {
+    accountId: run.accountId, contextGeneration: runtimeGeneration(run.contextGeneration), runId: run.id,
+  }) : undefined) : deps.shadowAdmission ?? (deps.db ? new DbShadowAdmission(deps.db) : undefined);
   if (!admission) return deny(503, "Durable shadow admission is unavailable");
   try {
     const allowed = await admission.authorize({ accountId: run.accountId, contextGeneration: runtimeGeneration(run.contextGeneration),

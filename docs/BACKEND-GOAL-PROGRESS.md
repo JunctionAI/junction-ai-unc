@@ -13,7 +13,13 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 61, 6 September NZ / 5 September UTC
+## Latest state — Batch 62, 6 September NZ / 5 September UTC
+
+**Calendar durable integration implemented and exact SQL migration applied; app/worker release pending.** [Implementation and acceptance evidence](CALENDAR-SHADOW-LEDGER-2026-09-06.md). Real PostgreSQL now exercises the production engine/admission/authority/bridge/completion path with synthetic HTTP, plus concurrent one-use claims, atomic rollback, recovery, tenant/source checks and expiry after observed lock waits. Dedicated server-only schema preserves existing private-schema privileges. 226 files / 3,014 tests, typechecks, production build and focused lint pass. Independent production function-body/grant readback matches; no bindings/registrations/runs or provider calls created. This is not live calendar/customer acceptance.
+
+The previous contractor-advice turn made no backend progress; this turn changes source and production database state with verification. Nguyen's corrected 05:37 handoff was found at the scheduled fresh read and downloaded: revision `ac771cd3-8899-4401-915c-40d4477e48e2`, final ZIP. It awaits independent review, not repin/run approval. The full B01–B24/all-client goal stays active; AVGAR remains paused and all external-action holds unchanged. Next: coherent release, handoff review, accepted credential/receiver binding and customer/live calendar acceptance.
+
+## Prior state — Batch 61, 6 September NZ / 5 September UTC
 
 **Second-lane calendar runtime implemented in source; production admission remains Codex-owned and incomplete.** [Exact contract, implemented path and acceptance boundary](CALENDAR-SHADOW-INTEGRATION.md). D05-W07 now has a distinct account/asset/source-bound contract, explicit manual adapter, separate start/dispatch/authority/completion hooks, checkpoint preservation, original draft continuation and historical evidence verifier. The GET-only execution reader requires separate calendar trigger/result pins and matches both the original request and the exact received artifact/receipt envelope to saved execution output. Six future client-timezone weeks, stored-source freshness, empty-history hypotheses, owned timing references and no scheduling claims are validated. The keyword wire contract and database authority remain separate; calendar cannot borrow them or use a generic callback/producer path.
 

@@ -40,6 +40,8 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "manual_routine_cancellations",
       "manual_routine_requests",
       "memories",
+      "n8n_calendar_bindings",
+      "n8n_calendar_runs",
       "n8n_shadow_candidates",
       "n8n_shadow_completions",
       "n8n_shadow_permits",
