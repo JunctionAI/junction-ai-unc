@@ -68,9 +68,23 @@ describe("reviewed keyword configuration",()=>{
       expect((await POST(req({market:"US",version:1,stateUpdatedAt:null,...extra}))).status).toBe(400);
     expect(rpc).not.toHaveBeenCalled();
   });
-  it("returns a conflict for stale save without retrying",async()=>{
-    const rpc=vi.spyOn(db,"rpc").mockResolvedValueOnce({data:fixture(),error:null}).mockResolvedValueOnce({data:null,error:{code:"40001",message:"stale"}});
+  it.each(["40001","PT409"])("returns %s as a conflict for stale save without retrying",async code=>{
+    const rpc=vi.spyOn(db,"rpc").mockResolvedValueOnce({data:fixture(),error:null}).mockResolvedValueOnce({data:null,error:{code,message:"stale"}});
     expect((await POST(req({market:"US",version:1,stateUpdatedAt:null}))).status).toBe(409);expect(rpc).toHaveBeenCalledTimes(2);
+  });
+  it("retains old saved history without advertising it as a current executable recipe",()=>{
+    const s=fixture();s.spec=structuredClone(s.candidates[0].spec);s.candidates=[];
+    const node=s.spec.nodes.find(n=>n.kind==="n8n");
+    if(node?.kind!=="n8n"||!node.shadowContract)throw Error("missing fixture");
+    node.shadowContract.workflowVersion="92135add-3c35-43e4-9649-5bb3d4557814";
+    const original=structuredClone(s.spec),{view}=readKeywordConfiguration(s,ctx);
+    expect(view).toMatchObject({market:null,markets:[],released:false,paused:true});expect(s.spec).toEqual(original);
+  });
+  it("rejects a stale revision masquerading as a new candidate",()=>{
+    const s=fixture(),node=s.candidates[0].spec.nodes.find(n=>n.kind==="n8n");
+    if(node?.kind!=="n8n"||!node.shadowContract)throw Error("missing fixture");
+    node.shadowContract.workflowVersion="92135add-3c35-43e4-9649-5bb3d4557814";
+    expect(()=>readKeywordConfiguration(s,ctx)).toThrow("Unreviewed configuration");
   });
   it("client refuses wrong account/actor/generation and unexpected internals",async()=>{
     const {view}=readKeywordConfiguration(fixture(),ctx);

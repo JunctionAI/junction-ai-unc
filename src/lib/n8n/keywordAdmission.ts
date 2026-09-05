@@ -7,7 +7,7 @@ import { keywordShadowSpec } from "./keywordShadowSpec";
 import { AVGAR_PILOT_ACCOUNT, KEYWORD_SHADOW_RECEIVER_URL, type KeywordShadowContract } from "./shadowContract";
 
 export const KEYWORD_PILOT_PIN = Object.freeze({ workflowId: "XiXJKuph1fAeH9pe",
-  workflowVersion: "92135add-3c35-43e4-9649-5bb3d4557814",
+  workflowVersion: "ac771cd3-8899-4401-915c-40d4477e48e2",
   receiverUrl: KEYWORD_SHADOW_RECEIVER_URL });
 export const KEYWORD_PILOT_MARKETS = Object.freeze({ US: 2840, NZ: 2554, AU: 2036 });
 export interface KeywordPilotApproval {

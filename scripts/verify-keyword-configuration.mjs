@@ -38,7 +38,12 @@ try {
     grant usage on schema public to service_role;grant select,insert,update,delete on all tables in schema public to service_role;
     insert into auth.users values('${owner}');insert into accounts(id,name,currency) values('${A}','SYNTHETIC LOCAL ONLY','NZD');
     insert into account_members(account_id,user_id,role) values('${A}','${owner}','owner');`);
-  await admin.query(await sql('20260905153025_keyword_customer_configuration.sql'));
+  // The complete exact migration is exercised in verify-keyword-command. This
+  // focused schema runs its exact resulting configuration body without unrelated
+  // command/recovery dependencies; only the reviewed literals are transformed.
+  await admin.query((await sql('20260905153025_keyword_customer_configuration.sql'))
+    .replaceAll('92135add-3c35-43e4-9649-5bb3d4557814',KEYWORD_PILOT_PIN.workflowVersion)
+    .replaceAll("errcode='40001'","errcode='PT409'"));
   const registration=randomUUID();
   await admin.query("insert into n8n_workflows(id,account_id,routine_id,webhook_url,active) values($1,$2,'D03-W01',$3,true)",[registration,A,KEYWORD_PILOT_PIN.receiverUrl]);
   for(const [index,market] of ['US','NZ','AU'].entries()) {
@@ -70,7 +75,7 @@ try {
   const pidA=(await a.query('select pg_backend_pid() pid')).rows[0].pid,pidB=(await b.query('select pg_backend_pid() pid')).rows[0].pid;
   await a.query('begin');const saved=await call(a,save);const waiting=call(b,save).then(result=>({result}),error=>({error}));
   let blocked=false;for(let i=0;i<80;i++){if((await admin.query('select $1::int=any(pg_blocking_pids($2)) blocked',[pidA,pidB])).rows[0].blocked){blocked=true;break;}await new Promise(r=>setTimeout(r,25));}
-  assert(blocked);await a.query('commit');assert.equal((await waiting).error?.code,'40001');checks.push('concurrent save has one winner');
+  assert(blocked);await a.query('commit');assert.equal((await waiting).error?.code,'PT409');checks.push('concurrent save has one winner');
   assert.equal(saved.enabled,false);assert.equal(saved.version,2);assert.deepEqual(saved.spec,save.spec);assert.equal((await call(a)).stateUpdatedAt,saved.stateUpdatedAt);checks.push('save and reload, no enable');
   const next={...save,market:'NZ',expectedVersion:2,expectedUpdatedAt:saved.stateUpdatedAt,spec:first.candidates.find(c=>c.market==='NZ').spec};
   await deny('enabled routine',async()=>{await a.query('update routine_states set enabled=true');},next);

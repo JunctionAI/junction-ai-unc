@@ -46,9 +46,46 @@ try {
     insert into accounts(id,name,currency) values('${A}','SYNTHETIC LOCAL ONLY','NZD');
     insert into account_members(account_id,user_id,role) values('${A}','${owner}','owner');
     insert into resource_profiles(account_id,website,budget_monthly) values('${A}','https://avgarsport.com',1000);`);
-  for(const name of ['20260905074645_keyword_shadow_admission.sql','20260905083033_keyword_shadow_pilot_issuance.sql',
-    '20260905092340_keyword_shadow_prepared_start.sql','20260905145250_keyword_shadow_bot_filter_revision.sql','20260905151627_keyword_command_admission.sql'])
+  for(const name of ['20260905074645_keyword_shadow_admission.sql','20260905080359_keyword_shadow_recovery.sql',
+    '20260905081458_keyword_shadow_completion.sql','20260905083033_keyword_shadow_pilot_issuance.sql',
+    '20260905092340_keyword_shadow_prepared_start.sql','20260905145250_keyword_shadow_bot_filter_revision.sql',
+    '20260905151627_keyword_command_admission.sql','20260905153025_keyword_customer_configuration.sql'])
     await admin.query(await sql(name));
+  const repin=await sql('20260905193007_keyword_reviewed_revision.sql');
+  await assert.rejects(admin.query(repin),/Paused original/);
+  await admin.query('update accounts set automation_paused=true');
+  // Synthetic historical rows test preservation, not historical provider truth.
+  // Local-only fixture setup bypasses INSERT transition triggers, not CHECKs.
+  await admin.query('begin');
+  try {
+    await admin.query("set local session_replication_role='replica'");
+    const oldRevision='92135add-3c35-43e4-9649-5bb3d4557814',run=randomUUID(),reg=randomUUID(),permit=randomUUID(),now=new Date();
+    const contract={...keywordPilotContract({authorizedBy:owner,approvalReference:'LOCAL',idempotencyKey:'LOCAL',market:'US',contextGeneration:1,maxProviderCalls:1,expiresAt:new Date(now.getTime()+600000).toISOString()},now),workflowVersion:oldRevision};
+    const spec=keywordShadowSpec(contract,2),hash=digest(spec),receipt={...contract,runId:run,status:'succeeded',mode:'dry_run',executedAction:'none',revisionEvidence:'verified_execution_record',executionId:'77',revisionVerification:{source:'n8n_execution_record'}};
+    await admin.query("insert into n8n_workflows(id,account_id,routine_id,webhook_url,active) values($1,$2,'D03-W01',$3,true)",[reg,A,KEYWORD_PILOT_PIN.receiverUrl]);
+    await admin.query("insert into routine_states(account_id,routine_id,enabled,version,live_spec) values($1,'D03-W01',false,2,$2)",[A,spec]);
+    await admin.query("insert into routine_runs(id,account_id,routine_id,version,mode,status,spec_hash) values($1,$2,'D03-W01',2,'dry_run','done',$3)",[run,A,hash]);
+    await admin.query("insert into artifacts(account_id,run_id,routine_id,kind,title,body,meta) values($1,$2,'D03-W01','keyword_list','SYNTHETIC','NOT LIVE',$3)",[A,run,{executionReceipt:receipt}]);
+    await admin.query("insert into n8n_shadow_permits(id,account_id,context_generation,run_id,registration_id,authorized_by,idempotency_key,spec_hash,spec,contract,receiver_url,status,expires_at,execution_id) values($1,$2,1,$3,$4,$5,'LOCAL',$6,$7,$8,$9,'verified',now(),'77')",[permit,A,run,reg,owner,hash,spec,contract,KEYWORD_PILOT_PIN.receiverUrl]);
+    await admin.query("set local session_replication_role='origin'");
+    const input={accountId:A,actorId:owner,contextGeneration:1,operation:'read'};
+    const config=async()=> (await admin.query('select keyword_customer_configuration($1) result',[input])).rows[0].result;
+    assert.equal((await config()).candidates.length,1);
+    const fingerprint=async()=>{const result={};for(const table of ['accounts','account_members','routine_states','routine_runs','artifacts','n8n_workflows','n8n_shadow_permits'])result[table]=(await admin.query(`select jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text) rows from ${table} t`)).rows[0].rows;return result;};
+    const before=await fingerprint();await admin.query(repin);assert.deepEqual(await fingerprint(),before);
+    const after=await config();assert.equal(after.candidates.length,0);assert.deepEqual(after.spec,spec);
+    checks.push('repin preserves old history and saved recipe; old proof cannot become new candidate');
+  } finally { await admin.query('rollback'); }
+  // A currently issued or uncertain allowance must prevent even code repinning.
+  await admin.query('begin');
+  try {
+    await admin.query("insert into routine_states(account_id,routine_id,enabled,version) values($1,'D03-W01',true,2)",[A]);
+    await assert.rejects(admin.query(repin),/Resolve original work/);
+  } finally { await admin.query('rollback'); }
+  await admin.query(repin);
+  await admin.query('update accounts set automation_paused=false');
+  const repinned=(await admin.query("select count(*) count from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','unc_private') and position('92135add-3c35-43e4-9649-5bb3d4557814' in p.prosrc)>0")).rows[0].count;
+  assert.equal(Number(repinned),0);checks.push('all admission/configuration pins move together; migration refuses active controls');
   const grants=(await admin.query(`select p.proname,p.prosecdef,has_function_privilege('anon',p.oid,'execute') anon,
     has_function_privilege('authenticated',p.oid,'execute') member,has_function_privilege('service_role',p.oid,'execute') server
     from pg_proc p where p.proname in ('assert_keyword_command_binding','issue_keyword_shadow_command','claim_keyword_shadow_command_start') order by p.proname`)).rows;
