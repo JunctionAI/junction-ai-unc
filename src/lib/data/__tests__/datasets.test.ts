@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { seededDb, NOW } from "../../connectors/__tests__/helpers";
 import { upsertConnector } from "../../connectors/store";
 import type { ConnectorReader, ReadQuery, ReadResult, RunContext } from "../../runtime/types";
-import { accountDataReader, datasetQueryHash, DbDatasetStore, StoredDatasetReader, storedDataEnabled, syncDataset, type DatasetIdentity, type DatasetSnapshot, type DatasetStore } from "../datasets";
+import { accountDataReader, datasetQueryHash, datasetSyncEnabled, DbDatasetStore, StoredDatasetReader, storedDataEnabled, syncDataset, type DatasetIdentity, type DatasetSnapshot, type DatasetStore } from "../datasets";
 
 const query: ReadQuery = { resource: "insights", window: "7d", fields: ["spend", "roas"] };
 const identity: DatasetIdentity = { accountId: "account-a", connectorId: "connector-a", externalRef: "act_123", platform: "meta_ads" };
@@ -24,6 +24,15 @@ describe("exact reporting snapshots", () => {
     expect(storedDataEnabled("account-a", "meta_ads", env)).toBe(true);
     expect(storedDataEnabled("account-c", "meta_ads", env)).toBe(false);
     expect(storedDataEnabled("account-a", "shopify", env)).toBe(false);
+  });
+  it("separates warming and reader cutover in both directions", () => {
+    const warming = { UNC_DATA_SYNC_ENABLED: "true", UNC_DATA_SYNC_ACCOUNTS: " account-a,account-b " };
+    expect(datasetSyncEnabled("account-a", "meta_ads", warming)).toBe(true);
+    expect(storedDataEnabled("account-a", "meta_ads", warming)).toBe(false);
+    expect(datasetSyncEnabled("account-c", "meta_ads", warming)).toBe(false);
+    expect(datasetSyncEnabled("account-a", "shopify", warming)).toBe(false);
+    expect(datasetSyncEnabled("account-a", "meta_ads", { ...warming, UNC_DATA_SYNC_ENABLED: "false" })).toBe(false);
+    expect(datasetSyncEnabled("account-a", "meta_ads", { UNC_DATA_SYNC_ENABLED: "true", UNC_STORED_DATA_ACCOUNTS: "account-a" })).toBe(false);
   });
   it("serves persisted source timestamps and receipt references after reader recreation", async () => {
     const store = memoryStore();
@@ -91,6 +100,29 @@ describe("database snapshot synchronization", () => {
       return result;
     });
     await expect(syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW)).rejects.toThrow("changed during data sync");
+    expect(seeded.db.rows("account_dataset_snapshots")).toHaveLength(0);
+  });
+  it.each(["fixture", "error"])("does not reuse recent %s data as fresh", async provenance => {
+    const store = new DbDatasetStore(seeded.db);
+    const id = (await store.connection(seeded.accountId, "meta_ads"))!;
+    seeded.db.insertRow("account_dataset_snapshots", { id: "bad", account_id: id.accountId, connector_id: id.connectorId,
+      external_ref: id.externalRef, platform: id.platform, query_hash: datasetQueryHash(query, NOW),
+      result: { ...result, provenance }, source_fetched_at: NOW.toISOString(), stored_at: NOW.toISOString() });
+    expect(await syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW)).toBe("synced");
+    expect(direct.read).toHaveBeenCalledTimes(1);
+  });
+  it.each([new Date(NOW.getTime() - 3_600_001).toISOString(), new Date(NOW.getTime() + 30_001).toISOString()])("does not store out-of-policy observation %s", async fetchedAt => {
+    direct.read = vi.fn(async () => ({ ...result, fetchedAt }));
+    await expect(syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW)).rejects.toThrow("source timestamp");
+    expect(seeded.db.rows("account_dataset_snapshots")).toHaveLength(0);
+  });
+  it("does not mislabel a provider query crossing UTC midnight", async () => {
+    let time = new Date("2026-09-02T23:59:59Z");
+    direct.read = vi.fn(async () => {
+      time = new Date("2026-09-03T00:00:01Z");
+      return { ...result, fetchedAt: time.toISOString() };
+    });
+    await expect(syncDataset(seeded.db, direct, "meta_ads", query, run, () => time)).rejects.toThrow("reporting day changed");
     expect(seeded.db.rows("account_dataset_snapshots")).toHaveLength(0);
   });
 });

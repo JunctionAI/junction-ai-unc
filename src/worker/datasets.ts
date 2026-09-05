@@ -1,10 +1,37 @@
 import { CATALOG_SPECS } from "../lib/runtime/catalog-specs";
 import { effectiveSpec } from "../lib/runtime/versioning";
-import { datasetQueryHash, storedDataEnabled, syncDataset } from "../lib/data/datasets";
+import { DbDatasetStore, datasetQueryHash, datasetSyncEnabled, syncDataset } from "../lib/data/datasets";
+import { inspectDatasetReadiness, type DatasetRequirement } from "../lib/data/readiness";
+import { assertSameRuntimeContext } from "../lib/runtime/contextFence";
 import type { RunContext } from "../lib/runtime/types";
 import { WorkerConnectorReader } from "./providers/connectorReader";
 import { defaultCredentialProvider } from "./wiring";
 import type { ServiceDeps } from "./service";
+
+/** Inspect enabled demand, or explicitly proposed routines, without enabling them.
+ * This remains an internal operator read, never a grant or a scheduler receipt. */
+export async function inspectAccountDatasets(deps: ServiceDeps, accountId: string, proposedRoutineIds?: string[], env: Record<string, string | undefined> = process.env) {
+  if (!deps.db) throw new Error("dataset inspection database unavailable");
+  const account = await deps.accounts.getAccount(accountId);
+  if (!account) throw new Error("dataset inspection account unavailable");
+  if (proposedRoutineIds?.some(id => !CATALOG_SPECS.some(spec => spec.id === id))) throw new Error("unknown proposed dataset routine");
+  const requirements: DatasetRequirement[] = [];
+  for (const catalog of CATALOG_SPECS) {
+    if (proposedRoutineIds && !proposedRoutineIds.includes(catalog.id)) continue;
+    const state = await deps.store.getRoutineState(accountId, catalog.id);
+    if (!proposedRoutineIds && !state?.enabled) continue;
+    const spec = state ? effectiveSpec(state, catalog) : catalog;
+    for (const node of spec.nodes) {
+      if (node.kind === "read" && node.source === "meta_ads") requirements.push({ platform: node.source, query: node.query, routineId: spec.id });
+    }
+  }
+  const report = await inspectDatasetReadiness(new DbDatasetStore(deps.db), accountId, requirements, env, deps.now);
+  const after = await deps.accounts.getAccount(accountId);
+  if (!after || !!after.automationPaused !== !!account.automationPaused) throw new Error("dataset inspection account changed");
+  assertSameRuntimeContext(account.account, after.account);
+  return { ...report, accountPaused: !!account.automationPaused, contextGeneration: account.account.contextGeneration ?? 0,
+    selection: proposedRoutineIds ? "proposed" : "enabled", coverage: "meta_ads_only" as const };
+}
 
 /** Bounded background read-only sync. Opt-in accounts only; never dispatches a routine.
  * Returns after at most one provider query (which may paginate), with a shared lease. */
@@ -14,7 +41,7 @@ export async function runDatasetSyncTick(deps: ServiceDeps, env: Record<string, 
   const now = deps.now ?? (() => new Date());
   const direct = new WorkerConnectorReader({ credentials: deps.credentials ?? defaultCredentialProvider(env), now, fetch: deps.fetch, log: deps.log });
   for (const acct of await deps.accounts.listAccounts()) {
-    if (!storedDataEnabled(acct.account.accountId, "meta_ads", env)) continue;
+    if (acct.automationPaused || !datasetSyncEnabled(acct.account.accountId, "meta_ads", env)) continue;
     const seen = new Set<string>();
     for (const catalog of CATALOG_SPECS) {
       const state = await deps.store.getRoutineState(acct.account.accountId, catalog.id);

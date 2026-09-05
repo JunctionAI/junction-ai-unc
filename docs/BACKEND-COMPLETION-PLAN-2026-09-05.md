@@ -124,8 +124,9 @@ The aim is to make Nguyen's callable workflow delivery the next integration depe
 ## Rollout controls / verification commands
 
 - `CONNECTOR_REFRESH_LEASES_ENABLED=true`: requires the applied migration and coordinated refresh-owner rollout. Default remains off.
-- `UNC_DATA_SYNC_ENABLED=true`: worker sync opt-in. Also requires an explicit account in `UNC_STORED_DATA_ACCOUNTS`.
+- `UNC_DATA_SYNC_ENABLED=true`: worker sync opt-in. From Batch 50, also requires an explicit account in **`UNC_DATA_SYNC_ACCOUNTS`**, independent of reader cutover. Requires the compatible worker release; never assume older deployed code recognizes this separation.
 - `UNC_STORED_DATA_ACCOUNTS=<pilot account>`: switches that account's Meta reads in the app proxy/worker to exact stored snapshots. It is not a global warehouse activation.
+- `scripts/inspect-avgar-dataset-readiness.mjs [--routine D02-W01]`: metadata-only database inspection of enabled/proposed Meta demand; no providers, credentials or writes. A nonempty ready query set is required before reader cutover, but does not prove ongoing scheduler health. See `DATASET-WARMING-2026-09-06.md`.
 - Snapshots use exact query plus UTC reporting day, 15-minute sync reuse and a 60-minute maximum source age. This is an initial policy, not a universal freshness SLA or historical daily fact model.
 - Keep publishing/messaging/ad/live flags disabled. Do not repurpose an existing Klaviyo Header Auth credential as the Unc receiver credential.
 - Run `npm test -- --no-file-parallelism`, `npx tsc -p tsconfig.worker.json`, `npm run build`, `npm run lint` and `git diff --check`.

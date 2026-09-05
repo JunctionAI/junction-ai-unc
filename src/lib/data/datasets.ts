@@ -22,11 +22,30 @@ export function storedDataEnabled(accountId: string, platform: Platform, env: Re
   return platform === "meta_ads" && (env.UNC_STORED_DATA_ACCOUNTS ?? "").split(",").map(x => x.trim()).filter(Boolean).includes(accountId);
 }
 
+/** Producer admission is independent of reader cutover: warm and verify first.
+ * The reader allowlist must never implicitly authorize scheduled provider calls. */
+export function datasetSyncEnabled(accountId: string, platform: Platform, env: Record<string, string | undefined>): boolean {
+  return env.UNC_DATA_SYNC_ENABLED === "true" && platform === "meta_ads" &&
+    (env.UNC_DATA_SYNC_ACCOUNTS ?? "").split(",").map(x => x.trim()).filter(Boolean).includes(accountId);
+}
+
 export interface DatasetIdentity { accountId: string; connectorId: string; externalRef: string; platform: Platform }
 function sameIdentity(a: DatasetIdentity, b: DatasetIdentity): boolean {
   return a.accountId === b.accountId && a.connectorId === b.connectorId && a.externalRef === b.externalRef && a.platform === b.platform;
 }
 export interface DatasetSnapshot { id: string; identity: DatasetIdentity; queryHash: string; result: ReadResult; storedAt: string }
+export type DatasetAvailability = "missing" | "identity_mismatch" | "unverified" | "stale" | "ready";
+
+/** Shared by actual readers and read-only rollout inspection. Storage time never
+ * renews source freshness; a recent fixture/error is not a usable observation. */
+export function datasetAvailability(snapshot: DatasetSnapshot | null, identity: DatasetIdentity, queryHash: string, now: Date, maxAgeMs = DATASET_MAX_AGE_MS): DatasetAvailability {
+  if (!snapshot) return "missing";
+  if (!sameIdentity(snapshot.identity, identity) || snapshot.queryHash !== queryHash) return "identity_mismatch";
+  if (!["ok", "empty"].includes(snapshot.result.provenance ?? "")) return "unverified";
+  const age = now.getTime() - Date.parse(snapshot.result.fetchedAt);
+  if (!Number.isFinite(age) || !Number.isFinite(maxAgeMs) || maxAgeMs < 0 || age < -30_000 || age > maxAgeMs) return "stale";
+  return "ready";
+}
 export interface DatasetStore {
   connection(accountId: string, platform: Platform): Promise<DatasetIdentity | null>;
   latest(identity: DatasetIdentity, queryHash: string): Promise<DatasetSnapshot | null>;
@@ -48,6 +67,12 @@ export class DbDatasetStore implements DatasetStore {
   }
   async save(identity: DatasetIdentity, query: ReadQuery, queryHash: string, result: ReadResult, now: Date): Promise<DatasetSnapshot> {
     if (!["ok", "empty"].includes(result.provenance ?? "") || !Number.isFinite(Date.parse(result.fetchedAt))) throw new Error("only complete provider reads can enter stored datasets");
+    if (datasetAvailability({ id: "pending", identity, queryHash, result, storedAt: now.toISOString() }, identity, queryHash, now) !== "ready")
+      throw new Error("dataset sync returned stale or invalid source timestamp");
+    // Relative windows can change at UTC midnight while the provider is in flight.
+    // Never label yesterday's request as today's reporting query (or vice versa).
+    if (queryHash !== datasetQueryHash(query, now) || queryHash !== datasetQueryHash(query, new Date(result.fetchedAt)))
+      throw new Error("dataset reporting day changed during data sync");
     const id = randomUUID();
     await unwrap("save account dataset", this.db.from("account_dataset_snapshots").insert({ id, account_id: identity.accountId,
       connector_id: identity.connectorId, external_ref: identity.externalRef, platform: identity.platform, query_hash: queryHash,
@@ -64,12 +89,12 @@ export class StoredDatasetReader implements ConnectorReader {
     if (!identity) throw new Error(`stored data unavailable: ${platform} connection identity is not verified`);
     const queryHash = datasetQueryHash(query, this.now());
     const snapshot = await this.store.latest(identity, queryHash);
-    if (!snapshot) throw new Error(`stored data unavailable: ${platform} ${query.resource} has not synchronized for this query`);
-    // Check even injected store results, so no caller can accidentally substitute another account.
-    if (!sameIdentity(snapshot.identity, identity) || snapshot.queryHash !== queryHash) throw new Error("stored data identity or query mismatch");
-    const age = this.now().getTime() - Date.parse(snapshot.result.fetchedAt);
-    if (!Number.isFinite(age) || age < -30_000 || age > this.maxAgeMs) throw new Error("stored data is stale or has an invalid source timestamp; synchronization required");
-    if (!["ok", "empty"].includes(snapshot.result.provenance ?? "")) throw new Error("stored data has no verified provider provenance");
+    const availability = datasetAvailability(snapshot, identity, queryHash, this.now(), this.maxAgeMs);
+    if (!snapshot || availability === "missing") throw new Error(`stored data unavailable: ${platform} ${query.resource} has not synchronized for this query`);
+    if (availability === "identity_mismatch") throw new Error("stored data identity or query mismatch");
+    if (availability === "unverified") throw new Error("stored data has no verified provider provenance");
+    if (availability === "stale") throw new Error("stored data is stale or has an invalid source timestamp; synchronization required");
+    if (queryHash !== datasetQueryHash(query, this.now())) throw new Error("stored data reporting day changed; synchronization required");
     return { ...snapshot.result, dataset: { id: snapshot.id, servedFrom: "stored", storedAt: snapshot.storedAt } };
   }
 }
@@ -97,7 +122,7 @@ export async function syncDataset(db: DbClient, direct: ConnectorReader, platfor
   try {
     const previous = await store.latest(identity, hash);
     const age = previous ? now().getTime() - Date.parse(previous.result.fetchedAt) : Infinity;
-    if (age >= 0 && age < DATASET_SYNC_INTERVAL_MS) { completed = true; return "fresh"; }
+    if (age >= 0 && age < DATASET_SYNC_INTERVAL_MS && datasetAvailability(previous, identity, hash, now()) === "ready") { completed = true; return "fresh"; }
     const result = await direct.read(platform, query, ctx);
     const current = await store.connection(ctx.account.accountId, platform);
     if (!current || !sameIdentity(current, identity)) throw new Error("connection changed during data sync");
