@@ -70,7 +70,7 @@ export function fixtureExpectations(executionId) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2);
-  if (args.length > 1 || (args[0] && !/^[1-9]\d{0,10}$/.test(args[0]))) throw new Error('Usage: node scripts/verify-calendar-receiver-fixture.mjs [executionId]');
+  if (args.length > 1 || (args[0] && !/^(latest|[1-9]\d{0,10})$/.test(args[0]))) throw new Error('Usage: node scripts/verify-calendar-receiver-fixture.mjs [executionId|latest]');
   const expected = fixtureExpectations(args[0]);
   const source = `const verifyFixtureDefinition=${verifyFixtureDefinition.toString()};
     const verifyFixtureExecution=${verifyFixtureExecution.toString()}; const canonicalFixture=${canonicalFixture.toString()};
@@ -83,6 +83,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>524288){await reader.cancel();throw new Error('oversize_response');}chunks.push(Buffer.from(value));}
       return JSON.parse(Buffer.concat(chunks).toString()); }
     const w=await read('/workflows/'+expected.workflowId); const definition=verifyFixtureDefinition(w,expected,hash);
+    if(expected.executionId==='latest'){const list=await read('/executions?workflowId='+expected.workflowId+'&limit=1');const id=list.data?.[0]?.id;if(typeof id!=='string'||!/^\\d{1,11}$/.test(id))throw Error('fixture_execution_missing');expected.executionId=id;}
     const result=expected.executionId?verifyFixtureExecution(await read('/executions/'+expected.executionId+'?includeData=true'),expected,hash,canonicalFixture):{status:'PASS',...definition};
     console.log(JSON.stringify({...result,verifiedAt:new Date().toISOString()}));
     })().catch(e=>{const reason=/^(fixture_(verification|execution)_[a-z_]+|HTTP_[0-9]+|unexpected_api_origin|oversize_response)$/.test(e.message)?e.message:'verification_transport_or_shape';

@@ -39,7 +39,10 @@ export function buildCalendarReceiverBundle() {
     finally { transformed.dispose(); }
   });
   const compiled = ts.transpileModule(chunks.join('\n'), { compilerOptions: {
-    target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, removeComments: true,
+    // Cloud expression AST rewriting rejects optional catch bindings (execution
+    // 91: "null does not match type Pattern"). ES2018 emits explicit bindings
+    // and lowers newer syntax without changing the shared source semantics.
+    target: ts.ScriptTarget.ES2018, module: ts.ModuleKind.None, removeComments: true,
   }, reportDiagnostics: true });
   if (compiled.diagnostics?.some(d => d.category === ts.DiagnosticCategory.Error)) throw new Error('Receiver transpilation failed');
   const expression = `(() => {\n"use strict";\n${compiled.outputText}\nreturn { ${publicNames.join(', ')} };\n})()`;

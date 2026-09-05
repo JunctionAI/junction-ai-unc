@@ -24,7 +24,9 @@ const id = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9_-]
 const uuid = (v: unknown): v is string => typeof v === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(v);
 const iso = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(v) && Number.isFinite(Date.parse(v));
 const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(",")}]`
-  : v !== null && typeof v === "object" ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canonical(row(v)[k])}`).join(",")}}` : JSON.stringify(v);
+  // Keep adjacent closing braces out of template literals: n8n's expression
+  // delimiters can terminate the surrounding {{ ... }} expression early.
+  : v !== null && typeof v === "object" ? "{" + Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canonical(row(v)[k])}`).join(",") + "}" : JSON.stringify(v);
 function requireFact(condition: unknown, code: string): asserts condition { if (!condition) throw new Error(`calendar_receiver_${code}`); }
 export interface CalendarReceiverPins { accountId: string; providerAccountId: string; primaryDomain: string; workflowId: string }
 export interface CalendarReceiverContext {

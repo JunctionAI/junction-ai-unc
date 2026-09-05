@@ -6,6 +6,14 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
+**Batch 69 overlay:** [separate calendar draft](integration/CALENDAR-RECEIVER-DRAFT-2026-09-06.md)
+matches reviewed source; real test-webhook executions 95/96 prove refusal before
+provider access, and current-source synthetic execution 97 passes. Receiver is
+not published or registered. Native campaign read, runtime configuration, customer
+calendar E2E and unattended failure visibility remain Codex-owned next steps.
+No calendar or full-launch PASS, other-client readiness or new action authority
+is inferred. The full goal remains active.
+
 **Batch 68 overlay:** [calendar Cloud compatibility](integration/CALENDAR-RECEIVER-COMPATIBILITY-2026-09-06.md)
 passes execution 87 with 22 synthetic assertions and independent saved code/output
 matching. The actual sandbox failure was fixed; no provider call or customer

@@ -2,7 +2,13 @@
 
 6 September 2026 NZ. **Backend implementation; no live customer calendar claim.**
 
-**Batch 68:** [receiver source and Cloud compatibility proof](integration/CALENDAR-RECEIVER-COMPATIBILITY-2026-09-06.md)
+**Batch 69:** [source-matched receiver draft and real refusal tests](integration/CALENDAR-RECEIVER-DRAFT-2026-09-06.md).
+The separate receiver now exists but remains unpublished. Executions 95/96 stop
+before Klaviyo; current-source synthetic execution 97 passes. Dedicated inbound
+auth is configured, runtime secret changes staged; no binding/registration or
+actual calendar run has been admitted. Codex still owns configuration and E2E.
+
+**Historical Batch 68:** [receiver source and Cloud compatibility proof](integration/CALENDAR-RECEIVER-COMPATIBILITY-2026-09-06.md)
 now pass in separate synthetic execution 87. This does not create a binding,
 callable calendar receiver, allowance, provider read or customer calendar result.
 The next step remains Codex-owned receiver/registration and bounded E2E work.

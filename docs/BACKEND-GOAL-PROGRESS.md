@@ -13,7 +13,28 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 68, 6 September NZ / 5 September UTC
+## Latest state — Batch 69, 6 September NZ / 5 September UTC
+
+**Separate calendar receiver is source-matched in Cloud; real refusal paths and
+current compiled-code compatibility pass.** [Exact draft, receipts and remaining
+gates](integration/CALENDAR-RECEIVER-DRAFT-2026-09-06.md). Inactive receiver
+`rQeWMo5ANO9OtUJp`, revision `52b301af-a66a-4377-9e36-fe836879e833`, has dedicated
+inbound auth and existing AVGAR Klaviyo reference. Executions 95/96 prove invalid
+input and real authority denial stop before provider calls. Synthetic execution
+97 proves the current bundle's 22 assertions and exact saved code/output hashes.
+Cloud expression failures were corrected and the initially exposed test token
+was rotated; no secrets are printed in the hardened execution projection.
+
+227 files / 3,050 application tests and 59 Node tests, types, production build and
+focused lint pass. Receiver remains unpublished; no calendar registration/binding,
+provider read, app/worker deployment or customer calendar acceptance. Separate
+inbound secret is staged for future runtime release. The previous advice turn was
+no backend progress; this turn makes source and Cloud verification progress.
+Next remains Codex-owned native HTTP/happy-path, binding/configuration and bounded
+customer E2E, plus failure visibility before unattended operation. Full B01–B24/
+all-client/launch goal remains active and unchanged; Nguyen is not the blocker.
+
+## Previous state — Batch 68, 6 September NZ / 5 September UTC
 
 **Calendar receiver logic now has exact-source n8n Cloud compatibility proof.**
 [Scope, defect and independent receipt](integration/CALENDAR-RECEIVER-COMPATIBILITY-2026-09-06.md).
