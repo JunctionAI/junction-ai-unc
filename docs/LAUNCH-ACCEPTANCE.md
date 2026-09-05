@@ -6,6 +6,13 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
+**Batch 67 overlay:** [Klaviyo account identity proof](integration/KLAVIYO-ACCOUNT-BINDING-PROOF-2026-09-06.md)
+passes a separate manual read (#85), with independent saved revision/credential/
+account verification. Existing grant belongs to AVGAR `SuYidF`; provider reporting
+is USD / US/Eastern while Unc business currency remains NZD. Preserve these distinct
+semantics. No calendar registration or callable receiver is claimed; these remain
+Codex's next tasks. No Nguyen workflow, provider settings or action flags changed.
+
 **Batch 66 overlay:** [plain-language customer acceptance](integration/KEYWORD-NATURAL-LANGUAGE-ACCEPTANCE-2026-09-06.md)
 passes the signed-in US request → ordinary command worker → verified execution 84
 → automatic conversation completion → saved draft/receipt reload → switch-off

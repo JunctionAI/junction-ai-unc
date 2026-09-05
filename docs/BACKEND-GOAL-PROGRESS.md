@@ -13,7 +13,25 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 66, 6 September NZ / 5 September UTC
+## Latest state — Batch 67, 6 September NZ / 5 September UTC
+
+**Existing Klaviyo credential/account identity independently proven.**
+[Real probe and verifier evidence](integration/KLAVIYO-ACCOUNT-BINDING-PROOF-2026-09-06.md).
+Separate Codex manual workflow `BHU55GyCpcRVh8eq`, execution **85**, actual saved
+revision `a8a13681-4811-4601-b088-9b7a5875db30`, one real GET / HTTP 200 in 340 ms.
+The existing credential resolves to AVGAR `SuYidF`, avgarsport.com, US/Eastern,
+USD, not a test account. Unc remains generation 1, NZD and paused. No currency or
+timezone was overwritten; provider reporting context is not Unc business context.
+
+Independent one-GET verifier passes; 39 synthetic denial/projection tests,
+focused lint and diff checks pass. No app/worker deployment needed for these
+operator scripts. No Nguyen workflow or credential change, no calendar binding/
+registration, and no publishing/messaging/ad/spend activation. This is **progress**,
+following a contractor-message draft turn with no backend mutation. Next remains
+the separate callable calendar receiver, binding and bounded customer acceptance;
+the full B01–B24/all-client/launch goal is not complete or blocked.
+
+## Previous state — Batch 66, 6 September NZ / 5 September UTC
 
 **Plain-language customer keyword request now has live success and switch-off
 proof.** [Authority, release, original IDs and readback](integration/KEYWORD-NATURAL-LANGUAGE-ACCEPTANCE-2026-09-06.md).

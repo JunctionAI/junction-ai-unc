@@ -129,8 +129,12 @@ The initial received-only status is superseded by the
 Specific output corrections are accepted; no registration repin or live run was
 performed. No complaint, payment release or new run authorization was sent.
 
-Next: accept the handoff, verify the intended native Klaviyo credential/account
-binding, package the callable calendar receiver, configure its separate pins,
+Batch 67: [the native Klaviyo account identity is now independently proven](integration/KLAVIYO-ACCOUNT-BINDING-PROOF-2026-09-06.md)
+by manual probe 85. The credential belongs to AVGAR `SuYidF`; provider USD /
+US/Eastern must remain distinct from Unc's NZD business context. The corrected
+handoff is already accepted; no need to ask Nguyen to repeat it.
+
+Next: create the reviewed binding, package the callable calendar receiver, configure its separate pins,
 finish customer selection/recovery, and run an explicitly bounded shadow window.
 AVGAR stays paused, zero enabled routines; publishing/messages/ad changes/spend
 activation remain off. No fresh provider window has been opened.
