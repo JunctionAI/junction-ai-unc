@@ -8,6 +8,8 @@
      case "channels": return <ChannelsSettings />;                      — docs/CHANNELS.md */
 
 import React, { useCallback, useEffect, useState } from "react";
+import type { AgentContext } from "@/lib/agents/client";
+import SlackRouteSetupPanel from "./SlackRouteSetupPanel";
 import ConnectChannelStep, { fetchListing, type FetchedListing, type LinksListing, type WireLink } from "./ConnectChannelStep";
 
 export const SETTINGS_TITLE = "Channels";
@@ -38,7 +40,7 @@ export function describeLink(l: WireLink): string {
   return l.displayName ? `${l.displayName}${l.handle ? ` · ${l.handle}` : ""}` : (l.handle ?? "this device");
 }
 
-export default function ChannelsSettings({ initial }: { initial?: LinksListing | null }) {
+export default function ChannelsSettings({ initial, context }: { initial?: LinksListing | null; context?: AgentContext }) {
   const [listing, setListing] = useState<LinksListing | null>(initial ?? null);
   const [note, setNote] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -102,6 +104,8 @@ export default function ChannelsSettings({ initial }: { initial?: LinksListing |
           </div>
         )}
       </div>
+
+      {context && <SlackRouteSetupPanel context={context} />}
 
       {listing && linked.length === 0 && !adding && (
         <div data-testid="channels-empty" style={card}>

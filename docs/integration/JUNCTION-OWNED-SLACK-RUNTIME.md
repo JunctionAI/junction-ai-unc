@@ -156,10 +156,10 @@ neither Slack migration has been applied remotely or any native listener changed
 
 ## Remaining implementation and cutover gates
 
-- Codex: expose owner-verified route setup/readback, selecting an existing Slack
-  OAuth identity rather than reinstalling/moving it for every client. Add explicit
-  revision-bound activation/deactivation and retained-history cutover/rebinding.
-- Codex: release both migrations and the matching app/worker with messaging still
+- Owner setup/readback is now implemented locally (see batch below). Codex still
+  needs explicit revision-bound activation/deactivation and retained-history
+  cutover/rebinding; staging never silently overwrites active or revoked routes.
+- Codex: release the three migrations and matching app/worker with messaging still
   disabled, then verify the deployed route/command/outbox path before pilot use.
 - Codex: verify provider grants and per-client routine mappings; expose stale,
   expired and missing connections as actionable failures, not successful work.
@@ -178,3 +178,44 @@ can inherit Hyperagent's bot identity or OAuth tokens.
 
 Official references consulted: [Slack app mentions](https://docs.slack.dev/reference/events/app_mention/)
 and [message interaction payloads](https://docs.slack.dev/reference/interaction-payloads/block_actions-payload/).
+
+## Owner setup/readback batch — 6 September NZ
+
+Migration `20260905222650_slack_route_owner_setup.sql` adds one read-only,
+service-role-only security-invoker RPC. The authenticated owner is resolved by
+the application; membership and account generation are independently checked in
+SQL. Available direct identities may originate from another account where the
+owner remains a member; routed delivery destinations never appear as OAuth
+identities. Only this client's mappings are returned. Credential existence is
+a boolean, not proof the token can still be used. No token/ciphertext or other
+account's name, mappings or business context is exposed.
+
+`/api/channels/slack/routes` GET establishes the authenticated actor in the
+context-bound response. POST accepts only identity ID/version, workspace and
+channel ID, requires that actor header and checks account context again. It uses
+the existing provider-verification/staging path, then independently reads and
+validates the resulting staged mapping. No API activation operation exists.
+Unknown fields, cross-origin requests and mismatched readbacks are rejected;
+arbitrary provider/database errors are not reflected in the response.
+
+`SlackRouteSetupPanel` is mounted in Connections / Messaging and legacy Channels
+when a real account context exists. There is no auto-selected connection or
+channel, no blind reinstall, no optimistic success and no automatic save retry.
+An uncertain save clears the mutation-capable snapshot until a fresh read;
+changing account/generation destroys stale state and ignores late responses.
+Saved state, revision and last resource-check time are explicitly not called
+live delivery. A paused client can prepare a mapping without being unpaused.
+
+Verification: 15 API/client contract tests, full 3,138-test suite (231 files),
+six isolated browser checks, actual PostgreSQL pipeline/owner-grant checks,
+app/worker TypeScript, focused ESLint and production build pass. Mobile/desktop
+screenshots inspected; fixtures exercise the real component but use synthetic
+server responses. No provider call, customer message or production change.
+
+Still required: supported Slack installation/scopes, per-client membership,
+explicit revision-bound lifecycle, coordinated deployment and authorized pilot
+cutover. Existing OAuth requested scopes have not yet been expanded for room
+metadata; a missing-scope failure asks for an installation review rather than
+silently reinstalling. The application's first-membership session selection also
+remains an explicit multi-client management limitation. Do not count this UI as
+acceptance of all client channels or all routines.

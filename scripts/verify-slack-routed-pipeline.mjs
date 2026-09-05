@@ -25,7 +25,7 @@ try {
   await admin.query(`create role anon;create role authenticated;create role service_role bypassrls;
     create schema auth;create schema unc_private;create table auth.users(id uuid primary key);
     ${['accounts','account_members','routine_runs','chat_messages'].map(t=>table(base,t)).join('\n')}
-    ${['channel_links','outbound_messages'].map(t=>table(channels,t)).join('\n')}
+    ${['channel_links','outbound_messages','channel_secrets'].map(t=>table(channels,t)).join('\n')}
     ${table(await sql('0010_client_brain.sql'),'account_profiles')}
     alter table accounts add column context_generation bigint not null default 0,add column automation_paused boolean not null default false;
     alter table routine_runs add column context_generation bigint not null default 0;
@@ -41,7 +41,8 @@ try {
   for(const t of ['outbound_messages','routine_commands'])await admin.query(`create trigger account_automation_pause before insert or update or delete on ${t} for each row execute function unc_private.guard_automation_pause()`);
   for(const name of ['20260905053820_channel_inbox_identity.sql','20260905054958_channel_inbound_controls.sql',
     '20260905065409_channel_outbound_claims.sql','20260905071413_command_delivery_identity.sql',
-    '20260905220557_slack_conversation_registry.sql','20260905221238_slack_routed_inbox.sql'])await admin.query(await sql(name));
+    '20260905220557_slack_conversation_registry.sql','20260905221238_slack_routed_inbox.sql',
+    '20260905222650_slack_route_owner_setup.sql'])await admin.query(await sql(name));
   await admin.query('create trigger command_context before insert or update on routine_commands for each row execute function unc_private.guard_command_context()');
   const accountA=randomUUID(),accountB=randomUUID(),owner=randomUUID(),identity=randomUUID();
   await admin.query('insert into auth.users values($1)',[owner]);
@@ -58,6 +59,20 @@ try {
     await admin.query("update unc_slack_private.conversation_routes set state='active' where id=$1",[r.id]);return r;
   }
   const ra=await register(accountA,'CA');await register(accountB,'CB');
+  const ownerView=(accountId=accountB,actorId=owner,contextGeneration=0)=>a.query('select slack_route_owner_view($1) r',[
+    {accountId,actorId,contextGeneration}]).then(q=>q.rows[0].r);
+  const setup=await ownerView();
+  assert.equal(setup.identities.length,1);assert.equal(setup.identities[0].identityLinkId,identity);
+  assert.equal(setup.identities[0].credentialStored,false);assert.equal(setup.routes.length,1);
+  assert.equal(setup.routes[0].conversationId,'CB');assert.equal(setup.routes[0].bindingCurrent,true);
+  assert.equal(setup.activationAvailable,false);assert.equal(setup.executedAction,'none');
+  await admin.query("insert into channel_secrets(account_id,channel,scope_id,ciphertext,iv,tag) values($1,'slack','T1','synthetic-not-a-token','synthetic','synthetic')",[accountA]);
+  assert.equal((await ownerView()).identities[0].credentialStored,true);
+  assert.equal(JSON.stringify(await ownerView()).includes('synthetic-not-a-token'),false);
+  await assert.rejects(ownerView(accountB,randomUUID()),{code:'42501'});
+  await assert.rejects(ownerView(accountB,owner,1),{code:'PT409'});
+  await assert.rejects(a.query('select slack_route_owner_view($1)',[{accountId:accountB,actorId:owner,contextGeneration:0,token:'forged'}]),{code:'22023'});
+  checks.push('owner readback reuses one direct identity across clients, returns only target routes, rejects foreign owner/stale context, never exposes tokens or activation');
   function event(room,ts='1756800001.000001',text='run the keyword routine'){
     return {channel:'slack',externalId:'U1',scopeId:'T1',conversationId:room,threadId:'1756800000.000099',externalMsgId:`${room}:${ts}`,text};
   }
@@ -71,6 +86,7 @@ try {
   assert.notEqual(first.binding.linkId,second.binding.linkId);assert.notEqual(first.binding.linkId,identity);
   assert.equal((await admin.query('select account_id from channel_links where id=$1',[identity])).rows[0].account_id,accountA);
   assert.equal((await admin.query('select count(*)::int n from channel_links')).rows[0].n,3);
+  assert.equal((await ownerView()).identities.length,1);
   assert.equal((await accept(event('CUNKNOWN'))).binding.kind,'unlinked');
   const missingOrigin=event('CA','1756800002.000001');delete missingOrigin.conversationId;
   assert.equal((await accept(missingOrigin)).binding.kind,'unlinked');
@@ -121,10 +137,12 @@ try {
   await assert.rejects(verify(first),{code:'40001'});
   checks.push('route revision cancels queued delivery; fresh event captures new revision while old ingress never rebinds');
   await admin.query('delete from account_members where account_id=$1 and user_id=$2',[accountB,owner]);
+  await assert.rejects(ownerView(),{code:'42501'});
   await assert.rejects(verify(second),{code:'40001'});
   assert.equal((await accept(event('CB','1756800011.000001'))).binding.kind,'unlinked');
   await admin.query("update channel_links set meta=meta||'{\"refresh_test\":true}' where id=$1",[identity]);
   await assert.rejects(verify(fresh),{code:'40001'});
+  assert.equal((await ownerView(accountA)).routes[0].bindingCurrent,false);
   await assert.rejects(admin.query('update channel_links set slack_route_id=null where id=$1',[fresh.binding.linkId]),{code:'23514'});
   checks.push('membership removal and OAuth identity revision invalidate existing captured routes; routed links cannot become direct identities');
   for(const role of ['anon','authenticated']){
@@ -132,6 +150,13 @@ try {
     await assert.rejects(b.query('select accept_channel_inbound($1,$2)',['a'.repeat(64),first.event]),{code:'42501'});
     await assert.rejects(b.query('select verify_channel_inbound_binding($1,$2,false)',[first.binding,first.event]),{code:'42501'});
     await assert.rejects(b.query('select enqueue_channel_outbound($1)',[{}]),{code:'42501'});
+    await assert.rejects(b.query('select slack_route_owner_view($1)',[{}]),{code:'42501'});
   }
+  const security=(await admin.query(`select not prosecdef invoker_only,proconfig @> array['search_path=""']::text[] pinned_path,
+    has_function_privilege('service_role',oid,'EXECUTE') server_allowed,
+    has_function_privilege('anon',oid,'EXECUTE') anon_allowed,has_function_privilege('authenticated',oid,'EXECUTE') member_allowed
+    from pg_proc where oid='public.slack_route_owner_view(jsonb)'::regprocedure`)).rows[0];
+  assert.deepEqual(security,{invoker_only:true,pinned_path:true,server_allowed:true,anon_allowed:false,member_allowed:false});
+  checks.push('owner view security catalog confirms invoker execution, pinned search path and service-only execute grants; only credential-presence boolean is exposed');
   console.log(JSON.stringify({status:'PASS',checks,providerCalls:0,customerMessages:0,productionChanges:0,database:directory},null,2));
 } finally {await Promise.all(clients.map(c=>c.end()));await cluster.stop();}

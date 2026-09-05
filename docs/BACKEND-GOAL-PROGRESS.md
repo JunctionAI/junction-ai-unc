@@ -13,7 +13,40 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 75, 6 September NZ
+## Latest state — Batch 76, 6 September NZ
+
+**Owner Slack channel setup implemented and locally verified.** Connections /
+Messaging and the existing Channels screen now expose a context-bound setup
+panel. It reads reusable verified direct Slack identities across the owner's
+legitimate memberships, verifies the selected workspace/bot/channel with the
+existing staging service, and confirms a saved staged mapping by fresh readback.
+It does not reinstall OAuth, transfer its account link, join a room, activate a
+route, enable a routine, send a message or change Hyperagent listeners.
+
+The new service-only invoker RPC returns target-account route state, revision,
+last provider verification time, current binding status and credential-presence
+booleans only. API requests require owner session, current account/generation,
+same-origin headers and the readback actor on writes; browser authority/credential
+fields are refused. Lost saves do not auto-retry; changing account context discards
+late responses. No activation control is exposed and current binding is explicitly
+not called a delivery receipt.
+
+Verification: **3,138 tests / 231 files**, app/worker TypeScript, focused ESLint,
+diff check and production Next build pass. Six isolated Playwright checks pass,
+including stage/reload, lost-save readback, late-response fencing, missing identity
+and 390px/1280px layout. Screenshots inspected. The extended real PostgreSQL
+pipeline harness verifies owner readback, cross-client reuse without identity
+transfer, membership/context refusal and service-only grants, alongside Batch 75's
+inbox/command/outbox checks. No actual Slack/provider calls or remote mutations.
+
+Three Slack migrations now await a coordinated app/worker/schema release.
+Activation/deactivation/rebinding and the scoped live pilot still remain, as do
+OAuth grant review and client memberships. The existing first-membership session
+selection has not been silently replaced by trusting a browser account ID.
+Production remains the previously verified `4067b08`; no full-client or launch
+completion claim. Full goal stays active; this is a completed source batch.
+
+## Previous state — Batch 75, 6 September NZ
 
 **Registry connected to durable Slack intake, commands and same-thread outbox
 in local code/SQL.** [Implementation and exact acceptance limits](integration/JUNCTION-OWNED-SLACK-RUNTIME.md).

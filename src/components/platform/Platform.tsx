@@ -247,7 +247,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
         {V.isStrategy && <StrategyView V={V} />}
         {V.isConnectors && <ConnectionsWorkspace V={V} />}
         {V.isSystems && (V.noSel ? <AgentsView key={`${persistence.accountId}:${S.contextGeneration}`} accountId={persistence.accountId!} contextGeneration={S.contextGeneration ?? 0} onInspect={V.openRoutineById} onSaved={V.setRoutineLocal} /> : <RoutinesView V={V} run={runTarget} />)}
-        {V.isChannels && <ChannelsSettings />}
+        {V.isChannels && <ChannelsSettings context={V.accountId ? { accountId: V.accountId, contextGeneration: V.contextGeneration } : undefined} />}
       </>} />
     {modelsOpen && <ModelSettings onClose={() => setModelsOpen(false)} />}
     {skillsOpen && <SkillsSettings onClose={() => setSkillsOpen(false)} />}
@@ -306,7 +306,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
         {V.isConnectors && !showGuided && <ConnectorsView V={V} />}
         {V.isSystems && !showGuided && <RoutinesView V={V} run={runTarget} />}
         {/* Channels (docs/CHANNELS.md): accounts mode only — the view fetches /api/channels/links, which demo mode cannot answer. */}
-        {V.isChannels && !showGuided && inAccount && <ChannelsSettings />}
+        {V.isChannels && !showGuided && inAccount && <ChannelsSettings context={V.accountId ? { accountId: V.accountId, contextGeneration: V.contextGeneration } : undefined} />}
       </main>
       {V.showBuddy && !showGuided && <CornerBuddy V={V} />}
       {inAccount && modelsOpen && <ModelSettings onClose={() => setModelsOpen(false)} />}

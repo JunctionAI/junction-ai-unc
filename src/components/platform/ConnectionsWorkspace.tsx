@@ -11,7 +11,7 @@ export default function ConnectionsWorkspace({V}:{V:PlatformVals}) {
     <div className={styles.tabs} role="group" aria-label="Connection type">{["Data platforms","Messaging"].map(t=><button key={t} aria-pressed={tab===t} onClick={()=>setTab(t)}>{t}</button>)}</div>
     {tab==="Data platforms"?<ConnectorsView V={V} modern/>:<div className={styles.channels}>
       <p className={styles.notice}>Customer messaging remains disabled. Saved channel links and preferences are setup records, not proof of delivered replies. Deep Slack routing, digest and escalation capabilities still require acceptance; no prototype switches are enabled here.</p>
-      <ChannelsSettings/>
+      <ChannelsSettings context={V.accountId ? { accountId: V.accountId, contextGeneration: V.contextGeneration } : undefined}/>
     </div>}
   </div>;
 }
