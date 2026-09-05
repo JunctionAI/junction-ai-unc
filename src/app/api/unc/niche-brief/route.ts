@@ -14,6 +14,7 @@
 
 import { generateNicheBrief, readNicheBrief, type ProfileLike } from "@/lib/brain/nicheBrief";
 import { requireAccountOwnerSession, requireAccountSession } from "@/lib/db/session";
+import { captureMemoryContext, contextChangedResponse, contextStillCurrent } from "@/lib/db/contextGeneration";
 import { unwrap } from "@/lib/db/types";
 import { withErrorCapture } from "@/lib/observability/errors";
 
@@ -46,8 +47,11 @@ function coerceProfile(raw: unknown): ProfileLike | null {
 async function handleGET() {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
+  const context = await captureMemoryContext(session.service, session.accountId);
+  if (context instanceof Response) return context;
   try {
-    const brief = await readNicheBrief(session.service, session.accountId);
+    const brief = await readNicheBrief(context.db, session.accountId);
+    if (!await contextStillCurrent(session.service, session.accountId, context.generation)) return contextChangedResponse();
     return Response.json({ brief }, { headers: { "cache-control": "no-store" } });
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : "couldn't read the brief" }, { status: 500 });
@@ -57,6 +61,8 @@ async function handleGET() {
 async function handlePOST(req: Request) {
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
+  const context = await captureMemoryContext(session.service, session.accountId, req);
+  if (context instanceof Response) return context;
   let body: { profile?: unknown } = {};
   try {
     body = await req.json();
@@ -73,7 +79,8 @@ async function handlePOST(req: Request) {
     unwrap<{ budget_monthly: number | string | null } | null>("resource_profiles.select", session.service.from("resource_profiles").select("budget_monthly").eq("account_id", session.accountId).maybeSingle()),
   ]);
   const budget = Number(resources?.budget_monthly ?? NaN);
-  const r = await generateNicheBrief({ accountId: session.accountId, profile, db: session.service }, { extra: { currency: account?.currency ?? "NZD", budgetMonthly: Number.isFinite(budget) && budget > 0 ? budget : null } });
+  const r = await generateNicheBrief({ accountId: session.accountId, profile, db: context.db }, { extra: { currency: account?.currency ?? "NZD", budgetMonthly: Number.isFinite(budget) && budget > 0 ? budget : null } });
+  if (!await contextStillCurrent(session.service, session.accountId, context.generation)) return contextChangedResponse();
   return Response.json(r);
 }
 

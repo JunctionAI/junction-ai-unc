@@ -51,14 +51,14 @@ export function useOnboardingMemories(S: PlatformState, enabled: boolean): void 
     if (!enabled || !was.enabled || was.onboarded || !S.onboarded) return;
     fetch("/api/unc/onboarding", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-unc-context-generation": String(stateRef.current.contextGeneration ?? 0) },
       body: JSON.stringify({ answers: onboardingAnswersFromState(stateRef.current) }),
     }).catch(() => {});
     // The niche brief ("How I read your market", docs/PRESETS.md): one model call over the scan's profile;
     // its band steers every routine's industry preset. Fire-and-forget, never blocking the plan.
     fetch("/api/unc/niche-brief", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-unc-context-generation": String(stateRef.current.contextGeneration ?? 0) },
       body: JSON.stringify({ profile: stateRef.current.scan.profile }),
     }).catch(() => {});
   }, [S.onboarded, enabled]);

@@ -51,6 +51,7 @@ export const CLIENT_STATE_SCHEMA_VERSION = 1;
 // ---------- row shapes (subset of columns the client reads/writes) ----------
 
 export interface AccountRow {
+  context_generation?: number;
   id: string;
   currency: string;
   /** accounts.name — read for the sidebar header; written once at plan agreement (src/lib/db/accountState.ts ensureAccountName). */
@@ -358,6 +359,7 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
     values). Tolerates a partially populated account: whatever is missing keeps base's value. */
 export function rowsToState(rows: LoadedRows, base: PlatformState = initialState): PlatformState {
   const S: PlatformState = { ...base };
+  S.contextGeneration = rows.account?.context_generation ?? 0;
   const cs = rows.stateMeta?.client_state;
 
   if (rows.account?.currency) S.currency = rows.account.currency;

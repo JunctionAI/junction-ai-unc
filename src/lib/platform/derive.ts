@@ -610,6 +610,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
 
   return {
     wfNodes,
+    contextGeneration: S.contextGeneration ?? 0,
     inspParams,
     inspTag: inspNode.tag,
     inspName: inspNode.name,

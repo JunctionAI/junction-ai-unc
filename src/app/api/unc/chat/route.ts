@@ -22,7 +22,8 @@
 import { requireModelAccountContext } from "@/lib/llm/accountContext";
 import type { LlmMessage } from "@/lib/llm/types";
 import type { UncSurface } from "@/lib/unc/prompt";
-import { buildServerContext, MAX_TURN_CHARS, respondAsUnc } from "@/lib/unc/respond";
+import { buildServerContext, buildServerHistory, MAX_TURN_CHARS, respondAsUnc } from "@/lib/unc/respond";
+import { contextStillCurrent, CONTEXT_CHANGED_MESSAGE } from "@/lib/db/contextGeneration";
 import { withErrorCapture } from "@/lib/observability/errors";
 import { routeCommand } from "@/lib/commands/message";
 import { getStore } from "@/lib/runtime/store";
@@ -50,7 +51,7 @@ function sanitizeMessages(raw: unknown): LlmMessage[] | null {
 const fallback = () => Response.json({ fallback: true });
 
 async function handlePOST(req: Request) {
-  const account = await requireModelAccountContext();
+  const account = await requireModelAccountContext(req);
   if (account instanceof Response) return account;
 
   let body: { messages?: unknown; context?: unknown; surface?: unknown; requestId?: unknown };
@@ -62,7 +63,7 @@ async function handlePOST(req: Request) {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const history = sanitizeMessages(body.messages);
+  let history = sanitizeMessages(body.messages);
   if (!history) return Response.json({ error: "invalid messages" }, { status: 400 });
   if (history[history.length - 1].role !== "user") return Response.json({ error: "last message must be from the user" }, { status: 400 });
   const surface: UncSurface = body.surface === "onboarding" ? "onboarding" : "corner";
@@ -79,11 +80,18 @@ async function handlePOST(req: Request) {
   if (account && surface === "corner") {
     try {
       context = await buildServerContext(account.db, account.accountId);
+      history = await buildServerHistory(account.db, account.accountId, history[history.length - 1]);
     } catch {
       return Response.json({ error: "Couldn't load your business context. Please try again." }, { status: 503 });
     }
   }
   const result = await respondAsUnc({ history, context, surface, account });
+  if (account?.contextGeneration !== undefined) {
+    try {
+      if (!await contextStillCurrent(account.db, account.accountId, account.contextGeneration))
+        return Response.json({ error: CONTEXT_CHANGED_MESSAGE, code: "context_changed" }, { status: 409 });
+    } catch { return Response.json({ error: "Couldn't verify business context." }, { status: 503 }); }
+  }
   if (!result.ok) return result.reason === "invalid_history" ? Response.json({ error: "invalid messages" }, { status: 400 }) : fallback();
   return Response.json({ reply: result.reply });
 }

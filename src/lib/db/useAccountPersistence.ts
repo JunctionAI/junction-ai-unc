@@ -89,7 +89,7 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
         if (!res.accountId || (res.role !== "owner" && res.role !== "member") || !res.state || !Number.isSafeInteger(res.revision))
           throw new Error("The account could not be verified. Please try again.");
         if (cancelled) return;
-        saver.current = createAccountStateSaver(res.accountId, res.revision);
+        saver.current = createAccountStateSaver(res.accountId, res.revision, { initialState: res.state });
         setAccountId(res.accountId);
         setRole(res.role);
         setAccountName(res.name ?? "");

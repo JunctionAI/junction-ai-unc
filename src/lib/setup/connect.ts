@@ -43,11 +43,13 @@ export const EMAIL_ANSWER_MEMORY: Record<"klaviyo" | "mailchimp" | "none", strin
   none: "No email tool yet — nothing sends email today; email routines wait until there is one.",
 };
 
-export async function recordEmailAnswer(answer: "klaviyo" | "mailchimp" | "none", opts: { fetch?: typeof fetch } = {}): Promise<boolean> {
+export async function recordEmailAnswer(answer: "klaviyo" | "mailchimp" | "none", opts: { fetch?: typeof fetch; contextGeneration?: number } = {}): Promise<boolean> {
   const f = opts.fetch ?? fetch;
   try {
-    const res = await f("/api/brain/memories", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: EMAIL_ANSWER_MEMORY[answer], kind: "fact" }) });
-    return res.ok || res.status === 409; // 409 = already remembered, word for word
+    const res = await f("/api/brain/memories", { method: "POST", headers: { "content-type": "application/json", "x-unc-context-generation": String(opts.contextGeneration ?? 0) }, body: JSON.stringify({ text: EMAIL_ANSWER_MEMORY[answer], kind: "fact" }) });
+    if (res.ok) return true;
+    // Context conflicts are not duplicates and must never be reported as remembered.
+    return res.status === 409 && (await res.json()).code === "already_exists";
   } catch {
     return false;
   }

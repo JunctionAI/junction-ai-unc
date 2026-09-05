@@ -70,6 +70,7 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
 
 export default function WhatUncKnows({ onClose }: { onClose: () => void }) {
   const [memories, setMemories] = useState<Memory[] | null>(null);
+  const [contextGeneration, setContextGeneration] = useState(0);
   const [notes, setNotes] = useState<string>("");
   const [notesSaved, setNotesSaved] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -82,9 +83,10 @@ export default function WhatUncKnows({ onClose }: { onClose: () => void }) {
     let cancelled = false;
     (async () => {
       try {
-        const [m, p] = await Promise.all([call<{ memories: Memory[] }>("/api/brain/memories"), call<{ founderNotes: string | null }>("/api/brain/profile")]);
+        const [m, p] = await Promise.all([call<{ memories: Memory[]; contextGeneration: number }>("/api/brain/memories"), call<{ founderNotes: string | null }>("/api/brain/profile")]);
         if (cancelled) return;
         setMemories(m.memories);
+        setContextGeneration(m.contextGeneration);
         setNotes(p.founderNotes ?? "");
         setNotesSaved(p.founderNotes ?? "");
       } catch (e) {
@@ -115,7 +117,7 @@ export default function WhatUncKnows({ onClose }: { onClose: () => void }) {
 
   const forget = (m: Memory) =>
     run(m.id, async () => {
-      await call("/api/brain/memories", { method: "DELETE", body: JSON.stringify({ id: m.id }) });
+      await call("/api/brain/memories", { method: "DELETE", headers: { "x-unc-context-generation": String(contextGeneration) }, body: JSON.stringify({ id: m.id }) });
       setMemories((cur) => (cur ?? []).filter((x) => x.id !== m.id));
     });
 
@@ -124,7 +126,7 @@ export default function WhatUncKnows({ onClose }: { onClose: () => void }) {
     const { id, text } = editing;
     if (!text.trim()) return;
     return run(id, async () => {
-      const { memory } = await call<{ memory: Memory }>("/api/brain/memories", { method: "PATCH", body: JSON.stringify({ id, text: text.trim() }) });
+      const { memory } = await call<{ memory: Memory }>("/api/brain/memories", { method: "PATCH", headers: { "x-unc-context-generation": String(contextGeneration) }, body: JSON.stringify({ id, text: text.trim() }) });
       setMemories((cur) => (cur ?? []).map((x) => (x.id === id ? memory : x)));
       setEditing(null);
     });
@@ -134,7 +136,7 @@ export default function WhatUncKnows({ onClose }: { onClose: () => void }) {
     const text = addText.trim();
     if (!text) return;
     return run("add", async () => {
-      const { memory } = await call<{ memory: Memory }>("/api/brain/memories", { method: "POST", body: JSON.stringify({ text, kind: addKind }) });
+      const { memory } = await call<{ memory: Memory }>("/api/brain/memories", { method: "POST", headers: { "x-unc-context-generation": String(contextGeneration) }, body: JSON.stringify({ text, kind: addKind }) });
       setMemories((cur) => [memory, ...(cur ?? [])]);
       setAddText("");
     });

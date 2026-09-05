@@ -75,6 +75,8 @@ export interface ObAnswered {
 }
 
 export interface PlatformState {
+  /** Server-owned business identity version. Never written through client_state. */
+  contextGeneration?: number;
   view: View;
   selCat: string;
   sel: RoutineDef | null;
@@ -153,6 +155,7 @@ export type Patch = Partial<PlatformState>;
 export type Setter = (patch: Patch | ((s: PlatformState) => Patch)) => void;
 
 export const initialState: PlatformState = {
+  contextGeneration: 0,
   view: "today",
   selCat: "All",
   sel: null,

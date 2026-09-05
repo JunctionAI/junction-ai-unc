@@ -13,6 +13,7 @@ import { afterOnboarding } from "@/lib/brain/hooks";
 import { coerceOnboardingAnswers } from "@/lib/brain/onboarding";
 import { requireAccountOwnerSession } from "@/lib/db/session";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { captureMemoryContext, contextChangedResponse, contextStillCurrent } from "@/lib/db/contextGeneration";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,8 @@ export const dynamic = "force-dynamic";
 async function handlePOST(req: Request) {
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
+  const context = await captureMemoryContext(session.service, session.accountId, req);
+  if (context instanceof Response) return context;
 
   let body: { answers?: unknown };
   try {
@@ -30,7 +33,8 @@ async function handlePOST(req: Request) {
   const answers = coerceOnboardingAnswers(body.answers);
   if (!answers) return Response.json({ error: "answers.goalTitle is required" }, { status: 400 });
 
-  const r = await afterOnboarding({ accountId: session.accountId, answers }, { db: session.service });
+  const r = await afterOnboarding({ accountId: session.accountId, answers }, { db: context.db });
+  if (!await contextStillCurrent(session.service, session.accountId, context.generation)) return contextChangedResponse();
   return Response.json(r ?? { written: 0, merged: 0, failed: 0 });
 }
 

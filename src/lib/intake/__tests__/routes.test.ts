@@ -143,6 +143,20 @@ describe("/api/brain/memories + /api/brain/profile", () => {
     expect(db.rows("memories")).toHaveLength(3); // nothing deleted, only ended
     expect((await forget(req("/api/brain/memories", "DELETE", { id: "00000000-0000-4000-8000-00000000m0a2" }))).status).toBe(404);
   });
+  it("rejects old browser memory writes after context repair and reads only the current generation", async () => {
+    db.rows("accounts")[0].context_generation = 1;
+    db.seed("memories", [{ id: "old-memory", account_id: ACCT, context_generation: 0, kind: "fact", text: "Old Junction context", source: "chat" }]);
+    for (const handler of [addMemory, revise, forget]) {
+      const response = await handler(req("/api/brain/memories", "POST", { id: "old-memory", text: "Stale overwrite" }));
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ code: "context_changed" });
+    }
+    expect((await (await listMemories()).json())).toMatchObject({ memories: [], contextGeneration: 1 });
+    const response = await addMemory(req("/api/brain/memories", "POST", { text: "Current context" }, { "x-unc-context-generation": "1" }));
+    expect(response.status).toBe(200);
+    expect(db.rows("memories")[1]).toMatchObject({ context_generation: 1, text: "Current context", account_id: ACCT });
+    expect(db.rows("memories")[0].text).toBe("Old Junction context");
+  });
   it("founder notes round-trip; null clears; demo mode → fallback", async () => {
     expect(await (await getProfile()).json()).toEqual({ founderNotes: null, tone: {}, cadence: {}, channels: {} });
     let res = await patchProfile(req("/api/brain/profile", "PATCH", { founderNotes: "  Keep it short. No Sundays.  " }));

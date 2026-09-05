@@ -15,6 +15,7 @@ import { requireModelAccountContext } from "@/lib/llm/accountContext";
 import { complete, resolveModel } from "@/lib/llm/router";
 import { NARRATIVE_EFFORT, NARRATIVE_MAX_TOKENS, NARRATIVE_SYSTEM, buildNarrativeUserMessage, coerceNarrativeRequest, extractJsonObject, parseNarrative } from "@/lib/unc/narrative";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { contextChangedResponse, contextStillCurrent } from "@/lib/db/contextGeneration";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ const fallback = () => Response.json({ fallback: true });
 
 async function handlePOST(req: Request) {
   if (!resolveModel("plan_narrative")) return fallback();
-  const account = await requireModelAccountContext();
+  const account = await requireModelAccountContext(req);
   if (account instanceof Response) return account;
 
   let raw: unknown;
@@ -45,6 +46,7 @@ async function handlePOST(req: Request) {
       { system: NARRATIVE_SYSTEM, messages: [{ role: "user", content: buildNarrativeUserMessage(request) }], maxTokens: NARRATIVE_MAX_TOKENS, effort: NARRATIVE_EFFORT, jsonMode: true },
       { accountId: account?.accountId ?? null, db: account?.db },
     );
+    if (account?.contextGeneration !== undefined && !await contextStillCurrent(account.db, account.accountId, account.contextGeneration)) return contextChangedResponse();
     if (!response || response.stopReason === "refusal" || response.stopReason === "error") return fallback();
     const parsed = parseNarrative(extractJsonObject(response.text), request);
     if (!parsed || parsed.liveFields === 0) return fallback();

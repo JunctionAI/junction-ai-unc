@@ -63,10 +63,15 @@ export function useUncChat(S: PlatformState, set: Setter): UncSend {
       fetch("/api/unc/chat", {
         method: "POST",
         signal: requestController.signal,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-unc-context-generation": String(s0.contextGeneration ?? 0) },
         body: JSON.stringify({ surface, messages: history, context, requestId }),
       })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then(async (r) => {
+          const data = await r.json();
+          if (r.ok) return data;
+          if (r.status === 409 && data.code === "context_changed") throw new Error("context_changed");
+          throw new Error(`HTTP ${r.status}`);
+        })
         .then((data: { reply?: string; fallback?: boolean; commandId?: string }) => {
           if (accountRef.current.accountId !== sendingAccountId) return;
           const reply = !data.fallback && typeof data.reply === "string" ? data.reply.trim() : "";
@@ -112,8 +117,10 @@ export function useUncChat(S: PlatformState, set: Setter): UncSend {
             void poll();
           }
         })
-        .catch(() => {
-          if (accountRef.current.accountId === sendingAccountId) finish(inAccount ? "i couldn’t confirm whether your message was processed. check Unc before requesting the same work again." : canned);
+        .catch((error: unknown) => {
+          if (accountRef.current.accountId === sendingAccountId) finish(error instanceof Error && error.message === "context_changed"
+            ? "your business context changed. reload unc before continuing — this reply wasn’t accepted for the new context."
+            : inAccount ? "i couldn’t confirm whether your message was processed. check Unc before requesting the same work again." : canned);
         }).finally(() => { clearTimeout(requestTimeout); pendingPolls.current.delete(requestController); sending.current.delete(key); });
     },
     [set],

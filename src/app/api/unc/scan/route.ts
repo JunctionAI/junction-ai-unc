@@ -15,6 +15,7 @@ import { requireModelAccountContext } from "@/lib/llm/accountContext";
 import { resolveModel } from "@/lib/llm/router";
 import { isSafeUrl, scanBusiness } from "@/lib/unc/scan";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { contextChangedResponse, contextStillCurrent } from "@/lib/db/contextGeneration";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ const fallback = () => Response.json({ fallback: true });
 
 async function handlePOST(req: Request) {
   if (!resolveModel("business_scan")) return fallback();
-  const account = await requireModelAccountContext();
+  const account = await requireModelAccountContext(req);
   if (account instanceof Response) return account;
 
   let body: { website?: unknown; socials?: unknown };
@@ -49,6 +50,7 @@ async function handlePOST(req: Request) {
 
   try {
     const profile = await scanBusiness({ website, socials, accountId: account?.accountId ?? null });
+    if (account?.contextGeneration !== undefined && !await contextStillCurrent(account.db, account.accountId, account.contextGeneration)) return contextChangedResponse();
     if (account?.db && profile.confidence !== "low") {
       // Client Brain: the profile's facts become memories (source "scan"); fire-and-forget, accounts mode only.
       void afterScan({ accountId: account.accountId, profile, sourceRef: website || null }, { db: account.db }).catch(() => {});

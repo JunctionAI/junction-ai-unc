@@ -266,7 +266,7 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
             onEmailAnswer={(answer) => {
               // known_platforms (autosaved) + a founder memory — one answer replaces any earlier one
               V.addKnownPlatform(EMAIL_TOOL_LABEL[answer], Object.values(EMAIL_TOOL_LABEL));
-              void recordEmailAnswer(answer);
+              void recordEmailAnswer(answer, { contextGeneration: S.contextGeneration });
               setupRefresh();
             }}
           />

@@ -9,18 +9,24 @@
 import { isDbConfigured } from "../db/client";
 import { requireAccountOwnerSession } from "../db/session";
 import type { DbClient } from "../db/types";
+import { accountContextGeneration, contextMemoryDb, contextRequestMatches, CONTEXT_CHANGED_MESSAGE } from "../db/contextGeneration";
 
 export interface ModelAccountContext {
   accountId: string;
   userId?: string;
+  contextGeneration?: number;
   db: DbClient;
 }
 
 const unavailable = () => Response.json({ error: "account storage is required for model access" }, { status: 503 });
 
-export async function requireModelAccountContext(): Promise<ModelAccountContext | Response | null> {
+export async function requireModelAccountContext(req?: Request): Promise<ModelAccountContext | Response | null> {
   if (!isDbConfigured()) return process.env.NODE_ENV === "production" ? unavailable() : null;
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
-  return { accountId: session.accountId, userId: session.userId, db: session.service };
+  try {
+    const contextGeneration = await accountContextGeneration(session.service, session.accountId);
+    if (req && !contextRequestMatches(req, contextGeneration)) return Response.json({ error: CONTEXT_CHANGED_MESSAGE, code: "context_changed" }, { status: 409 });
+    return { accountId: session.accountId, userId: session.userId, contextGeneration, db: contextMemoryDb(session.service, session.accountId, contextGeneration) };
+  } catch { return unavailable(); }
 }

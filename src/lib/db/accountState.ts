@@ -45,7 +45,7 @@ export async function createAccount(db: DbClient, opts: { name?: string; currenc
 export async function loadAccountRows(db: DbClient, accountId: string): Promise<LoadedRows> {
   const byAccount = (table: string, columns: string) => db.from(table).select(columns).eq("account_id", accountId);
   const [account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages, stateMeta] = await Promise.all([
-    unwrap<LoadedRows["account"]>("accounts.select", db.from("accounts").select("id, currency, name").eq("id", accountId).maybeSingle()),
+    unwrap<LoadedRows["account"]>("accounts.select", db.from("accounts").select("id, currency, name, context_generation").eq("id", accountId).maybeSingle()),
     unwrap<LoadedRows["goals"]>("goals.select", byAccount("goals", "account_id, category, tier, title, baseline, deadline").order("created_at", { ascending: true })),
     unwrap<LoadedRows["resourceProfile"]>(
       "resource_profiles.select",

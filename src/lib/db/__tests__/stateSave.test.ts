@@ -6,6 +6,29 @@ const state = accountInitialState("NZD");
 const reply = (revision: number, accountId = "account-a") => Response.json({ ok: true, accountId, revision });
 
 describe("versioned account save client", () => {
+  it("does not write or bump revision on hydration, view changes or a duplicate acknowledged save", async () => {
+    const request = vi.fn().mockResolvedValue(reply(4));
+    const saver = createAccountStateSaver("account-a", 3, { initialState: state, fetch: request });
+    await saver.save(state);
+    await saver.save({ ...state, view: "connectors" });
+    expect(request).not.toHaveBeenCalled();
+    expect(saver.revision).toBe(3);
+    const edited = { ...state, website: "avgarsport.com" };
+    await saver.save(edited);
+    await saver.save(edited);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(request.mock.calls[0][1].body).revision).toBe(3);
+    expect(saver.revision).toBe(4);
+  });
+  it("reconciles an uncertain write even when edits revert to the hydration snapshot", async () => {
+    const request = vi.fn().mockRejectedValueOnce(new Error("lost")).mockResolvedValueOnce(reply(4)).mockResolvedValueOnce(reply(5));
+    const saver = createAccountStateSaver("account-a", 3, { initialState: state, fetch: request });
+    await expect(saver.save({ ...state, website: "avgarsport.com" })).rejects.toThrow("lost");
+    await saver.save(state);
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls[0][1].body).toBe(request.mock.calls[1][1].body);
+    expect(JSON.parse(request.mock.calls[2][1].body)).toMatchObject({ revision: 4, rows: { resourceProfile: { website: null } } });
+  });
   it("strips credential/runtime sections and serializes the initial revision", async () => {
     const request = vi.fn().mockResolvedValue(reply(4));
     const saver = createAccountStateSaver("account-a", 3, { fetch: request, id: () => "save-one" });

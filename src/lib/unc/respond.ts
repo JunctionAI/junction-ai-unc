@@ -26,7 +26,7 @@ import { afterChatReply } from "../brain/hooks";
 import { getProfile, renderProfileForPrompt } from "../brain/profile";
 import { recallForContext } from "../brain/retrieve";
 import { loadAccountState } from "../db/accountState";
-import type { DbClient } from "../db/types";
+import { unwrap, type DbClient } from "../db/types";
 import { BUDGET_EXHAUSTED_LINE, BUDGET_UNAVAILABLE_LINE, isBudgetExceeded, isBudgetUnavailable } from "../llm/budget";
 import { loadAccountFacts } from "./loadAccountFacts";
 import { complete, resolveModel } from "../llm/router";
@@ -147,4 +147,17 @@ export async function buildServerContext(db: DbClient, accountId: string): Promi
   const [{ state }, facts] = await Promise.all([loadAccountState(db, accountId), loadAccountFacts(db, accountId)]);
   // A real account: the hydrated state only — never the demo approvals / signals / levers.
   return buildUncContext(state, { mode: "account", facts }) as unknown as Record<string, unknown>;
+}
+
+/** Persisted app history is authoritative; a stale browser cannot replay archived turns
+ * into the model or rolling memory summaries. The current explicit user input is retained. */
+export async function buildServerHistory(db: DbClient, accountId: string, latest: LlmMessage): Promise<LlmMessage[]> {
+  const rows = await unwrap<{ sender: string; body: string }[]>("chat_messages.context",
+    db.from("chat_messages").select("sender, body").eq("account_id", accountId).eq("channel", "app")
+      .eq("thread", "corner").order("position", { ascending: false }).limit(49));
+  const history: LlmMessage[] = rows.reverse().filter(row => (row.sender === "user" || row.sender === "unc") && row.body?.trim())
+    .map(row => ({ role: row.sender === "user" ? "user" : "assistant", content: row.body.slice(0, MAX_TURN_CHARS) }));
+  const last = history[history.length - 1];
+  if (last?.role === "user" && last.content.trim() === latest.content.trim()) history.pop();
+  return [...history, latest];
 }

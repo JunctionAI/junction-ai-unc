@@ -12,8 +12,9 @@ export function stateSaveRows(accountId: string, state: PlatformState) {
     plan: rows.plan, businessProfile: rows.businessProfile, chatMessages: rows.chatMessages, stateMeta: rows.stateMeta };
 }
 
-export function createAccountStateSaver(accountId: string, initialRevision: number, opts: { fetch?: typeof fetch; id?: () => string } = {}) {
+export function createAccountStateSaver(accountId: string, initialRevision: number, opts: { fetch?: typeof fetch; id?: () => string; initialState?: PlatformState } = {}) {
   let revision = initialRevision;
+  let acknowledgedProjection = opts.initialState ? persistedProjection(opts.initialState) : null;
   let pending: { body: string; projection: string } | null = null;
   let inFlight = false;
   const request = opts.fetch ?? fetch;
@@ -25,6 +26,9 @@ export function createAccountStateSaver(accountId: string, initialRevision: numb
       inFlight = true;
       try {
         const projection = persistedProjection(state);
+        // Hydration is already persisted. Opening another tab must not bump revision.
+        // Never skip an uncertain in-flight payload, even if the user reverted edits.
+        if (!pending && projection === acknowledgedProjection) return;
         // Flush an uncertain earlier save first. Only then send newer local edits
         // against the newly acknowledged revision. A conflict stays a conflict.
         do {
@@ -39,6 +43,7 @@ export function createAccountStateSaver(accountId: string, initialRevision: numb
             throw new Error("The account save could not be verified. Please try again.");
           revision = result.revision;
           const savedProjection = pending.projection;
+          acknowledgedProjection = savedProjection;
           pending = null;
           if (savedProjection === projection) break;
         } while (true);
