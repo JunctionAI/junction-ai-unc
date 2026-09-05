@@ -13,7 +13,28 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 63, 6 September NZ / 5 September UTC
+## Latest state — Batch 64, 6 September NZ / 5 September UTC
+
+**Reviewed keyword revision now pinned in matching production SQL/app/worker.**
+[Exact release and readback](KEYWORD-REVIEWED-REVISION-2026-09-06.md). Source
+`aa3fba4`, Vercel `dpl_2nmd4t7GiyKmbRubE7MEzbLv4Xef`, Fly 38. The exact-body
+migration changes future admission/configuration to Nguyen's independently
+reviewed `ac771cd3-8899-4401-915c-40d4477e48e2` and fixes intentional keyword
+business-conflict SQLSTATEs. Old saved recipe, all four verified permits/runs
+and registrations have identical pre/post fingerprints. Actual compiled worker
+conflict returns HTTP 409 in 25 ms; new candidates absent, old selection rejected.
+Signed-in settings confirm empty new market choices while original work reloads.
+3,017 tests, typechecks/build, isolated PostgreSQL migration/history/concurrency
+checks and focused lint pass. No provider/n8n calls or new permits; AVGAR remains
+generation 1 paused, zero enabled routines, all action flags off.
+
+Previous contractor-advice turn was **no backend progress**. This continuation
+is **progress**: live migration, matching release and independently observed
+runtime/UI evidence. Fresh bounded reviewed-revision acceptance and customer
+selection remain next; calendar native binding/receiver, remaining lanes and
+all-client launch acceptance stay open. No complaint or payment action sent.
+
+## Previous state — Batch 63, 6 September NZ / 5 September UTC
 
 **Calendar runtime release verified, live RPC retry trap corrected, Nguyen's specific output corrections independently accepted.** [Release/transport evidence](CALENDAR-SHADOW-LEDGER-2026-09-06.md), [final handoff review](integration/NGUYEN-FINAL-REVIEW-2026-09-06.md). App/worker run `2b4bcfb`, Fly release 37. Actual Data API refusal initially hung on intentional SQLSTATE 40001; the additive exact-body migration changes only calendar business refusals to PT409. Full local PostgreSQL path/concurrency/recovery passes; actual compiled worker now returns paused completion HTTP 409 in 22 ms. Seven DB calls, no provider/writes. SQL confirms invoker/grants unchanged, zero calendar bindings/runs, AVGAR paused/generation 1/four historical runs; advisors unchanged at 19 INFO/six WARN.
 

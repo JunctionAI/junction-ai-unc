@@ -44,14 +44,55 @@ not a relabelling of the four historical provider runs or proof of a new run.
 
 ## Release status
 
-Source verified; migration and app/worker rollout pending at this checkpoint.
-The release-specific worker checker tests actual compiled pin/configuration,
-prompt HTTP conflict refusal, paused issuance rejection and preserved history.
-It deliberately supplies an incomplete invalid issuance payload, never an
-executable approval. It expects no new live proof and must not be reused as a
-generic readiness check after a fresh pilot.
+Migration applied as production history `20260905193727_keyword_reviewed_revision`.
+At 19:37:41 UTC and again 19:41:18 UTC, all four row fingerprints above remain
+identical. Eight function readbacks preserve invoker/grants/owner/search path;
+the three admission/configuration pins are new and none retains intentional
+40001 raises. Security advisors remain 19 INFO / six pre-existing WARN notices.
 
-Next: apply/read back migration; release matching app/worker; verify deployed
-configuration and history. Then prepare the genuinely authorized bounded
-US/NZ/AU run context. New customer selection remains unreleased until that proof.
-The full B01–B24/all-client launch goal stays active.
+### Deploy result
+
+- URL: https://junction-unc.vercel.app
+- Target: production; status READY/promoted.
+- Source: `aa3fba419a1cbb8d5a1d4c27dbb363bc3626f92a`, independently pushed/read back.
+- Vercel: `dpl_2nmd4t7GiyKmbRubE7MEzbLv4Xef`; Next 16.3.4, build 29 seconds.
+  Candidate https://junction-h2n8o7n8f-tom-junctionmedis-projects.vercel.app passed
+  health/build/DB and anonymous keyword-configuration HTTP 401 before promotion.
+- Fly: release 38, sole Sydney machine `1857466fd76998`, image
+  `sha256:f8e2e6b08d8da299594e7c0ef80be51455597320c56d4fbfe11c6c8b658abcaf`,
+  tag `deployment-01M1SH7T64YSFNNT26HGE6FCMF`. Actual machine source matches;
+  all five external-action flags remain false.
+- Canonical health at 19:40:09 UTC reports `aa3fba419a1c`, healthy DB,
+  fresh worker (27 seconds old), no worker error.
+- The deployed worker check at **19:41:03.720 UTC** passes: exact compiled pin,
+  RPC returns no new recipe candidates, shared command admission rejects the
+  old saved recipe, stale-context HTTP 409 in **25 ms**, paused issuance HTTP
+  409, four historical verified permits unchanged. Five DB calls, no writes,
+  provider or n8n calls. Intentionally incomplete invalid issuance payload is
+  not an executable approval. This release-specific checker must not be reused
+  as generic readiness after a new pilot.
+- Initial verifier failed because it imported the app-only customer-view module
+  from the standalone worker, which intentionally excludes it. Fixed the checker
+  to use the actual shared compiled admission predicate; no runtime change was
+  needed. Customer-view verification was performed on the real signed-in app.
+- Signed-in Agents → SEO → keyword inspector: saved old run/receipts/draft still
+  load; market setup says Not configured, no verified configuration, empty
+  selector and disabled Save; Run and switch remain disabled. No settings changed.
+  The old draft still displays its historical wording; it was not overwritten.
+
+### Post-deploy observability
+
+- Error/fatal scan for this exact deployment over the last ten minutes returned
+  no entries. This is bounded observation, not proof of ongoing alert delivery.
+- Authenticated `/v1/drains` returns an empty list. Zero drains; ongoing alert
+  delivery and broader monitoring gaps remain tracked in the full register.
+- Rollback reference: previous app `dpl_9QB6yhzc1D7aztoEwDvofKZwbiLy`, worker 37
+  at `2b4bcfbe5f364b170029f179e4aa124c9518e1f8`. Keep account paused if rollback
+  is required; an old app/new SQL pin is not an executable configuration. Never
+  restore the intentional 40001 retry trap or relabel historical receipts.
+
+Next: prepare the genuinely authorized bounded US/NZ/AU run context on this
+reviewed revision; independent live results can then supply new customer market
+choices. No fresh allowance has been opened or old approval extended here.
+Native calendar binding/receiver, other lanes and the full B01–B24/all-client
+launch goal remain open; this release does not establish customer readiness.

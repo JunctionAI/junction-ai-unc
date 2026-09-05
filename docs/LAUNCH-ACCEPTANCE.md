@@ -6,6 +6,13 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
+**Batch 64 overlay:** [reviewed keyword pin release](KEYWORD-REVIEWED-REVISION-2026-09-06.md)
+is live on matching `aa3fba4` app/worker 38. Prior verified work and saved settings
+remain unchanged; old proof does not become proof of the new revision. Deployed
+read/refusal and signed-in settings checks pass. No new live provider allowance
+or customer release has been opened. Next is bounded reviewed-revision acceptance,
+then customer selection, alongside calendar binding/receiver and other lanes.
+
 **Batch 62 overlay:** calendar permissions/checkpoints/completion SQL is applied,
 with real isolated PostgreSQL proof for the actual runtime path and recovery.
 Route/worker/operator-selection source is now deployed at `2b4bcfb` (worker 37).

@@ -11,10 +11,16 @@ const source=`let stage='build';const finish=r=>process.stdout.write(JSON.string
   const accountId='aa5cfc84-2569-4c99-9b40-67003ae55eda',actorId='74802c60-149a-4405-b719-dc058d174072';
   stage='account';const a=await db.from('accounts').select('context_generation,automation_paused').eq('id',accountId).single();assert.equal(a.error,null);assert.equal(a.data.context_generation,1);assert.equal(a.data.automation_paused,true);
   const input={accountId,actorId,contextGeneration:1,operation:'read'};
-  stage='configuration';const c=await db.rpc('keyword_customer_configuration',{input});assert.equal(c.error,null);assert.equal(c.data.enabled,false);assert.equal(c.data.paused,true);assert.deepEqual(c.data.candidates,[]);
+  stage='configuration-rpc';const c=await db.rpc('keyword_customer_configuration',{input});assert.equal(c.error,null);
+  stage='configuration-controls';assert.equal(c.data.enabled,false);assert.equal(c.data.paused,true);
+  stage='configuration-candidates';assert.deepEqual(c.data.candidates,[]);
+  stage='configuration-history';
   assert.equal(c.data.spec.nodes[3].shadowContract.workflowVersion,'92135add-3c35-43e4-9649-5bb3d4557814');
-  const view=require('/app/dist/worker/lib/n8n/keywordConfiguration.js').readKeywordConfiguration(c.data,input).view;
-  assert.equal(view.market,null);assert.equal(view.released,false);
+  // The customer view module is app-only and is intentionally absent from the
+  // standalone worker. Verify its shared admission predicate here; inspect the
+  // deployed signed-in settings separately for customer-view acceptance.
+  stage='configuration-admission';const market=require('/app/dist/worker/lib/n8n/keywordCommand.js').keywordCommandMarket({accountId,userId:actorId,contextGeneration:1,channel:'app',requestId:'release-check'},c.data.spec,c.data.workflow);
+  assert.equal(market,null);
   stage='stale-context';const started=Date.now();const stale=await db.rpc('keyword_customer_configuration',{input:{...input,contextGeneration:2}});assert.equal(stale.error?.code,'PT409');assert.equal(stale.status,409);const refusalMs=Date.now()-started;assert.ok(refusalMs<5000);
   stage='paused-issuance';const refusal=await db.rpc('issue_keyword_shadow_pilot',{input:{run:{id:'00000000-0000-4000-8000-000000000001',accountId,contextGeneration:1},receiverUrl:KEYWORD_PILOT_PIN.receiverUrl,approval:{authorizedBy:actorId,approvalReference:'release-refusal-check',idempotencyKey:'release-refusal-check',market:'US',contextGeneration:1,maxProviderCalls:1,expiresAt:new Date(Date.now()+60000).toISOString()}}});assert.equal(refusal.error?.code,'PT409');assert.equal(refusal.status,409);
   stage='history';const p=await db.from('n8n_shadow_permits').select('id,status,contract,execution_id').eq('account_id',accountId);assert.equal(p.error,null);assert.equal(p.data.length,4);assert.ok(p.data.every(r=>r.status==='verified'&&r.contract.workflowVersion==='92135add-3c35-43e4-9649-5bb3d4557814'));
