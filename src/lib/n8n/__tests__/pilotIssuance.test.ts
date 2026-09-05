@@ -221,7 +221,9 @@ describe("atomic pilot issuance wiring", () => {
       id: randomUUID(), accountId: f.account.accountId, routineId: "D03-W01", active: true, webhookUrl: KEYWORD_PILOT_PIN.receiverUrl,
     })).rejects.toThrow("explicit shadow contract");
     expect(fetch).not.toHaveBeenCalled();
-    const changed = structuredClone(f.spec); (changed.nodes[3] as N8nNode).shadowContract!.client.seedKeyword = "unapproved";
+    const changed = structuredClone(f.spec); const changedContract = (changed.nodes[3] as N8nNode).shadowContract!;
+    if (changedContract.contract !== "unc.keyword-shadow.v1") throw new Error("keyword fixture required");
+    changedContract.client.seedKeyword = "unapproved";
     await expect(f.start(changed)).rejects.toThrow("contract mismatch"); expect(f.create).not.toHaveBeenCalled();
   });
 });

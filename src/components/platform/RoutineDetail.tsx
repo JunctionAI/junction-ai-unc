@@ -183,7 +183,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
   const eligibility = detail && live?.eligibility && detail.actorId===live.eligibility.actorId && !live.loading && detailRow?.version===currentRow?.version && detailRow?.stateUpdatedAt===currentRow?.stateUpdatedAt ? {...detail,role:live.eligibility.role,paused:live.eligibility.paused,routines:live.eligibility.routines} : null;
   const block = accounts ? (live?.error || trailErr || routineBlock(eligibility,routineId)) : null;
   const keywordNode=spec?.nodes.find(n=>n.kind==="n8n");
-  const keywordMarket=keywordNode?.kind==="n8n"?({2840:"US",2554:"NZ",2036:"AU"} as const)[keywordNode.shadowContract?.client.locationCode as 2840|2554|2036]:undefined;
+  const keywordMarket=keywordNode?.kind==="n8n" && keywordNode.shadowContract?.contract==="unc.keyword-shadow.v1"?({2840:"US",2554:"NZ",2036:"AU"} as const)[keywordNode.shadowContract.client.locationCode as 2840|2554|2036]:undefined;
   const keywordSelection:KeywordRequestSelection|null=keywordMarket && detailRow?.version===2 && detailRow.stateUpdatedAt
     ? {market:keywordMarket,version:2,stateUpdatedAt:detailRow.stateUpdatedAt}:null;
   const sources = spec ? readPlatforms(spec) : [];

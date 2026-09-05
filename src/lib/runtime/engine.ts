@@ -80,7 +80,7 @@ import type {
 import { assertValidSpec } from "./validate";
 import { assertSameRuntimeContext, runtimeGeneration, RuntimeContextError, type RuntimeContextIdentity } from "./contextFence";
 import { MemoryStore } from "./store/memory";
-import { assertShadowRequest } from "../n8n/shadowContract";
+import { assertProtocolRequest as assertShadowRequest, isCalendarShadow } from "../n8n/shadowProtocols";
 
 const UNSAFE_PROPOSAL_STATUSES = new Set(["BLOCKED", "HOLD", "PARTIAL"]);
 
@@ -130,6 +130,7 @@ export interface Adapters {
   /** Atomic keyword artifact + dry review/receipt completion from the verified ledger.
    * Never accepted from a workflow callback or a model-provided result. */
   completeKeywordShadow?: (run: RunRecord) => Promise<RunResult>;
+  completeCalendarShadow?: (run: RunRecord) => Promise<RunResult>;
   /** Injectable clock (tests, replays). */
   now?: () => Date;
   /** Injectable id generator. */
@@ -149,6 +150,9 @@ export interface RunOptions {
   /** One durable winner across initial starts and operator recovery. No I/O on false
    * or a lost reply; a possibly committed start must never be automatically retried. */
   claimKeywordShadowStart?: (run: RunRecord) => Promise<boolean>;
+  /** A distinct calendar allowance; never alias the keyword ledger or generic manual claim. */
+  reserveCalendarShadowRun?: (run: RunRecord) => Promise<RunRecord>;
+  claimCalendarShadowStart?: (run: RunRecord) => Promise<boolean>;
 }
 
 export interface ResumeOptions {
@@ -474,25 +478,27 @@ class RunSession {
     const bridge = this.adapters.n8n;
     if (!bridge) return this.fail(node.id, "no n8n bridge is configured — nothing was drafted", { node: node.id });
     if (node.kind === "n8n" && node.shadowContract) {
-      if (!this.adapters.completeKeywordShadow) return this.fail(node.id, "Atomic keyword completion is not configured; nothing was dispatched.");
-      assertKeywordShadowTail(this.spec, index);
-      const snapshot: RunSnapshot = { spec: this.spec, ctx: this.ctx, nextNodeIndex: index + 1, awaiting: "keyword_shadow" };
+      const calendar = isCalendarShadow(node.shadowContract), label = calendar ? "Calendar" : "Keyword";
+      const complete = calendar ? this.adapters.completeCalendarShadow : this.adapters.completeKeywordShadow;
+      if (!complete) return this.fail(node.id, `Atomic ${label.toLowerCase()} completion is not configured; nothing was dispatched.`);
+      assertShadowTail(this.spec, index, calendar);
+      const snapshot: RunSnapshot = { spec: this.spec, ctx: this.ctx, nextNodeIndex: index + 1, awaiting: calendar ? "calendar_shadow" : "keyword_shadow" };
       this.run = await this.store.updateRun(this.run.id, { snapshot,
-        summary: "Keyword shadow work is awaiting verified completion. Do not repeat this request." });
+        summary: `${label} shadow work is awaiting verified completion. Do not repeat this request.` });
       try {
         const out = await bridge.call(node, this.ctx, workflow);
-        if (out.kind === "needs") return this.waitForInput(node, index, out.needs);
-        if (out.kind !== "artifact") throw new Error("Keyword shadow requires a synchronous verified result");
+        if (out.kind === "needs" && !calendar) return this.waitForInput(node, index, out.needs);
+        if (out.kind !== "artifact") throw new Error(`${label} shadow requires a synchronous verified result`);
         // The completion adapter reads the independently verified durable result;
         // the in-flight return object cannot substitute for that evidence.
-        return await this.adapters.completeKeywordShadow(this.run);
+        return await complete(this.run);
       } catch (error) {
         if (error instanceof RuntimeContextError) throw error;
         // A commit may have succeeded despite a lost response. Never overwrite it
         // with failed status or clear the pre-dispatch continuation. Recovery uses
         // the same atomic completion key, not another paid dispatch.
-        return this.result("running", "Keyword shadow completion is unconfirmed. Reconcile the original run; do not repeat it.",
-          "keyword_shadow_reconciliation_required");
+        return this.result("running", `${label} shadow completion is unconfirmed. Reconcile the original run; do not repeat it.`,
+          calendar ? "calendar_shadow_reconciliation_required" : "keyword_shadow_reconciliation_required");
       }
     }
     const out = await bridge.call(node, this.ctx, workflow);
@@ -716,6 +722,13 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
     specHash: stableHash(spec),
   };
   let run: RunRecord;
+  const calendar = spec.nodes.some(n => n.kind === "n8n" && n.shadowContract && isCalendarShadow(n.shadowContract));
+  if (calendar && (!opts.reserveCalendarShadowRun || !opts.claimCalendarShadowStart || !adapters.completeCalendarShadow ||
+      opts.reserveKeywordShadowRun || opts.admitManualStart))
+    throw new Error("Calendar shadow requires its own durable reservation, start claim and completion before any work");
+  if (!calendar && (opts.reserveCalendarShadowRun || opts.claimCalendarShadowStart)) throw new Error("Calendar allowance cannot start another routine");
+  const reserveShadow = calendar ? opts.reserveCalendarShadowRun : opts.reserveKeywordShadowRun;
+  const claimShadow = calendar ? opts.claimCalendarShadowStart : opts.claimKeywordShadowStart;
   if (opts.admitManualStart) {
     if (opts.reserveKeywordShadowRun || spec.id === "D03-W01" || opts.mode !== "dry_run" || ctx.triggeredBy !== "manual")
       throw new Error("Manual admission cannot start the keyword pilot or live work");
@@ -731,38 +744,38 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
       throw new Error("Original manual run identity unavailable; reconcile without restarting");
     assertSameRuntimeContext(original, saved.ctx.account);
     return new RunSession(saved.spec, saved.ctx, original, adapters).runFrom(0);
-  } else if (opts.reserveKeywordShadowRun) {
-    if (!opts.claimKeywordShadowStart) throw new Error("Keyword pilot requires an atomic start claim before issuance");
+  } else if (reserveShadow) {
+    if (!claimShadow) throw new Error("Shadow pilot requires an atomic start claim before issuance");
     const producers = spec.nodes.filter(node => node.kind === "produce" || node.kind === "n8n");
     const node = producers[0];
     if (producers.length !== 1 || node?.kind !== "n8n" || !node.shadowContract || ctx.triggeredBy !== "manual")
       throw new Error("Pilot issuance requires an explicit manual keyword shadow specification");
     assertShadowRequest(node.shadowContract, { ...initial, runId: initial.id });
-    assertKeywordShadowTail(spec, spec.nodes.indexOf(node));
+    assertShadowTail(spec, spec.nodes.indexOf(node), calendar);
     initial.snapshot = { spec: structuredClone(spec), ctx: structuredClone(ctx), nextNodeIndex: 0,
-      awaiting: "keyword_start", startProtocol: "keyword_claim_v1" };
-    run = await opts.reserveKeywordShadowRun(structuredClone(initial));
+      awaiting: calendar ? "calendar_start" : "keyword_start", startProtocol: calendar ? "calendar_claim_v1" : "keyword_claim_v1" };
+    run = await reserveShadow(structuredClone(initial));
     if (run.id !== initial.id || run.accountId !== initial.accountId || run.contextGeneration !== initial.contextGeneration ||
         run.status !== "running" || run.mode !== initial.mode || run.version !== initial.version || run.routineId !== initial.routineId ||
         run.startedAt !== initial.startedAt || run.specHash !== initial.specHash || JSON.stringify(run.snapshot) !== JSON.stringify(initial.snapshot))
       throw new Error("Issued keyword run differs from its captured original identity");
-    return startPreparedKeywordShadow(run, adapters, opts.claimKeywordShadowStart);
+    return startPreparedShadow(run, adapters, claimShadow, calendar);
   } else run = await adapters.store.createRun(initial);
   return new RunSession(spec, ctx, run, adapters).runFrom(0);
 }
 
 /** A reserved run can be resumed only BEFORE any engine work began. This is not a
  * lease: a lost claim response remains uncertain and is never reclaimed by timeout. */
-async function startPreparedKeywordShadow(original: RunRecord, adapters: Adapters,
-  claim: NonNullable<RunOptions["claimKeywordShadowStart"]>): Promise<RunResult> {
+async function startPreparedShadow(original: RunRecord, adapters: Adapters,
+  claim: NonNullable<RunOptions["claimKeywordShadowStart"]>, calendar = false): Promise<RunResult> {
   const run = structuredClone(original), snapshot = run.snapshot;
-  if (!snapshot || snapshot.awaiting !== "keyword_start" || snapshot.startProtocol !== "keyword_claim_v1" ||
+  if (!snapshot || snapshot.awaiting !== (calendar ? "calendar_start" : "keyword_start") || snapshot.startProtocol !== (calendar ? "calendar_claim_v1" : "keyword_claim_v1") ||
       snapshot.nextNodeIndex !== 0 || run.status !== "running" || run.mode !== "dry_run" || run.finishedAt || run.approvalId)
     throw new Error("Original unstarted keyword snapshot unavailable; reconcile without redispatch");
   const { spec, ctx } = snapshot;
   assertValidSpec(spec);
   const index = spec.nodes.findIndex(node => node.kind === "n8n");
-  assertKeywordShadowTail(spec, index);
+  assertShadowTail(spec, index, calendar);
   assertSameRuntimeContext(run, ctx.account);
   assertShadowRequest((spec.nodes[index] as N8nNode).shadowContract!, {
     accountId: run.accountId, runId: run.id, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt,
@@ -776,7 +789,7 @@ async function startPreparedKeywordShadow(original: RunRecord, adapters: Adapter
   await adapters.assertContext?.(run);
   if (await claim(structuredClone(run)) !== true)
     throw new Error("Keyword start is unavailable or already claimed; reconcile the original run without redispatch");
-  snapshot.awaiting = "keyword_started";
+  snapshot.awaiting = calendar ? "calendar_started" : "keyword_started";
   return new RunSession(spec, ctx, run, adapters).runFrom(0);
 }
 
@@ -786,7 +799,14 @@ export async function resumePreparedKeywordShadowRun(runId: string, adapters: Ad
   claim: NonNullable<RunOptions["claimKeywordShadowStart"]>): Promise<RunResult> {
   const run = await adapters.store.getRun(runId);
   if (!run) throw new Error("Original keyword run unavailable");
-  return startPreparedKeywordShadow(run, adapters, claim);
+  return startPreparedShadow(run, adapters, claim);
+}
+
+export async function resumePreparedCalendarShadowRun(runId: string, adapters: Adapters,
+  claim: NonNullable<RunOptions["claimCalendarShadowStart"]>): Promise<RunResult> {
+  const run = await adapters.store.getRun(runId);
+  if (!run || !adapters.completeCalendarShadow) throw new Error("Original calendar run or atomic completion unavailable");
+  return startPreparedShadow(run, adapters, claim, true);
 }
 
 export async function resumeRun(runId: string, decision: "approved" | "held", adapters: Adapters, opts: ResumeOptions = {}): Promise<RunResult> {
@@ -895,12 +915,16 @@ export async function completeExternalArtifact(runId: string, result: { artifact
   return session.deliverExternal(node, result.artifact, nextNodeIndex);
 }
 
-function assertKeywordShadowTail(spec: RoutineSpec, index: number): void {
+function assertShadowTail(spec: RoutineSpec, index: number, calendar = false): void {
   const node = spec.nodes[index], tail = spec.nodes.slice(index + 1);
-  if (spec.id !== "D03-W01" || !node || node.kind !== "n8n" || !node.shadowContract ||
+  if (calendar && (index !== 1 || spec.nodes[0]?.kind !== "trigger" || spec.nodes[0].cadence !== "manual" ||
+      spec.mutates || node?.kind !== "n8n" || node.webhookUrl || node.webhookUrlEnv))
+    throw new Error("Calendar shadow permits only its manual trigger before the registered producer");
+  if (spec.id !== (calendar ? "D05-W07" : "D03-W01") || !node || node.kind !== "n8n" || !node.shadowContract ||
+      isCalendarShadow(node.shadowContract) !== calendar ||
       spec.nodes.filter(n => n.kind === "produce" || n.kind === "n8n").length !== 1 || spec.nodes.some(n => n.kind === "execute") ||
       tail.length < 1 || tail.length > 10 || tail.at(-1)?.kind !== "receipt" ||
-      tail.slice(0, -1).some(n => n.kind !== "gate")) throw new Error("Keyword shadow continuation must contain only draft review gates and its final receipt");
+      tail.slice(0, -1).some(n => n.kind !== "gate")) throw new Error(`${calendar ? "Calendar" : "Keyword"} shadow continuation must contain only draft review gates and its final receipt`);
 }
 
 /** Run the ORIGINAL post-producer semantics into an isolated staging store. This is
@@ -908,10 +932,18 @@ function assertKeywordShadowTail(spec: RoutineSpec, index: number): void {
  * No caller adapters are available, so no provider/model/executor can be invoked. */
 export async function planKeywordShadowCompletion(run: RunRecord, draft: ArtifactDraft,
   opts: { now?: () => Date; idGen?: () => string } = {}): Promise<{ result: RunResult; snapshot: RunSnapshot }> {
-  if (!run.snapshot || run.snapshot.awaiting !== "keyword_shadow" || !["running", "failed"].includes(run.status) || run.mode !== "dry_run")
+  return planShadowCompletion(run, draft, opts, false);
+}
+export async function planCalendarShadowCompletion(run: RunRecord, draft: ArtifactDraft,
+  opts: { now?: () => Date; idGen?: () => string } = {}): Promise<{ result: RunResult; snapshot: RunSnapshot }> {
+  return planShadowCompletion(run, draft, opts, true);
+}
+async function planShadowCompletion(run: RunRecord, draft: ArtifactDraft,
+  opts: { now?: () => Date; idGen?: () => string }, calendar: boolean): Promise<{ result: RunResult; snapshot: RunSnapshot }> {
+  if (!run.snapshot || run.snapshot.awaiting !== (calendar ? "calendar_shadow" : "keyword_shadow") || !["running", "failed"].includes(run.status) || run.mode !== "dry_run")
     throw new Error("Original keyword shadow continuation is unavailable");
   const snapshot = structuredClone(run.snapshot), { spec, ctx, nextNodeIndex } = snapshot;
-  assertValidSpec(spec); assertKeywordShadowTail(spec, nextNodeIndex - 1);
+  assertValidSpec(spec); assertShadowTail(spec, nextNodeIndex - 1, calendar);
   assertSameRuntimeContext(run, ctx.account);
   assertShadowRequest((spec.nodes[nextNodeIndex - 1] as N8nNode).shadowContract!, {
     accountId: run.accountId, runId: run.id, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt,

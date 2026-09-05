@@ -17,7 +17,7 @@ export function keywordCommandMarket(actor: CommandActor, spec: RoutineSpec, wor
       !workflow?.active || workflow.accountId !== actor.accountId || workflow.routineId !== spec.id || workflow.webhookUrl !== KEYWORD_PILOT_PIN.receiverUrl)
     return null;
   const node = spec.nodes.find(n => n.kind === "n8n");
-  if (!node || node.kind !== "n8n" || !node.shadowContract) return null;
+  if (!node || node.kind !== "n8n" || !node.shadowContract || node.shadowContract.contract !== "unc.keyword-shadow.v1") return null;
   const contract = node.shadowContract;
   const market = (Object.keys(KEYWORD_PILOT_MARKETS) as (keyof typeof KEYWORD_PILOT_MARKETS)[]).find(m => KEYWORD_PILOT_MARKETS[m] === contract.client?.locationCode);
   if (!market || !isDeepStrictEqual(contract, { contract: "unc.keyword-shadow.v1", accountId: actor.accountId,

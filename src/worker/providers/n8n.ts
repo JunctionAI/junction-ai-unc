@@ -19,7 +19,10 @@ import { isArtifactKind, validateArtifactObject } from "../../lib/artifacts/vali
 import { DATA_ENDPOINTS, dataBaseUrl, issueDataToken, scopesForRoutine } from "../../lib/n8n/dataToken";
 import { checkWebhookTarget, type HostLookup } from "../../lib/n8n/urlSecurity";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
-import { assertShadowRequest, validateShadowReceipt, verifyShadowExecution, KEYWORD_SHADOW_RECEIVER_URL, type KeywordShadowContract } from "../../lib/n8n/shadowContract";
+import { KEYWORD_SHADOW_RECEIVER_URL } from "../../lib/n8n/shadowContract";
+import { CALENDAR_SHADOW_RECEIVER_URL } from "../../lib/n8n/calendarShadowContract";
+import { assertProtocolRequest, validateProtocolReceipt, verifyProtocolExecution, protocolCandidate,
+  isCalendarShadow, protocolEnvPrefix, protocolReceiver, type ShadowContract } from "../../lib/n8n/shadowProtocols";
 import type { N8nBridge, N8nCallResult, N8nNode, N8nWorkflow, ProduceNeed, ProduceNode, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
 import { pinnedWebhookFetch, type WebhookFetch, type WebhookResponse } from "./pinnedWebhookFetch";
@@ -27,13 +30,13 @@ import { createShadowExecutionReader, type ShadowExecutionReader } from "./n8nEx
 import { shadowRequestDigest } from "../../lib/n8n/executionEvidence";
 import { shadowTokenDigest, type ShadowAdmission } from "../../lib/n8n/shadowAdmission";
 import { runtimeGeneration } from "../../lib/runtime/contextFence";
-import { shadowCandidate, verifiedShadowResult } from "../../lib/n8n/shadowCandidate";
+import { verifiedShadowResult } from "../../lib/n8n/shadowCandidate";
 
 export const N8N_DEFAULT_TIMEOUT_MS = 60_000;
 export const N8N_SECRET_ENV = "N8N_SIGNING_SECRET";
 
 export interface N8nPayload {
-  shadow?: KeywordShadowContract;
+  shadow?: ShadowContract;
   accountId: string;
   runId: string;
   routineId: string;
@@ -64,7 +67,10 @@ export interface PayloadOptions {
 
 export function buildN8nPayload(node: ProduceNode | N8nNode, ctx: RunContext, opts: PayloadOptions = {}): N8nPayload {
   const skillId = node.kind === "produce" ? (node.skill ?? ctx.routineId) : ctx.routineId;
-  const scopes = scopesForRoutine(ctx.routineId);
+  // Calendar's provider is bound natively in n8n; its authority token must not
+  // inherit Shopify/customer-data scopes from the different built-in calendar.
+  const calendar = node.kind === "n8n" && node.shadowContract && isCalendarShadow(node.shadowContract);
+  const scopes = calendar ? [] : scopesForRoutine(ctx.routineId);
   const minted = opts.secret ? issueDataToken(opts.secret, { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, scopes }, { now: opts.now }) : null;
   return {
     ...(node.kind === "n8n" && node.shadowContract ? { shadow: node.shadowContract } : {}),
@@ -125,6 +131,9 @@ export interface HttpN8nBridgeOptions {
   executionFetch?: WebhookFetch;
   /** Durable operator-issued permit; required for every paid shadow dispatch. */
   shadowAdmission?: ShadowAdmission;
+  /** Separate durable calendar ledger; never borrow a keyword permit/reader. */
+  calendarShadowAdmission?: ShadowAdmission;
+  readCalendarShadowExecution?: ShadowExecutionReader;
 }
 
 export class HttpN8nBridge implements N8nBridge {
@@ -145,9 +154,12 @@ export class HttpN8nBridge implements N8nBridge {
 
   async call(node: ProduceNode | N8nNode, ctx: RunContext, workflow: N8nWorkflow | null): Promise<N8nCallResult> {
     const shadow = node.kind === "n8n" ? node.shadowContract : undefined;
+    const calendar = shadow ? isCalendarShadow(shadow) : false;
+    const admission = calendar ? this.opts.calendarShadowAdmission : this.opts.shadowAdmission;
     const identity = { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, mode: ctx.mode, startedAt: ctx.startedAt };
     if (shadow) {
-      assertShadowRequest(shadow, identity);
+      assertProtocolRequest(shadow, identity);
+      if (isCalendarShadow(shadow) && shadow.client.currency !== ctx.account.currency) throw new Error("calendar currency differs from the run account");
       if (!workflow || workflow.accountId !== shadow.accountId || workflow.routineId !== shadow.routineId || !workflow.active)
         throw new Error("shadow integration requires an active account-specific workflow registration");
     }
@@ -155,19 +167,22 @@ export class HttpN8nBridge implements N8nBridge {
     if (!url) throw new Error("no n8n webhook is registered for this routine");
     const target = await checkWebhookTarget(url, this.env, { maxLength: 2000, lookup: this.opts.lookup });
     if (!target.ok) throw new Error(`n8n webhook refused: ${target.reason}`);
-    if (!shadow && target.url.href === KEYWORD_SHADOW_RECEIVER_URL)
-      throw new Error("The keyword pilot receiver requires its explicit shadow contract and permit");
+    if (!shadow && [KEYWORD_SHADOW_RECEIVER_URL, CALENDAR_SHADOW_RECEIVER_URL].includes(target.url.href))
+      throw new Error("The shadow receiver requires its explicit shadow contract and permit");
     const secret = (this.env[N8N_SECRET_ENV] ?? "").trim();
     if (!secret) throw new Error(`${N8N_SECRET_ENV} is not set — refusing to call n8n unsigned`);
     const receiverHeaders: Record<string, string> = {};
-    const readExecution = shadow ? this.opts.readShadowExecution ?? createShadowExecutionReader(this.env, shadow.workflowId, {
-      fetch: this.opts.executionFetch, lookup: this.opts.lookup,
+    const readExecution = shadow ? (calendar ? this.opts.readCalendarShadowExecution : this.opts.readShadowExecution) ?? createShadowExecutionReader(this.env, shadow.workflowId, {
+      fetch: this.opts.executionFetch, lookup: this.opts.lookup, protocol: calendar ? "calendar" : "keyword",
     }) : undefined;
     if (shadow) {
       // Separate receiver credential, pinned to this exact URL. Never send it to an
       // owner-edited/global webhook, and never share the root data-token signing key.
-      const receiverUrl = (this.env.N8N_SHADOW_RECEIVER_URL ?? "").trim();
-      const receiverToken = (this.env.N8N_SHADOW_RECEIVER_TOKEN ?? "").trim();
+      const prefix = protocolEnvPrefix(shadow);
+      const receiverUrl = (this.env[`${prefix}_RECEIVER_URL`] ?? "").trim();
+      const receiverToken = (this.env[`${prefix}_RECEIVER_TOKEN`] ?? "").trim();
+      if (calendar && (receiverUrl !== protocolReceiver(shadow) || receiverToken === this.env.N8N_SHADOW_RECEIVER_TOKEN))
+        throw new Error("Calendar requires its own receiver URL and scoped credential");
       if (receiverUrl !== target.url.toString()) throw new Error("shadow receiver URL is not pinned in server configuration");
       if (receiverToken.length < 24 || /\s/.test(receiverToken) || receiverToken === secret)
         throw new Error("shadow receiver requires a separate scoped authentication credential");
@@ -182,9 +197,9 @@ export class HttpN8nBridge implements N8nBridge {
     let permitId: string | undefined;
     let observedExecutionId: string | undefined;
     if (shadow) {
-      if (!this.opts.shadowAdmission || !payload.dataToken || !workflow)
+      if (!admission || !payload.dataToken || !workflow)
         throw new Error("Durable shadow admission is not configured; provider dispatch is disabled");
-      permitId = await this.opts.shadowAdmission.claim({ accountId: identity.accountId,
+      permitId = await admission.claim({ accountId: identity.accountId,
         contextGeneration: runtimeGeneration(ctx.account.contextGeneration), runId: identity.runId,
         registrationId: workflow.id, contract: shadow, receiverUrl: target.url.toString(),
         requestDigest: shadowRequestDigest(JSON.parse(body)), tokenDigest: shadowTokenDigest(payload.dataToken) });
@@ -214,15 +229,17 @@ export class HttpN8nBridge implements N8nBridge {
       // output. A malformed artifact still consumed a provider call; retain the
       // named execution for reconciliation, never silently refund/replay it.
       const reported = shadow && parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.hasOwn(parsed, "artifact")
-        ? validateShadowReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now()) : undefined;
+        ? validateProtocolReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now()) : undefined;
       if (reported) observedExecutionId = String(reported.executionId);
       const out = parseN8nReply(parsed, payload.kind, node.kind === "produce" ? node.maxItems : SKILL_BY_ID[ctx.routineId]?.maxItems);
       if (shadow && out.kind === "artifact") {
         if (!reported) throw new Error("Shadow artifact requires a validated reported execution receipt");
-        const candidate = shadowCandidate(out.artifact, reported);
+        const envelope = parsed as { artifact: unknown; executionReceipt: unknown };
+        const resultDigest = calendar ? shadowRequestDigest({ artifact: envelope.artifact, executionReceipt: envelope.executionReceipt }) : undefined;
+        const candidate = protocolCandidate(out.artifact, reported, shadow, identity, resultDigest);
         // Persist the known execution before the next network wait. A crash here
         // must leave a named execution to inspect, not a reason to call n8n again.
-        await this.opts.shadowAdmission!.observe(permitId!, String(reported.executionId), candidate);
+        await admission!.observe(permitId!, String(reported.executionId), candidate);
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
         let observation: unknown;
@@ -235,7 +252,7 @@ export class HttpN8nBridge implements N8nBridge {
           // Do not leak API response bodies/credentials or retry the paid provider call.
           throw new Error(`n8n execution could not be independently verified; reconcile the execution before rerunning (workflow=${shadow.workflowId}, execution=${reported.executionId})`);
         } finally { clearTimeout(timer); }
-        const receipt = verifyShadowExecution(reported, observation, shadow, identity, this.now(), shadowRequestDigest(JSON.parse(body)));
+        const receipt = verifyProtocolExecution(reported, observation, shadow, identity, this.now(), shadowRequestDigest(JSON.parse(body)), resultDigest);
         return verifiedShadowResult(candidate, receipt);
       }
       this.opts.log?.info("n8n.replied", { runId: ctx.runId, routineId: ctx.routineId, kind: out.kind });
@@ -243,13 +260,13 @@ export class HttpN8nBridge implements N8nBridge {
     };
     try {
       const result = await perform();
-      if (permitId) await this.opts.shadowAdmission!.finish(permitId, result.kind === "artifact" ? "verified" : "refused", observedExecutionId, result);
+      if (permitId) await admission!.finish(permitId, result.kind === "artifact" ? "verified" : "refused", observedExecutionId, result);
       return result;
     } catch (error) {
       // A crash after claim also leaves a non-reusable dispatching row. Neither an
       // uncertain network outcome nor failed receipt persistence refunds the permit.
       if (permitId) {
-        try { await this.opts.shadowAdmission!.finish(permitId, "uncertain", observedExecutionId); }
+        try { await admission!.finish(permitId, "uncertain", observedExecutionId); }
         catch { this.opts.log?.warn("n8n.reconciliation_required", { runId: identity.runId, permitId }); }
       }
       throw error;

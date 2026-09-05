@@ -86,7 +86,7 @@ export function keywordPilotStartClaim(db: DbClient, command?: KeywordCommandBin
   command = command ? Object.freeze({ ...command }) : undefined;
   return async run => {
     const node = run.snapshot?.spec.nodes.find(n => n.kind === "n8n");
-    if (!node || node.kind !== "n8n" || !node.shadowContract || run.accountId !== AVGAR_PILOT_ACCOUNT ||
+    if (!node || node.kind !== "n8n" || !node.shadowContract || node.shadowContract.contract !== "unc.keyword-shadow.v1" || run.accountId !== AVGAR_PILOT_ACCOUNT ||
         !isDeepStrictEqual(run.snapshot!.spec, keywordShadowSpec(node.shadowContract, 2)))
       throw new Error("Original reviewed keyword start specification required");
     return await unwrap<boolean>("shadow.start", db.rpc(command ? "claim_keyword_shadow_command_start" : "claim_keyword_shadow_start", { input: { run, ...commandEnvelope(run, command) } })) === true;

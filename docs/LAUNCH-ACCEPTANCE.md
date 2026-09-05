@@ -6,6 +6,13 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
+**Batch 61 source-only overlay:** the second-lane calendar contract/runtime and
+independent result verification are prepared; the production database ledger,
+route, recovery and worker/selection wiring are still Codex-owned open work.
+[Exact boundary](CALENDAR-SHADOW-INTEGRATION.md). Synthetic round-trip tests do
+not advance any customer journey to PASS. Production and all action holds remain
+unchanged; the original full launch scope is not narrowed to this adapter.
+
 1. Work by complete customer journey, not endless isolated hardening. Reuse existing contracts, code, sessions and proven infrastructure. No new architecture or provider swap without a concrete failing requirement.
 2. Maintain one status per journey/client: PASS with a live receipt, PARTIAL with the exact missing step, or BLOCKED with the dependency/owner. Do not compute completion from test count or a list of seeded accounts.
 3. Run focused tests during editing; one full test/type/build batch before a coherent release. Reuse unchanged evidence and combine related work into releases. Do not repeatedly inspect unchanged blocked systems.

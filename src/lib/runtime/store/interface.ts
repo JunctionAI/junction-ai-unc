@@ -206,9 +206,9 @@ export interface RunSnapshot {
   /** waiting_input: what the producer asked for (resume-input re-runs the produce node). */
   needs?: ProduceNeed[];
   /** A run whose artifact an n8n workflow will deliver later (POST /api/routines/artifacts). */
-  awaiting?: "n8n" | "keyword_shadow" | "keyword_start" | "keyword_started";
+  awaiting?: "n8n" | "keyword_shadow" | "keyword_start" | "keyword_started" | "calendar_shadow" | "calendar_start" | "calendar_started";
   /** Only snapshots created by the claim-before-I/O protocol may resume at node 0. */
-  startProtocol?: "keyword_claim_v1" | "manual_claim_v1";
+  startProtocol?: "keyword_claim_v1" | "manual_claim_v1" | "calendar_claim_v1";
 }
 
 export interface ListArtifactsOptions {

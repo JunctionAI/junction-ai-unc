@@ -5,6 +5,8 @@ import type { ArtifactDraft, N8nCallResult } from "../runtime/types";
 export interface ShadowCandidate {
   artifact: ArtifactDraft;
   executionReceipt: Record<string, unknown>;
+  /** Calendar's exact received envelope hash; not a verified result until independently matched. */
+  resultDigest?: string;
 }
 
 export function shadowCandidate(artifact: unknown, reportedReceipt: Record<string, unknown>): ShadowCandidate {

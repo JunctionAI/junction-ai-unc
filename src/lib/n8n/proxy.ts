@@ -61,6 +61,7 @@ export interface ProxyDeps {
   dataEnv?: Record<string, string | undefined>;
   /** Test seam; real authority resolves its durable admission from the service DB. */
   shadowAdmission?: ShadowAdmission;
+  calendarShadowAdmission?: ShadowAdmission;
   /** Playbook recall; undefined = recallPlaybooks (env-gated), null = none. */
   playbooks?: ((query: string, domains: Skill["domain"][] | null, limit: number) => Promise<Playbook[]>) | null;
 }

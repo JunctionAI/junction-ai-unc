@@ -2,7 +2,7 @@
    before a draft can be dry-run or promoted. Pure. */
 
 import type { Node, NodeKind, Platform, Predicate, RoutineSpec } from "./types";
-import { shadowContractProblem } from "../n8n/shadowContract";
+import { protocolProblem as shadowContractProblem } from "../n8n/shadowProtocols";
 
 export interface ValidationIssue {
   path: string;

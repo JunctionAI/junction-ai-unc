@@ -2,7 +2,8 @@ import { stableHash } from "../runtime/context";
 import { validateSpec } from "../runtime/validate";
 import { assertProxyRuntimeContext, authenticate, type ProxyDeps } from "./proxy";
 import { RuntimeContextError, runtimeGeneration } from "../runtime/contextFence";
-import { assertShadowRequest, type KeywordShadowContract } from "./shadowContract";
+import { assertProtocolRequest, isCalendarShadow, projectProtocolContract } from "./shadowProtocols";
+import { CALENDAR_SHADOW_RECEIVER_URL } from "./calendarShadowContract";
 import { DbShadowAdmission, shadowTokenDigest } from "./shadowAdmission";
 import { bearerToken } from "./dataToken";
 
@@ -13,6 +14,15 @@ import { bearerToken } from "./dataToken";
  * Call only an independently pinned Junction origin, with redirects disabled.
  */
 export async function shadowAuthority(deps: ProxyDeps, req: Request, receiverUrl: string | undefined): Promise<Response> {
+  return protocolAuthority(deps, req, receiverUrl, false);
+}
+/** Separate entry point; no calendar allowance is inferred from a keyword ledger. */
+export async function calendarShadowAuthority(deps: ProxyDeps, req: Request, receiverUrl: string | undefined): Promise<Response> {
+  if (req.method !== "POST") return Response.json({ ok: false, error: "calendar authority requires POST" },
+    { status: 405, headers: { "allow": "POST", "cache-control": "no-store", "vary": "Authorization" } });
+  return protocolAuthority(deps, req, receiverUrl, true);
+}
+async function protocolAuthority(deps: ProxyDeps, req: Request, receiverUrl: string | undefined, calendar: boolean): Promise<Response> {
   const headers = { "cache-control": "no-store", "vary": "Authorization" };
   const deny = (status: number, error: string) => Response.json({ ok: false, error }, { status, headers });
   const auth = await authenticate(deps, req);
@@ -29,8 +39,11 @@ export async function shadowAuthority(deps: ProxyDeps, req: Request, receiverUrl
     return deny(403, "run is not an explicit manual keyword shadow routine");
   }
   const contract = node.shadowContract;
+  if (isCalendarShadow(contract) !== calendar) return deny(403, "shadow authority protocol mismatch");
+  if (calendar && (receiverUrl !== CALENDAR_SHADOW_RECEIVER_URL || run.snapshot?.awaiting !== "calendar_shadow"))
+    return deny(403, "calendar receiver or dispatch continuation is not pinned");
   try {
-    assertShadowRequest(contract, { accountId: run.accountId, runId: run.id, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt });
+    assertProtocolRequest(contract, { accountId: run.accountId, runId: run.id, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt });
   } catch {
     return deny(403, "shadow account, routine or dry-run authority does not match");
   }
@@ -52,19 +65,14 @@ export async function shadowAuthority(deps: ProxyDeps, req: Request, receiverUrl
     return deny(503, "shadow receiver is not pinned");
   }
   // Explicit projection avoids disclosing arbitrary snapshot fields, secrets, reads or context.
-  const shadow: KeywordShadowContract = {
-    contract: contract.contract, accountId: contract.accountId, routineId: contract.routineId,
-    routineKey: contract.routineKey, workflowId: contract.workflowId, workflowVersion: contract.workflowVersion,
-    client: { id: contract.client.id, primaryDomain: contract.client.primaryDomain,
-      seedKeyword: contract.client.seedKeyword, locationCode: contract.client.locationCode, languageCode: contract.client.languageCode },
-  };
+  const shadow = projectProtocolContract(contract);
   try {
     await assertProxyRuntimeContext(deps, run);
   } catch (error) {
     return deny(error instanceof RuntimeContextError && error.code === "context_changed" ? 409 : 503,
       "The stored run's business context is stale, paused or unavailable");
   }
-  const admission = deps.shadowAdmission ?? (deps.db ? new DbShadowAdmission(deps.db) : undefined);
+  const admission = calendar ? deps.calendarShadowAdmission : deps.shadowAdmission ?? (deps.db ? new DbShadowAdmission(deps.db) : undefined);
   if (!admission) return deny(503, "Durable shadow admission is unavailable");
   try {
     const allowed = await admission.authorize({ accountId: run.accountId, contextGeneration: runtimeGeneration(run.contextGeneration),

@@ -348,7 +348,7 @@ export interface ProduceNode extends NodeBase {
 export interface N8nNode extends NodeBase {
   kind: "n8n";
   /** Optional server-pinned, synchronous, fail-closed pilot contract. */
-  shadowContract?: import("../n8n/shadowContract").KeywordShadowContract;
+  shadowContract?: import("../n8n/shadowProtocols").ShadowContract;
   webhookUrl?: string;
   /** Name of the env variable holding the webhook URL. */
   webhookUrlEnv?: string;
