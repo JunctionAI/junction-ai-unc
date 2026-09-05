@@ -34,6 +34,28 @@ describe("read-only dataset cutover coverage", () => {
     expect(await inspect(s, [])).toMatchObject({ ready: false, queries: [] });
     expect(s.connection).not.toHaveBeenCalled();
   });
+  it("uses the strictest freshness limit for shared consumers without widening the reader policy", async () => {
+    const s = store({ ...snapshot, result: { ...snapshot.result, fetchedAt: "2026-09-05T11:54:00Z" } });
+    const report = await inspect(s, [{ ...requirement, maxAgeMs: 30 * 60_000 },
+      { ...requirement, routineId: "D02-W02", maxAgeMs: 5 * 60_000 }]);
+    expect(s.latest).toHaveBeenCalledTimes(1);
+    expect(report).toMatchObject({ ready: false, queries: [{ availability: "stale", maxAgeMs: 5 * 60_000 }] });
+    const wide = await inspect(store(), [{ ...requirement, maxAgeMs: 2 * 60 * 60_000 }]);
+    expect(wide.queries[0].maxAgeMs).toBe(60 * 60_000);
+  });
+  it.each([-1, NaN])("rejects an invalid consumer freshness limit %s", async maxAgeMs => {
+    const s = store();
+    await expect(inspect(s, [{ ...requirement, maxAgeMs }])).rejects.toThrow("freshness requirement");
+    expect(s.connection).not.toHaveBeenCalled();
+  });
+  it("rechecks stricter consumer freshness at the end of a slow inspection", async () => {
+    let clock = time;
+    const s = store({ ...snapshot, result: { ...snapshot.result, fetchedAt: "2026-09-05T11:55:01Z" } });
+    s.latest = vi.fn(async () => { clock = new Date("2026-09-05T12:00:02Z"); return { ...snapshot,
+      result: { ...snapshot.result, fetchedAt: "2026-09-05T11:55:01Z" } }; });
+    const report = await inspectDatasetReadiness(s, "account-a", [{ ...requirement, maxAgeMs: 5 * 60_000 }], env, () => clock);
+    expect(report).toMatchObject({ ready: false, queries: [{ availability: "stale" }] });
+  });
   it("does not certify a recent budget snapshot with an old normalization marker", async () => {
     const budget = { ...requirement, query: { resource: "adsets" } };
     const s = store({ ...snapshot, queryHash: datasetQueryHash(budget.query, time) });

@@ -106,6 +106,13 @@ describe("database snapshot synchronization", () => {
     expect(await syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW)).toBe("busy");
     expect(direct.read).not.toHaveBeenCalled();
   });
+  it.each([-1, NaN, Infinity, 900_001])("rejects invalid refresh interval %s before claiming or fetching", async refreshAfterMs => {
+    const claim = vi.fn(seeded.db.rpcs.claim_backend_lease);
+    seeded.db.rpcs.claim_backend_lease = claim;
+    await expect(syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW, refreshAfterMs)).rejects.toThrow("refresh interval");
+    expect(claim).not.toHaveBeenCalled();
+    expect(direct.read).not.toHaveBeenCalled();
+  });
   it("commits with the exact claimed holder and captured context, without a direct insert", async () => {
     let holder: unknown;
     seeded.db.rpcs.claim_backend_lease = args => { holder = args.p_holder; return true; };

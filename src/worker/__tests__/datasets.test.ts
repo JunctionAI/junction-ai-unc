@@ -6,6 +6,7 @@ import { StaticAccountsSource, DEMO_ACCOUNT } from "../accounts";
 import { FixtureCredentialProvider } from "../credentials";
 import { syncDataset } from "../../lib/data/datasets";
 import { inspectAccountDatasets, runDatasetSyncTick } from "../datasets";
+import { CATALOG_SPEC_BY_ID } from "../../lib/runtime/catalog-specs";
 vi.mock("../../lib/data/datasets", async importOriginal => ({ ...await importOriginal<typeof import("../../lib/data/datasets")>(), syncDataset: vi.fn() }));
 const env = { UNC_DATA_SYNC_ENABLED: "true", UNC_DATA_SYNC_ACCOUNTS: "demo" };
 const now = () => new Date("2026-09-05T01:00:00Z");
@@ -54,6 +55,20 @@ describe("bounded dataset background job", () => {
     vi.mocked(syncDataset).mockRejectedValue(new Error("unavailable"));
     expect(await runDatasetSyncTick(d, env)).toEqual({ synced: 0, failed: 1 });
     expect(syncDataset).toHaveBeenCalledTimes(1);
+  });
+  it("deduplicates shared enabled demand using its strictest consumer refresh interval", async () => {
+    const d = deps();
+    for (const [id, freshnessMinutes] of [["D02-W01", 30], ["D02-W02", 2]] as const) {
+      await setEnabled(d, "demo", id, true);
+      const state = (await d.store.getRoutineState("demo", id))!;
+      await d.store.putRoutineState({ ...state, liveSpec: { ...CATALOG_SPEC_BY_ID[id], nodes: [
+        { kind: "read", id: "read", as: "stats", source: "meta_ads", query: { resource: "insights" }, freshnessMinutes },
+      ] } });
+    }
+    vi.mocked(syncDataset).mockResolvedValue("fresh");
+    await runDatasetSyncTick(d, env);
+    expect(syncDataset).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(syncDataset).mock.calls[0][6]).toBe(120_000);
   });
 });
 

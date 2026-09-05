@@ -13,7 +13,11 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 54, 6 September NZ / 5 September UTC
+## Latest state — Batch 55, 6 September NZ / 5 September UTC
+
+**Cold-cache scheduled-run failure reproduced and fixed.** [Behavior, tests and limits](DATASET-SCHEDULE-READINESS-2026-09-06.md). The producer now precedes consumers; required stored-data waits do not create a failed run or consume the cron slot. Shared demand uses the strictest consumer freshness limit for readiness and refresh. Two-query warming, stored reuse, worker recreation, next refresh cycle and refusal/optional/direct-reader paths pass with synthetic HTTP and schema-checked in-memory storage. 217 files / 2,855 tests, app/worker TypeScript and focused lint pass. Worker-only release is next; app interface/schema unchanged. No live scheduling acceptance, provider call, n8n edit or action/sync/switch activation. The prior goal turn and this turn are concrete progress. Full goal remains active; remaining lane adapters, actual refresh cadence and all-client acceptance stay open.
+
+## Previous state — Batch 54, 6 September NZ / 5 September UTC
 
 **Actual Nguyen bundle reviewed; output acceptance defects reproduced and scoped corrections sent.** [Review, immutable archive hash and exact evidence](integration/NGUYEN-DELIVERY-REVIEW-2026-09-06.md). Attached builder matches the published revision; three saved-market statistics reproduce. Five semantic boundary cases fail, evidence references are missing, email bodies mix customer copy with internal notes, and some inventory outputs are not delivered. Six-week calendar is useful. No new provider call, workflow edit or repin. Nguyen received specific output-only corrections and an ETA request within the existing agreement; later adapters remain Codex-owned.
 

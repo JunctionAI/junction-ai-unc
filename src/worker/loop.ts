@@ -34,7 +34,7 @@ import { createLogger, type Logger } from "./log";
 import { dueRoutines, type DueRoutine } from "./scheduler";
 import { buildAdapters, collectCandidates, LIVE_MODE_ENABLED, triggerRun, WORKER_RUN_MODE, type BuiltAdapters, type ServiceDeps } from "./service";
 import { runBenchmarks, runDailyBrief, runKpiSnapshot, runMeasure, runSelfReview, type TelemetryDeps } from "./telemetry";
-import { runDatasetSyncTick } from "./datasets";
+import { runDatasetSyncTick, scheduledDatasetsReady } from "./datasets";
 import { runChannelsTick, type ChannelsTickReport } from "./channels";
 import { keyringFromEnv } from "../lib/connectors/crypto";
 import type { SelfReviewLlm } from "../lib/telemetry/selfReview";
@@ -98,6 +98,10 @@ export interface TickReport {
   deferred: number;
   /** Due produce routines skipped because their account is over its monthly model-spend cap. */
   budgetSkipped: number;
+  /** Due routines waiting for required stored data; no run/slot is consumed. */
+  dataDeferred: number;
+  /** Independent producer result, not a routine execution or readiness proof. */
+  datasets?: { synced: number; failed: number };
   /** Scheduled telemetry jobs this tick ran (jobs.ts), in order. */
   jobs: JobId[];
   /** Accounts whose daily brief this tick served (account-local 06:30). */
@@ -151,9 +155,16 @@ export class Worker {
   /** Run one scheduling pass. Safe to call directly (tests, --once). */
   async tick(now: Date = this.now()): Promise<TickReport> {
     const t0 = Date.now();
-    const report: TickReport = { at: now.toISOString(), accounts: 0, candidates: 0, due: 0, started: [], deferred: 0, budgetSkipped: 0, jobs: [], briefs: [], swept: false, ms: 0 };
+    const report: TickReport = { at: now.toISOString(), accounts: 0, candidates: 0, due: 0, started: [], deferred: 0, budgetSkipped: 0, dataDeferred: 0, jobs: [], briefs: [], swept: false, ms: 0 };
+    // Refresh before consumers, independently of model limits. A cold cache may
+    // need several bounded ticks; don't burn the scheduled slot in the meantime.
+    if (!this.stopping) {
+      try { report.datasets = await runDatasetSyncTick(this.deps); }
+      catch { report.datasets = { synced: 0, failed: 1 }; this.log.warn("dataset.scheduler_failed", { reason: "data sync unavailable" }); }
+    }
     try {
-      await runCommandsTick(this.deps, this.adapters, this.tickBudgetMs);
+      if (!this.stopping && Date.now() - t0 < this.tickBudgetMs)
+        await runCommandsTick(this.deps, this.adapters, Math.max(0, this.tickBudgetMs - (Date.now() - t0)));
     } catch {
       this.log.warn("commands.tick_failed", { reason: "command queue unavailable; queued work was not acknowledged as complete" });
     }
@@ -184,6 +195,14 @@ export class Worker {
           break;
         }
         const d = due[i];
+        let dataReady = false;
+        try { dataReady = await scheduledDatasetsReady(this.deps, d.accountId, d.routineId); }
+        catch { this.log.warn("dataset.readiness_failed", { accountId: d.accountId, routineId: d.routineId }); }
+        if (!dataReady) {
+          report.dataDeferred++;
+          this.log.info("run.data_deferred", { accountId: d.accountId, routineId: d.routineId, slot: d.slot.toISOString() });
+          continue;
+        }
         if (overCap.has(d.accountId) && routineProduces(d.routineId)) {
           report.budgetSkipped += 1;
           this.log.info("run.budget_skipped", { accountId: d.accountId, routineId: d.routineId, slot: d.slot.toISOString() });
@@ -198,7 +217,6 @@ export class Worker {
       this.log.error("tick.error", { error: message });
     }
     // Housekeeping after the routines: each part isolates its own failures.
-    try { await runDatasetSyncTick(this.deps); } catch { this.log.warn("dataset.scheduler_failed", { reason: "data sync unavailable" }); }
     if (this.opts.jobs ?? true) report.jobs = await this.runDueJobs(now);
     if (this.opts.briefs ?? true) report.briefs = await this.runDueBriefs(now);
     if (this.deps.db) {
@@ -213,7 +231,7 @@ export class Worker {
     this.stats.ticks += 1;
     this.stats.lastTickAt = report.at;
     this.stats.lastTickMs = report.ms;
-    this.log.info("tick.end", { at: report.at, started: report.started.length, deferred: report.deferred, ms: report.ms });
+    this.log.info("tick.end", { at: report.at, started: report.started.length, deferred: report.deferred, dataDeferred: report.dataDeferred, datasets: report.datasets, ms: report.ms });
     this.writeHeartbeat();
     return report;
   }

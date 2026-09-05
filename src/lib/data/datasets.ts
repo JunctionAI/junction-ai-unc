@@ -126,7 +126,9 @@ export function accountDataReader(direct: ConnectorReader, db: DbClient | null, 
 
 /** Sync and read are separate paths. One distributed lease prevents duplicate fetches.
  * This stores exact reporting snapshots; daily-grain historical backfills remain separate work. */
-export async function syncDataset(db: DbClient, direct: ConnectorReader, platform: Platform, query: ReadQuery, ctx: RunContext, now = () => new Date()): Promise<"synced" | "fresh" | "busy"> {
+export async function syncDataset(db: DbClient, direct: ConnectorReader, platform: Platform, query: ReadQuery, ctx: RunContext, now = () => new Date(), refreshAfterMs = DATASET_SYNC_INTERVAL_MS): Promise<"synced" | "fresh" | "busy"> {
+  if (!Number.isFinite(refreshAfterMs) || refreshAfterMs < 0 || refreshAfterMs > DATASET_SYNC_INTERVAL_MS)
+    throw new Error("invalid dataset refresh interval");
   const store = new DbDatasetStore(db);
   const identity = await store.connection(ctx.account.accountId, platform);
   if (!identity) throw new Error("dataset sync has no verified connection identity");
@@ -138,7 +140,7 @@ export async function syncDataset(db: DbClient, direct: ConnectorReader, platfor
   try {
     const previous = await store.latest(identity, hash);
     const age = previous ? now().getTime() - Date.parse(previous.result.fetchedAt) : Infinity;
-    if (age >= 0 && age < DATASET_SYNC_INTERVAL_MS && previous && datasetAvailability(previous, identity, hash, now()) === "ready" && datasetNormalizationCurrent(platform, query, previous.result)) { completed = true; return "fresh"; }
+    if (age >= 0 && age < refreshAfterMs && previous && datasetAvailability(previous, identity, hash, now()) === "ready" && datasetNormalizationCurrent(platform, query, previous.result)) { completed = true; return "fresh"; }
     const result = await direct.read(platform, query, ctx);
     const current = await store.connection(ctx.account.accountId, platform);
     if (!current || !sameIdentity(current, identity)) throw new Error("connection changed during data sync");
