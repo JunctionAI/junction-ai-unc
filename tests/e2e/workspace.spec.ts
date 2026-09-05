@@ -4,6 +4,41 @@ const base = process.env.WORKSPACE_FIXTURE_BASE;
 test.skip(!base, "Start the isolated workspace component server; no live accounts are used.");
 const url = () => `${base}/tests/workspace-fixture/index.html`;
 
+test("full history pages, returns to newer work and never enables draft actions", async ({ page }) => {
+  const requests: string[] = [],writes: string[]=[];
+  page.on("request",r=>{if(r.method()!=="GET")writes.push(r.url());});
+  await page.route("**/api/workspace/history*",r=>{
+    requests.push(r.request().url());
+    expect(r.request().headers()["x-unc-account-id"]).toBe(fixture.accountId);
+    expect(r.request().headers()["x-unc-context-generation"]).toBe("1");
+    const older=new URL(r.request().url()).searchParams.has("cursor");
+    return r.fulfill({json:{accountId:fixture.accountId,contextGeneration:1,fetchedAt:fixture.fetchedAt,asOf:fixture.fetchedAt,
+      nextCursor:older?null:"fixture-position",entries:older?[{kind:"artifact",id:"older-draft",occurredAt:fixture.fetchedAt,
+        artifact:{...fixture.artifacts[0],id:"older-draft",title:"Older saved golf research"}}]:[{kind:"run",id:"newer-run",occurredAt:fixture.fetchedAt,
+        run:{id:"newer-run",routineId:"D03-W01",name:"Recent history run",mode:"dry_run",status:"done",startedAt:fixture.fetchedAt,finishedAt:fixture.fetchedAt}}]}});
+  });
+  await page.goto(url()+"#inbox");await page.getByRole("button",{name:"Browse full saved history"}).click();
+  await expect(page.getByText("Recent history run",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Older page",exact:true}).click();
+  await expect(page.getByText("Older saved golf research",{exact:true})).toBeVisible();
+  await page.getByTestId("artifact-open").click();
+  await expect(page.getByTestId("artifact-approve")).toBeDisabled();
+  await expect(page.getByTestId("artifact-hold")).toBeDisabled();
+  await expect(page.getByText("End of this history view.")).toBeVisible();
+  await expect(page.getByRole("button",{name:"Older page",exact:true})).toBeDisabled();
+  await page.getByRole("button",{name:"Newer page",exact:true}).click();
+  await expect(page.getByText("Recent history run",{exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Newer page",exact:true})).toBeDisabled();
+  expect(requests.some(u=>u.includes("cursor=fixture-position"))).toBe(true);expect(writes).toEqual([]);
+});
+test("history failure or foreign context never renders an empty/successful page", async ({ page }) => {
+  await page.route("**/api/workspace/history*",r=>r.fulfill({json:{accountId:"foreign-account",contextGeneration:1,entries:[],nextCursor:null,asOf:fixture.fetchedAt}}));
+  await page.goto(url()+"#inbox");await page.getByRole("button",{name:"Browse full saved history"}).click();
+  await expect(page.getByRole("alert").filter({hasText:"Couldn’t verify this history page"})).toBeVisible();
+  await expect(page.getByText("No saved records on this page.")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Older page",exact:true})).toBeDisabled();
+});
+
 test("Today and inbox show saved records, filters, receipts and unchanged navigation", async ({ page }) => {
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
   await page.goto(url());

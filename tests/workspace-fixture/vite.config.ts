@@ -22,6 +22,8 @@ export default defineConfig({
       if (req.url?.startsWith("/api/artifacts?") && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify({accountId:agentsFixture.accountId,contextGeneration:1,artifacts:[],channels:[]})); return; }
       if (req.url === "/api/agents" && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(req.headers.referer?.includes("/routine-detail-fixture/")?detailFixture():agentsFixture)); return; }
       if (req.url?.startsWith("/api/ops")) { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(opsFixture(new URL(req.url, "http://fixture.test").searchParams.get("accountId")))); return; }
+      if (req.url?.startsWith("/api/workspace/history")) { res.setHeader("content-type", "application/json"); res.end(JSON.stringify({accountId:fixture.accountId,contextGeneration:fixture.contextGeneration,
+        asOf:fixture.fetchedAt,fetchedAt:fixture.fetchedAt,nextCursor:null,entries:[{kind:"artifact",id:fixture.artifacts[0].id,occurredAt:fixture.artifacts[0].createdAt,artifact:fixture.artifacts[0]}]})); return; }
       if (req.url === "/api/workspace") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(fixture)); return; }
       if (req.url?.startsWith("/api/")) { res.statusCode = 405; res.end("Fixture API not implemented"); return; }
       next();

@@ -9,6 +9,7 @@ import { publishPersistence } from "@/lib/unc/accountFacts";
 import { openPortal } from "@/lib/billing/clientActions";
 import type { WorkspaceSnapshot } from "@/lib/workspace/read";
 import DraftCard from "./DraftCard";
+import WorkspaceHistory from "./WorkspaceHistory";
 import { useWorkspace } from "./useWorkspace";
 import styles from "./client-workspace.module.css";
 
@@ -35,6 +36,7 @@ function BoundWorkspace({ S, V, account, send, legacy, onModels, onSkills, onCon
   const data = work.data;
   const [localTab, setLocalTab] = useState<"today" | "inbox" | "ask">("today");
   const [filter, setFilter] = useState("All");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [text, setText] = useState("");
   const [billingError, setBillingError] = useState<string | null>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
@@ -116,15 +118,18 @@ function BoundWorkspace({ S, V, account, send, legacy, onModels, onSkills, onCon
           <div className={styles.columns}><section><h2>Recent runs</h2>{data && !data.runs.length && <p className={styles.muted}>No saved runs for this business context yet.</p>}{data?.runs.slice(0, 6).map(r => <div className={styles.run} key={r.id}><strong>{r.name}</strong><span>{r.status.replaceAll("_", " ")} · {r.mode === "dry_run" ? "shadow" : "live"}</span><time>{workspaceTime(r.finishedAt || r.startedAt)}</time><small className={styles.code}>{r.id}</small></div>)}</section><section><h2>What’s next</h2><p>{S.automationPaused ? "Finish setup verification before enabling runs." : "Review saved work and choose which ready routines to enable."}</p><button className={styles.link} onClick={() => navigate("connections")}>Check connections →</button><p className={styles.caption}>No next-run time is claimed without a confirmed schedule.</p></section></div>
         </>}
         {tab === "inbox" && <>
+          <button className={styles.link} onClick={() => setHistoryOpen(open => !open)}>{historyOpen ? "Back to recent work" : "Browse full saved history →"}</button>
+          {historyOpen ? <WorkspaceHistory key={`${account.accountId}:${S.contextGeneration}:${data?.fetchedAt}`} accountId={account.accountId!} generation={S.contextGeneration ?? 0} onOpenRoutine={openRoutine} /> : <>
           <p className={styles.muted}>Research, recommendations and drafts. Approving a draft records your review; it does not publish, send or resume a run.</p>
           {data && !data.canReview && <p className={styles.notice}>Review changes are unavailable while paused or without owner access. You can still read, inspect evidence and copy the work.</p>}
           <div className={styles.filters} role="group" aria-label="Filter work by specialty">{["All", ...categories].map(category => <button key={category} aria-pressed={filter === category} onClick={() => setFilter(category)}>{category}</button>)}</div>
           <div className={styles.workList}>{data?.artifacts.filter(a => filter === "All" || a.category === filter).map(draftCard)}{data?.approvals.filter(a => filter === "All" || a.category === filter).map(approvalCard)}</div>
           {data && !data.artifacts.some(a => filter === "All" || a.category === filter) && !data.approvals.some(a => filter === "All" || a.category === filter) && <div className={styles.empty}>No saved work matches this filter.</div>}
           <section><h2>Execution receipts</h2>{data && !data.receipts.length && <p className={styles.muted}>No receipts recorded for this business context.</p>}{data?.receipts.map(r => <details key={r.id} className={styles.receipt}><summary>{r.description || r.kind}</summary><p>{workspaceTime(r.createdAt)} · {r.kind}</p><p className={styles.code}>Receipt {r.id}<br />Run {r.runId || "Not attached"}</p></details>)}</section>
+          </>}
         </>}
         {tab === "ask" && <><p className={styles.muted}>Your saved account conversation. A queued request is not a completed run; missing access and paused routines remain explicit.</p><div className={styles.chat} role="log" aria-label="Account conversation">{!S.messages.length && <p>What would you like help with?</p>}{S.messages.map((m, i) => <div key={i} data-from={m.from} className={styles.message}><small>{m.from === "u" ? "You" : "Junction"}</small><p>{m.typing ? "Working on your request…" : m.text}</p>{m.link && <button className={styles.link} onClick={() => V.openRoutineById(m.link!)}>{m.linkLabel || "Open routine"}</button>}</div>)}<div ref={chatEnd} /></div>{composer}</>}
-        {data && <p className={styles.caption}>Current business context · generation {data.contextGeneration}. Up to {data.window} recent records per list.{truncated ? " A list reached its limit; these counts are not lifetime totals. Older-history navigation is not available yet." : ""}</p>}
+        {data && <p className={styles.caption}>Current business context · generation {data.contextGeneration}. Up to {data.window} recent records per list.{truncated ? " A list reached its limit; these counts are not lifetime totals. Browse full saved history in Work inbox for older records." : ""}</p>}
       </div> : <div className={styles.legacy}>{legacy}</div>}
     </main>
   </div>;

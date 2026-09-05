@@ -156,7 +156,7 @@ function approvalToRow(a: ApprovalRecord): Row {
     created_at: a.createdAt,
   };
 }
-function rowToApproval(row: Row): ApprovalRecord {
+export function rowToApproval(row: Row): ApprovalRecord {
   return compact({
     id: row.id as string,
     accountId: row.account_id as string,
