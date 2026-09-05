@@ -82,11 +82,21 @@ The live owner session added temporary marker `CTX-1514`, row `7f97af8c-7e10-4d5
 
 Safety and remaining coverage: no provider workflow was edited/executed, no credential changed, no publishing/messaging/ad mutation enabled. The old worker remains deployed. This memory guard does **not** yet fence generated artifacts/briefs, manual founder notes, intake business fields or command enqueue across a context repair. Complete those paths or quiesce/reconcile them safely before changing the pilot business identity. Repair must lock the account first, preserve a restricted restore record and close old valid memories before advancing generation in the same transaction. Do not silently re-label historical facts as the new business.
 
+## Batch 5 — Nguyen revision-provenance clarification (source, not activated)
+
+Nguyen correctly reported that the workflow cannot expose its own internal executing version through the runtime workflow context. The contract now separates expected configuration from observed evidence: request `shadow.workflowVersion` is the server's expected pin; response `workflowVersion=null` and `revisionEvidence=pending_unc_verification`, with actual execution/workflow IDs. Codex independently reads the named execution's saved revision and account/run/routine identity before enriching the stored receipt. Current/latest workflow metadata or an echoed expected value are not accepted as execution proof.
+
+Implemented parser changes, a strict independent-observation validator, a server-owned reader hook and a bounded post-response verification wait. Without a reader configured, the shadow bridge refuses **before** calling the paid-provider webhook. A failed independent read never falls back to an LLM or repeats the provider call. An explicitly server-pinned dedicated wrapper ID is supported; parent IDs cannot substitute for the actual executing wrapper. Child-workflow provenance still needs explicit binding if that composition is used.
+
+Updated `KEYWORD-SHADOW-INTEGRATION.md` and `integration/NGUYEN-NEXT-HANDOFF.md`, and provided Tom a copyable clarification so Nguyen can continue the keyword wrapper. No Nguyen workflow was inspected/modified/executed during this clarification. Public official n8n docs/source support the distinction, but the Cloud instance's exact execution-read fields and permissions have **not** been verified. The concrete authenticated reader transport/access, durable reconciliation and deployment remain Codex-owned gates; the injectable test reader is not a production integration.
+
+Validation: 68 focused tests, **179 files / 2,104 full tests**, app/worker TypeScript, production build and focused lint pass. No additional app or worker deployment was performed for this contract change. Live app remains Batch 4 (`2bcbed838f7f`); the pilot remains unregistered/inactive.
+
 ## Next independent work
 
 1. Atomic app/save and memory-generation boundaries are live; redundant initial saves are removed. Complete actual two-tab competing-edit/recovery checks. Do not roll back to a browser-direct memory/state writer under the new grants.
 2. Extend the context boundary to old worker jobs, generated briefs/artifacts, founder notes, intake and command admission (or safely quiesce and reconcile them). Then preserve the original Junction context in a restricted audit/restore record and correct the pilot profile/resources without inventing AVGAR commercial settings. Close wrong-business memories/history/plan/cache in the guarded repair transaction. Align setup/goal UI claims with verified data.
-3. Release the compatible app/worker pair, reconcile staged receiver configuration safely, and verify no action controls changed.
+3. Release the compatible app/worker pair, reconcile staged receiver configuration safely, and verify no action controls changed. Complete the independent n8n execution reader against actual saved-execution evidence; never substitute the expected revision or a current-workflow lookup. Do not dispatch the pilot without that capability.
 4. Continue connection/refresh-owner, stored-data, scheduler, metric and security work from the register while Nguyen delivers the first keyword wrapper.
 5. Bind D03-W01 only after actual webhook/revision/credential/receipt delivery. Then perform the real shadow round trip and expand verified lanes.
 

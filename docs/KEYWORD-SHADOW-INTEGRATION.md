@@ -1,6 +1,6 @@
 # D03-W01 shadow integration — implementation and remaining activation gate
 
-Status: Unc-side implementation and contract tests complete locally; not deployed or activated.
+Status: initial bridge and authority code exists; **revision-evidence clarification below supersedes the earlier receipt requirement**. Updated revision verification tests are local; the independent execution-reader transport/access is still an Unc-owned activation gate. No pilot is registered or activated.
 The integration owner is Codex/Unc, not Tom. Tom should not have to invent routine mappings,
 relay schema decisions, or manually join execution receipts.
 
@@ -43,14 +43,29 @@ check DataForSEO's top-level and task status codes, not merely the absence of an
 
 ## Wrapper contract to implement
 
+### Revision-evidence decision — 5 September 2026 (for Nguyen)
+
+You are correct not to fake or echo an internal n8n version ID. **Unc owns independent revision verification.**
+
+- Request `shadow.workflowVersion` means the **expected frozen revision**, pinned in Unc's server-owned spec. Authority preflight still labels it `expected_only`.
+- Return the actual executing `workflowId` and `executionId`. In the returned `executionReceipt`, set **`workflowVersion: null`** and **`revisionEvidence: "pending_unc_verification"`**. Do not copy the expected version into an actual-version field, hardcode n8n's rotating internal version ID or query the latest workflow version inside the running workflow.
+- Unc must independently retrieve the named execution's saved revision and original trigger identity, compare them with the exact registered/pinned workflow revision and account/run/routine, and verify terminal success/timing before storing a verified artifact. Looking up the current/latest workflow is not enough. A webhook-supplied verification object is not trusted.
+- The accepted stored receipt is enriched by Unc with the observed `workflowVersion`, `expectedWorkflowVersion`, `revisionEvidence: "verified_execution_record"` and verification provenance/time. Raw API data/headers/secrets are not copied into receipts.
+- Your handoff supplies the final wrapper ID, tested/published revision, exact callable URL and actual success/failure execution IDs. Keep that tested revision frozen after handoff; changes require a new pin/retest. A dedicated wrapper may have a different ID from `OUerIfgAkMnhkuen`; Codex binds the ID that actually ran. If it calls child workflows, include their IDs/revisions/executions separately. Parent evidence does not prove a mutable child's revision; child provenance is an additional gate before that composition is enabled.
+- Keep the response `{artifact, executionReceipt}` within 60 seconds; do not wait inside n8n for Unc's post-response verification. Unc performs the independent read after the response, allowing a bounded wait for n8n to finalize its execution record. Missing/mismatched/unreadable evidence never becomes a verified success. Reconcile an uncertain execution; do not automatically repeat the paid provider call.
+
+**Implementation status:** the parser, independent-observation validator and fail-closed bridge reader hook are implemented/tested locally. The concrete server-authenticated execution reader is not yet wired or proven against n8n Cloud. Dispatch refuses before the paid webhook call if that reader is absent. This is **Codex's work, not an additional version-discovery task for Nguyen**. Continue the keyword-only wrapper using the receipt below; activation waits for the matching app/worker and reader acceptance.
+
+Basis: n8n's [documented workflow runtime context](https://github.com/n8n-io/n8n-docs/blob/main/docs/build/work-with-data/transform-data/expression-reference/workflowdata.md) lists workflow ID/name/active, not internal version ID. Its [execution storage schema](https://github.com/n8n-io/n8n/blob/master/docs/generated/postgres-schema/execution_entity.md) records the executed workflow revision. This supports control-plane verification but does **not** establish which fields this Cloud instance exposes through its current API/permissions; Codex must verify that actual read path. If it is unavailable, keep the result unverified instead of relabelling an expected revision as observed.
+
 The existing Unc request envelope remains. Its additional `shadow` field is:
 
 ```json
 {
   "contract": "unc.keyword-shadow.v1",
   "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
-  "workflowId": "OUerIfgAkMnhkuen",
-  "workflowVersion": "<tested revision that actually executes>",
+  "workflowId": "<registered executing wrapper workflow ID>",
+  "workflowVersion": "<expected frozen revision pinned by Unc>",
   "routineId": "D03-W01",
   "routineKey": "keyword_opportunity",
   "client": {
@@ -90,8 +105,9 @@ Required execution receipt shape:
   "runId": "<request runId>",
   "routineId": "D03-W01",
   "routineKey": "keyword_opportunity",
-  "workflowId": "OUerIfgAkMnhkuen",
-  "workflowVersion": "<actual tested executing revision>",
+  "workflowId": "<actual executing wrapper workflow ID>",
+  "workflowVersion": null,
+  "revisionEvidence": "pending_unc_verification",
   "executionId": "<actual n8n execution ID>",
   "mode": "dry_run",
   "status": "succeeded",
@@ -119,6 +135,7 @@ Required execution receipt shape:
 `client` is an object, not a serialized string. Values in angle brackets are explanatory,
 not executable fixtures. The timestamps and provider count/status must come from the run.
 Do not echo an unverified client-provided revision as proof of the executing workflow version.
+Unc enriches the null version only after independent execution readback, as specified above.
 The new wrapper revision must be frozen/identified before creating the server-side contract.
 
 Missing business/provider input may return `{needs:[{input:"seed_keyword",why:"..."}]}`.
@@ -129,8 +146,9 @@ as a successful artifact. HTTP 202 is not supported by this pilot.
 
 Unc alone writes `routine_runs`, `artifacts` and `receipts`. The validated external receipt is
 stored as `artifacts.meta.executionReceipt` and `receipts.payload.externalExecution`; the draft
-receipt links the artifact ID. A referenced n8n execution is reported evidence, not an independent
-provider attestation. Acceptance must inspect the actual matching execution and provider result.
+receipt links the artifact ID. A referenced n8n execution alone is reported evidence, not independent
+revision or provider attestation. The bridge requires independent execution revision/identity verification;
+live acceptance additionally inspects the provider result. Provider fields in the receipt remain reported provider evidence.
 
 Activation still requires:
 
@@ -210,8 +228,9 @@ The receiver must call this endpoint at the independently pinned Junction origin
 redirects disabled and use its canonical client values, not incoming body overrides.
 This preflight is **not** a one-use provider-spend permit or a replay/deduplication store.
 It returns `revisionEvidence=expected_only`: the workflow version is a server expectation,
-not attestation of the n8n revision that executed. Actual execution revision provenance
-and duplicate-call handling still need resolution before receiver activation.
+not attestation of the n8n revision that executed. The revision-evidence decision above defines
+provenance ownership and the new reply fields. Actual execution-reader transport/access acceptance
+and duplicate-call handling still need completion before receiver activation.
 
 Current local verification after this addition: **172 files / 2,023 tests PASS** (28 new
 authority tests); **61 focused tests PASS** across authority/proxy/shadow contract;

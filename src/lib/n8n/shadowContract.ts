@@ -8,6 +8,7 @@ export interface KeywordShadowContract {
   contract: typeof KEYWORD_SHADOW_CONTRACT;
   accountId: string;
   workflowId: string;
+  /** Expected frozen revision, pinned by Unc; never an executing-workflow attestation. */
   workflowVersion: string;
   routineId: "D03-W01";
   routineKey: "keyword_opportunity";
@@ -27,8 +28,10 @@ const text = (v: unknown, max: number) => typeof v === "string" && v.trim().leng
 export function shadowContractProblem(value: unknown): string | null {
   const c = object(value);
   if (!c || c.contract !== KEYWORD_SHADOW_CONTRACT) return "unsupported shadow contract";
-  if (c.accountId !== AVGAR_PILOT_ACCOUNT || c.workflowId !== AVGAR_SEO_WORKFLOW)
-    return "shadow pilot must bind the AVGAR account and SEO workflow";
+  if (c.accountId !== AVGAR_PILOT_ACCOUNT) return "shadow pilot must bind the AVGAR account";
+  // A dedicated keyword wrapper may have its own ID. The server-owned spec pins it;
+  // the response and independent execution record must match that exact ID.
+  if (typeof c.workflowId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(c.workflowId)) return "an explicit executing workflow ID is required";
   if (c.routineId !== "D03-W01" || c.routineKey !== "keyword_opportunity") return "only keyword opportunity is supported by this shadow contract";
   if (!text(c.workflowVersion, 128)) return "a tested workflow revision is required";
   const client = object(c.client);
@@ -49,8 +52,8 @@ export function assertShadowRequest(contract: KeywordShadowContract, run: Shadow
   if (run.accountId !== contract.accountId || run.routineId !== contract.routineId) throw new Error("shadow integration account/routine mismatch");
 }
 
-/** Validates correlation and the workflow's reported provider evidence, not an independent
- * provider attestation. Live acceptance must also inspect the named n8n execution. */
+/** Validates the reported result only. A workflow cannot attest its own internal revision.
+ * The bridge must independently resolve the named execution before storing a verified draft. */
 export function validateShadowReceipt(value: unknown, contract: KeywordShadowContract, run: ShadowRunIdentity, now: Date): Record<string, unknown> {
   assertShadowRequest(contract, run);
   const receipt = object(value);
@@ -58,12 +61,14 @@ export function validateShadowReceipt(value: unknown, contract: KeywordShadowCon
   const expected: Record<string, unknown> = {
     contract: contract.contract, accountId: run.accountId, runId: run.runId,
     routineId: run.routineId, routineKey: contract.routineKey,
-    workflowId: contract.workflowId, workflowVersion: contract.workflowVersion,
+    workflowId: contract.workflowId,
     mode: "dry_run", status: "succeeded", executedAction: "none",
   };
   for (const [key, val] of Object.entries(expected)) {
     if (receipt[key] !== val) throw new Error(`shadow receipt ${key} mismatch`);
   }
+  if (receipt.workflowVersion !== null || receipt.revisionEvidence !== "pending_unc_verification")
+    throw new Error("shadow receipt revision must be null and pending Unc verification; an echoed version is not proof");
   if (typeof receipt.executionId !== "string" || !/^\d{1,30}$/.test(receipt.executionId)) throw new Error("shadow receipt requires an n8n execution ID");
   const client = object(receipt.client);
   for (const [key, val] of Object.entries(contract.client)) {
@@ -83,7 +88,45 @@ export function validateShadowReceipt(value: unknown, contract: KeywordShadowCon
   if (!Number.isFinite(fetchedAt) || fetchedAt < startedAt - 30_000 || fetchedAt > finishedAt + 30_000)
     throw new Error("shadow provider evidence is outside this execution");
   // Only preserve validated fields; tokens and unrelated raw response data are not receipts.
-  return { ...expected, executionId: receipt.executionId, startedAt: receipt.startedAt, finishedAt: receipt.finishedAt,
+  return { ...expected, workflowVersion: null, expectedWorkflowVersion: contract.workflowVersion, revisionEvidence: "pending_unc_verification",
+    executionId: receipt.executionId, startedAt: receipt.startedAt, finishedAt: receipt.finishedAt,
     client: { ...contract.client }, provider: { name: "dataforseo", statusCode: 20000, taskStatusCode: 20000,
       taskId: provider.taskId, itemsCount: provider.itemsCount, fetchedAt: provider.fetchedAt } };
+}
+
+/** Projection from an independently authenticated n8n execution read, NOT the webhook
+ * response, current workflow metadata or user input. Reader integration must derive
+ * request identity from that execution's saved trigger input, stripping credentials. */
+export interface ShadowExecutionObservation {
+  source: "n8n_execution_record";
+  executionId: string;
+  workflowId: string;
+  workflowVersion: string;
+  status: "success";
+  finished: true;
+  startedAt: string;
+  stoppedAt: string;
+  request: { accountId: string; runId: string; routineId: string };
+}
+
+export function verifyShadowExecution(value: unknown, observation: unknown, contract: KeywordShadowContract, run: ShadowRunIdentity, now: Date): Record<string, unknown> {
+  const receipt = validateShadowReceipt(value, contract, run, now);
+  const seen = object(observation);
+  if (!seen || seen.source !== "n8n_execution_record") throw new Error("independent n8n execution evidence is unavailable");
+  for (const [key, expected] of Object.entries({ executionId: receipt.executionId, workflowId: contract.workflowId,
+    workflowVersion: contract.workflowVersion, status: "success", finished: true })) {
+    if (seen[key] !== expected) throw new Error(`independent n8n execution ${key} mismatch`);
+  }
+  const request = object(seen.request);
+  for (const [key, expected] of Object.entries({ accountId: run.accountId, runId: run.runId, routineId: run.routineId })) {
+    if (request?.[key] !== expected) throw new Error(`independent n8n execution request.${key} mismatch`);
+  }
+  const started = Date.parse(String(seen.startedAt)), stopped = Date.parse(String(seen.stoppedAt));
+  if (![started, stopped, now.getTime()].every(Number.isFinite) || stopped < started ||
+      Math.abs(started - Date.parse(String(receipt.startedAt))) > 30_000 ||
+      stopped < Date.parse(String(receipt.finishedAt)) - 30_000 || stopped > now.getTime() + 30_000 ||
+      now.getTime() - stopped > 15 * 60_000) throw new Error("independent n8n execution timing is stale or invalid");
+  return { ...receipt, workflowVersion: seen.workflowVersion, revisionEvidence: "verified_execution_record",
+    revisionVerification: { source: "n8n_execution_record", verifiedAt: now.toISOString(),
+      startedAt: seen.startedAt, stoppedAt: seen.stoppedAt } };
 }

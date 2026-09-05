@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { AVGAR_PILOT_ACCOUNT, AVGAR_SEO_WORKFLOW, KEYWORD_SHADOW_CONTRACT, assertShadowRequest, validateShadowReceipt, type KeywordShadowContract } from "../shadowContract";
+import { describe, expect, it, vi } from "vitest";
+import { AVGAR_PILOT_ACCOUNT, AVGAR_SEO_WORKFLOW, KEYWORD_SHADOW_CONTRACT, assertShadowRequest, validateShadowReceipt, verifyShadowExecution, type KeywordShadowContract } from "../shadowContract";
 import { keywordShadowSpec } from "../keywordShadowSpec";
 import { HttpN8nBridge, parseN8nReply } from "../../../worker/providers/n8n";
 import { runRoutine } from "../../runtime/engine";
@@ -22,17 +22,23 @@ const node: N8nNode = { kind: "n8n", id: "produce", shadowContract: contract };
 const workflow = { id: "registered-test", accountId: contract.accountId, routineId: contract.routineId, active: true, webhookUrl: "https://n8n.test/keyword" };
 const env = { N8N_SIGNING_SECRET: "test-secret", N8N_DATA_BASE_URL: "https://unc.test", N8N_SHADOW_RECEIVER_URL: workflow.webhookUrl, N8N_SHADOW_RECEIVER_TOKEN: "synthetic-receiver-token-for-tests-only" };
 function receipt() {
-  return { ...identity, contract: contract.contract, routineKey: contract.routineKey, workflowId: contract.workflowId, workflowVersion: contract.workflowVersion,
+  return { ...identity, contract: contract.contract, routineKey: contract.routineKey, workflowId: contract.workflowId, workflowVersion: null, revisionEvidence: "pending_unc_verification",
     executionId: "12345", mode: "dry_run", status: "succeeded", executedAction: "none", startedAt: start, finishedAt: end, client: { ...contract.client },
     provider: { name: "dataforseo", taskId: "synthetic-task", statusCode: 20000, taskStatusCode: 20000, itemsCount: 1, fetchedAt: end } };
 }
+function observation() {
+  return { source: "n8n_execution_record", workflowId: contract.workflowId, workflowVersion: contract.workflowVersion,
+    executionId: "12345", status: "success", finished: true, startedAt: start, stoppedAt: end,
+    request: { accountId: contract.accountId, runId: identity.runId, routineId: contract.routineId } };
+}
+const readShadowExecution = async () => observation();
 function reply() {
   return { artifact: { kind: "keyword_list", title: "Test keyword opportunity", body: "A synthetic provider-backed recommendation for contract testing only.", items: [{ title: "test keyword", body: "Synthetic observation, not real business evidence." }] }, executionReceipt: receipt() };
 }
 function bridge(body: unknown, status = 200) {
   let count = 0;
   const sent: unknown[] = [];
-  const b = new HttpN8nBridge({ env, now: () => now,
+  const b = new HttpN8nBridge({ env, now: () => now, readShadowExecution,
     fetch: async (_url, init) => { count++; sent.push(JSON.parse(String(init.body))); return new Response(JSON.stringify(body), { status }); } });
   return { b, sent, count: () => count };
 }
@@ -44,7 +50,7 @@ describe("AVGAR keyword shadow contract", () => {
     expect(sent[0]).toMatchObject({ shadow: contract, accountId: contract.accountId, routineId: "D03-W01", mode: "dry_run" });
     expect(out).toMatchObject({ kind: "artifact", artifact: { meta: { executionReceipt: { executionId: "12345", executedAction: "none" } }, evidence: [{ source: "n8n_execution", ref: expect.stringContaining("/executions/12345") }] } });
   });
-  it.each(["accountId", "runId", "routineId", "routineKey", "workflowId", "workflowVersion", "mode", "status", "executedAction", "contract"])("rejects mismatched receipt %s", key => {
+  it.each(["accountId", "runId", "routineId", "routineKey", "workflowId", "mode", "status", "executedAction", "contract"])("rejects mismatched receipt %s", key => {
     expect(() => validateShadowReceipt({ ...receipt(), [key]: "wrong" }, contract, identity, now)).toThrow(/mismatch/);
   });
   it("rejects another account or live mode before a network call", async () => {
@@ -62,7 +68,7 @@ describe("AVGAR keyword shadow contract", () => {
     await expect(new HttpN8nBridge({ env, fetch }).call(node, ctx, { ...workflow, webhookUrl: "https://other.test/hook" })).rejects.toThrow("not pinned");
     expect(calls).toBe(0);
     let headers: HeadersInit | undefined;
-    await new HttpN8nBridge({ env, now: () => now, fetch: async (_url, init) => { headers = init.headers; return fetch(); } }).call(node, ctx, workflow);
+    await new HttpN8nBridge({ env, now: () => now, readShadowExecution, fetch: async (_url, init) => { headers = init.headers; return fetch(); } }).call(node, ctx, workflow);
     expect(new Headers(headers).get("authorization")).toBe(`Bearer ${env.N8N_SHADOW_RECEIVER_TOKEN}`);
   });
   it("rejects unbound, missing, failed or stale evidence", () => {
@@ -100,17 +106,62 @@ describe("AVGAR keyword shadow contract", () => {
     const spec = keywordShadowSpec(contract, 2);
     const { adapters, store, producer, executor } = buildAdapters({ producer: new FakeProducer() });
     await store.putN8nWorkflow(workflow);
+    let observedRunId = "";
     const b = new HttpN8nBridge({ env, now: () => now,
+      readShadowExecution: async () => ({ ...observation(), request: { ...observation().request, runId: observedRunId } }),
       fetch: async (_url, init) => {
         const request = JSON.parse(String(init.body));
+        observedRunId = request.runId;
         return new Response(JSON.stringify({ ...reply(), executionReceipt: { ...receipt(), runId: request.runId } }), { status: 200 });
       } });
     const result = await runRoutine(spec, { account: ctx.account, triggeredBy: "manual" }, { ...adapters, now: () => new Date(start), n8n: b }, { mode: "dry_run" });
     expect(result.status).toBe("done");
     expect(result.artifact).toMatchObject({ accountId: contract.accountId, routineId: "D03-W01", status: "draft", meta: { via: "n8n", executionReceipt: { executionId: "12345" } } });
     const draft = result.receipts.find(r => r.kind === "draft");
-    expect(draft?.payload).toMatchObject({ artifactId: result.artifact?.id, externalExecution: { executionId: "12345", executedAction: "none" } });
+    expect(draft?.payload).toMatchObject({ artifactId: result.artifact?.id, externalExecution: { executionId: "12345", executedAction: "none", workflowVersion: contract.workflowVersion, revisionEvidence: "verified_execution_record" } });
     expect(producer.calls).toHaveLength(0);
     expect(executor.calls).toHaveLength(0);
+  });
+
+  it("does not turn an echoed expected revision into execution proof", () => {
+    expect(validateShadowReceipt(receipt(), contract, identity, now)).toMatchObject({ workflowVersion: null, expectedWorkflowVersion: contract.workflowVersion, revisionEvidence: "pending_unc_verification" });
+    for (const revisionEvidence of [undefined, "expected_only", "verified_execution_record", "pending_unc_verification"]) {
+      expect(() => validateShadowReceipt({ ...receipt(), workflowVersion: contract.workflowVersion, revisionEvidence }, contract, identity, now)).toThrow("echoed version is not proof");
+    }
+  });
+
+  it("requires an independent reader BEFORE sending a paid-provider request", async () => {
+    const fetch = vi.fn();
+    await expect(new HttpN8nBridge({ env, fetch }).call(node, ctx, workflow)).rejects.toThrow("verification is not configured");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(["workflowId", "workflowVersion", "executionId", "status", "finished"])("rejects a mismatched independent execution %s", key => {
+    expect(() => verifyShadowExecution(receipt(), { ...observation(), [key]: "wrong" }, contract, identity, now)).toThrow("mismatch");
+  });
+  it.each(["accountId", "runId", "routineId"])("rejects another execution's request %s", key => {
+    expect(() => verifyShadowExecution(receipt(), { ...observation(), request: { ...observation().request, [key]: "wrong" } }, contract, identity, now)).toThrow(`request.${key}`);
+  });
+
+  it("rejects missing/current-workflow-only/stale evidence and strips unrelated control-plane data", () => {
+    expect(() => verifyShadowExecution(receipt(), null, contract, identity, now)).toThrow("unavailable");
+    expect(() => verifyShadowExecution(receipt(), { ...observation(), source: "current_workflow" }, contract, identity, now)).toThrow("unavailable");
+    expect(() => verifyShadowExecution(receipt(), { ...observation(), stoppedAt: "2026-09-03T00:00:00Z" }, contract, identity, now)).toThrow("timing");
+    expect(verifyShadowExecution(receipt(), { ...observation(), apiKey: "never-store" }, contract, identity, now)).not.toHaveProperty("apiKey");
+  });
+
+  it("does not accept a webhook-supplied verification object or silently retry when independent lookup fails", async () => {
+    let calls = 0;
+    const b = new HttpN8nBridge({ env, now: () => now,
+      readShadowExecution: async () => { throw new Error("private-provider-error"); },
+      fetch: async () => { calls++; return Response.json({ ...reply(), revisionVerification: observation() }); } });
+    await expect(b.call(node, ctx, workflow)).rejects.toThrow("could not be independently verified");
+    expect(calls).toBe(1);
+  });
+
+  it("permits an explicitly pinned dedicated wrapper, but never substitutes its parent ID", () => {
+    const wrapper = { ...contract, workflowId: "dedicated-keyword-wrapper" };
+    expect(() => assertShadowRequest(wrapper, identity)).not.toThrow();
+    expect(() => verifyShadowExecution({ ...receipt(), workflowId: wrapper.workflowId }, observation(), wrapper, identity, now)).toThrow("workflowId mismatch");
   });
 });

@@ -19,7 +19,7 @@ import { isArtifactKind, validateArtifactObject } from "../../lib/artifacts/vali
 import { DATA_ENDPOINTS, dataBaseUrl, issueDataToken, scopesForRoutine } from "../../lib/n8n/dataToken";
 import { checkWebhookTarget, type HostLookup } from "../../lib/n8n/urlSecurity";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
-import { assertShadowRequest, validateShadowReceipt, type KeywordShadowContract } from "../../lib/n8n/shadowContract";
+import { assertShadowRequest, validateShadowReceipt, verifyShadowExecution, type KeywordShadowContract } from "../../lib/n8n/shadowContract";
 import type { N8nBridge, N8nCallResult, N8nNode, N8nWorkflow, ProduceNeed, ProduceNode, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
 import { pinnedWebhookFetch, type WebhookFetch, type WebhookResponse } from "./pinnedWebhookFetch";
@@ -112,6 +112,10 @@ export interface HttpN8nBridgeOptions {
   timeoutMs?: number;
   /** Test seam for request-time DNS validation. */
   lookup?: HostLookup;
+  /** Server-owned independent execution reader. Must read the named execution's
+   * saved revision + trigger identity, never current/latest workflow metadata.
+   * No production reader is provisioned implicitly; shadow dispatch fails closed. */
+  readShadowExecution?: (input: { workflowId: string; executionId: string; signal: AbortSignal }) => Promise<unknown>;
 }
 
 export class HttpN8nBridge implements N8nBridge {
@@ -153,6 +157,7 @@ export class HttpN8nBridge implements N8nBridge {
       if (receiverUrl !== target.url.toString()) throw new Error("shadow receiver URL is not pinned in server configuration");
       if (receiverToken.length < 24 || /\s/.test(receiverToken) || receiverToken === secret)
         throw new Error("shadow receiver requires a separate scoped authentication credential");
+      if (!this.opts.readShadowExecution) throw new Error("independent n8n execution verification is not configured; shadow dispatch is disabled");
       receiverHeaders.authorization = `Bearer ${receiverToken}`;
     }
     const payload = buildN8nPayload(node, ctx, { secret, env: this.env, now: this.now });
@@ -182,7 +187,20 @@ export class HttpN8nBridge implements N8nBridge {
     }
     const out = parseN8nReply(parsed, payload.kind, node.kind === "produce" ? node.maxItems : SKILL_BY_ID[ctx.routineId]?.maxItems);
     if (shadow && out.kind === "artifact") {
-      const receipt = validateShadowReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now());
+      const reported = validateShadowReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now());
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let observation: unknown;
+      try {
+        observation = await Promise.race([
+          this.opts.readShadowExecution!({ workflowId: shadow.workflowId, executionId: String(reported.executionId), signal: controller.signal }),
+          new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("execution verification timed out")); }, 10_000); }),
+        ]);
+      } catch {
+        // Do not leak API response bodies/credentials or retry the paid provider call.
+        throw new Error("n8n execution could not be independently verified; reconcile the execution before rerunning");
+      } finally { clearTimeout(timer); }
+      const receipt = verifyShadowExecution(reported, observation, shadow, identity, this.now());
       const ref = `https://junctionai8.app.n8n.cloud/workflow/${shadow.workflowId}/executions/${receipt.executionId}`;
       out.artifact.meta = { executionReceipt: receipt, approval_status: "pending_approval", executed_action: "none" };
       out.artifact.evidence = [...(out.artifact.evidence ?? []), { source: "n8n_execution", ref }];
