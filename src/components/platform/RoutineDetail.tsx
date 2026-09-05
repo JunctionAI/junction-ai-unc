@@ -13,6 +13,7 @@ import RunNowPanel, { type RunNowProps } from "./RunNowPanel";
 import DraftCard, { type ArtifactView } from "./DraftCard";
 import { artifactHeaders } from "@/lib/artifacts/client";
 import RoutineInspector, { type ParamsView } from "./RoutineInspector";
+import KeywordConfigurationPanel from "./KeywordConfigurationPanel";
 import { agoLabel, runStatusLabel, type RoutinesLive } from "./useRoutinesState";
 
 const contractCard: React.CSSProperties = { background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "17px 19px" };
@@ -283,7 +284,8 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
           </div>
         </div>
         {/* Accounts mode: the one-screen "Adjust this routine" panel (industry presets + optional steps → routine_params + a draft version). */}
-        {accounts && routineId && <RoutineInspector key={`${V.accountId}:${V.contextGeneration}:${routineId}:${detail?.actorId}`} routineId={routineId} currency={run.account.currency} initial={inspectorInitial} onSaved={refresh} context={{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration,actorId:detail?.actorId}} blockReason={eligibility?.role==="owner" && !eligibility.paused && !trailErr ? null : block ?? "Account eligibility unavailable."} runBlockReason={block} />}
+        {accounts && routineId === "D03-W01" && <KeywordConfigurationPanel key={`${V.accountId}:${V.contextGeneration}:${detail?.actorId}`} context={{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration,actorId:detail?.actorId}} onSaved={refresh} />}
+        {accounts && routineId && routineId !== "D03-W01" && <RoutineInspector key={`${V.accountId}:${V.contextGeneration}:${routineId}:${detail?.actorId}`} routineId={routineId} currency={run.account.currency} initial={inspectorInitial} onSaved={refresh} context={{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration,actorId:detail?.actorId}} blockReason={eligibility?.role==="owner" && !eligibility.paused && !trailErr ? null : block ?? "Account eligibility unavailable."} runBlockReason={block} />}
         {!accounts && (
           <div style={{ marginTop: 12, background: "white", border: "1px solid var(--card-border)", borderRadius: 14, padding: "18px 22px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

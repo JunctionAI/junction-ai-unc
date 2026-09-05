@@ -13,7 +13,15 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 46, 6 September NZ / 5 September UTC
+## Latest state — Batch 47, 6 September NZ / 5 September UTC
+
+**Customer keyword market configuration implemented; database function installed.** [Behavior, evidence and remaining acceptance](KEYWORD-CUSTOMER-CONFIGURATION-2026-09-06.md). Owner-only setup selects a canonical US/NZ/AU recipe from the current account's completed pilot evidence. Saved recipe, routine enablement and command admission remain separate. The UI replaces generic keyword recipe editing with explicit market selection, refuses stale/foreign responses and never retries a lost save automatically.
+
+Production migration **20260905154039** (source `20260905153025`) installs one service-only security-invoker function. Live read finds the three actual market runs; production rollback-only save/owner/stale checks pass against real constraints and leave existing settings unchanged. AVGAR remains paused, version 1/no saved keyword recipe, routine off, zero commands, three prior runs. No n8n edit, provider invocation or action flag change. Advisors remain 16 INFO / 6 WARN.
+
+213 files / 2,723 unit tests, app/worker TypeScript, 18 real isolated PostgreSQL checks and six isolated browser checks pass. Source is not deployed; the customer request control and compatible app/worker release remain next. The last conversational advice turn made no implementation progress; this turn made concrete source/database progress. Full B01–B24/all-client goal remains active.
+
+## Previous state — Batch 46, 6 September NZ / 5 September UTC
 
 **Customer keyword command admission implemented; additive database migration installed.** [Exact request path, release/readback, tests and remaining activation gates](KEYWORD-CUSTOMER-COMMAND-2026-09-06.md). The existing queue now has a D03-W01 path to one-use issuance/start, bound to the command ID, current owner, saved reviewed market/recipe, full queued fingerprints and original ten-minute expiry. Customer switch withdrawal is enforced again at provider authority consumption. The existing operator entry/CLI and its three historical results remain separate and unchanged. Agents switch readiness is conditional on the actual saved adapter and exact rollout scope.
 
