@@ -105,6 +105,31 @@ describe('durable keyword admission wiring', () => {
     await expect(f.bridge().call(node,ctx,workflow)).rejects.toThrow('unused shadow permit');
     expect(f.paid()).toBe(1);
   });
+  it('retains a valid reported execution when its artifact kind is rejected, without accepting or replaying it', async () => {
+    const f=fixture(), original=f.fetch.getMockImplementation()!;
+    f.fetch.mockImplementation(async (...args) => {
+      const response=await original(...args), body=await response.json();
+      body.artifact.kind='invented_keyword_kind';
+      return Response.json(body);
+    });
+    await expect(f.bridge().call(node,ctx,workflow)).rejects.toThrow('kind missing or unsupported');
+    expect(f.state()).toBe('uncertain'); expect(f.execution()).toBe('123');
+    expect(f.saved()).toBeNull(); expect(f.read).not.toHaveBeenCalled();
+    await expect(f.bridge().call(node,ctx,workflow)).rejects.toThrow('unused shadow permit');
+    expect(f.fetch).toHaveBeenCalledTimes(1); expect(f.paid()).toBe(1);
+  });
+  it('does not retain an execution claimed by another account when rejecting an artifact', async () => {
+    const f=fixture(), original=f.fetch.getMockImplementation()!;
+    f.fetch.mockImplementation(async (...args) => {
+      const response=await original(...args), body=await response.json();
+      body.artifact.kind='invented_keyword_kind'; body.executionReceipt.accountId='other-account';
+      return Response.json(body);
+    });
+    await expect(f.bridge().call(node,ctx,workflow)).rejects.toThrow();
+    expect(f.state()).toBe('uncertain'); expect(f.execution()).toBeNull();
+    expect(f.saved()).toBeNull(); expect(f.read).not.toHaveBeenCalled();
+    expect(f.paid()).toBe(1);
+  });
   it('revocation between dispatch and authority stops before the paid provider', async () => {
     const f=fixture(); f.db.rpcs.consume_keyword_shadow_authority=()=>false;
     await expect(f.bridge().call(node,ctx,workflow)).rejects.toThrow('answered 409');

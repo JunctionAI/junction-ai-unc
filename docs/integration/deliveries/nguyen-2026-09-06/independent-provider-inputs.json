@@ -1,0 +1,185 @@
+{
+  "checkedAt": "2026-09-05T17:03:08.845Z",
+  "revision": "e5ae41ae-d025-4231-9f5c-99589c43e88a",
+  "definitionHash": "fac94aaa603e5497004428213c2b665d95919aa6779b6007836526ce299d5301",
+  "builderHash": "c20f01dbe355c5ac16cc917526f3c3ae1bbddbbba5ba4e5d5e843d166368b513",
+  "fixtures": [
+    {
+      "executionId": "77",
+      "auth": {
+        "seed_keyword": "golf travel bag",
+        "location_code": 2840,
+        "language_code": "en",
+        "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+        "runId": "39ed122b-5b29-4e7d-9fae-0d974a8962e9",
+        "startedAt": "2026-09-05T15:00:00.262Z",
+        "client": {
+          "id": "avgar",
+          "primaryDomain": "avgarsport.com",
+          "seedKeyword": "golf travel bag",
+          "locationCode": 2840,
+          "languageCode": "en"
+        }
+      },
+      "http": {
+        "statusCode": 200,
+        "body": {
+          "status_code": 20000,
+          "tasks": [
+            {
+              "id": "09051500-2436-0607-0000-b0f044df5884",
+              "status_code": 20000,
+              "result": [
+                {
+                  "items_count": 1,
+                  "items": [
+                    {
+                      "keyword": "golf travel bag",
+                      "keyword_info": {
+                        "search_volume": 22200,
+                        "cpc": 1.96,
+                        "competition": 1,
+                        "competition_level": "HIGH",
+                        "last_updated_time": "2026-08-28 16:44:27 +00:00"
+                      },
+                      "keyword_properties": {
+                        "keyword_difficulty": 3
+                      },
+                      "search_intent_info": {
+                        "main_intent": "transactional",
+                        "last_updated_time": "2026-04-27 21:34:51 +00:00"
+                      },
+                      "serp_info": null,
+                      "avg_backlinks_info": {
+                        "last_updated_time": "2026-07-30 06:54:33 +00:00"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "executionId": "78",
+      "auth": {
+        "seed_keyword": "golf travel bag",
+        "location_code": 2554,
+        "language_code": "en",
+        "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+        "runId": "14c8823c-2a45-427d-8286-7ec44af3988a",
+        "startedAt": "2026-09-05T15:02:01.801Z",
+        "client": {
+          "id": "avgar",
+          "primaryDomain": "avgarsport.com",
+          "seedKeyword": "golf travel bag",
+          "locationCode": 2554,
+          "languageCode": "en"
+        }
+      },
+      "http": {
+        "statusCode": 200,
+        "body": {
+          "status_code": 20000,
+          "tasks": [
+            {
+              "id": "09051502-2436-0607-0000-dce0a21234a0",
+              "status_code": 20000,
+              "result": [
+                {
+                  "items_count": 1,
+                  "items": [
+                    {
+                      "keyword": "golf travel bag",
+                      "keyword_info": {
+                        "search_volume": 720,
+                        "cpc": 0.53,
+                        "competition": 1,
+                        "competition_level": "HIGH",
+                        "last_updated_time": "2026-08-27 23:32:17 +00:00"
+                      },
+                      "keyword_properties": {
+                        "keyword_difficulty": 0
+                      },
+                      "search_intent_info": {
+                        "main_intent": "transactional",
+                        "last_updated_time": "2026-04-27 21:34:52 +00:00"
+                      },
+                      "serp_info": null,
+                      "avg_backlinks_info": {
+                        "last_updated_time": "2026-08-31 19:30:02 +00:00"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "executionId": "79",
+      "auth": {
+        "seed_keyword": "golf travel bag",
+        "location_code": 2036,
+        "language_code": "en",
+        "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+        "runId": "b68396e5-d925-4f9c-8038-84e5f87ca9aa",
+        "startedAt": "2026-09-05T15:02:31.922Z",
+        "client": {
+          "id": "avgar",
+          "primaryDomain": "avgarsport.com",
+          "seedKeyword": "golf travel bag",
+          "locationCode": 2036,
+          "languageCode": "en"
+        }
+      },
+      "http": {
+        "statusCode": 200,
+        "body": {
+          "status_code": 20000,
+          "tasks": [
+            {
+              "id": "09051502-2436-0607-0000-9c9eec88dae1",
+              "status_code": 20000,
+              "result": [
+                {
+                  "items_count": 1,
+                  "items": [
+                    {
+                      "keyword": "golf travel bag",
+                      "keyword_info": {
+                        "search_volume": 3600,
+                        "cpc": 0.63,
+                        "competition": 1,
+                        "competition_level": "HIGH",
+                        "last_updated_time": "2026-08-19 00:44:26 +00:00"
+                      },
+                      "keyword_properties": {
+                        "keyword_difficulty": 0
+                      },
+                      "search_intent_info": {
+                        "main_intent": "transactional",
+                        "last_updated_time": "2026-04-27 21:34:51 +00:00"
+                      },
+                      "serp_info": null,
+                      "avg_backlinks_info": {
+                        "last_updated_time": "2026-09-05 14:03:13 +00:00"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "reads": 4,
+  "providerCalls": 0,
+  "workflowInvocations": 0
+}

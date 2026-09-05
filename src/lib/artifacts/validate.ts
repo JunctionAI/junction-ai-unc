@@ -153,7 +153,10 @@ function cleanEvidence(v: unknown): ArtifactEvidence[] {
 export function validateArtifactObject(parsed: unknown, spec: ArtifactSpec): ParsedArtifact {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { ok: false, reason: "reply is not a JSON object" };
   const o = parsed as { kind?: unknown; title?: unknown; body?: unknown; items?: unknown; meta?: unknown; evidence?: unknown };
-  const kind = typeof o.kind === "string" && isArtifactKind(o.kind) ? o.kind : spec.kind;
+  // A misspelled/provider-specific type is a contract failure, not permission to
+  // relabel an unrelated payload as the routine's requested deliverable.
+  if (!isArtifactKind(o.kind)) return { ok: false, reason: "kind missing or unsupported" };
+  const kind = o.kind;
   if (kind !== spec.kind) return { ok: false, reason: `kind "${kind}" is not the expected "${spec.kind}"` };
   const title = str(o.title, TITLE_MAX);
   if (!title) return { ok: false, reason: "title missing" };

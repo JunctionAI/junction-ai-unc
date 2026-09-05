@@ -210,14 +210,19 @@ export class HttpN8nBridge implements N8nBridge {
       } catch {
         throw new Error("n8n webhook answered with a body that is not JSON");
       }
+      // Capture a contract-valid reported execution before validating its business
+      // output. A malformed artifact still consumed a provider call; retain the
+      // named execution for reconciliation, never silently refund/replay it.
+      const reported = shadow && parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.hasOwn(parsed, "artifact")
+        ? validateShadowReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now()) : undefined;
+      if (reported) observedExecutionId = String(reported.executionId);
       const out = parseN8nReply(parsed, payload.kind, node.kind === "produce" ? node.maxItems : SKILL_BY_ID[ctx.routineId]?.maxItems);
       if (shadow && out.kind === "artifact") {
-        const reported = validateShadowReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now());
-        observedExecutionId = String(reported.executionId);
+        if (!reported) throw new Error("Shadow artifact requires a validated reported execution receipt");
         const candidate = shadowCandidate(out.artifact, reported);
         // Persist the known execution before the next network wait. A crash here
         // must leave a named execution to inspect, not a reason to call n8n again.
-        await this.opts.shadowAdmission!.observe(permitId!, observedExecutionId, candidate);
+        await this.opts.shadowAdmission!.observe(permitId!, String(reported.executionId), candidate);
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
         let observation: unknown;

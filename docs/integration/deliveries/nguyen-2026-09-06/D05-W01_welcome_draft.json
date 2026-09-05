@@ -1,0 +1,61 @@
+{
+  "kind": "email_draft",
+  "title": "D05-W01 Welcome Series — shadow draft (packaged from historical exec #63)",
+  "body": "Shadow-only welcome email draft for AVGAR. Identity and flow facts are grounded in historical Klaviyo evidence from n8n execution #63. Offer codes, discount %, product hero image URLs, and measured step delays remain TBD — not invented. No send.",
+  "items": [
+    {
+      "title": "Welcome message draft — JM | Welcome Series (Updated)",
+      "body": "SUBJECT:\nWelcome to AVGAR — your Links kit starts here\n\nPREVIEW TEXT:\nYou're on the Welcome Series List. Here's what AVGAR is and where to go next.\n\nEMAIL BODY (complete draft/shadow):\nHi {{first_name|there}},\n\nWelcome to AVGAR.\n\nYou're receiving this because you joined the Welcome Series List that feeds the draft Klaviyo flow \"JM | Welcome Series (Updated)\".\n\nAVGAR builds golf travel and on-course accessories. From recent AVGAR email history (separate campaign evidence), product lines already in market include Links / Dry Bag, UFORIA, Head Cover Clip / Headcover Clasp, and Putt Tuit — use those as catalogue context only; this welcome does not invent a promotion.\n\nIn this first welcome step:\n1) Confirm you're in the right place for AVGAR gear.\n2) Point to the live storefront: https://avgarsport.com\n3) Invite one next action: browse the accessories collection that matches what brought you in.\n\nCTA label: Shop AVGAR accessories\nCTA URL: https://avgarsport.com  (exact collection deep-link = TBD — not present in exec #63)\n\nWhat this draft does NOT claim:\n- No open-rate / click-rate targets (unmeasured here)\n- No discount or free-shipping offer (not evidenced)\n- No multi-step delay schedule beyond list-trigger identity (step timing = TBD)\n- No activation of the draft Welcome flow\n\nShadow boundary: approval_status=pending_approval; executed_action=none; send_count=0; mutation_count=0.",
+      "meta": {
+        "routine": "D05-W01",
+        "routine_key": "welcome_flow_tuning",
+        "status": "hypothesis",
+        "shadow_mode": true,
+        "subject": "Welcome to AVGAR — your Links kit starts here",
+        "preview_text": "You're on the Welcome Series List. Here's what AVGAR is and where to go next.",
+        "flow": {
+          "id": "YaisEd",
+          "name": "JM | Welcome Series (Updated)",
+          "status": "draft",
+          "trigger_type": "Added to List"
+        },
+        "list": {
+          "id": "TAm8Nv",
+          "name": "Welcome Series List"
+        },
+        "message_id": null,
+        "product_focus": null,
+        "step_delay": null,
+        "offer_code": null,
+        "unknown_or_tbd": [
+          "exact flow-action message template HTML from Klaviyo (not read in #63)",
+          "approved welcome offer / discount",
+          "collection deep-link URL",
+          "measured multi-step delays"
+        ]
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "source": "n8n_saved_execution",
+      "ref": "workflow=DV5Wv6wXlzpz4zeN execution=#63 startedAt=2026-09-04T04:42:14.463Z status=success"
+    },
+    {
+      "source": "branch_receipt",
+      "ref": "origin/issue-26/klaviyo-real-shadow scripts/_issue26_exec63_receipt.json"
+    },
+    {
+      "source": "klaviyo_provider_observation",
+      "ref": "GET /api/flows/ + GET /api/lists/ revision=2024-10-15; welcome flow YaisEd draft; list TAm8Nv"
+    }
+  ],
+  "packaging": {
+    "issue": 45,
+    "phase": "A1",
+    "proof_class_after_packaging": "PACKAGED_ARTIFACT_READY",
+    "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+    "provider_calls_this_packaging": 0,
+    "send_attempted": false
+  }
+}

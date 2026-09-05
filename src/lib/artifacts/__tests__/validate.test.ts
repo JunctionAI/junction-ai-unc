@@ -27,6 +27,12 @@ describe("parseArtifactReply", () => {
     expect(parseArtifactReply(JSON.stringify({ kind: "generic", title: "t", body: "short" }), { kind: "generic" })).toEqual({ ok: false, reason: "body is too short (5 chars)" });
   });
 
+  it.each([undefined, null, "", "email_draft", "campaign_calendar", "made_up", 7, {}, ["post_set"]].map(kind => ({ kind })))
+    ("rejects missing or unsupported declared kind $kind instead of silently relabelling it", ({ kind }) => {
+      expect(validateArtifactObject({ ...GOOD, kind }, { kind: "post_set" }))
+        .toEqual({ ok: false, reason: "kind missing or unsupported" });
+    });
+
   it("rejects an invented number anywhere in the text, accepts numbers from the evidence, counts, the year and k-suffixes", () => {
     const bad = parseArtifactReply(JSON.stringify({ ...GOOD, items: [{ title: "We serve 1,200 customers", body: "x" }] }), { kind: "post_set", allowedNumbers: allowed });
     expect(bad).toEqual({ ok: false, reason: "numbers not in the evidence: 1,200" });

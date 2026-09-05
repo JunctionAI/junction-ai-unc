@@ -13,7 +13,13 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 53, 6 September NZ / 5 September UTC
+## Latest state — Batch 54, 6 September NZ / 5 September UTC
+
+**Actual Nguyen bundle reviewed; output acceptance defects reproduced and scoped corrections sent.** [Review, immutable archive hash and exact evidence](integration/NGUYEN-DELIVERY-REVIEW-2026-09-06.md). Attached builder matches the published revision; three saved-market statistics reproduce. Five semantic boundary cases fail, evidence references are missing, email bodies mix customer copy with internal notes, and some inventory outputs are not delivered. Six-week calendar is useful. No new provider call, workflow edit or repin. Nguyen received specific output-only corrections and an ETA request within the existing agreement; later adapters remain Codex-owned.
+
+Codex fixed silent unsupported artifact-kind coercion and retained valid reported execution references when malformed artifacts are rejected, without accepting or replaying them. 216 files / 2,839 tests, app/worker typechecks and focused lint pass. Matched app/worker release and production checks are next. The preceding advice turn was no implementation progress; this continuation revalidates and advances the pending release. Full B01–B24/all-client goal and action holds remain unchanged.
+
+## Previous state — Batch 53, 6 September NZ / 5 September UTC
 
 **Dataset completion fence live and independently verified.** [Exact evidence and limits](DATASET-SYNC-FENCE-2026-09-06.md). Late or superseded sync workers can no longer use the normal save path without atomic holder/expiry/account/context/connector checks. Snapshot insertion consumes that lease in the same transaction. 2,828 tests and 31 isolated real-PostgreSQL checks pass, including independently observed lock waits crossing expiry, authority changes during waits and concurrent one-winner completion. Production function-body/grant readback and paused-account refusal pass, with four datasets/four runs/one command unchanged. Source `78687e415076c1f2d6132bcead90915e0e5a5ffb` is deployed as worker release 31/image `0d1203fa6c2bd9d1c94f4357cb8fee80f29f72c1acd00a7a4136986ed1507692`. At 16:59:56 UTC its actual compiled save reached the new RPC and refused an unowned holder/paused AVGAR, with zero provider calls, lease claims or inserts. App remains compatible at `bb538e2e3638`; canonical health fresh/no-error, zero enabled routines and all sync/actions off. Coverage/cadence, later adapters and full-client acceptance remain next.
 

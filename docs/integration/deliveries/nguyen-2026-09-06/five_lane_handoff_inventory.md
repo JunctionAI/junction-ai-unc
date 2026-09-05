@@ -1,0 +1,34 @@
+# Five-lane handoff inventory
+
+Proof classes: HISTORICAL_PROVIDER_PROOF | PACKAGED_ARTIFACT_READY | FINAL_REVISION_TESTED | BLOCKED_INPUT | CODEX_ADAPTER_PENDING | NOT_VERIFIED
+
+Rule: historical successful executions prove the TEST graph at that time. They do not prove a later packaged/final revision unless that revision was actually tested.
+
+| routine | workflow ID | frozen/evidence revision | credential (metadata) | sample / saved exec | proof class | remaining blocker |
+|---|---|---|---|---|---|---|
+| D02-W01 daily_decisioning | WljLEMABNjfUkbB1 | 053e1e02-c816-4d7c-aa32-08e9eb06e6f3 (TEST draft; inactive) | Facebook Graph account 2 / j6w7zi8lhRivXI0q (facebookGraphApiOAuth2Api) | exec #53 HOLD ads with identity+metrics | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex Unc adapter/callable; no FINAL_REVISION_TESTED for packaged artifact |
+| D02-W02 creative_testing | WljLEMABNjfUkbB1 | 053e1e02… / exec #53 | Facebook Graph account 2 / j6w7zi8lhRivXI0q | exec #53 winner vs underperformer | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | test_budget_per_variant TBD; Codex adapter |
+| D02-W03 hook_rotation | WljLEMABNjfUkbB1 | 053e1e02… / exec #53 | Facebook Graph account 2 / j6w7zi8lhRivXI0q | exec #53 CTR vs peer median | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex adapter |
+| D02-W04 ad_fatigue | WljLEMABNjfUkbB1 | 053e1e02… / exec #53 | Facebook Graph account 2 / j6w7zi8lhRivXI0q | exec #53 frequency < 2.5 | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex adapter |
+| D02-W05 creator_whitelisting | WljLEMABNjfUkbB1 | n/a | Facebook Graph account 2 / j6w7zi8lhRivXI0q | disabled on #53 | BLOCKED_INPUT | Tom: approved creator handles/rights/consent |
+| D02-W06 creative_test_planner | WljLEMABNjfUkbB1 | 053e1e02… / exec #53 | Facebook Graph account 2 / j6w7zi8lhRivXI0q | exec #53 blocked on experiment ledger | HISTORICAL_PROVIDER_PROOF | experiment_ledger_connected; Codex adapter |
+| D02-W07 budget_pacing | WljLEMABNjfUkbB1 | 053e1e02… / exec #53 | Facebook Graph account 2 / j6w7zi8lhRivXI0q | exec #53 NZD 3000 ceiling / spend 305.88 | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex adapter |
+| D02-W08 organic_to_paid | WljLEMABNjfUkbB1 | n/a | Facebook Graph account 2 / j6w7zi8lhRivXI0q | disabled on #53 | BLOCKED_INPUT | Tom: approved organic-performance source |
+| D02-W09 Google Ads BOFU (mapping) | TSajBg5SB32NQtLE | 960c91bc-7216-4999-aa0b-045a4beb1d4d / exec #57 | DataForSEO Unnamed credential / SK8RwgcCrYPQdWRB | AVGAR BOFU Search SHADOW PAUSED plan | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF + CODEX_ADAPTER_PENDING | Codex distinct Unc mapping (not D03-W01); login_customer_id + conversion_action TBD for mutate |
+| D03-W01 keyword_opportunity | OUerIfgAkMnhkuen (logic) + XiXJKuph1fAeH9pe (wrapper) | SEO TEST historical #59; wrapper CURRENT FROZEN e5ae41ae-d025-4231-9f5c-99589c43e88a (output-quality correction; supersedes 92135add…); historical E2E #77-80 on prior 92135add… | DataForSEO SK8RwgcCrYPQdWRB; wrapper Header Auth Y9Xu3zApLSrcWu1e | Historical #59 + corrected fixtures from saved #77/#78/#79; signed-in #80 on prior revision | HISTORICAL_PROVIDER_PROOF (#77-80 on 92135add) + FINAL_REVISION_TESTED (output correction fixture PASS; published e5ae41ae) + PACKAGED_ARTIFACT_READY; live E2E on e5ae41ae still CODEX_ADAPTER_PENDING (repin) | Codex independent diff review + Unc repin to e5ae41ae before further live execution |
+| D03-W02 content_gap | OUerIfgAkMnhkuen | cda63062… / exec #59 | DataForSEO SK8RwgcCrYPQdWRB | primary_absent for travel bag | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex adapter |
+| D03-W03 AI-search probe | OUerIfgAkMnhkuen | n/a | n/a | none | BLOCKED_INPUT | Tom/Codex: intended AI-search source |
+| D03-W04 CMS/Admin | n/a | n/a | Shopify OAuth parked | none | BLOCKED_INPUT | CMS/Admin access; Shopify deferred by Tom |
+| D03-W05 serp_position_watch | OUerIfgAkMnhkuen | cda63062… / exec #59 | DataForSEO SK8RwgcCrYPQdWRB | not_present | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex adapter |
+| D03-W06 page/content analysis (distinct) | OUerIfgAkMnhkuen | content_gap path on #59 is page/content gap class — keep distinct from backlink gap | DataForSEO SK8RwgcCrYPQdWRB | content_gap primary_absent (see D03-W02 packaging) | HISTORICAL_PROVIDER_PROOF | Codex mapping clarity; do not equate to backlink gap |
+| D03-W07 reserved | n/a | n/a | n/a | none | CODEX_ADAPTER_PENDING | Codex owns reserved adapter |
+| backlink_gap (not D03-W06) | OUerIfgAkMnhkuen | cda63062… / exec #59 competitor_gap | DataForSEO SK8RwgcCrYPQdWRB | baggallini.com backlink sample | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF + CODEX_ADAPTER_PENDING | Codex distinct routine mapping |
+| D01-W02 viral_hook_mining | lMXjTgd3Qh4vZaMp | c8d6955d-0033-47ce-9672-399f7f10118c / #58+#68 | DataForSEO SK8RwgcCrYPQdWRB | 5 hooks packaged | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex adapter; how-to-shoot TBD |
+| D01-W03 customer_question_mining | lMXjTgd3Qh4vZaMp | c8d6955d… / exec #68 | DataForSEO SK8RwgcCrYPQdWRB | 4 PAA questions packaged | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | support/DM/review source not connected; Codex adapter |
+| D05-W01 welcome | DV5Wv6wXlzpz4zeN | f96c1b82-348a-4711-823f-a9f68498793e (current draft tip=#71 path); historical proof #63 | Header Auth account / 4mkTKL1q0njNafh9 | scripts/issue45_artifacts/D05-W01_welcome_draft.json | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex adapter; FINAL_REVISION_TESTED of packaged draft = NOT done |
+| D05-W02 abandoned_cart | DV5Wv6wXlzpz4zeN | n/a | Header Auth account / 4mkTKL1q0njNafh9 | none | BLOCKED_INPUT | Tom: contact_frequency_cap |
+| D05-W03 segmentation | DV5Wv6wXlzpz4zeN | historical #69 | Header Auth account / 4mkTKL1q0njNafh9 | D05-W03_segmentation.json | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex adapter; size is aggregate gap not live membership |
+| D05-W04 winback | DV5Wv6wXlzpz4zeN | n/a | Header Auth account / 4mkTKL1q0njNafh9 | none | BLOCKED_INPUT | Tom: margin_floor |
+| D05-W05 post_purchase | DV5Wv6wXlzpz4zeN | historical #70 | Header Auth account / 4mkTKL1q0njNafh9 | D05-W05_post_purchase_draft.json | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | approved education copy TBD; Codex adapter |
+| D05-W06 review_timing | DV5Wv6wXlzpz4zeN | f96c1b82… / historical #71 | Header Auth account / 4mkTKL1q0njNafh9 | D05-W06_review_timing.json | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | suppression limits TBD; Codex adapter |
+| D05-W07 campaign_calendar | DV5Wv6wXlzpz4zeN | historical #62 | Header Auth account / 4mkTKL1q0njNafh9 | D05-W07_six_week_calendar.json (future week_start x6) | PACKAGED_ARTIFACT_READY + HISTORICAL_PROVIDER_PROOF | Codex adapter; FINAL_REVISION_TESTED of packaged calendar = NOT done |

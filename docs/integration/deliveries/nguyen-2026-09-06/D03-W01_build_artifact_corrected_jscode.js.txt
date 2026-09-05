@@ -1,0 +1,162 @@
+const auth = $('Validate Authority').first().json;
+const http = $input.first().json || {};
+const fetchedAt = new Date().toISOString();
+const finishedAt = fetchedAt;
+const statusCode = Number(http.statusCode || 0);
+const raw = http.body && typeof http.body === "object" ? http.body : http;
+function hypeSafe(text) {
+  const banned = /guarantee|fully autonomous|\b10x\b|set and forget/i;
+  if (!text) return text;
+  return banned.test(text) ? String(text).replace(banned, "[redacted]") : text;
+}
+function fail(httpStatus, error, extra) {
+  return [{ json: { http_status: httpStatus, payload: Object.assign({ ok: false, error: error, workflowId: $workflow.id, executionId: String($execution.id), workflowVersion: null, revisionEvidence: "pending_unc_verification" }, extra || {}) } }];
+}
+if (statusCode < 200 || statusCode >= 300) return fail(502, "dataforseo_http_error", { provider_http_status: statusCode });
+const topStatus = Number(raw.status_code || 0);
+const tasks = Array.isArray(raw.tasks) ? raw.tasks : [];
+const task = tasks[0] || null;
+const taskStatus = task ? Number(task.status_code || 0) : 0;
+const taskId = task && task.id != null ? String(task.id) : null;
+if (topStatus !== 20000 || taskStatus !== 20000 || !task) {
+  return fail(502, "dataforseo_task_failed", { top_status_code: topStatus, task_status_code: taskStatus, taskId: taskId });
+}
+const result = (task.result && task.result[0]) || null;
+const items = (result && Array.isArray(result.items)) ? result.items : [];
+const itemsCount = result && result.items_count != null ? Number(result.items_count) : items.length;
+if (!items.length || itemsCount < 1) {
+  return [{ json: { http_status: 200, payload: { needs: [{ input: "keyword_provider_items", why: "DataForSEO returned a valid zero-item result; unc.keyword-shadow.v1 cannot represent zero-result success without contract extension. No fabricated item." }] } } }];
+}
+const keyword = auth.seed_keyword;
+const artifactItems = [];
+for (let i = 0; i < items.length && artifactItems.length < 15; i++) {
+  const item = items[i] || {};
+  const kw = String(item.keyword || keyword || "").trim();
+  if (!kw) continue;
+  const kwInfo = item.keyword_info || {};
+  const kwProps = item.keyword_properties || {};
+  const intentInfo = item.search_intent_info || {};
+  const serpInfo = item.serp_info;
+  const search_volume = kwInfo.search_volume != null ? kwInfo.search_volume : null;
+  const cpc = kwInfo.cpc != null ? kwInfo.cpc : null;
+  const paid_competition = kwInfo.competition != null ? kwInfo.competition : null;
+  const paid_competition_level = kwInfo.competition_level || null;
+  const keyword_difficulty = kwProps.keyword_difficulty != null ? Number(kwProps.keyword_difficulty) : null;
+  const main_intent = intentInfo.main_intent || null;
+  const keyword_info_last_updated = kwInfo.last_updated_time || null;
+  const intent_last_updated = intentInfo.last_updated_time || null;
+  const backlinks_last_updated = item.avg_backlinks_info && item.avg_backlinks_info.last_updated_time ? item.avg_backlinks_info.last_updated_time : null;
+  const currency = kwInfo.currency != null ? kwInfo.currency : (kwInfo.cpc_currency != null ? kwInfo.cpc_currency : null);
+  const hasPageMatchSignal = !!(serpInfo && (serpInfo.se_results_count != null || (Array.isArray(serpInfo.items) && serpInfo.items.length > 0) || serpInfo.check_url));
+  const target_page = null;
+  const target_page_status = hasPageMatchSignal ? "matched" : "unverified";
+  const organicEvidenceSufficient = hasPageMatchSignal && keyword_difficulty != null;
+  let prioritization = "pending";
+  let priority = null;
+  let move = "await_serp_or_page_evidence";
+  let prioritization_reason = "Paid-search competition is not organic difficulty. keyword_difficulty is present but serp_info/page-match evidence is insufficient in keyword_overview payload; organic priority left pending.";
+  if (organicEvidenceSufficient) {
+    if (keyword_difficulty <= 15 && (search_volume || 0) >= 200) {
+      prioritization = "scored";
+      priority = "medium";
+      move = "consider_content_expansion";
+      prioritization_reason = "Organic keyword_difficulty + SERP/page evidence present.";
+    } else {
+      prioritization = "scored";
+      priority = "low";
+      move = "monitor";
+      prioritization_reason = "Organic metrics scored with SERP/page evidence.";
+    }
+  }
+  const stats = "Provider stats (DataForSEO-reported): search_volume=" + search_volume + ", cpc=" + cpc + (currency ? (" " + currency) : " (currency unavailable)") + ", paid_competition=" + paid_competition + ", paid_competition_level=" + paid_competition_level + ", keyword_difficulty=" + keyword_difficulty + ", intent=" + main_intent + ".";
+  const rec = hypeSafe("SHADOW keyword_opportunity hypothesis for \"" + kw + "\" at locationCode " + auth.location_code + " / " + auth.language_code + ". prioritization=" + prioritization + (priority ? (" priority=" + priority) : "") + ". " + stats + " target_page=" + target_page_status + ". No AVGAR rank/click/CTR claimed. GSC not connected.");
+  artifactItems.push({
+    title: kw.slice(0, 160),
+    body: rec.slice(0, 4000),
+    meta: {
+      intent: main_intent,
+      target_page: target_page,
+      target_page_status: target_page_status,
+      move: move,
+      status: "hypothesis",
+      prioritization: prioritization,
+      priority: priority,
+      prioritization_reason: prioritization_reason,
+      provider_stats: {
+        search_volume: search_volume,
+        cpc: cpc,
+        currency: currency,
+        paid_competition: paid_competition,
+        paid_competition_level: paid_competition_level,
+        keyword_difficulty: keyword_difficulty,
+        search_intent: main_intent,
+        competition_is_paid_search: true
+      },
+      provider_timestamps: {
+        keyword_info_last_updated: keyword_info_last_updated,
+        intent_last_updated: intent_last_updated,
+        backlinks_last_updated: backlinks_last_updated,
+        fetchedAt: fetchedAt
+      },
+      location_code: auth.location_code,
+      language_code: auth.language_code,
+      invented_facts: false,
+      serp_info_present: serpInfo != null
+    }
+  });
+}
+if (!artifactItems.length) {
+  return [{ json: { http_status: 200, payload: { needs: [{ input: "keyword_provider_items", why: "Provider items lacked usable keyword titles; no fabricated item emitted." }] } } }];
+}
+const title = ("Keyword opportunity: " + keyword + " [" + auth.language_code + "/" + auth.location_code + "]").slice(0, 160);
+const body = hypeSafe(("Shadow keyword_list for " + keyword + ". " + artifactItems.length + " provider item(s). Statistics below are DataForSEO-reported; recommendations are hypotheses only. Organic prioritization pending where SERP/page evidence is absent. No spend/publish/mutate.")).slice(0, 12000);
+const first = items[0] || {};
+const firstInfo = first.keyword_info || {};
+const artifact = {
+  kind: "keyword_list",
+  title: title,
+  body: body,
+  items: artifactItems,
+  evidence: [{
+    source: "dataforseo",
+    endpoint: "dataforseo_labs/google/keyword_overview/live",
+    taskId: taskId,
+    topStatusCode: topStatus,
+    taskStatusCode: taskStatus,
+    itemsCount: itemsCount,
+    fetchedAt: fetchedAt,
+    observedAt: firstInfo.last_updated_time || null,
+    locationCode: auth.location_code,
+    languageCode: auth.language_code,
+    wording: "DataForSEO-reported"
+  }]
+};
+const executionReceipt = {
+  contract: "unc.keyword-shadow.v1",
+  accountId: auth.accountId,
+  runId: auth.runId,
+  routineId: "D03-W01",
+  routineKey: "keyword_opportunity",
+  workflowId: $workflow.id,
+  workflowVersion: null,
+  revisionEvidence: "pending_unc_verification",
+  executionId: String($execution.id),
+  mode: "dry_run",
+  status: "succeeded",
+  executedAction: "none",
+  startedAt: auth.startedAt,
+  finishedAt: finishedAt,
+  client: auth.client,
+  provider: {
+    name: "dataforseo",
+    statusCode: topStatus,
+    taskStatusCode: taskStatus,
+    taskId: taskId,
+    itemsCount: itemsCount,
+    fetchedAt: fetchedAt,
+    observedAt: firstInfo.last_updated_time || null,
+    httpStatus: statusCode
+  },
+  dataBaseUrl_ignored_for_destination: true
+};
+return [{ json: { http_status: 200, payload: { artifact: artifact, executionReceipt: executionReceipt } } }];

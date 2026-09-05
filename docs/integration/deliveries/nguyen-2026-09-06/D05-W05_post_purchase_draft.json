@@ -1,0 +1,68 @@
+{
+  "kind": "email_draft",
+  "title": "D05-W05 Post-purchase education — shadow draft (packaged from historical exec #70)",
+  "body": "Shadow-only post-purchase education draft for AVGAR. Timing anchors and product identity come from historical Klaviyo aggregates/events in n8n execution #70. Usage instructions, care tips, and how-to claims are NOT invented — those slots stay TBD pending approved education copy. No send / no draft-flow activation.",
+  "items": [
+    {
+      "title": "Post-purchase education draft — Alignment Sticks (top observed product)",
+      "body": "SUBJECT:\nYour AVGAR Alignment Sticks are on the way — next steps after delivery\n\nPREVIEW TEXT:\nFulfilment and delivery signals are live. Education copy slots stay TBD until approved.\n\nEMAIL BODY (complete draft/shadow):\nHi {{first_name|there}},\n\nThanks for your AVGAR order.\n\nThis draft is keyed to an Ordered Product title observed in the historical sample: \"Avgar Proline Carbon Alignment Sticks (2 pack)\" (SKU 6994c51435f0b, product_id 8808593588362, collections: Accessories / All Products / Uforia Suites; sample_count=7 in the #70 event page).\n\nTiming plan (provider-grounded, not invented satisfaction):\n- Anchor metrics from exec #70: Fulfilled Order (WBCFMr) total=97 and Delivered Shipment (W2rqgp) total=74 over 2026-07-01..2026-09-05 US/Eastern.\n- Propose sending this education message after fulfilment/delivery readiness — not at purchase alone.\n- Exact hour/day delay = TBD (not measured as a per-order latency in #70).\n\nWhat to include once approved education copy exists:\n1) Confirm the product received: Avgar Proline Carbon Alignment Sticks (2 pack).\n2) Point to the storefront product/support page: URL = TBD (not in #70).\n3) Education blocks (COPY REQUIRED — do not invent usage claims):\n   - Setup / first use: TBD approved copy\n   - Care / storage: TBD approved copy\n   - When to contact support: TBD approved policy\n\nRelated observed products available for additional education variants (titles/SKUs only):\n- Cigar Holder (product_id 8904008138890; sample_count=4)\n- Uforia Travel Case (SKU 6994c5142716c; sample_count=4)\n- Putt Tuit Training Accessory (SKU 6994c51423fc0; sample_count=1)\n- Headcover Clasp (sample_count=1)\n\nFlow context: Post-Purchase Follow (RK56AC) exists as draft in account — not activated by this packaging.\n\nShadow boundary: approval_status=pending_approval; executed_action=none; send_count=0; mutation_count=0.",
+      "meta": {
+        "routine": "D05-W05",
+        "routine_key": "post_purchase_education",
+        "status": "hypothesis",
+        "shadow_mode": true,
+        "subject": "Your AVGAR Alignment Sticks are on the way — next steps after delivery",
+        "preview_text": "Fulfilment and delivery signals are live. Education copy slots stay TBD until approved.",
+        "flow": {
+          "id": "RK56AC",
+          "name": "Post-Purchase Follow",
+          "status": "draft"
+        },
+        "primary_product": {
+          "product_name": "Avgar Proline Carbon Alignment Sticks (2 pack)",
+          "sku": "6994c51435f0b",
+          "product_id": "8808593588362",
+          "collections": ["Accessories", "All Products", "Uforia Suites"],
+          "sample_count": 7
+        },
+        "timing": {
+          "anchor_metrics": ["Fulfilled Order (WBCFMr)", "Delivered Shipment (W2rqgp)"],
+          "fulfilled_total": 97,
+          "delivered_total": 74,
+          "window": "2026-07-01_to_2026-09-05",
+          "timezone": "US/Eastern",
+          "exact_delay_hours": null
+        },
+        "usage_instructions": null,
+        "unknown_or_tbd": [
+          "approved education/how-to copy",
+          "exact post-delivery delay hours",
+          "product support deep-link",
+          "activation of Post-Purchase Follow draft"
+        ]
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "source": "n8n_saved_execution",
+      "ref": "workflow=DV5Wv6wXlzpz4zeN execution=#70 status=success"
+    },
+    {
+      "source": "branch_receipt",
+      "ref": "origin/issue-36/email-fourth-klaviyo-routine scripts/_issue36_exec70_receipt.json"
+    },
+    {
+      "source": "klaviyo_provider_observation",
+      "ref": "POST metric-aggregates Fulfilled Order WBCFMr + Delivered Shipment W2rqgp; GET events Ordered Product XeDJq4"
+    }
+  ],
+  "packaging": {
+    "issue": 45,
+    "phase": "A1",
+    "proof_class_after_packaging": "PACKAGED_ARTIFACT_READY",
+    "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+    "provider_calls_this_packaging": 0,
+    "send_attempted": false
+  }
+}
