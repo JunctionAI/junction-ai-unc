@@ -34,6 +34,10 @@ export const DEFAULT_PREFS: ChannelPrefs = { brief: true, approvals: true, draft
 export interface ChannelLink {
   id: string;
   accountId: string;
+  /** Database-managed identity revision, independent of the account's context generation. */
+  bindingVersion: number;
+  /** Pending codes cannot be reused after a business-context reset. */
+  linkCodeGeneration: number | null;
   /** The founder who linked it — decided_by for decisions taken on this channel. */
   userId: string | null;
   channel: Channel;

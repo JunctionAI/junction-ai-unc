@@ -10,7 +10,16 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 11, 5 September 2026, approximately 05:31 UTC
+## Latest state — Batch 12, 5 September 2026, approximately 05:45 UTC
+
+**Further verified, source-only progress; full goal remains active.** Prepared immutable message-arrival identity and database-managed channel binding revisions. New code captures account/generation/link/user separately from provider payloads; duplicate acceptance preserves the initial binding, unknown arrivals never inherit later links, and pending codes carry their issue generation. Atomic claim and terminal-state denial helpers are ready for the consumer migration.
+
+- **186 files / 2,241 tests**, application/worker TypeScript, production build and focused lint pass. New real PostgreSQL canary passes within a rollback-only migration rehearsal. No schema or synthetic data remains in production.
+- This does **not** complete channel processing: existing webhook routes, raw consumer, multi-statement code consumption, channel history/persistence and outbound delivery still need the same identity enforced. The prepared helpers are not wired in yet. No channel/app/worker/n8n release or execution was performed, and messaging must remain disabled.
+- Live health still reports runtime `00fc57cfd07b`, healthy database and fresh worker. AVGAR remains generation 1, revision 15, paused; channel links/inbox/outbound and leftover canary accounts all zero.
+- Full behavior, canary scope, compatibility/release boundary and exact next work: [channel identity foundation](CHANNEL-IDENTITY-FOUNDATION-2026-09-05.md). Do not deploy source reading the new link fields until the migration and remaining channel protections are coordinated.
+
+## Batch 11, 5 September 2026, approximately 05:31 UTC
 
 **Further verified progress; full goal remains active.** Daily briefs, KPI snapshots and the worker's derived-style write now carry their captured business generation through evidence gathering, provider/model waits, persistence and readback. Brief evidence filters current-context inputs before limits; same-day output preserves separate generations. The browser brief lifecycle and worker local-day candidates/markers are generation-bound.
 

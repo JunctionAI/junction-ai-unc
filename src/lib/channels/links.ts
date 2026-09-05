@@ -14,6 +14,9 @@
 
 import { randomBytes } from "node:crypto";
 import { unwrap, type DbClient, type Row } from "../db/types";
+import { accountContextGeneration } from "../db/contextGeneration";
+import { assertRuntimeContext } from "../db/runtimeContext";
+import { runtimeGeneration } from "../runtime/contextFence";
 import { CHANNEL_LABEL, DEFAULT_PREFS, isChannel, type Channel, type ChannelLink, type ChannelPrefs, type QuietHours } from "./types";
 
 export const LINK_CODE_TTL_MS = 10 * 60 * 1000;
@@ -21,7 +24,7 @@ export const LINK_CODE_PREFIX = "UNC-";
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 32 symbols, no 0/O/1/I
 const CODE_LEN = 6;
 
-const LINK_COLS = "id, account_id, user_id, channel, external_id, handle, display_name, verified_at, link_code, link_code_expires_at, prefs, meta, last_inbound_at, created_at";
+const LINK_COLS = "id, account_id, binding_version, link_code_generation, user_id, channel, external_id, handle, display_name, verified_at, link_code, link_code_expires_at, prefs, meta, last_inbound_at, created_at";
 
 export function newLinkCode(): string {
   const bytes = randomBytes(CODE_LEN);
@@ -65,6 +68,8 @@ export function rowToLink(r: Row): ChannelLink {
   return {
     id: String(r.id),
     accountId: String(r.account_id),
+    bindingVersion: runtimeGeneration(r.binding_version),
+    linkCodeGeneration: r.link_code_generation == null ? null : runtimeGeneration(r.link_code_generation),
     userId: r.user_id ? String(r.user_id) : null,
     channel: r.channel as Channel,
     externalId: r.external_id ? String(r.external_id) : null,
@@ -122,18 +127,23 @@ export interface IssuedCode {
     An already-verified link on that channel is left alone — a new pending row is created so
     a second device can be added. */
 export async function issueLinkCode(db: DbClient, input: { accountId: string; userId: string | null; channel: Channel; now: Date; ttlMs?: number }): Promise<IssuedCode> {
+  input = Object.freeze({ ...input });
+  const contextGeneration = await accountContextGeneration(db, input.accountId);
+  const identity = Object.freeze({ accountId: input.accountId, contextGeneration });
+  await assertRuntimeContext(db, identity, { allowPaused: true });
   const code = newLinkCode();
   const expiresAt = new Date(input.now.getTime() + (input.ttlMs ?? LINK_CODE_TTL_MS)).toISOString();
   const pending = (await listLinks(db, input.accountId)).find((l) => l.channel === input.channel && !l.verifiedAt);
+  await assertRuntimeContext(db, identity, { allowPaused: true });
   if (pending) {
-    await unwrap("channel_links.update", db.from("channel_links").update({ link_code: code, link_code_expires_at: expiresAt, user_id: input.userId }).eq("id", pending.id));
+    await unwrap("channel_links.update", db.from("channel_links").update({ link_code: code, link_code_generation: contextGeneration, link_code_expires_at: expiresAt, user_id: input.userId }).eq("id", pending.id).eq("account_id", input.accountId).eq("binding_version", pending.bindingVersion).select("id").single());
     return { linkId: pending.id, code, expiresAt };
   }
   const row = await unwrap<{ id: string }>(
     "channel_links.insert",
     db
       .from("channel_links")
-      .insert({ account_id: input.accountId, user_id: input.userId, channel: input.channel, link_code: code, link_code_expires_at: expiresAt, prefs: DEFAULT_PREFS, created_at: input.now.toISOString() })
+      .insert({ account_id: input.accountId, user_id: input.userId, channel: input.channel, link_code: code, link_code_generation: contextGeneration, link_code_expires_at: expiresAt, prefs: DEFAULT_PREFS, created_at: input.now.toISOString() })
       .select("id")
       .single(),
   );
@@ -173,8 +183,8 @@ export async function consumeLinkCode(db: DbClient, input: ConsumeInput): Promis
 
   const nowIso = input.now.toISOString();
   const patch: Row = { external_id: input.externalId, handle: input.handle ?? null, display_name: input.displayName ?? null, verified_at: nowIso, link_code: null, link_code_expires_at: null, last_inbound_at: nowIso };
-  await unwrap("channel_links.update", db.from("channel_links").update(patch).eq("id", pending.id));
-  const link = { ...pending, externalId: input.externalId, handle: input.handle ?? null, displayName: input.displayName ?? null, verifiedAt: nowIso, linkCode: null, linkCodeExpiresAt: null, lastInboundAt: nowIso };
+  const written = await unwrap<Row>("channel_links.update", db.from("channel_links").update(patch).eq("id", pending.id).select(LINK_COLS).single());
+  const link = rowToLink(written);
   return { ok: true, link, welcome: welcomeLine(input.channel) };
 }
 
@@ -187,15 +197,15 @@ export async function upsertVerifiedLink(
   const existing = await unwrap<Row | null>("channel_links.select", db.from("channel_links").select(LINK_COLS).eq("channel", input.channel).eq("external_id", input.externalId).maybeSingle());
   if (existing) {
     const patch: Row = { account_id: input.accountId, user_id: input.userId, handle: input.handle ?? null, display_name: input.displayName ?? null, verified_at: nowIso, link_code: null, link_code_expires_at: null, meta: { ...((existing.meta as Record<string, unknown>) ?? {}), ...(input.meta ?? {}) } };
-    await unwrap("channel_links.update", db.from("channel_links").update(patch).eq("id", existing.id));
-    return rowToLink({ ...existing, ...patch });
+    const written = await unwrap<Row>("channel_links.update", db.from("channel_links").update(patch).eq("id", existing.id).select(LINK_COLS).single());
+    return rowToLink(written);
   }
   // a pending code row for this channel becomes the verified one
   const pending = (await listLinks(db, input.accountId)).find((l) => l.channel === input.channel && !l.verifiedAt);
   if (pending) {
     const patch: Row = { user_id: input.userId, external_id: input.externalId, handle: input.handle ?? null, display_name: input.displayName ?? null, verified_at: nowIso, link_code: null, link_code_expires_at: null, meta: input.meta ?? {} };
-    await unwrap("channel_links.update", db.from("channel_links").update(patch).eq("id", pending.id));
-    return { ...pending, userId: input.userId, externalId: input.externalId, handle: input.handle ?? null, displayName: input.displayName ?? null, verifiedAt: nowIso, linkCode: null, linkCodeExpiresAt: null, meta: input.meta ?? {} };
+    const written = await unwrap<Row>("channel_links.update", db.from("channel_links").update(patch).eq("id", pending.id).select(LINK_COLS).single());
+    return rowToLink(written);
   }
   const row = await unwrap<Row>(
     "channel_links.insert",

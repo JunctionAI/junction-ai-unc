@@ -90,7 +90,7 @@ async function sayToUnknown(deps: InboundDeps, event: InboundEvent, text: string
   if (!adapter?.configured) return;
   // Slack needs a workspace token; an unknown Slack user in an installed workspace still has one on file via team meta — skip rather than guess.
   if (event.channel === "slack") return;
-  const pseudo: ChannelLink = { id: "", accountId: "", userId: null, channel: event.channel, externalId: event.externalId, handle: null, displayName: null, verifiedAt: null, linkCode: null, linkCodeExpiresAt: null, prefs: { brief: false, approvals: false, drafts: false, quiet_hours: null }, meta: {}, lastInboundAt: deps.now().toISOString(), createdAt: "" };
+  const pseudo: ChannelLink = { id: "", accountId: "", bindingVersion: 0, linkCodeGeneration: null, userId: null, channel: event.channel, externalId: event.externalId, handle: null, displayName: null, verifiedAt: null, linkCode: null, linkCodeExpiresAt: null, prefs: { brief: false, approvals: false, drafts: false, quiet_hours: null }, meta: {}, lastInboundAt: deps.now().toISOString(), createdAt: "" };
   await adapter.send(event.externalId, { text }, { link: pseudo }).catch(() => undefined);
 }
 

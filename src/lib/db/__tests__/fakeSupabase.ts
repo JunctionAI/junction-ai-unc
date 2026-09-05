@@ -331,6 +331,7 @@ export class FakeSupabase implements DbClient {
     const out: Row = {};
     for (const c of t.columns) out[c] = c in row ? row[c] : null;
     if (t.columns.has("context_generation") && !("context_generation" in row)) out.context_generation = 0;
+    if (table === "channel_links" && !("binding_version" in row)) out.binding_version = 0;
     if (table === "accounts" && !("automation_paused" in row)) out.automation_paused = false;
     if (t.columns.has("id") && out.id === null) out.id = fakeUuid();
     for (const c of ["created_at", "updated_at", "started_at", "saved_at"]) if (t.columns.has(c) && out[c] === null) out[c] = this.now();
