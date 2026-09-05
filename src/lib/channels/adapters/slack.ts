@@ -44,10 +44,15 @@ export function verifySlackWebhook(rawBody: string | Buffer, headers: { signatur
 
 export type SlackInbound = { kind: "challenge"; challenge: string } | { kind: "events"; events: InboundEvent[] };
 
-type SlackEvent = { type?: string; channel_type?: string; user?: string; bot_id?: string; subtype?: string; text?: string; channel?: string; ts?: string; event_ts?: string };
+type SlackEvent = { type?: string; channel_type?: string; user?: string; bot_id?: string; subtype?: string; text?: string; channel?: string; ts?: string; thread_ts?: string; event_ts?: string };
 type SlackEventBody = { type?: string; challenge?: string; team_id?: string; event?: SlackEvent; event_id?: string };
 type SlackAction = { action_id?: string; value?: string; block_id?: string };
-type SlackInteraction = { type?: string; user?: { id?: string; username?: string; name?: string }; team?: { id?: string }; actions?: SlackAction[]; response_url?: string; trigger_id?: string; container?: { channel_id?: string; message_ts?: string } };
+type SlackInteraction = { type?: string; user?: { id?: string; username?: string; name?: string }; team?: { id?: string }; actions?: SlackAction[]; response_url?: string; trigger_id?: string; container?: { channel_id?: string; message_ts?: string }; message?: { ts?: string; thread_ts?: string } };
+
+// Keep timestamps as exact strings for threading; Number loses provider precision.
+const isSlackTimestamp = (v: unknown): v is string => typeof v === "string"
+  && /^\d{1,12}(?:\.\d{1,6})?$/.test(v) && Number(v) > 0;
+const isSlackId = (v: unknown): v is string => typeof v === "string" && /^[A-Z][A-Z0-9]{1,63}$/.test(v);
 
 const stripMentions = (t: string) => t.replace(/<@[A-Z0-9]+>/g, " ").replace(/\s+/g, " ").trim();
 
@@ -56,15 +61,17 @@ export function parseSlackEvent(raw: unknown): SlackInbound {
   if (!raw || typeof raw !== "object") return { kind: "events", events: [] };
   const body = raw as SlackEventBody;
   if (body.type === "url_verification" && typeof body.challenge === "string") return { kind: "challenge", challenge: body.challenge };
-  if (body.type !== "event_callback" || !body.event || !body.team_id) return { kind: "events", events: [] };
+  if (body.type !== "event_callback" || !body.event || !isSlackId(body.team_id)) return { kind: "events", events: [] };
   const e = body.event;
-  if (e.bot_id || e.subtype || !e.user || !e.channel || !e.ts) return { kind: "events", events: [] };
+  if (e.bot_id || e.subtype || !isSlackId(e.user) || !isSlackId(e.channel) || !isSlackTimestamp(e.ts)
+    || (e.thread_ts !== undefined && !isSlackTimestamp(e.thread_ts))) return { kind: "events", events: [] };
   const isDm = e.type === "message" && e.channel_type === "im";
   const isMention = e.type === "app_mention";
   if (!isDm && !isMention) return { kind: "events", events: [] };
-  const text = stripMentions(e.text ?? "");
+  const text = stripMentions(typeof e.text === "string" ? e.text : "");
   if (!text) return { kind: "events", events: [] };
-  return { kind: "events", events: [{ channel: "slack", externalId: e.user, externalMsgId: `${e.channel}:${e.ts}`, text, scopeId: body.team_id, at: new Date(Number(e.ts) * 1000).toISOString() }] };
+  return { kind: "events", events: [{ channel: "slack", externalId: e.user, externalMsgId: `${e.channel}:${e.ts}`, text, scopeId: body.team_id,
+    conversationId: e.channel, threadId: e.thread_ts ?? e.ts, at: new Date(Number(e.ts) * 1000).toISOString() }] };
 }
 
 /** Form body (Interactivity): payload=<json>. */
@@ -75,11 +82,15 @@ export function parseSlackInteraction(payloadJson: string): InboundEvent[] {
   } catch {
     return [];
   }
-  if (p.type !== "block_actions" || !p.user?.id || !p.team?.id) return [];
-  const action = p.actions?.find((a) => typeof a.value === "string" && a.value);
+  if (!p || p.type !== "block_actions" || !isSlackId(p.user?.id) || !isSlackId(p.team?.id)
+    || !isSlackId(p.container?.channel_id) || !isSlackTimestamp(p.container?.message_ts)
+    || (p.message?.ts !== undefined && p.message.ts !== p.container.message_ts)
+    || (p.message?.thread_ts !== undefined && !isSlackTimestamp(p.message.thread_ts))) return [];
+  const action = Array.isArray(p.actions) ? p.actions.find((a) => a && typeof a.value === "string" && a.value) : undefined;
   if (!action?.value) return [];
-  const key = `${p.container?.channel_id ?? "dm"}:${p.container?.message_ts ?? p.trigger_id ?? action.value}`;
-  return [{ channel: "slack", externalId: p.user.id, externalMsgId: `act:${key}:${action.value}`, action: action.value, ackRef: p.response_url, scopeId: p.team.id, handle: p.user.username ?? p.user.name }];
+  const key = `${p.container.channel_id}:${p.container.message_ts}`;
+  return [{ channel: "slack", externalId: p.user.id, externalMsgId: `act:${key}:${action.value}`, action: action.value, ackRef: p.response_url,
+    scopeId: p.team.id, conversationId: p.container.channel_id, threadId: p.message?.thread_ts ?? p.container.message_ts, handle: p.user.username ?? p.user.name }];
 }
 
 /** Body of a request that is either JSON (events) or form-encoded (interactivity). */

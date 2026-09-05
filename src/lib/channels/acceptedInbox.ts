@@ -15,6 +15,8 @@ export function verifiedEventSnapshot(event: InboundEvent): InboundEvent {
     ...(event.handle !== undefined ? { handle: event.handle } : {}),
     ...(event.displayName !== undefined ? { displayName: event.displayName } : {}),
     ...(event.scopeId !== undefined ? { scopeId: event.scopeId } : {}),
+    ...(event.channel === "slack" && event.conversationId !== undefined ? { conversationId: event.conversationId } : {}),
+    ...(event.channel === "slack" && event.threadId !== undefined ? { threadId: event.threadId } : {}),
     ...(event.accountScope !== undefined ? { accountScope: event.accountScope } : {}),
     ...(event.lifecycle !== undefined ? { lifecycle: event.lifecycle } : {}),
     ...(event.at !== undefined ? { at: event.at } : {}),

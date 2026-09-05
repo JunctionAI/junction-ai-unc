@@ -95,6 +95,10 @@ export interface InboundEvent {
   displayName?: string;
   /** Slack: the workspace the event came from (selects the bot token). */
   scopeId?: string;
+  /** Provider conversation, distinct from the sender. Metadata, NOT account authority. */
+  conversationId?: string;
+  /** Provider thread root; for a new Slack thread this is the inbound message ts. */
+  threadId?: string;
   /** Trusted ingress restriction for a single-account pilot. Never parsed from customer text. */
   accountScope?: string;
   at?: string;

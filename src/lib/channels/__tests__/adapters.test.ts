@@ -181,7 +181,7 @@ describe("Slack", () => {
   it("url_verification → challenge; DM + app_mention → turns (mentions stripped); bot / subtype / channel messages ignored", () => {
     expect(parseSlackEvent({ type: "url_verification", challenge: "abc" })).toEqual({ kind: "challenge", challenge: "abc" });
     const dm = parseSlackEvent(JSON.parse(eventBody));
-    expect(dm).toEqual({ kind: "events", events: [{ channel: "slack", externalId: "U1", externalMsgId: "D1:1756800000.000100", text: "hey what's waiting?", scopeId: "T1", at: new Date(1756800000000.1).toISOString() }] });
+    expect(dm).toEqual({ kind: "events", events: [{ channel: "slack", externalId: "U1", externalMsgId: "D1:1756800000.000100", text: "hey what's waiting?", scopeId: "T1", conversationId: "D1", threadId: "1756800000.000100", at: new Date(1756800000000.1).toISOString() }] });
     expect(parseSlackEvent({ type: "event_callback", team_id: "T1", event: { type: "app_mention", user: "U1", channel: "C1", ts: "1.2", text: "<@UBOT> brief me" } })).toMatchObject({ events: [{ text: "brief me", externalMsgId: "C1:1.2" }] });
     expect(parseSlackEvent({ type: "event_callback", team_id: "T1", event: { type: "message", channel_type: "im", bot_id: "B1", user: "U1", channel: "D1", ts: "1", text: "x" } })).toEqual({ kind: "events", events: [] });
     expect(parseSlackEvent({ type: "event_callback", team_id: "T1", event: { type: "message", channel_type: "channel", user: "U1", channel: "C1", ts: "1", text: "x" } })).toEqual({ kind: "events", events: [] });
@@ -190,10 +190,42 @@ describe("Slack", () => {
 
   it("block_actions (form payload=) → a press with the response_url as ack handle", () => {
     const payload = JSON.stringify({ type: "block_actions", user: { id: "U1", username: "tom" }, team: { id: "T1" }, response_url: "https://hooks.slack.com/actions/T1/1/abc", container: { channel_id: "D1", message_ts: "1756800001.5" }, actions: [{ action_id: `ap:${AP}:why`, value: `ap:${AP}:why`, block_id: "b" }] });
-    expect(parseSlackInteraction(payload)).toEqual([{ channel: "slack", externalId: "U1", externalMsgId: `act:D1:1756800001.5:ap:${AP}:why`, action: `ap:${AP}:why`, ackRef: "https://hooks.slack.com/actions/T1/1/abc", scopeId: "T1", handle: "tom" }]);
+    expect(parseSlackInteraction(payload)).toEqual([{ channel: "slack", externalId: "U1", externalMsgId: `act:D1:1756800001.5:ap:${AP}:why`, action: `ap:${AP}:why`, ackRef: "https://hooks.slack.com/actions/T1/1/abc", scopeId: "T1", conversationId: "D1", threadId: "1756800001.5", handle: "tom" }]);
     expect(parseSlackBody(`payload=${encodeURIComponent(payload)}`, "application/x-www-form-urlencoded")).toMatchObject({ events: [{ action: `ap:${AP}:why` }] });
     expect(parseSlackBody("not json", "application/json")).toEqual({ kind: "events", events: [] });
     expect(parseSlackInteraction("{bad")).toEqual([]);
+  });
+
+  it("keeps the original thread and distinguishes two rooms for the same sender", () => {
+    const parse = (channel: string) => parseSlackEvent({ type: "event_callback", team_id: "T1", event: {
+      type: "app_mention", user: "U1", channel, ts: "1756800001.000001", thread_ts: "1756800000.000099", text: "<@UBOT> yes",
+    } });
+    expect(parse("C1")).toMatchObject({ events: [{ externalId: "U1", conversationId: "C1", threadId: "1756800000.000099", externalMsgId: "C1:1756800001.000001" }] });
+    expect(parse("C2")).toMatchObject({ events: [{ externalId: "U1", conversationId: "C2", threadId: "1756800000.000099", externalMsgId: "C2:1756800001.000001" }] });
+  });
+
+  it.each(["bad", "NaN", "Infinity", "-1", "1e12", "", "9999999999999999999999", 1756800000, null])("rejects malformed thread timestamp %j without falling back to a new thread", thread_ts => {
+    expect(parseSlackEvent({ type: "event_callback", team_id: "T1", event: {
+      type: "app_mention", user: "U1", channel: "C1", ts: "1756800001.000001", thread_ts, text: "hi",
+    } })).toEqual({ kind: "events", events: [] });
+  });
+
+  it("rejects invalid message timestamps without throwing and does not interpret text as a destination", () => {
+    const raw = { type: "event_callback", team_id: "T1", event: { type: "app_mention", user: "U1", channel: "C1", ts: "NaN", text: "reply in C2" } };
+    expect(parseSlackEvent(raw)).toEqual({ kind: "events", events: [] });
+    expect(parseSlackEvent({ ...raw, event: { ...raw.event, ts: "1756800001.000001" } })).toMatchObject({ events: [{ conversationId: "C1", threadId: "1756800001.000001" }] });
+  });
+
+  it("uses the thread root for message buttons; rejects missing or contradictory message origins", () => {
+    const raw = { type: "block_actions", user: { id: "U1" }, team: { id: "T1" },
+      container: { channel_id: "C1", message_ts: "1756800001.000001" },
+      message: { ts: "1756800001.000001", thread_ts: "1756800000.000099" }, actions: [{ value: `ap:${AP}:why` }] };
+    expect(parseSlackInteraction(JSON.stringify(raw))).toMatchObject([{ conversationId: "C1", threadId: "1756800000.000099" }]);
+    expect(parseSlackInteraction(JSON.stringify({ ...raw, container: { type: "view" } }))).toEqual([]);
+    expect(parseSlackInteraction(JSON.stringify({ ...raw, message: { ts: "1756800002.000001" } }))).toEqual([]);
+    expect(parseSlackInteraction(JSON.stringify({ ...raw, message: { ...raw.message, thread_ts: "invalid" } }))).toEqual([]);
+    expect(parseSlackInteraction(JSON.stringify({ ...raw, actions: {} }))).toEqual([]);
+    expect(parseSlackInteraction("null")).toEqual([]);
   });
 
   it("send opens the DM once (remembered on the link), posts blocks with the workspace token; no token → fails closed", async () => {

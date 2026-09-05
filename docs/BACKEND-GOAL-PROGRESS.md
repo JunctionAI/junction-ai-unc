@@ -13,7 +13,24 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 72, 6 September NZ / 5 September UTC
+## Latest state — Batch 73, 6 September NZ
+
+**Junction-owned Slack migration: origin capture implemented, routing still
+incomplete.** [Decision, exact batch scope and remaining gates](integration/JUNCTION-OWNED-SLACK-RUNTIME.md).
+The parser and durable ingress snapshot retain Slack conversation/thread IDs
+separately from sender/workspace, with malformed/missing message-origin refusal
+and changed-thread readback tests. Full suite: 3,083 tests / 228 files pass;
+application TypeScript and focused ESLint pass. These are local tests, not a
+live Slack send or database route proof.
+
+No new migration, credential, native listener change, customer message or runtime
+deployment in this batch. Production remains the prior matched `4067b08` release.
+Next work is the account-specific route and sender authorization, then origin
+propagation through commands/outbox and an authorized channel pilot. Existing
+sender-only account lookup and DM delivery are **not fixed by metadata alone**.
+Full B01–B24/all-client acceptance stays active; no goal reset or completion claim.
+
+## Previous state — Batch 72, 6 September NZ / 5 September UTC
 
 **Matched calendar setup release complete; existing-client continuity inventory
 now identifies the next integration gap.** [Release evidence](CALENDAR-CUSTOMER-PREFERENCES-2026-09-06.md)

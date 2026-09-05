@@ -80,6 +80,14 @@ describe("accepted channel binding", () => {
     await db.from("channel_links").update({ channel: "slack", meta: { team_id: "workspace-a" } }).eq("id", captured.binding.kind === "linked" ? captured.binding.linkId : "");
     await expect(assertInboundBinding(db, { ...captured, event: { ...event, channel: "slack", scopeId: "workspace-b" } })).rejects.toThrow();
   });
+  it("preserves Slack conversation metadata without accepting injected account authority", () => {
+    const slack: InboundEvent = { channel: "slack", externalId: "U1", externalMsgId: "C1:1756800001.000001", scopeId: "T1",
+      conversationId: "C1", threadId: "1756800000.000099", text: "hello" };
+    const snapshot = verifiedEventSnapshot({ ...slack, accountId: OTHER, routeId: "untrusted" } as InboundEvent);
+    expect(snapshot).toEqual(slack);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(verifiedEventSnapshot({ ...event, conversationId: "C1", threadId: "1756800000.000099" })).toEqual(event);
+  });
   it("issues pending codes with a fixed generation, including while automation is paused", async () => {
     const { db } = setup();
     await db.from("accounts").update({ context_generation: 3, automation_paused: true }).eq("id", ACCT);
@@ -94,6 +102,15 @@ describe("accepted channel binding", () => {
 });
 
 describe("accepted inbox application contract (RPC fixtures, not SQL proof)", () => {
+  it("rejects a persisted Slack event whose original thread was lost or changed", async () => {
+    const { db, captured } = setup();
+    const slack: InboundEvent = { channel: "slack", externalId: "U1", externalMsgId: "C1:1756800001.000001", scopeId: "T1",
+      conversationId: "C1", threadId: "1756800000.000099", text: "hello" };
+    db.rpcs.accept_channel_inbound = args => ({ id: args.inbox_id, event: { ...slack, threadId: "1756800001.000001" }, binding: captured.binding });
+    await expect(acceptInboundEvent(db, slack)).rejects.toThrow("Persisted message does not match");
+    db.rpcs.accept_channel_inbound = args => ({ id: args.inbox_id, event: args.inbound_event, binding: captured.binding });
+    expect((await acceptInboundEvent(db, slack)).event).toEqual(slack);
+  });
   it("awaits the durable receipt and tolerates jsonb key order", async () => {
     const { db, captured } = setup();
     let release!: () => void;
