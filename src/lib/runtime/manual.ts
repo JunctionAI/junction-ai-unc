@@ -16,24 +16,40 @@ export type ManualPurpose = "run" | "validate" | "input";
 type Operation = { request_id: string; purpose: ManualPurpose; routine_id: string; phase: "prepared" | "claimed";
   request_body: Row; configuration_revision: string; initial_record: RunRecord; run_id: string };
 export type ManualRecord = { operation: Operation; run: RunRecord };
+export type ManualCancellation = { operation: { request_id:string; routine_id:string; purpose:ManualPurpose; phase:"cancelled" }; run:null };
+export type ManualInspection = ManualRecord | ManualCancellation;
 const args = (i: EditorIdentity, requestId: string) => ({ p_account: i.accountId, p_actor: i.userId, p_generation: i.contextGeneration, p_request: requestId });
-function confirmed(data: unknown, i: EditorIdentity, requestId: string): ManualRecord {
-  const d = data as { operation?: Operation & { account_id: string; actor_id: string; context_generation: number }; run?: Row } | null;
+function confirmed(data: unknown, i: EditorIdentity, requestId: string): ManualInspection {
+  const d = data as { operation?: (Operation | ManualCancellation["operation"]) & { account_id: string; actor_id: string; context_generation: number }; run?: Row | null } | null;
   const o = d?.operation, r = d?.run;
-  if (!o || !r || o.account_id !== i.accountId || o.actor_id !== i.userId || o.context_generation !== i.contextGeneration ||
-    o.request_id !== requestId || !["run", "validate", "input"].includes(o.purpose) || !["prepared", "claimed"].includes(o.phase) ||
+  const invalid=()=>new ManualRequestError("Could not verify the original run. Check its saved outcome; do not start another request.",503);
+  if (!o || o.account_id !== i.accountId || o.actor_id !== i.userId || o.context_generation !== i.contextGeneration ||
+    o.request_id !== requestId || !["run", "validate", "input"].includes(o.purpose) || !CATALOG_SPEC_BY_ID[o.routine_id])throw invalid();
+  if(o.phase==="cancelled") {if(r!==null)throw invalid();return{operation:o,run:null};}
+  if (!r || !["prepared", "claimed"].includes(o.phase) ||
     r.id !== o.run_id || r.account_id !== i.accountId || r.context_generation !== i.contextGeneration || r.routine_id !== o.routine_id ||
     r.mode !== "dry_run" || !o.initial_record || o.initial_record.id !== r.id || o.initial_record.accountId !== i.accountId ||
     o.initial_record.contextGeneration !== i.contextGeneration || o.initial_record.routineId !== o.routine_id)
-    throw new ManualRequestError("Could not verify the original run. Check its saved outcome; do not start another request.", 503);
+    throw invalid();
   return { operation: o, run: rowToRun(r) };
 }
 const failed = (code?: string): never => { throw new ManualRequestError("Run not confirmed. Access, settings or an earlier run may have changed. Check the original request before retrying.", code === "42501" ? 403 : code === "40001" ? 409 : code === "22023" ? 400 : 503); };
-export async function readManual(db: DbClient, i: EditorIdentity, requestId: string): Promise<ManualRecord | null> {
+export async function readManual(db: DbClient, i: EditorIdentity, requestId: string): Promise<ManualInspection | null> {
   if (!MANUAL_REQUEST_ID.test(requestId)) throw new ManualRequestError("A valid requestId is required.", 400);
   const { data, error } = await db.rpc("read_manual_routine_request", args(i, requestId));
   if (error) return failed(error.code);
   return data ? confirmed(data, i, requestId) : null;
+}
+export async function cancelManual(db:DbClient,i:EditorIdentity,requestId:string,routineId:string,purpose:ManualPurpose):Promise<ManualCancellation> {
+  if(!MANUAL_REQUEST_ID.test(requestId) || !CATALOG_SPEC_BY_ID[routineId] || routineId==="D03-W01" || !["run","validate","input"].includes(purpose))
+    throw new ManualRequestError("A valid original request identity is required.",400);
+  const {data,error}=await db.rpc("cancel_manual_routine_request",{...args(i,requestId),p_routine:routineId,p_purpose:purpose});
+  if(error)throw new ManualRequestError(error.code==="55000"?"Account is paused. The original request is retained; cancellation cannot close this prepared run during the hold.":
+    "Cancellation not confirmed. The request may already be claimed; check its original outcome before starting another.",error.code==="42501"?403:["40001","55000"].includes(error.code??"")?409:503);
+  const record=confirmed(data,i,requestId);
+  if(record.run!==null || record.operation.routine_id!==routineId || record.operation.purpose!==purpose)
+    throw new ManualRequestError("Cancellation not confirmed. Keep the original request.",503);
+  return record;
 }
 export async function manualResult(store: Store, record: ManualRecord): Promise<RunResult> {
   const r = record.run;
@@ -58,7 +74,9 @@ export async function executeManual(db: DbClient, i: EditorIdentity, requestId: 
   if (!MANUAL_REQUEST_ID.test(requestId)) throw new ManualRequestError("A valid requestId is required.", 400);
   const routineId = String(body.routineId);
   if (routineId === "D03-W01" || !CATALOG_SPEC_BY_ID[routineId]) throw new ManualRequestError("This routine cannot use manual admission.");
-  let record = await readManual(db, i, requestId);
+  const saved = await readManual(db, i, requestId);
+  if(saved?.run===null)throw new ManualRequestError("This original request was cancelled before execution.");
+  let record:ManualRecord|null = saved;
   const same = (a: unknown, b: unknown): boolean => {
     const canonical = (v: unknown): unknown => Array.isArray(v) ? v.map(canonical) : v && typeof v === "object" ?
       Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, canonical(v)])) : v;
@@ -73,14 +91,17 @@ export async function executeManual(db: DbClient, i: EditorIdentity, requestId: 
     const { data, error } = await db.rpc("prepare_manual_routine_request", { ...args(i, requestId), p_purpose: purpose,
       p_body: body, p_revision: snapshot.configurationRevision, p_initial: initial });
     if (error) return failed(error.code);
-    record = confirmed(data, i, requestId);
+    const prepared = confirmed(data, i, requestId);
+    if(prepared.run===null)throw new ManualRequestError("This original request was cancelled before execution.");
+    record = prepared;
     if (record.operation.phase === "claimed") return false;
     const claim = await db.rpc("claim_manual_routine_request", args(i, requestId));
     if (claim.error) return failed(claim.error.code);
     if (typeof claim.data !== "boolean") throw new ManualRequestError("Start claim outcome is uncertain. Check this original request without restarting it.", 503);
     if (!claim.data) {
-      record = await readManual(db, i, requestId);
-      if (!record) return failed();
+      const observed = await readManual(db, i, requestId);
+      if (!observed || observed.run===null) return failed();
+      record=observed;
     }
     return claim.data;
   };

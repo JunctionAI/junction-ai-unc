@@ -26,3 +26,25 @@ it("a timeout never automatically retries or forgets the original identity",asyn
  const r=saveManualJournal(key,ctx,"D01-W01","/api/routines/run",{}),fetch=vi.fn(async()=>{throw new Error("timeout");});vi.stubGlobal("fetch",fetch);
  await expect(sendManualJournal(r)).rejects.toThrow("timeout");expect(fetch).toHaveBeenCalledOnce();expect(loadManualJournal(key)?.requestId).toBe(r.requestId);
 });
+it("a 404 never clears the journal; only a matching cancellation receipt permits recovery",async()=>{
+ const r=saveManualJournal(key,ctx,"D01-W01","/api/routines/run",{});
+ const fetch=vi.fn(async()=>Response.json({error:"not found"},{status:404}));vi.stubGlobal("fetch",fetch);
+ await expect(sendManualJournal(r,true)).rejects.toThrow("Outcome not confirmed");expect(loadManualJournal(key)?.requestId).toBe(r.requestId);
+ fetch.mockImplementation(async()=>Response.json({...ctx,requestId:r.requestId,routineId:r.routineId,purpose:"run",phase:"cancelled",run:null}));
+ expect((await sendManualJournal(r,false,true)).phase).toBe("cancelled");
+ expect(fetch).toHaveBeenLastCalledWith("/api/routines/request",expect.objectContaining({method:"POST",body:JSON.stringify({action:"cancel",requestId:r.requestId,routineId:r.routineId,purpose:"run"})}));
+ expect(loadManualJournal(key)?.requestId).toBe(r.requestId); // Explicit UI clear only.
+});
+it("rejects mismatched cancellation evidence and retains the original key after a lost reply",async()=>{
+ const r=saveManualJournal(key,ctx,"D01-W01","/api/routines/run",{});
+ const fetch=vi.fn(async()=>Response.json({...ctx,requestId:r.requestId,routineId:r.routineId,purpose:"input",phase:"cancelled",run:null}));vi.stubGlobal("fetch",fetch);
+ await expect(sendManualJournal(r,false,true)).rejects.toThrow();
+ fetch.mockImplementation(async()=>{throw new Error("lost cancellation reply");});
+ await expect(sendManualJournal(r,false,true)).rejects.toThrow();expect(loadManualJournal(key)?.requestId).toBe(r.requestId);
+});
+it("rejects stored context tampering and oversized requests before any send",()=>{
+ const r=saveManualJournal(key,ctx,"D01-W01","/api/routines/run",{});
+ rows.set(key,JSON.stringify({...r,contextGeneration:2}));expect(()=>loadManualJournal(key)).toThrow("cannot be read");
+ rows.clear();expect(()=>saveManualJournal(key,ctx,"D01-W01","/api/routines/run",{text:"x".repeat(17000)})).toThrow("safely saved");
+ expect(loadManualJournal(key)).toBeNull();
+});

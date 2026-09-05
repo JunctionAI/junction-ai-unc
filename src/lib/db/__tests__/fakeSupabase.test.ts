@@ -37,6 +37,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "kpi_snapshots",
       "llm_spend_reservations",
       "llm_usage",
+      "manual_routine_cancellations",
       "manual_routine_requests",
       "memories",
       "n8n_shadow_candidates",
@@ -63,6 +64,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "worker_heartbeats",
     ]);
     // 0014 launch hardening
+    expect(s.manual_routine_cancellations.primaryKey).toEqual(["account_id","context_generation","actor_id","request_id"]);
     expect(s.ops_account_access.primaryKey).toEqual(["user_id", "account_id"]);
     expect([...s.ops_account_access.columns]).toEqual(expect.arrayContaining(["granted_at", "granted_by", "reason", "revoked_at", "expires_at"]));
     expect(s.n8n_shadow_candidates.primaryKey).toEqual(["permit_id"]);

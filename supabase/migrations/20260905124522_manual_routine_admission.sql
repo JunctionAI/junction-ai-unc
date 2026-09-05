@@ -22,14 +22,39 @@ alter table public.manual_routine_requests enable row level security;
 revoke all on public.manual_routine_requests from public,anon,authenticated;
 grant select,insert,update,delete on public.manual_routine_requests to service_role;
 
+-- A missing request can still be in flight. Cancellation reserves its identity
+-- permanently, even when no prepare ever reached this database.
+create table public.manual_routine_cancellations (
+  account_id uuid not null references public.accounts(id) on delete cascade,
+  context_generation bigint not null check (context_generation >= 0),
+  actor_id uuid not null,
+  request_id uuid not null,
+  routine_id text not null,
+  purpose text not null check (purpose in ('run','validate','input')),
+  phase text not null default 'cancelled' check (phase='cancelled'),
+  created_at timestamptz not null default clock_timestamp(),
+  primary key (account_id,context_generation,actor_id,request_id)
+);
+alter table public.manual_routine_cancellations enable row level security;
+revoke all on public.manual_routine_cancellations from public,anon,authenticated;
+grant select,insert on public.manual_routine_cancellations to service_role;
+
 create function public.read_manual_routine_request(p_account uuid,p_actor uuid,p_generation bigint,p_request uuid)
 returns jsonb language sql stable security invoker set search_path='' as $$
+ select jsonb_build_object('operation',to_jsonb(c),'run',null)
+ from public.manual_routine_cancellations c
+ join public.accounts a on a.id=c.account_id and a.context_generation=c.context_generation
+ join public.account_members m on m.account_id=a.id and m.user_id=c.actor_id and m.role='owner'
+ where c.account_id=p_account and c.actor_id=p_actor and c.context_generation=p_generation and c.request_id=p_request
+ union all
  select jsonb_build_object('operation',to_jsonb(o),'run',to_jsonb(r))
  from public.manual_routine_requests o join public.routine_runs r on r.id=o.run_id
  join public.accounts a on a.id=o.account_id and a.context_generation=o.context_generation
  join public.account_members m on m.account_id=a.id and m.user_id=o.actor_id and m.role='owner'
  where o.account_id=p_account and o.actor_id=p_actor and o.context_generation=p_generation and o.request_id=p_request
-   and r.account_id=o.account_id and r.context_generation=o.context_generation and r.routine_id=o.routine_id;
+   and r.account_id=o.account_id and r.context_generation=o.context_generation and r.routine_id=o.routine_id
+   and not exists(select 1 from public.manual_routine_cancellations c where c.account_id=p_account and c.actor_id=p_actor
+     and c.context_generation=p_generation and c.request_id=p_request);
 $$;
 
 create function public.prepare_manual_routine_request(p_account uuid,p_actor uuid,p_generation bigint,p_request uuid,
@@ -44,6 +69,8 @@ begin
  if a.context_generation is distinct from p_generation then raise exception 'context_changed' using errcode='40001'; end if;
  if p_request is null or p_purpose is null or p_purpose not in ('run','validate','input') or jsonb_typeof(p_body) is distinct from 'object'
    or octet_length(p_body::text)>16384 then raise exception 'invalid_request' using errcode='22023'; end if;
+ if exists(select 1 from public.manual_routine_cancellations where account_id=p_account and context_generation=p_generation and actor_id=p_actor and request_id=p_request)
+   then raise exception 'request_cancelled' using errcode='40001'; end if;
  select * into o from public.manual_routine_requests where account_id=p_account and context_generation=p_generation and actor_id=p_actor and request_id=p_request;
  if found then
    if o.purpose is distinct from p_purpose or o.request_body is distinct from p_body then raise exception 'request_id_reused' using errcode='40001'; end if;
@@ -99,6 +126,8 @@ begin
  select role into owner_role from public.account_members where account_id=p_account and user_id=p_actor for share;
  if a.id is null or owner_role is distinct from 'owner' then raise exception 'owner_required' using errcode='42501'; end if;
  if a.context_generation is distinct from p_generation or a.automation_paused then raise exception 'context_changed_or_paused' using errcode='40001'; end if;
+ if exists(select 1 from public.manual_routine_cancellations where account_id=p_account and context_generation=p_generation and actor_id=p_actor and request_id=p_request)
+   then raise exception 'request_cancelled' using errcode='40001'; end if;
  select * into o from public.manual_routine_requests where account_id=p_account and context_generation=p_generation and actor_id=p_actor and request_id=p_request for update;
  if o.run_id is null then raise exception 'request_unavailable' using errcode='40001'; end if;
  if o.phase='claimed' then return false; end if;
@@ -122,9 +151,50 @@ begin
  return true;
 end;
 $$;
+
+create function public.cancel_manual_routine_request(p_account uuid,p_actor uuid,p_generation bigint,p_request uuid,p_routine text,p_purpose text)
+returns jsonb language plpgsql security invoker set search_path='' as $$
+declare a public.accounts%rowtype; owner_role text; o public.manual_routine_requests%rowtype;
+ c public.manual_routine_cancellations%rowtype; r public.routine_runs%rowtype;
+begin
+ -- Same first lock as prepare/claim: a late start and cancellation cannot both win.
+ select * into a from public.accounts where id=p_account for update;
+ select role into owner_role from public.account_members where account_id=p_account and user_id=p_actor for share;
+ if a.id is null or owner_role is distinct from 'owner' then raise exception 'owner_required' using errcode='42501'; end if;
+ if a.context_generation is distinct from p_generation then raise exception 'context_changed' using errcode='40001'; end if;
+ if p_request is null or p_purpose is null or p_purpose not in ('run','validate','input') or p_routine is null
+   or p_routine !~ '^D0[1-5]-W0[1-8]$' or p_routine='D03-W01' then raise exception 'invalid_request' using errcode='22023'; end if;
+ select * into c from public.manual_routine_cancellations where account_id=p_account and context_generation=p_generation and actor_id=p_actor and request_id=p_request;
+ if found then
+   if c.routine_id is distinct from p_routine or c.purpose is distinct from p_purpose then raise exception 'request_id_reused' using errcode='40001'; end if;
+   return public.read_manual_routine_request(p_account,p_actor,p_generation,p_request);
+ end if;
+ select * into o from public.manual_routine_requests where account_id=p_account and context_generation=p_generation and actor_id=p_actor and request_id=p_request for update;
+ if found then
+   if o.routine_id is distinct from p_routine or o.purpose is distinct from p_purpose then raise exception 'request_id_reused' using errcode='40001'; end if;
+   if o.phase='claimed' then raise exception 'already_claimed_inspect_original_run' using errcode='40001'; end if;
+   if o.purpose<>'input' then
+     select * into r from public.routine_runs where id=o.run_id for update;
+     if r.id is null or r.account_id<>p_account or r.context_generation<>p_generation or r.routine_id<>p_routine
+       or r.mode<>'dry_run' or r.status<>'running' or r.snapshot is distinct from o.initial_record->'snapshot'
+       then raise exception 'original_run_changed' using errcode='40001'; end if;
+     update public.routine_runs set status='skipped',finished_at=clock_timestamp(),summary='Cancelled before the start was claimed.' where id=o.run_id;
+   end if;
+ end if;
+ -- Selection/settings changes do not authorize execution here. Existing pause
+ -- triggers still protect run updates: a held prepared start cannot be closed
+ -- until that hold is resolved. No bypass or temporary unpause is introduced.
+ -- Missing/answer cancellations do not update the original run.
+ insert into public.manual_routine_cancellations(account_id,context_generation,actor_id,request_id,routine_id,purpose)
+ values(p_account,p_generation,p_actor,p_request,p_routine,p_purpose);
+ return public.read_manual_routine_request(p_account,p_actor,p_generation,p_request);
+end;
+$$;
 revoke all on function public.read_manual_routine_request(uuid,uuid,bigint,uuid) from public,anon,authenticated;
 revoke all on function public.prepare_manual_routine_request(uuid,uuid,bigint,uuid,text,jsonb,text,jsonb) from public,anon,authenticated;
 revoke all on function public.claim_manual_routine_request(uuid,uuid,bigint,uuid) from public,anon,authenticated;
 grant execute on function public.read_manual_routine_request(uuid,uuid,bigint,uuid) to service_role;
 grant execute on function public.prepare_manual_routine_request(uuid,uuid,bigint,uuid,text,jsonb,text,jsonb) to service_role;
 grant execute on function public.claim_manual_routine_request(uuid,uuid,bigint,uuid) to service_role;
+revoke all on function public.cancel_manual_routine_request(uuid,uuid,bigint,uuid,text,text) from public,anon,authenticated;
+grant execute on function public.cancel_manual_routine_request(uuid,uuid,bigint,uuid,text,text) to service_role;
