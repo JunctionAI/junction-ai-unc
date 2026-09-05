@@ -28,4 +28,16 @@ Scope: B07/B08 progress, not full auth or private-beta acceptance. No provider w
 
 ## Release
 
-Database applied and verified; matched app/worker release readback will be recorded here after deployment. AVGAR stays generation 1 / paused. Nguyen's frozen wrapper and the supplied design ZIP are unchanged.
+**Production READY:** https://junction-unc.vercel.app/app
+
+- GitHub and live code: `1a1b0596e67c549425255446db9971ec69524069`, branch `codex/backend-foundation-20260905`. Clean detached release checkout; unrelated `src/lib/runtime/context 2.ts` preserved and excluded.
+- Vercel deployment `dpl_2pvHPR8wb55mykjBnuy7orjgiJaE`; protected candidate `junction-g0906scft-tom-junctionmedis-projects.vercel.app` independently checked and promoted. Next.js 16.3.4; build-to-ready 43.392 seconds. Canonical health reports the matching code and healthy DB.
+- Fly existing machine `1857466fd76998`, release 19, image `registry.fly.io/unc-worker@sha256:d882624a87f8d270973bfd574a068eced262fc9917c66d721c69e277d5babab3`. Exact SHA matches the app; started 10:25:23.968 UTC, two ticks through 10:26:24.089 UTC, zero runs and dry-run mode. Independent machine metadata confirms command/messaging/live/SMS/Apple flags all false.
+- Authenticated owner Home/Connectors load. Meta/Shopify selections and historical successful reads retained. Instagram/TikTok/YouTube now say no completed data read instead of claiming an active 90-day read. No connect/reconnect/disconnect action was taken. Unauthenticated connector state returns 401; Apple webhook remains 503 `apple_channel_not_ready`.
+- 10:26:21 UTC DB readback: zero synthetic accounts, refresh attempts, runs and OAuth states. AVGAR stays generation 1 / paused. There are 19 connector rows and two sealed credentials **database-wide**; the active AVGAR account has six connector rows and two dated successful selected bindings. Earlier shorthand must not be interpreted as 19 AVGAR connections.
+- Security advisors: six existing WARN and thirteen INFO; the extra INFO is intentional service-only RLS-with-no-client-policies on the refresh-attempt table. Actual anonymous/authenticated grants denied and tested. The pre-existing warnings remain open.
+- Bounded Vercel error/fatal scan since 10:24 UTC returned zero entries. Drains were not re-inventoried; ongoing monitoring remains an acceptance gap, not signed off by this snapshot.
+
+Rollback pair: Batch 26 code `0c673111e1867181d938919d8f01509c58624aa0`, Vercel `dpl_BhJ3V2t2TGqfSFutWHxjKhNJBwYC`, worker image `b33071940bad4b066521c890a842ee3c54cbcb484c8ccdf0d2e20876c1776c69`. Additive schema can stay. Rollback would remove the new refresh safeguards; reconcile any intervening refresh attempts before doing so.
+
+Nguyen's frozen wrapper and the supplied design ZIP are unchanged. [Tom's updated all-screen/all-client acceptance and next work](LAUNCH-ACCEPTANCE.md) supersedes any implication that another isolated safety batch finishes the product.

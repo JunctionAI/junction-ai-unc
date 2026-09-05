@@ -3,6 +3,8 @@
 Active goal: complete the acceptance gates in `BACKEND-COMPLETION-PLAN-2026-09-05.md`.
 Started 5 September 2026. This file records progress; it does not replace the 24-item register.
 
+Tom's latest clarification extends acceptance to the real landing/client/ops screens and every in-scope client's existing systems. [Current launch acceptance and token-efficient work order](LAUNCH-ACCEPTANCE.md) is the governing delivery overlay. The goal is not reset or narrowed to the keyword pilot; test counts and isolated safety releases do not establish completion.
+
 ## Current boundaries
 
 - Nguyen owns n8n delivery. Do not edit, activate or execute his workflows while he is working. Integrate after his acceptance packet arrives.
@@ -16,7 +18,8 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 
 - Captured grant/account/owner guards, mandatory leases, durable refresh-attempt uncertainty, classified bounded retries, atomic settlement, per-page worker checks and redacted dashboard recovery evidence. Removed fictitious running-read copy and generic reconnect prescriptions.
 - **200 files / 2,542 tests PASS**, app/worker TypeScript, production build, lint zero errors / 39 existing warnings. Real service-role SQL rehearsal and post-migration rollback canary passed. No provider call or credential replacement during verification.
-- [Exact behavior, acceptance limitations and release readback](CONNECTOR-TOKEN-CONTEXT-2026-09-05.md). B07 remains partial: shared Google grants, disconnect/revoke and hosted/manual/picker races, operator recovery and actual provider acceptance remain. n8n and frontend gates are unchanged. Matched release verification is in progress.
+- Live/pushed source `1a1b0596e67c549425255446db9971ec69524069`; Vercel `dpl_2pvHPR8wb55mykjBnuy7orjgiJaE`, Fly release 19 / image `d882624a87f8d270973bfd574a068eced262fc9917c66d721c69e277d5babab3`. Health SHA, two worker ticks, authenticated dashboard, 401/disabled-Apple 503 and zero-run/fixture SQL checks pass. Five action flags false; AVGAR paused. Bounded error scan empty; ongoing monitoring not signed off.
+- [Exact behavior, acceptance limitations and release readback](CONNECTOR-TOKEN-CONTEXT-2026-09-05.md). B07 remains partial: shared Google grants, disconnect/revoke and hosted/manual/picker races, operator recovery and actual provider acceptance remain. n8n and frontend gates are unchanged. [All-screen/all-client acceptance](LAUNCH-ACCEPTANCE.md) now guides the next work: supplied frontend wiring, canonical client/system reconciliation and actual journey acceptance. Read-only account inventory finds seven records, including two AVGAR records, five without membership; none of that proves the legacy systems are broken or grants authority to merge accounts.
 
 ## Batch 26, 5 September 2026, approximately 10:02 UTC
 

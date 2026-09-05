@@ -18,7 +18,11 @@ The model interprets requests and explains outcomes. It does not decide tenant i
 
 Current scope remains read/draft/shadow. No publishing, customer messaging, ad mutation or spending activation was enabled during this work. No Nguyen workflow was edited, executed or registered during this audit. Messages to Tom in the eventual pilot channel and outward customer campaigns are separate authorities.
 
-## Fresh evidence
+## Current acceptance overlay
+
+This document's original audit below is historical. Read [the execution ledger](BACKEND-GOAL-PROGRESS.md) for current release evidence and [the all-screen/all-client launch acceptance plan](LAUNCH-ACCEPTANCE.md) for Tom's latest delivery requirement and work priorities. No original B01–B24 gate is silently removed.
+
+## Fresh evidence — original audit, superseded by the execution ledger
 
 | Check | Observed result |
 |---|---|
