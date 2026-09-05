@@ -13,7 +13,15 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 50, 6 September NZ / 5 September UTC
+## Latest state — Batch 51, 6 September NZ / 5 September UTC
+
+**Matched release and actual two-query AVGAR Meta ingestion/reuse pass.** [Deployment, runtime, saved-data receipts and limits](DATASET-LIVE-RELEASE-2026-09-06.md). Source `7cf363cadee7e1c72e86a014812550f7b000fee0`, Vercel `dpl_5jXKUjsrnTgYCK6c9Kt1qr6EydZC`, Fly release 29/image `aa617890ce47dce3d2d45bf848a157ff12f9fd7fc1e209449857b3545b2f6e7f`. Canonical health, actual worker SHA, anonymous denial and signed-in AVGAR/reload pass. Error/fatal scans empty; zero drains/alert-delivery gap retained.
+
+Temporary all-routines-off test window opened 16:23:27 UTC and closed 16:23:50. Existing Meta account currency independently reads NZD. Three provider GETs (currency plus two query reads) produced snapshots `09726ed5-f15a-4fc8-a432-d616b82d7f61` (three insights rows) and `e1a4b0c9-a7fd-4c1b-bc6b-906c55ff8033` (62 adsets). Repeated sync and new stored-reader instances reused each without another provider call. Post-closure apply refused before credential/provider access. Zero workflow runs, external mutations or credential replacements. SQL retains pause true, zero enabled routines, four runs/one command and three snapshots. Nine operator preflight Node tests plus script syntax/lint pass; deployed source retains 2,771-test validation.
+
+**Next genuine Codex gap surfaced by the data:** the ad-set metric sums paused/campaign-paused budgets and selects an ineligible largest ad set. Total configured NZD 173.67 is not the effectively active daily-adset subset NZD 32.61, and neither is actual/projected account spend. Keep reader cutover/decisioning off while correcting and versioning these metric semantics from saved data. Then complete warming coverage, scoped ongoing sync and interval/restart proof. Legacy refresh-lease env absence no longer disables mandatory native token refresh/reseal guards. No new Nguyen reply after 4:09 AM; no duplicate request or n8n edit. Both this and the previous goal turn are verified progress. Full B01–B24/all-client goal remains active, not narrowed to dataset ingestion.
+
+## Previous state — Batch 50, 6 September NZ / 5 September UTC
 
 **Separated dataset producer admission from consumer cutover; live metadata inspection proves the current gap.** [Behavior, commands and actual evidence](DATASET-WARMING-2026-09-06.md). The worker now requires `UNC_DATA_SYNC_ACCOUNTS` separately from `UNC_STORED_DATA_ACCOUNTS`, permitting staged warming without forcing readers onto absent snapshots. Shared validation rejects unverified, stale/future and reporting-day-mismatched observations. A metadata-only account inspector derives effective enabled/proposed Meta queries, deduplicates consumers, rejects empty-demand/foreign/context-changed evidence and never calls providers or writes.
 
