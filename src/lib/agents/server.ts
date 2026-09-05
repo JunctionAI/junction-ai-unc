@@ -6,6 +6,10 @@ import { getStore } from "@/lib/runtime/store";
 import { routinesStateForAccount } from "@/lib/runtime/routinesState";
 import { AGENT_JOBS } from "@/lib/agents/catalog";
 import type { AgentsSnapshot } from "@/lib/agents/types";
+import { keywordCommandMarket } from "@/lib/n8n/keywordCommand";
+import { commandSelectionReleased } from "@/lib/commands/releaseScope";
+import { effectiveSpec } from "@/lib/runtime/versioning";
+import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
 
 const json = (body: unknown, status=200) => Response.json(body,{status,headers:{"cache-control":"private, no-store"}});
 const failure = () => json({error:"Couldn’t verify the saved agent settings. Refresh before trying again."},503);
@@ -25,12 +29,23 @@ export async function agentSnapshot(req: Request) {
     unwrap<{automation_paused:boolean}>("agents.pause",session.service.from("accounts").select("automation_paused").eq("id",session.accountId).single()),
   ]);
   if (!member) return json({error:"Account access changed. Sign in again."},403);
+  let keywordBlock = "Keyword requests need a reviewed account-specific market configuration.";
+  if (listing.routines.some(r => r.routineId === "D03-W01")) {
+    const store = getStore();
+    const [state, workflow] = await Promise.all([store.getRoutineState(session.accountId, "D03-W01"), store.findN8nWorkflow(session.accountId, "D03-W01")]);
+    if (state) {
+      const spec = effectiveSpec(state, CATALOG_SPEC_BY_ID["D03-W01"]);
+      const actor = { accountId: session.accountId, userId: session.userId, contextGeneration: ctx.contextGeneration, channel: "app" as const, requestId: "selection-preview" };
+      if (keywordCommandMarket(actor, spec, workflow)) keywordBlock = commandSelectionReleased(actor, spec, workflow)
+        ? "" : "Keyword requests are not released for this account and market yet.";
+    }
+  }
   await assertRuntimeContext(session.service,ctx,{allowPaused:true});
   const byId = new Map(states.map(s=>[s.routine_id,s]));
   if (listing.spec && listing.spec.version !== (byId.get(listing.spec.id)?.version ?? 1)) return json({error:"Routine configuration changed. Refresh to inspect it."},409);
   const data: AgentsSnapshot = {...listing,...ctx,actorId:session.userId,fetchedAt:new Date().toISOString(),role:member.role,paused:account.automation_paused,
     routines:listing.routines.map(r=>{const s=byId.get(r.routineId);return {...r,enabled:s?.enabled??false,version:s?.version??1,stateUpdatedAt:s?.updated_at??null,
-      selectionBlock:r.routineId==="D03-W01" ? "Keyword pilot requires operator-authorized registration and independent execution verification." : r.skillSource==="none" ? "No drafting implementation is registered." : !r.canEnable ? r.availabilityCopy : null};})};
+      selectionBlock:r.routineId==="D03-W01" ? keywordBlock || null : r.skillSource==="none" ? "No drafting implementation is registered." : !r.canEnable ? r.availabilityCopy : null};})};
   return {session,data};
 }
 export async function GET(req: Request) {

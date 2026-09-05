@@ -13,7 +13,15 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 45, 6 September NZ / 5 September UTC
+## Latest state — Batch 46, 6 September NZ / 5 September UTC
+
+**Customer keyword command admission implemented; additive database migration installed.** [Exact request path, release/readback, tests and remaining activation gates](KEYWORD-CUSTOMER-COMMAND-2026-09-06.md). The existing queue now has a D03-W01 path to one-use issuance/start, bound to the command ID, current owner, saved reviewed market/recipe, full queued fingerprints and original ten-minute expiry. Customer switch withdrawal is enforced again at provider authority consumption. The existing operator entry/CLI and its three historical results remain separate and unchanged. Agents switch readiness is conditional on the actual saved adapter and exact rollout scope.
+
+Production migration **20260905152646** (source `20260905151627_keyword_command_admission.sql`) installed three service-only, security-invoker RPCs and the customer permit trigger; existing core function hashes are unchanged. Independent production negative check denies repurposing operator permits as customer commands. Readback retains AVGAR paused/generation 1, three runs/artifacts/verified permits, zero commands/enabled routines. Advisors unchanged at 16 INFO / 6 WARN. No provider invocation, n8n change, account unpause, switch or environment change.
+
+Full 212-file / 2,707-unit suite, app/worker TypeScript, 36 operator/preflight tests and focused lint pass. Exact migration functions also pass twenty isolated real-PostgreSQL checks including observed concurrent lock waiting, one issuance/start winner and switch-off provider refusal. Customer pipeline unit tests use fake provider responses, not live business output. App/worker source is not deployed yet. Next: install the reviewed saved customer configuration, release compatible app/worker code, then prove a bounded signed-in command and reloadable result. B03 and the full B01–B24/all-client goal remain active. Both this turn and the prior goal turn made concrete implementation progress.
+
+## Previous state — Batch 45, 6 September NZ / 5 September UTC
 
 **Customer command rollout scoping implemented in source; not yet deployed or activated.** [Behavior, verification and remaining customer keyword work](COMMAND-RELEASE-SCOPE-2026-09-06.md). The global command flag is now insufficient by itself: server-controlled exact account/generation/channel/routine/spec/workflow scopes are also required. Worker execution rechecks owner, switch and selected revision through engine steps; changes during a read stop later provider work/acceptance. Explicit slash requests while disabled get a deterministic refusal. The keyword operator allowance remains separate and cannot be used through generic chat dispatch.
 

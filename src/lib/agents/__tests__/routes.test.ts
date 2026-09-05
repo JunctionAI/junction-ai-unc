@@ -1,21 +1,28 @@
-import {beforeEach,describe,expect,it,vi} from "vitest";
+import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
 import {FakeSupabase} from "@/lib/db/__tests__/fakeSupabase";
 import type {AccountSession} from "@/lib/db/session";
 import {AGENT_JOBS} from "../catalog";
 import {ALL_SYSTEMS} from "@/lib/platform/catalog";
-const A="00000000-0000-4000-8000-000000000001", U="00000000-0000-4000-8000-000000000002";
+import {keywordPilotContract,KEYWORD_PILOT_PIN} from "@/lib/n8n/keywordAdmission";
+import {keywordShadowSpec} from "@/lib/n8n/keywordShadowSpec";
+import {digest} from "@/lib/commands/queue";
+import {workflowFingerprint} from "@/lib/commands/releaseScope";
+const A="aa5cfc84-2569-4c99-9b40-67003ae55eda", U="00000000-0000-4000-8000-000000000002";
 let db:FakeSupabase, session:AccountSession|Response;
 const listing=vi.hoisted(()=>vi.fn());
+const store=vi.hoisted(()=>({getRoutineState:vi.fn(),findN8nWorkflow:vi.fn()}));
 vi.mock("@/lib/db/session",()=>({requireAccountSession:async()=>session}));
 vi.mock("@/lib/db/runtimeContext",()=>({assertRuntimeContext:async()=>{}}));
-vi.mock("@/lib/runtime/store",()=>({getStore:()=>({})}));
+vi.mock("@/lib/runtime/store",()=>({getStore:()=>store}));
 vi.mock("@/lib/runtime/routinesState",()=>({routinesStateForAccount:listing}));
 import {GET,POST} from "@/app/api/agents/route";
 import {GET as legacyGet,POST as legacyPost} from "@/app/api/routines/state/route";
 import {POST as setupPost} from "@/app/api/setup/enable/route";
 const request=(body?:unknown,account=A,generation="1")=>new Request("https://unc.test/api/agents",{method:body===undefined?"GET":"POST",headers:{"content-type":"application/json","x-unc-account-id":account,"x-unc-context-generation":generation},...(body===undefined?{}:{body:JSON.stringify(body)})});
 const change={routineId:"D01-W01",enabled:true,stateUpdatedAt:null,version:1};
+afterEach(()=>vi.unstubAllEnvs());
 beforeEach(()=>{
+  store.getRoutineState.mockReset().mockResolvedValue(null);store.findN8nWorkflow.mockReset().mockResolvedValue(null);
   db=new FakeSupabase();db.seed("accounts",[{id:A,name:"Fixture",context_generation:1,automation_paused:false}]);db.seed("account_members",[{account_id:A,user_id:U,role:"owner"}]);
   session={accountId:A,userId:U,role:"owner",email:"fixture@example.test",db,service:db};
   listing.mockReset();listing.mockResolvedValue({routines:[{routineId:"D01-W01",enabled:false,version:1,canEnable:true,skillSource:"builtin",availabilityCopy:"drafts only"}],connected:[],business:{},recommendedFirst:[],planChannel:null});
@@ -58,6 +65,27 @@ describe("account-bound Agents API",()=>{
     const saved={accountId:A,contextGeneration:1,routineId:"D01-W01",enabled:true,version:1,stateUpdatedAt:"2026-09-05T11:30:00Z"};
     const rpc=vi.spyOn(db,"rpc").mockResolvedValue({data:saved,error:null});expect(await (await POST(request(change))).json()).toEqual({saved});
     expect(rpc).toHaveBeenCalledExactlyOnceWith("set_agent_switch",{p_account:A,p_actor:U,p_generation:1,p_routine:"D01-W01",p_enabled:true,p_expected_updated_at:null,p_expected_version:1});
+  });
+  it("exposes the keyword switch only for the reviewed saved selection and explicit release",async()=>{
+    const now=new Date(),expiry=new Date(now.getTime()+600000).toISOString();
+    const contract=keywordPilotContract({authorizedBy:U,approvalReference:"TEST",idempotencyKey:"TEST",market:"US",contextGeneration:1,maxProviderCalls:1,expiresAt:expiry},now);
+    const spec=keywordShadowSpec(contract,2),workflow={id:"00000000-0000-4000-8000-000000000003",accountId:A,routineId:"D03-W01",active:true,webhookUrl:KEYWORD_PILOT_PIN.receiverUrl};
+    store.getRoutineState.mockResolvedValue({accountId:A,routineId:spec.id,enabled:false,version:2,liveSpec:spec,draftSpec:null,updatedAt:now.toISOString()});
+    store.findN8nWorkflow.mockResolvedValue(workflow);
+    listing.mockResolvedValue({routines:[{routineId:spec.id,canEnable:true,skillSource:"n8n"}]});
+    expect((await (await GET(request())).json()).routines[0].selectionBlock).toContain("not released");
+    vi.stubEnv("UNC_COMMANDS_ENABLED","true");vi.stubEnv("UNC_COMMAND_RELEASE_SCOPES",JSON.stringify([{accountId:A,contextGeneration:1,channel:"app",routineId:spec.id,
+      specHash:digest(spec),workflowHash:workflowFingerprint(workflow),expiresAt:expiry}]));
+    expect((await (await GET(request())).json()).routines[0].selectionBlock).toBeNull();
+    const saved={accountId:A,contextGeneration:1,routineId:spec.id,enabled:true,version:2,stateUpdatedAt:now.toISOString()};
+    const rpc=vi.spyOn(db,"rpc").mockResolvedValue({data:saved,error:null});
+    expect((await POST(request({...change,routineId:spec.id,version:2}))).status).toBe(200);
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("set_agent_switch",expect.objectContaining({p_routine:spec.id,p_enabled:true}));
+  });
+  it("does not call the switch RPC if keyword configuration cannot be read",async()=>{
+    listing.mockResolvedValue({routines:[{routineId:"D03-W01",canEnable:true,skillSource:"n8n"}]});
+    store.getRoutineState.mockRejectedValue(Error("unavailable"));const rpc=vi.spyOn(db,"rpc");
+    expect((await POST(request({...change,routineId:"D03-W01"}))).status).toBe(503);expect(rpc).not.toHaveBeenCalled();
   });
   it("permits switching off while paused, but never hides a lost/conflicting save",async()=>{
     await db.from("accounts").update({automation_paused:true}).eq("id",A);const rpc=vi.spyOn(db,"rpc").mockResolvedValue({data:null,error:{code:"40001",message:"sensitive database detail"}});

@@ -18,9 +18,10 @@ export interface CommandReleaseScope {
 const fields = ["accountId", "contextGeneration", "channel", "routineId", "specHash", "workflowHash", "expiresAt"];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const hash = /^[0-9a-f]{64}$/;
-export const workflowFingerprint = (w: N8nWorkflow | null) => digest(w ? {
+export const workflowSelection = (w: N8nWorkflow | null) => w ? {
   id: w.id, accountId: w.accountId, routineId: w.routineId, webhookUrl: w.webhookUrl, active: w.active,
-} : null);
+} : null;
+export const workflowFingerprint = (w: N8nWorkflow | null) => digest(workflowSelection(w));
 
 /** Malformed config denies the entire release, never silently drops a bad entry. */
 export function commandReleaseScopes(raw: string | undefined): CommandReleaseScope[] {

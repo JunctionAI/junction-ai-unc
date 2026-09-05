@@ -21,6 +21,8 @@ import { freezeCommandActor } from "../lib/commands/binding";
 import { assertCommandSelection } from "../lib/commands/selectionGuard";
 import { digest } from "../lib/commands/queue";
 import { workflowFingerprint } from "../lib/commands/releaseScope";
+import { keywordCommandRunOptions } from "../lib/n8n/keywordCommand";
+import { assertKeywordRuntimeAccess } from "./providers/keywordRuntime";
 
 export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapters, c: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null) {
   c = Object.freeze({ ...c, actor: freezeCommandActor(c.actor) });
@@ -42,7 +44,15 @@ export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapter
     const value = Reflect.get(target, key);
     return typeof value === "function" ? value.bind(target) : value;
   } }) as Store;
-  const result = await runRoutine(spec, { account: account.account, triggeredBy: "manual", vars: account.vars ?? {}, inputs: { request: c.request } }, {
+  const options = spec.id === "D03-W01"
+    ? keywordCommandRunOptions(deps.db!, c, spec, workflow, deps.now)
+    : { mode: "dry_run" as const, runId: c.id };
+  if (spec.id === "D03-W01") {
+    if (!deps.db) throw new Error("Keyword commands require durable database admission");
+    assertKeywordRuntimeAccess();
+  }
+  const result = await runRoutine(spec, { account: account.account, triggeredBy: "manual", vars: account.vars ?? {},
+    ...(spec.id === "D03-W01" ? {} : { inputs: { request: c.request } }) }, {
     ...adapters, store: pinned,
     assertContext: async current => {
       assertSameRuntimeContext(identity, current);
@@ -51,7 +61,7 @@ export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapter
     },
     // A selected external workflow never silently falls back to a different implementation.
     ...(workflow ? { producer: undefined } : {}),
-  }, { mode: "dry_run", runId: c.id });
+  }, options);
   return result;
 }
 

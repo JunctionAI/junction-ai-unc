@@ -10,6 +10,7 @@ import type { CommandActor, CommandQueue, DispatchReply } from "./types";
 import { assertSameRuntimeContext, runtimeGeneration } from "../runtime/contextFence";
 import { freezeCommandActor } from "./binding";
 import { workflowFingerprint } from "./releaseScope";
+import { keywordCommandMarket } from "../n8n/keywordCommand";
 export { workflowFingerprint } from "./releaseScope";
 
 export interface DispatchDeps {
@@ -31,9 +32,9 @@ export async function eligible(deps: DispatchDeps, actor: CommandActor, routineI
   if (!catalog) return { ok: false, reply: "That routine is not in the supported library. Nothing was started." };
   const state = await deps.store.getRoutineState(actor.accountId, routineId);
   if (!state?.enabled) return { ok: false, reply: `${catalog.name} is switched off. Enable it in Routines before asking me to run it.` };
-  if (routineId === "D03-W01") return { ok: false, reply: "Keyword requests still need the customer authorization connection. This routine requires a separate one-use allowance; nothing was started." };
   const spec = effectiveSpec(state, catalog);
   const workflow = await deps.store.findN8nWorkflow(actor.accountId, routineId);
+  if (routineId === "D03-W01" && !keywordCommandMarket(actor, spec, workflow)) return { ok: false, reply: "Keyword requests still need the customer authorization connection and reviewed market settings. Nothing was started." };
   if (!deps.selectionReleased(actor, spec, workflow)) return { ok: false, reply: `${catalog.name} is not released for requests on this account and channel yet. Nothing was started.` };
   const [connected, business] = await Promise.all([deps.connected(actor.accountId), deps.business(actor.accountId)]);
   const availability = routineAvailability(spec, connected, business);

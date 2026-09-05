@@ -1,5 +1,7 @@
 # Customer command release scope — source implementation
 
+Historical Batch 45 checkpoint. [Batch 46](KEYWORD-CUSTOMER-COMMAND-2026-09-06.md) now supplies the command-bound keyword admission path and conditional keyword switch readiness. The rollout scope mechanism below remains; full customer activation is still pending.
+
 Status: implemented and tested locally; not deployed or enabled. B03 remains partial.
 
 The existing command path had a global on/off switch, not a per-client rollout boundary. Its queue consumer checked the routine before starting, but did not recheck the selected routine/owner/implementation during later runtime steps. That cannot safely express “release the accepted routine to this account only”.
