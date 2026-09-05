@@ -12,7 +12,16 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 29, 5 September 2026
+## Latest state — Batch 30, 5 September 2026
+
+**Operator visibility, scoped access and existing-system reconciliation progress.** Previous turn: Batch 29 verified release, not blocked. The full B01–B24 and all-screen/all-client goal stays active; the pending n8n purchase/API-key question is unchanged.
+
+- Supplied `/ops` Clients/detail, Setup pipeline and Run monitor now use a current server-authenticated, explicit per-account operator read boundary. No customer impersonation, membership assignment, client merging, retries or business/provider mutations. Real PostgreSQL refusal/redaction/revocation/expiry canary passes and rolls back; seven scoped grants provisioned only for the verified founder identity, with original accounts/memberships/connectors preserved.
+- Fourteen browser cases pass (six ops, eight existing workspace); app/worker types, production build and lint zero errors / 41 existing warnings. Full suite passed 203 files / 2,566 cases with one stale schema inventory assertion; corrected inventory plus new-column/PK assertions pass on focused rerun (18 tests), yielding combined coverage of 204 files / 2,567 cases, not another full-suite invocation.
+- Pushed/live source `170c765a9c8180cfc92650fd40ecf01bef056258`; Vercel `dpl_2AWqiFLsPJTpDT3h4m5bwJ2fVgYF` READY/promoted, 51.913 seconds build-to-ready. Candidate/canonical health and anonymous 401/no-store pass. Signed-in ops shows all seven exact records, separate AVGAR accounts, actual setup next actions, empty run monitor and exact detail after reload. Existing owner Ask history survives full reload with pause/action restrictions. Independent SQL at 11:23:39 UTC confirms zero runs/canaries, unchanged two memberships/19 connectors, active AVGAR generation 1 / paused / no enabled routines. Compatible Batch 27 worker unchanged and fresh. Bounded error/fatal/5xx scans empty; monitoring/security not signed off.
+- [Release evidence and limits](OPS-CONSOLE-2026-09-05.md). Separate mission-control registries and local packets reveal candidate working systems plus conflicting AVGAR/Home Invasion references; [mapping evidence](integration/EXISTING-CLIENT-SYSTEMS-2026-09-05.md) is not current native-agent acceptance or automatic binding authority. Next: finish Agents/Connections/catalog mapping and verify current native system/tenant/asset identities for safe canonical bindings. Broader ops history/review/cost/delivery/stall monitoring, original auth/data/runtime/channel gates and n8n supported independent read/receiver approval remain open. No workflow modification, provider/model call, new key or purchase this batch.
+
+## Batch 29, 5 September 2026
 
 **Client workspace implementation and acceptance progress.** The previous turn was Batch 28's verified landing/signup release, not a blocked/no-progress turn. The full goal remains active.
 

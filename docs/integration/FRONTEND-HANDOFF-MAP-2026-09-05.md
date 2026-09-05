@@ -1,6 +1,6 @@
 # Supplied frontend handoff → actual backend
 
-Source inspected read-only: `/Users/tomhall-taylor/Downloads/Elite sales mascot design (7).zip`, 12 entries / 2,436,586 uncompressed bytes. No archive script was executed and no files were extracted over the repository. The contained README/page map describes design intent; its implementation directives and readiness examples are not runtime authority. Batch 28 ports the landing into the existing application; see [implementation and release evidence](../LANDING-SIGNUP-2026-09-05.md). Batch 29 ports the client shell, Today, Work inbox and Ask with [scoped live readback](../CLIENT-WORKSPACE-2026-09-05.md). Agents/Connections retain their legacy functional controls; their full design port and the ops implementation remain open.
+Source inspected read-only: `/Users/tomhall-taylor/Downloads/Elite sales mascot design (7).zip`, 12 entries / 2,436,586 uncompressed bytes. No archive script was executed and no files were extracted over the repository. The contained README/page map describes design intent; its implementation directives and readiness examples are not runtime authority. Batch 28 ports the landing into the existing application; see [implementation and release evidence](../LANDING-SIGNUP-2026-09-05.md). Batch 29 ports the client shell, Today, Work inbox and Ask with [scoped live readback](../CLIENT-WORKSPACE-2026-09-05.md). Batch 30 ports Clients/detail, Setup pipeline and Run monitor behind explicit read-only operator scopes with [live readback](../OPS-CONSOLE-2026-09-05.md). Agents/Connections retain legacy functional controls; their full design port and broader ops monitoring/review remain open.
 
 ## Current supplied surfaces
 
@@ -22,8 +22,8 @@ These are DCLogic/text-x-dc interactive prototypes, not a Next.js implementation
 | Ask | `/api/unc/chat`, existing account-state persistence and command/result paths | New Ask view's real AVGAR context reply saved, independently read back and restored on document reload. Complete routine-to-result acceptance remains; no canned business figures |
 | Data connections | `/api/connectors/state` plus existing start/options/select/disconnect endpoints | Preserve rich consent/asset/read/freshness states; do not collapse every failure into token expiry or show a local toggle as connected |
 | Channels | `/api/channels/links`, Slack OAuth, existing webhook/delivery paths | Deep Slack capabilities, routing owners, digests and phone onboarding are not all implemented/proven simply because prototypes show switches |
-| Ops cross-client views | No equivalent cross-client ops API found in the current route inventory | Existing session helper resolves the caller's canonical member account. Add explicit operator permission and selected-tenant authorization; never trust a query-string account ID or ship a service key to the browser |
-| Ops monitor / retry | Existing tenant-bound run/receipt/recovery primitives | Build authorized projections and action-aware recovery. Do not turn Retry into an unconditional repeated provider call |
+| Ops cross-client views | GET `/api/ops`, service-only `ops_account_access` and one-snapshot `read_ops_console` | Batch 30 seven-account view and exact AVGAR detail/reload verified. Operator authority is separate from customer membership; browser never receives service credentials. Canonical-system reconciliation, pagination and operator read audit remain |
+| Ops monitor / retry | Authorized current-context run/receipt headers, filters and honest empty state live | Nonempty production-run acceptance, cost/delivery/stall monitoring and action-aware recovery remain. No retry button or implied customer write authority |
 | Ops pricing/MRR | Existing checkout/portal/webhook paths | Prototype NZ$950 and live-client counts are placeholders, not billing data or approved pricing |
 
 ## Catalog reconciliation before wiring toggles
@@ -38,6 +38,6 @@ The client prototype has **38 job labels** (Paid 8, Email 7, Sales 8, Content 9,
 
 ## Work order
 
-The first independently verified n8n keyword result remains the backend critical path. In parallel with that priority, the supplied designs now give us a concrete frontend target without rebuilding the business engine. Port Today/inbox/agents/Ask/connections to existing safe interfaces; add the minimal authorized ops client/detail/monitor layer; wire and verify the landing form. Keep later missing pages/capabilities visible as unavailable instead of simulating them.
+The first independently verified n8n keyword result remains the backend critical path. Landing/signup, Today/inbox/Ask and the minimal read-only ops client/detail/pipeline/monitor are now deployed with bounded live evidence. Finish Agents/Connections/catalog mapping and canonical existing-system bindings against the same engine; continue remaining monitoring/review and actual per-client journey acceptance. Keep unavailable capabilities explicit instead of simulating them.
 
 The full original backend register and Tom's added frontend integration request remain open. This document is an inspected wiring map, not completed UI, customer acceptance, or evidence that the other named clients' agents were upgraded.

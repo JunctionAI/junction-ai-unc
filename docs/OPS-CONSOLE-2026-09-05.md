@@ -23,8 +23,20 @@ Previous goal turn: verified Batch 29 client-workspace release, not a blocked tu
 ## Tests and release
 
 - Ten focused route/session/stage unit tests passed. Six ops browser tests passed after correcting a label locator to target the rendered combobox; eight existing client-workspace browser tests also passed. Browser fixtures are isolated (no env/session, synthetic records) and do not prove provider output or cross-client live sign-in.
-- Full unit run: 203 files / 2,566 cases passed, with one stale expected-table-list assertion failing for the added table. Updated that explicit schema inventory and added new primary-key/column assertions; its eight tests plus the ten ops tests pass on focused rerun. Combined coverage: 204 files / 2,567 cases. No behavioral test was weakened. App/worker TypeScript and production build pass; lint has zero errors / 41 pre-existing warnings. Production readback pending at this checkpoint.
+- Full unit run: 203 files / 2,566 cases passed, with one stale expected-table-list assertion failing for the added table. Updated that explicit schema inventory and added new primary-key/column assertions; its eight tests plus the ten ops tests pass on focused rerun. Combined coverage: 204 files / 2,567 cases, not a second full-suite invocation. No behavioral test was weakened. App/worker TypeScript and production build pass; lint has zero errors / 41 pre-existing warnings.
 - No worker dependency changed. Reuse the healthy Batch 27 worker, not a cosmetic SHA-matching restart. No model/provider call or customer message is required for ops acceptance.
+
+### Live release receipt
+
+- URL: [production ops](https://junction-unc.vercel.app/ops); [immutable candidate](https://junction-ldyrx2nqr-tom-junctionmedis-projects.vercel.app).
+- Target/status: existing `junction-unc` production project; `dpl_2AWqiFLsPJTpDT3h4m5bwJ2fVgYF` READY and explicitly promoted. Framework: Next.js. Build-to-ready: 51.913 seconds (deployment metadata).
+- Source: `170c765a9c8180cfc92650fd40ecf01bef056258`, pushed and built from a clean detached checkout; unrelated `context 2.ts` excluded and preserved. No secret/environment or worker change.
+- Candidate health at 11:21:52 UTC and canonical health at 11:22:32 UTC report `170c765a9c81`, healthy DB and fresh worker. Worker ticks advance 57 → 58 with no last error. Its compatible source remains `1a1b0596e67c549425255446db9971ec69524069`, Fly release 19; differing SHAs are intentional because the worker dependency closure is unchanged.
+- Candidate and canonical anonymous GET `/api/ops` return 401 and `Cache-Control: private, no-store`. Signed-in `halltaylor.tom@gmail.com` sees exactly seven records with both AVGAR IDs separate. Client detail shows the exact active account/generation, pause, zero enabled routines, two dated reads, zero registry/run/review/receipt/channel evidence. Setup pipeline shows five Needs identity, one Needs verification and one Paused. Run monitor honestly shows zero saved executions. Full-document client-detail reload retains the exact account selection and actual records. Desktop screenshot visually checked; isolated 390/1280px layout tests passed.
+- Existing `/app` fully reloads the same owner/AVGAR account and persisted Batch 29 Ask reply, with pause/action restrictions intact. No additional model call or workflow execution was used for this regression check.
+- Independent SQL at 11:23:39 UTC confirms seven accounts, two memberships, 19 connector rows, zero runs, seven operator read scopes, zero remaining canaries and active AVGAR generation 1 / paused / zero enabled routines. Earlier pre/post account fingerprint and preservation counts are recorded above.
+- Bounded error/fatal scan (11:21–11:22:50 UTC) and 5xx scan (11:21–11:23:04 UTC) return no entries. This is not continuous monitoring, nonempty live-run acceptance or security sign-off.
+- App rollback target: Batch 29 `dpl_DPUX275KL9hw4VHpt2BPkk5YcB35`, source `cd35a7e4d4d3a0382d5a25d465188f68a9e7c183`. The additive server-only schema need not be deleted to roll back the UI; explicit operator grants can be revoked separately if required.
 
 ## Existing systems are a separate acceptance gate
 
