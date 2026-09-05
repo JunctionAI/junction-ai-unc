@@ -125,11 +125,21 @@ The first release at `2bb2c579926e23cfc93a46794f176fc67c10a8c8` passed productio
 
 Validation: **181 files / 2,116 tests**, application/worker typechecks, final production build and lint pass (39 existing warnings, zero errors). No schema, business settings, credentials, Nguyen workflows or action permissions were changed by this batch. Final post-release SQL at 04:06:03 UTC retained generation 1, pause true, revision 14, two chats, zero enabled routines/runs/commands/briefs, empty unagreed plan and NULL budget/hours/margin. Bounded error/fatal scans returned no entries; zero drains and unverified alert delivery remain observability gaps.
 
+## Batch 8 — concrete independent execution reader, still gated
+
+Implemented the separate authenticated GET-only execution reader behind an off-by-default server gate. It uses the saved actual workflow revision and pinned webhook node, binds the entire original business payload with a canonical digest (excluding only the expiring data bearer), rejects wrong identity/manual/retried/redacted/truncated/child-workflow evidence, and bounds finalization reads without repeating the paid workflow POST. The shared bridge now creates this reader from valid server configuration; no new response field is required from Nguyen.
+
+Validation: **182 files / 2,160 tests**, including 44 new synthetic reader tests; app/worker TypeScript, production build, lint (zero errors, 39 existing warnings) and diff checks pass. No workflow, registration, account setting or credential was changed. This batch is source-only at this point; live runtime remains Batch 7's `b7c347bfd9ff862f00b01e6fb71740e26d783b0c`.
+
+The live Cloud UI shows a trial with nine days remaining and no API-key menu. Official n8n documentation excludes public API access during the free trial. No execution-reader key was found in inspected runtime configuration metadata, and no purchase/key creation was performed. The inspected official MCP execution projection omits the saved revision/snapshot, so it does not supply equivalent evidence. Supported API access, credential scope review and real saved-execution acceptance remain activation dependencies. Full details and pinned sources: `integration/N8N-EXECUTION-READER.md`.
+
+This is further progress, not a blocked goal or completed pilot. Continue runtime generation and admission work independently; do not enable the reader or paid dispatch merely because tests pass.
+
 ## Next independent work
 
 1. Atomic app/save and memory-generation boundaries are live; redundant initial saves are removed. Complete actual two-tab competing-edit/recovery checks. Do not roll back to a browser-direct memory/state writer under the new grants.
 2. Keep the repaired AVGAR account paused while extending captured-generation fencing to runtime jobs, generated briefs/artifacts, founder notes, intake and command admission. The context repair is already complete and must not be replayed. Retain the private recovery archive; do not decrease generation or relabel old output. Finish two-tab and delayed-work acceptance checks.
-3. Complete the independent n8n execution reader against actual saved-execution evidence; never substitute the expected revision or a current-workflow lookup. Do not dispatch the pilot without that capability. The compatible app/worker and staged receiver-secret release are already proven; neither is proof of a callable n8n lane.
+3. The concrete independent n8n execution reader is now implemented/tested. Resolve supported API access and least-privilege credential provisioning, then prove the actual saved-execution shape/read path before activation. Never substitute the expected revision or a current-workflow lookup. The compatible app/worker and receiver-secret release are already proven; neither is proof of a callable n8n lane.
 4. Continue connection/refresh-owner, stored-data, scheduler, metric and security work from the register while Nguyen delivers the first keyword wrapper.
 5. Bind D03-W01 only after actual webhook/revision/credential/receipt delivery. Then perform the real shadow round trip and expand verified lanes.
 

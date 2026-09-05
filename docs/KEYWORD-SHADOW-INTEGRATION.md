@@ -1,11 +1,11 @@
 # D03-W01 shadow integration — implementation and remaining activation gate
 
-Status: initial bridge and authority code exists; **revision-evidence clarification below supersedes the earlier receipt requirement**. Updated revision verification tests are local; the independent execution-reader transport/access is still an Unc-owned activation gate. No pilot is registered or activated.
+Status: bridge, authority and concrete independent execution-reader code exist; **revision-evidence clarification below supersedes the earlier receipt requirement**. The reader is off by default and not live-proven. Public API access and acceptance remain Unc-owned activation gates. No pilot is registered or activated. See `integration/N8N-EXECUTION-READER.md` for the precise source/configuration/access boundary.
 The integration owner is Codex/Unc, not Tom. Tom should not have to invent routine mappings,
 relay schema decisions, or manually join execution receipts.
 
-Bridge verification: 171 files / 1,995 tests PASS; app and standalone-worker TypeScript PASS;
-focused lint PASS; production webpack build PASS; `git diff --check` PASS. The new tests
+Latest source verification: 182 files / 2,160 tests PASS; app and standalone-worker TypeScript PASS;
+lint PASS (zero errors, 39 existing warnings); production webpack build PASS; `git diff --check` PASS. The new tests
 use synthetic responses and an in-memory store. They prove parsing, denial paths and linked
 storage behavior, not a fresh n8n/provider execution or phone end-to-end success.
 
@@ -54,7 +54,7 @@ You are correct not to fake or echo an internal n8n version ID. **Unc owns indep
 - Your handoff supplies the final wrapper ID, tested/published revision, exact callable URL and actual success/failure execution IDs. Keep that tested revision frozen after handoff; changes require a new pin/retest. A dedicated wrapper may have a different ID from `OUerIfgAkMnhkuen`; Codex binds the ID that actually ran. If it calls child workflows, include their IDs/revisions/executions separately. Parent evidence does not prove a mutable child's revision; child provenance is an additional gate before that composition is enabled.
 - Keep the response `{artifact, executionReceipt}` within 60 seconds; do not wait inside n8n for Unc's post-response verification. Unc performs the independent read after the response, allowing a bounded wait for n8n to finalize its execution record. Missing/mismatched/unreadable evidence never becomes a verified success. Reconcile an uncertain execution; do not automatically repeat the paid provider call.
 
-**Implementation status:** the parser, independent-observation validator and fail-closed bridge reader hook are implemented/tested locally. The concrete server-authenticated execution reader is not yet wired or proven against n8n Cloud. Dispatch refuses before the paid webhook call if that reader is absent. This is **Codex's work, not an additional version-discovery task for Nguyen**. Continue the keyword-only wrapper using the receipt below; activation waits for the matching app/worker and reader acceptance.
+**Implementation status:** the concrete GET-only public-API reader is now implemented and wired into the bridge behind separate server configuration. It checks the saved execution's actual revision, exact webhook node and original request payload, including business inputs. No digest field or extra API call is required in Nguyen's response. Dispatch refuses before the paid webhook call if the reader configuration is absent/invalid. Its 44 new synthetic tests do not prove this Cloud instance's API access or saved-data shape. The workspace currently shows a trial, and n8n documents public API access as unavailable on a trial; Codex has not purchased a plan or created an API key. This is **Codex's integration work, not an additional version-discovery task for Nguyen**. Continue the keyword-only wrapper using the receipt below; activation waits for access, matching app/worker and live reader acceptance.
 
 Basis: n8n's [documented workflow runtime context](https://github.com/n8n-io/n8n-docs/blob/main/docs/build/work-with-data/transform-data/expression-reference/workflowdata.md) lists workflow ID/name/active, not internal version ID. Its [execution storage schema](https://github.com/n8n-io/n8n/blob/master/docs/generated/postgres-schema/execution_entity.md) records the executed workflow revision. This supports control-plane verification but does **not** establish which fields this Cloud instance exposes through its current API/permissions; Codex must verify that actual read path. If it is unavailable, keep the result unverified instead of relabelling an expected revision as observed.
 

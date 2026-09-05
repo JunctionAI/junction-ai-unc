@@ -23,6 +23,8 @@ import { assertShadowRequest, validateShadowReceipt, verifyShadowExecution, type
 import type { N8nBridge, N8nCallResult, N8nNode, N8nWorkflow, ProduceNeed, ProduceNode, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
 import { pinnedWebhookFetch, type WebhookFetch, type WebhookResponse } from "./pinnedWebhookFetch";
+import { createShadowExecutionReader, type ShadowExecutionReader } from "./n8nExecutionReader";
+import { shadowRequestDigest } from "../../lib/n8n/executionEvidence";
 
 export const N8N_DEFAULT_TIMEOUT_MS = 60_000;
 export const N8N_SECRET_ENV = "N8N_SIGNING_SECRET";
@@ -114,8 +116,10 @@ export interface HttpN8nBridgeOptions {
   lookup?: HostLookup;
   /** Server-owned independent execution reader. Must read the named execution's
    * saved revision + trigger identity, never current/latest workflow metadata.
-   * No production reader is provisioned implicitly; shadow dispatch fails closed. */
-  readShadowExecution?: (input: { workflowId: string; executionId: string; signal: AbortSignal }) => Promise<unknown>;
+   * Otherwise the separately gated/pinned public-API reader is used. */
+  readShadowExecution?: ShadowExecutionReader;
+  /** Separate test seam: the execution API key never goes through the webhook transport. */
+  executionFetch?: WebhookFetch;
 }
 
 export class HttpN8nBridge implements N8nBridge {
@@ -149,6 +153,9 @@ export class HttpN8nBridge implements N8nBridge {
     const secret = (this.env[N8N_SECRET_ENV] ?? "").trim();
     if (!secret) throw new Error(`${N8N_SECRET_ENV} is not set — refusing to call n8n unsigned`);
     const receiverHeaders: Record<string, string> = {};
+    const readExecution = shadow ? this.opts.readShadowExecution ?? createShadowExecutionReader(this.env, shadow.workflowId, {
+      fetch: this.opts.executionFetch, lookup: this.opts.lookup,
+    }) : undefined;
     if (shadow) {
       // Separate receiver credential, pinned to this exact URL. Never send it to an
       // owner-edited/global webhook, and never share the root data-token signing key.
@@ -157,7 +164,7 @@ export class HttpN8nBridge implements N8nBridge {
       if (receiverUrl !== target.url.toString()) throw new Error("shadow receiver URL is not pinned in server configuration");
       if (receiverToken.length < 24 || /\s/.test(receiverToken) || receiverToken === secret)
         throw new Error("shadow receiver requires a separate scoped authentication credential");
-      if (!this.opts.readShadowExecution) throw new Error("independent n8n execution verification is not configured; shadow dispatch is disabled");
+      if (!readExecution) throw new Error("independent n8n execution verification is not configured; shadow dispatch is disabled");
       receiverHeaders.authorization = `Bearer ${receiverToken}`;
     }
     const payload = buildN8nPayload(node, ctx, { secret, env: this.env, now: this.now });
@@ -193,14 +200,14 @@ export class HttpN8nBridge implements N8nBridge {
       let observation: unknown;
       try {
         observation = await Promise.race([
-          this.opts.readShadowExecution!({ workflowId: shadow.workflowId, executionId: String(reported.executionId), signal: controller.signal }),
+          readExecution!({ workflowId: shadow.workflowId, executionId: String(reported.executionId), signal: controller.signal }),
           new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("execution verification timed out")); }, 10_000); }),
         ]);
       } catch {
         // Do not leak API response bodies/credentials or retry the paid provider call.
-        throw new Error("n8n execution could not be independently verified; reconcile the execution before rerunning");
+        throw new Error(`n8n execution could not be independently verified; reconcile the execution before rerunning (workflow=${shadow.workflowId}, execution=${reported.executionId})`);
       } finally { clearTimeout(timer); }
-      const receipt = verifyShadowExecution(reported, observation, shadow, identity, this.now());
+      const receipt = verifyShadowExecution(reported, observation, shadow, identity, this.now(), shadowRequestDigest(JSON.parse(body)));
       const ref = `https://junctionai8.app.n8n.cloud/workflow/${shadow.workflowId}/executions/${receipt.executionId}`;
       out.artifact.meta = { executionReceipt: receipt, approval_status: "pending_approval", executed_action: "none" };
       out.artifact.evidence = [...(out.artifact.evidence ?? []), { source: "n8n_execution", ref }];

@@ -107,9 +107,10 @@ export interface ShadowExecutionObservation {
   startedAt: string;
   stoppedAt: string;
   request: { accountId: string; runId: string; routineId: string };
+  requestDigest: string;
 }
 
-export function verifyShadowExecution(value: unknown, observation: unknown, contract: KeywordShadowContract, run: ShadowRunIdentity, now: Date): Record<string, unknown> {
+export function verifyShadowExecution(value: unknown, observation: unknown, contract: KeywordShadowContract, run: ShadowRunIdentity, now: Date, expectedRequestDigest: string): Record<string, unknown> {
   const receipt = validateShadowReceipt(value, contract, run, now);
   const seen = object(observation);
   if (!seen || seen.source !== "n8n_execution_record") throw new Error("independent n8n execution evidence is unavailable");
@@ -121,6 +122,8 @@ export function verifyShadowExecution(value: unknown, observation: unknown, cont
   for (const [key, expected] of Object.entries({ accountId: run.accountId, runId: run.runId, routineId: run.routineId })) {
     if (request?.[key] !== expected) throw new Error(`independent n8n execution request.${key} mismatch`);
   }
+  if (!/^[a-f0-9]{64}$/.test(expectedRequestDigest) || seen.requestDigest !== expectedRequestDigest)
+    throw new Error("independent n8n execution request digest mismatch");
   const started = Date.parse(String(seen.startedAt)), stopped = Date.parse(String(seen.stoppedAt));
   if (![started, stopped, now.getTime()].every(Number.isFinite) || stopped < started ||
       Math.abs(started - Date.parse(String(receipt.startedAt))) > 30_000 ||
@@ -128,5 +131,5 @@ export function verifyShadowExecution(value: unknown, observation: unknown, cont
       now.getTime() - stopped > 15 * 60_000) throw new Error("independent n8n execution timing is stale or invalid");
   return { ...receipt, workflowVersion: seen.workflowVersion, revisionEvidence: "verified_execution_record",
     revisionVerification: { source: "n8n_execution_record", verifiedAt: now.toISOString(),
-      startedAt: seen.startedAt, stoppedAt: seen.stoppedAt } };
+      startedAt: seen.startedAt, stoppedAt: seen.stoppedAt, requestDigest: expectedRequestDigest } };
 }

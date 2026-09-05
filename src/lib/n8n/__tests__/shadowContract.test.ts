@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { AVGAR_PILOT_ACCOUNT, AVGAR_SEO_WORKFLOW, KEYWORD_SHADOW_CONTRACT, assertShadowRequest, validateShadowReceipt, verifyShadowExecution, type KeywordShadowContract } from "../shadowContract";
 import { keywordShadowSpec } from "../keywordShadowSpec";
-import { HttpN8nBridge, parseN8nReply } from "../../../worker/providers/n8n";
+import { HttpN8nBridge, parseN8nReply, buildN8nPayload } from "../../../worker/providers/n8n";
+import { shadowRequestDigest } from "../executionEvidence";
 import { runRoutine } from "../../runtime/engine";
 import { adapters as buildAdapters, FakeProducer } from "../../runtime/__tests__/helpers";
 import type { N8nNode, RunContext } from "../../runtime/types";
@@ -21,6 +22,7 @@ const ctx: RunContext = { ...identity, version: 2, mode: "dry_run", account: { a
 const node: N8nNode = { kind: "n8n", id: "produce", shadowContract: contract };
 const workflow = { id: "registered-test", accountId: contract.accountId, routineId: contract.routineId, active: true, webhookUrl: "https://n8n.test/keyword" };
 const env = { N8N_SIGNING_SECRET: "test-secret", N8N_DATA_BASE_URL: "https://unc.test", N8N_SHADOW_RECEIVER_URL: workflow.webhookUrl, N8N_SHADOW_RECEIVER_TOKEN: "synthetic-receiver-token-for-tests-only" };
+const digest = shadowRequestDigest(JSON.parse(JSON.stringify(buildN8nPayload(node, ctx, { env, secret: env.N8N_SIGNING_SECRET, now: () => now }))));
 function receipt() {
   return { ...identity, contract: contract.contract, routineKey: contract.routineKey, workflowId: contract.workflowId, workflowVersion: null, revisionEvidence: "pending_unc_verification",
     executionId: "12345", mode: "dry_run", status: "succeeded", executedAction: "none", startedAt: start, finishedAt: end, client: { ...contract.client },
@@ -29,7 +31,7 @@ function receipt() {
 function observation() {
   return { source: "n8n_execution_record", workflowId: contract.workflowId, workflowVersion: contract.workflowVersion,
     executionId: "12345", status: "success", finished: true, startedAt: start, stoppedAt: end,
-    request: { accountId: contract.accountId, runId: identity.runId, routineId: contract.routineId } };
+    request: { accountId: contract.accountId, runId: identity.runId, routineId: contract.routineId }, requestDigest: digest };
 }
 const readShadowExecution = async () => observation();
 function reply() {
@@ -107,11 +109,13 @@ describe("AVGAR keyword shadow contract", () => {
     const { adapters, store, producer, executor } = buildAdapters({ producer: new FakeProducer() });
     await store.putN8nWorkflow(workflow);
     let observedRunId = "";
+    let observedDigest = "";
     const b = new HttpN8nBridge({ env, now: () => now,
-      readShadowExecution: async () => ({ ...observation(), request: { ...observation().request, runId: observedRunId } }),
+      readShadowExecution: async () => ({ ...observation(), request: { ...observation().request, runId: observedRunId }, requestDigest: observedDigest }),
       fetch: async (_url, init) => {
         const request = JSON.parse(String(init.body));
         observedRunId = request.runId;
+        observedDigest = shadowRequestDigest(request);
         return new Response(JSON.stringify({ ...reply(), executionReceipt: { ...receipt(), runId: request.runId } }), { status: 200 });
       } });
     const result = await runRoutine(spec, { account: ctx.account, triggeredBy: "manual" }, { ...adapters, now: () => new Date(start), n8n: b }, { mode: "dry_run" });
@@ -137,17 +141,18 @@ describe("AVGAR keyword shadow contract", () => {
   });
 
   it.each(["workflowId", "workflowVersion", "executionId", "status", "finished"])("rejects a mismatched independent execution %s", key => {
-    expect(() => verifyShadowExecution(receipt(), { ...observation(), [key]: "wrong" }, contract, identity, now)).toThrow("mismatch");
+    expect(() => verifyShadowExecution(receipt(), { ...observation(), [key]: "wrong" }, contract, identity, now, digest)).toThrow("mismatch");
   });
   it.each(["accountId", "runId", "routineId"])("rejects another execution's request %s", key => {
-    expect(() => verifyShadowExecution(receipt(), { ...observation(), request: { ...observation().request, [key]: "wrong" } }, contract, identity, now)).toThrow(`request.${key}`);
+    expect(() => verifyShadowExecution(receipt(), { ...observation(), request: { ...observation().request, [key]: "wrong" } }, contract, identity, now, digest)).toThrow(`request.${key}`);
   });
 
   it("rejects missing/current-workflow-only/stale evidence and strips unrelated control-plane data", () => {
-    expect(() => verifyShadowExecution(receipt(), null, contract, identity, now)).toThrow("unavailable");
-    expect(() => verifyShadowExecution(receipt(), { ...observation(), source: "current_workflow" }, contract, identity, now)).toThrow("unavailable");
-    expect(() => verifyShadowExecution(receipt(), { ...observation(), stoppedAt: "2026-09-03T00:00:00Z" }, contract, identity, now)).toThrow("timing");
-    expect(verifyShadowExecution(receipt(), { ...observation(), apiKey: "never-store" }, contract, identity, now)).not.toHaveProperty("apiKey");
+    expect(() => verifyShadowExecution(receipt(), null, contract, identity, now, digest)).toThrow("unavailable");
+    expect(() => verifyShadowExecution(receipt(), { ...observation(), source: "current_workflow" }, contract, identity, now, digest)).toThrow("unavailable");
+    expect(() => verifyShadowExecution(receipt(), { ...observation(), stoppedAt: "2026-09-03T00:00:00Z" }, contract, identity, now, digest)).toThrow("timing");
+    expect(verifyShadowExecution(receipt(), { ...observation(), apiKey: "never-store" }, contract, identity, now, digest)).not.toHaveProperty("apiKey");
+    expect(() => verifyShadowExecution(receipt(), { ...observation(), requestDigest: "wrong" }, contract, identity, now, digest)).toThrow("digest mismatch");
   });
 
   it("does not accept a webhook-supplied verification object or silently retry when independent lookup fails", async () => {
@@ -162,6 +167,6 @@ describe("AVGAR keyword shadow contract", () => {
   it("permits an explicitly pinned dedicated wrapper, but never substitutes its parent ID", () => {
     const wrapper = { ...contract, workflowId: "dedicated-keyword-wrapper" };
     expect(() => assertShadowRequest(wrapper, identity)).not.toThrow();
-    expect(() => verifyShadowExecution({ ...receipt(), workflowId: wrapper.workflowId }, observation(), wrapper, identity, now)).toThrow("workflowId mismatch");
+    expect(() => verifyShadowExecution({ ...receipt(), workflowId: wrapper.workflowId }, observation(), wrapper, identity, now, digest)).toThrow("workflowId mismatch");
   });
 });

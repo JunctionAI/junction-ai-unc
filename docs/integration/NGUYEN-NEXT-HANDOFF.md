@@ -21,7 +21,9 @@ Send back: exact callable URL, workflow ID, tested/published revision/version **
 
 **Revision clarification (5 September):** the workflow response must return `executionReceipt.workflowVersion: null` and `revisionEvidence: "pending_unc_verification"`, alongside the actual `workflowId`/`executionId`. Request `shadow.workflowVersion` is only Unc's expected pin. Codex independently reads the named execution's saved revision/trigger identity before enriching/storing a verified receipt; comparing only the latest workflow or echoing the expected pin is not proof. No extra version-discovery API call is needed inside your workflow. Freeze the tested revision after handoff; identify any child executions separately. The concrete independent reader/access and matching deployment are Codex-owned activation gates. Full details and updated JSON are in `../KEYWORD-SHADOW-INTEGRATION.md`.
 
-The run-scoped token is not a provider token and not a root signing key. Codex provisions and reconciles backend secrets without sending Tom secret values to relay. The receiver credential was previously staged on the worker, not proof of a deployed callable endpoint.
+**Codex-side update:** the independent execution reader is implemented/tested, off by default and not live-proven. It reads only the named saved execution, checks the actual revision and binds the original webhook business payload. There is no new field for your response and no API-key/version lookup work inside your workflow. Codex will resolve the webhook node pin from your final wrapper handoff. Public API access is a separate activation dependency: the workspace currently shows a trial and n8n documents public API access as unavailable during a trial. Do not bypass that with a browser session or echo the requested revision. See `N8N-EXECUTION-READER.md`.
+
+The run-scoped token is not a provider token and not a root signing key. Codex provisions and reconciles backend secrets without sending Tom secret values to relay. Receiver-token metadata is now deployed on the worker; that does not prove a matching value or callable endpoint.
 
 ## 2. Routine IDs and an important integration correction
 
@@ -87,7 +89,7 @@ Do not write directly to runtime tables or add a second scheduler. Do not let th
 ## 6. Delivery order and current blockers
 
 1. Nguyen completes and tests the keyword wrapper and sends the acceptance packet.
-2. In parallel, Codex corrects the current mixed business context: the AVGAR-connected Unc account still says Junction AI and `getjunction.ai`. Tom confirms the search market/seed and paid-ad targets. Do not overwrite these with the old `travel bag`/location `2840` test values.
+2. Codex has completed the archived AVGAR context repair and matched app/worker release. AVGAR automation remains paused while delayed-work generation fencing and pilot admission are completed. US/NZ/AU and the 50%-of-product-price CPA ceiling are recorded; the keyword seed and other unconfirmed business settings remain unknown. Do not overwrite these with the old `travel bag`/location `2840` test values.
 3. Codex deploys/configures the matching backend, binds only the pilot account/revision and performs the real shadow round trip.
 4. Together, integrate the six proven Meta lanes using explicit adapters and agreed metrics, then other ready lanes. Keep blocked capabilities visibly unavailable.
 5. Codex proves phone/web experience, isolated second-client onboarding and ongoing sync/recovery before claiming the full product works.
