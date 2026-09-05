@@ -4,7 +4,7 @@
    or { fallback: true }      demo mode (no database)
    or 401 | 403 | 503 { error }
 
-   Owner-bound; written through the founder's own client after a server-side role check. */
+   Owner-bound; written through the server after a verified owner check. */
 
 import { requireAccountOwnerSession } from "@/lib/db/session";
 import { agreePlan } from "@/lib/setup/progress";
@@ -17,7 +17,7 @@ async function handlePOST() {
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
   try {
-    return Response.json(await agreePlan(session.db, session.accountId));
+    return Response.json(await agreePlan(session.service, session.accountId));
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : "agree failed" }, { status: 500 });
   }

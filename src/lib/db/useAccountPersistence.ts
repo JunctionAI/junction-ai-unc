@@ -5,17 +5,18 @@
 
    Sequence on mount (configured):
      1. getUser()            no verified user → blocking account recovery
-     2. ensureAccount()      invited account → hydrate state from rows (over the empty account seed,
+     2. GET account/state    invited account → hydrate one atomic row snapshot (over the empty account seed,
                              so a partially populated account keeps honest blanks, never demo numbers)
                              no invite/membership → fail closed; private beta never self-provisions
-     3. owner autosave       every owner change after that persists, debounced 800 ms;
+     3. versioned autosave   every owner change persists atomically through PUT, debounced 800 ms;
                              members stay on the hydrated account in explicit read-only mode */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { COUNTRY_COOKIE, cookieValue } from "@/lib/locale/resolve";
 import { accountInitialState, currencyForLocale, type PlatformState, type Setter } from "@/lib/platform/state";
-import { ensureAccount, saveAccountState, type MembershipRole } from "./accountState";
-import { asDb, getBrowserSupabase, isDbConfigured } from "./client";
+import type { MembershipRole } from "./accountState";
+import { getBrowserSupabase, isDbConfigured } from "./client";
+import { createAccountStateSaver } from "./stateSave";
 import { persistedProjection } from "./mapping";
 import { useAutosave, type AutosaveStatus } from "./useAutosave";
 
@@ -63,7 +64,7 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
   const [mode, setMode] = useState<PersistenceMode>(configured ? "connecting" : "demo");
   const [accountId, setAccountId] = useState<string | null>(null);
   const [role, setRole] = useState<MembershipRole | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
+  const saver = useRef<ReturnType<typeof createAccountStateSaver> | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [accountName, setAccountName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -80,16 +81,19 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
         if (authProblem) throw new Error(authProblem);
         if (!data.user) return; // narrowed by accountAuthProblem; defensive for future client types
         if (!cancelled) {
-          setUserId(data.user.id);
           setUserEmail(data.user.email ?? null);
         }
-        const db = asDb(supabase);
-        const res = await ensureAccount(db, accountSeed(), { userId: data.user.id, allowCreate: false });
+        const response = await fetch("/api/account/state", { credentials: "same-origin", cache: "no-store" });
+        if (!response.ok) throw new Error("Couldn't load your account. Try again or sign in again.");
+        const res = await response.json() as { accountId: string; role: MembershipRole; name: string; state: PlatformState; revision: number };
+        if (!res.accountId || (res.role !== "owner" && res.role !== "member") || !res.state || !Number.isSafeInteger(res.revision))
+          throw new Error("The account could not be verified. Please try again.");
         if (cancelled) return;
+        saver.current = createAccountStateSaver(res.accountId, res.revision);
         setAccountId(res.accountId);
         setRole(res.role);
         setAccountName(res.name ?? "");
-        // created → the empty seed; existing → the rows hydrated over that seed. Either way, never the demo state.
+        // The server's snapshot hydrates over an empty account seed, never demo state.
         set(() => res.state);
         setMode("account");
       } catch (e) {
@@ -111,7 +115,8 @@ export function useAccountPersistence(S: PlatformState, set: Setter): Persistenc
     enabled,
     async (state) => {
       if (!accountId) return;
-      await saveAccountState(asDb(getBrowserSupabase()), accountId, state, { userId: userId ?? undefined });
+      if (!saver.current) throw new Error("Load the account before saving.");
+      await saver.current.save(state);
     },
     persistedProjection,
   );

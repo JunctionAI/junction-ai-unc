@@ -27,9 +27,28 @@ These repairs advance B01, B08, B14 and B23 but **do not close their live accept
 
 Verification for this batch: 175 test files / **2,065 tests pass**; application and standalone worker TypeScript pass; production webpack build passes. No application/worker release, provider request, n8n execution or database mutation was performed in this batch. Production profile repair remains outstanding.
 
+## Batch 2 — atomic persistence and revision guard
+
+Previous goal turn classification: **progress** (commit `c7bb8c3` and its tests were rechecked before this work).
+
+Implemented an owner-only `PUT /api/account/state`, using a service-only, security-invoker database function. It verifies current owner membership again inside the transaction, binds every written row to the session account, excludes all connector/routine/approval controls, and saves all sections or none. A save ID plus content checksum allows a lost-response retry without a second write. A stale revision fails with HTTP 409 and does not silently rebase local edits over newer data.
+
+`GET /api/account/state` loads a single MVCC snapshot and its revision. The browser now hydrates and autosaves through these endpoints. Members can read but not save. Server intake/plan/profile changes invalidate previously loaded revisions. Plan agreement was moved to the owner-checked server writer in preparation for retiring direct browser writes.
+
+Applied additive migrations:
+
+- `20260905024453_account_state_atomic_save`
+- `20260905024727_account_state_revision_invalidation`
+
+`scripts/verify-account-state-atomic.sql` passed against the actual Unc database: complete save, explicit zero, duplicate replay, stale revision, reused-ID mismatch, nested account-ID isolation, non-owner denial, late-error rollback, channel preservation and server-change revision invalidation. Independent readback found **zero remaining test accounts**. The pilot still reads `Junction AI`; no live business context repair is claimed yet.
+
+Local validation: **177 test files / 2,077 tests pass**, application/worker typechecks and production build pass. SQL checks exercise real transactions; the test is not a simultaneous multi-connection stress test. Security advisors remained at the existing six warnings/seven informational notices after the first additive migration; no new public executable definer function was added. Existing advisory remediation references remain in the main register.
+
+**Release order:** deploy and smoke-test the new app, revoke legacy client writes on the protected context/chat tables and account name/currency columns, prove legacy denial, then perform the backed-up AVGAR repair. Do not revoke the old app's save permissions before the replacement is ready. Do not claim the browser race closed until that enforcement step is live. Direct administrative `account_state_meta` edits must explicitly increment the revision and clear replay markers; the business-row triggers cover ordinary server intake changes.
+
 ## Next independent work
 
-1. Make the context repair recoverable and resistant to an already-open stale browser: implement/test atomic version-checked persistence or an equivalent enforced save boundary before changing the live profile. Existing autosave currently writes sections sequentially and can restore stale context.
+1. Release and enforce the tested atomic persistence path above. Legacy browser permissions remain unchanged pending deployment; they can still bypass the new protocol until revoked.
 2. Preserve the original Junction context in a restricted audit/restore record. Correct the pilot profile/resources and invalidate wrong-business memories, plan and cached narrative without inventing AVGAR commercial settings. Inspect chat summaries and memory extraction so old chat cannot relearn the removed business facts.
 3. Release the compatible app/worker pair, reconcile staged receiver configuration safely, and verify no action controls changed.
 4. Continue connection/refresh-owner, stored-data, scheduler, metric and security work from the register while Nguyen delivers the first keyword wrapper.
