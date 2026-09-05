@@ -6,6 +6,8 @@ This brief supersedes the earlier architecture suggestions. Keep the useful work
 
 ## 1. What to build next
 
+**Handoff received:** your published keyword wrapper `XiXJKuph1fAeH9pe` and denial execution 72 are independently visible. The fixed origin placeholder needs `https://junction-unc.vercel.app`, followed by validation and a newly published/frozen revision. Do not pin the old revision as origin-configured or run the paid pilot yet. Exact findings, ownership and copyable reply: [D03-W01 wrapper handoff](D03-W01-WRAPPER-HANDOFF-2026-09-05.md). This supersedes the instruction below to build a new keyword wrapper: reuse the one delivered.
+
 **Deliver one authenticated, keyword-only callable wrapper for `D03-W01` first**, using the existing DataForSEO credential and proven SEO logic. The full request/response contract is in `docs/KEYWORD-SHADOW-INTEGRATION.md`; contract version is `unc.keyword-shadow.v1`.
 
 - Execute only `keyword_opportunity`, not all SEO lanes followed by filtering the result.
@@ -88,7 +90,7 @@ Do not write directly to runtime tables or add a second scheduler. Do not let th
 
 ## 6. Delivery order and current blockers
 
-1. Nguyen completes and tests the keyword wrapper and sends the acceptance packet.
+1. Nguyen has delivered the keyword wrapper and missing-origin denial. Set the exact canonical origin, validate/test and return the final published revision, as recorded in the wrapper handoff above. The current delivery is not yet a successful provider round trip.
 2. Codex has completed the archived AVGAR context repair and matched app/worker release. AVGAR automation remains paused while delayed-work generation fencing and pilot admission are completed. US/NZ/AU and the 50%-of-product-price CPA ceiling are recorded; the keyword seed and other unconfirmed business settings remain unknown. Do not overwrite these with the old `travel bag`/location `2840` test values.
 3. Codex deploys/configures the matching backend, binds only the pilot account/revision and performs the real shadow round trip.
 4. Together, integrate the six proven Meta lanes using explicit adapters and agreed metrics, then other ready lanes. Keep blocked capabilities visibly unavailable.

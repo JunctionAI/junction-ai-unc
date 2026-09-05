@@ -20,6 +20,8 @@
 
 import { recallPlaybooks, type Playbook } from "../brain/playbooks";
 import type { DbClient } from "../db/types";
+import { assertRuntimeContext } from "../db/runtimeContext";
+import { assertSameRuntimeContext, RuntimeContextError } from "../runtime/contextFence";
 import { CATALOG_SPEC_BY_ID } from "../runtime/catalog-specs";
 import { newId } from "../runtime/context";
 import { SKILL_BY_ID } from "../runtime/skills";
@@ -64,6 +66,11 @@ export type ProxyAuth = { ok: true; claims: DataTokenClaims; run: RunRecord; spe
 
 const sharedLimiter = new RateLimiter();
 
+export async function assertProxyRuntimeContext(deps: ProxyDeps, run: RunRecord): Promise<void> {
+  if (run.snapshot) assertSameRuntimeContext(run, run.snapshot.ctx.account);
+  if (deps.db) await assertRuntimeContext(deps.db, run);
+}
+
 /** Resolve the exact authority a stored run was created under. A resumable snapshot wins; a
     promoted custom live spec is accepted only at the run's version; otherwise the catalog spec
     must match. No exact spec means no data authority. */
@@ -93,6 +100,12 @@ export async function authenticate(deps: ProxyDeps, req: Request): Promise<Proxy
   if (run.accountId !== claims.accountId || run.routineId !== claims.routineId) {
     return { ok: false, status: 404, error: "no stored run for this token" };
   }
+  try {
+    await assertProxyRuntimeContext(deps, run);
+  } catch (error) {
+    return { ok: false, status: error instanceof RuntimeContextError && error.code === "context_changed" ? 409 : 503,
+      error: "The stored run's business context is stale, paused or unavailable" };
+  }
   const spec = await specForStoredRun(deps, run);
   if (!spec) return { ok: false, status: 403, error: "the stored run has no matching routine specification" };
   const allowedScopes = scopesForSpec(spec);
@@ -112,7 +125,7 @@ function ctxFor(claims: DataTokenClaims, run: RunRecord, currency = "NZD"): RunC
     version: run.version,
     mode: run.mode,
     startedAt,
-    account: { accountId: claims.accountId, currency, budgetMonthly: 0 },
+    account: { accountId: claims.accountId, contextGeneration: run.contextGeneration ?? 0, currency, budgetMonthly: 0 },
     caps: { currency, perDay: 0, perMonth: 0 },
     triggeredBy: "manual",
     vars: {},
@@ -179,12 +192,14 @@ export async function readForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, { o
   const query: ReadQuery = { resource: q.resource, window: q.window, limit: q.limit, fields: q.fields, filter: q.filter };
   const ctx = ctxFor(claims, run);
   const receipt = async (kind: Receipt["kind"], description: string, payload: Record<string, unknown>) => {
+    await assertProxyRuntimeContext(deps, run);
     const r: Receipt = { id: idGen(), accountId: claims.accountId, runId: run.id, kind, platform, description, payload: { via: "n8n", query, ...payload }, createdAt: now().toISOString() };
     await deps.store.appendReceipt(r);
     return r.id;
   };
 
   try {
+    await assertProxyRuntimeContext(deps, run);
     const stored = storedDataEnabled(claims.accountId, platform, deps.dataEnv ?? {});
     const creds = stored ? null : await deps.credentials.get(claims.accountId, platform);
     if (!stored && !creds) {
@@ -194,10 +209,13 @@ export async function readForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, { o
       return { ok: false, code: secretStore ? "secret_store_unavailable" : "not_connected", reason, status: 200 };
     }
     const reader = accountDataReader(new WorkerConnectorReader({ credentials: deps.credentials, readers: deps.readers, now, fetch: deps.fetch }), deps.db, deps.dataEnv ?? {}, now);
+    await assertProxyRuntimeContext(deps, run);
     const res = await reader.read(platform, query, ctx);
     const receiptId = await receipt("read", `Read ${platform} ${q.resource}${q.window ? ` over ${q.window}` : ""} via n8n: ${res.rows.length} rows.`, { rowCount: res.rows.length, metrics: res.metrics, fetchedAt: res.fetchedAt, provenance: res.provenance ?? "ok", ...(res.dataset ? { dataset: res.dataset } : {}), ...(res.sourceNote ? { sourceNote: res.sourceNote } : {}) });
+    await assertProxyRuntimeContext(deps, run);
     return { ok: true, rows: res.rows, count: res.rows.length, metrics: res.metrics, provenance: { platform, resource: q.resource, window: q.window ?? null, fetchedAt: res.fetchedAt, source: res.provenance ?? "ok", via: "n8n", receiptId, ...(res.dataset ? { dataset: res.dataset } : {}), ...(res.sourceNote ? { sourceNote: res.sourceNote } : {}) } };
   } catch (err) {
+    if (err instanceof RuntimeContextError) throw err;
     const reason = stripCouldntAsk(err instanceof Error ? err.message : String(err));
     await receipt("notification", `Your n8n workflow asked ${platform} ${q.resource} — couldn’t ask: ${reason}.`, { rowCount: 0, provenance: "unavailable", reason });
     return { ok: false, code: "platform_error", reason, status: 200 };
@@ -231,6 +249,7 @@ function skillOrStub(routineId: string): Skill {
 export async function contextForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, { ok: true }>): Promise<Record<string, unknown>> {
   const now = deps.now ?? (() => new Date());
   const { claims, run } = auth;
+  await assertProxyRuntimeContext(deps, run);
   const skill = skillOrStub(claims.routineId);
   const ctx = ctxFor(claims, run);
   const source = deps.db ? new DbProducerContext(deps.db, deps.store, { now }) : new EmptyProducerContext(deps.store);
@@ -246,6 +265,8 @@ export async function contextForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, 
     }
   }
   const spec = CATALOG_SPEC_BY_ID[claims.routineId];
+  // A reset during gather/recall must not disclose a mixture of old and new business context.
+  await assertProxyRuntimeContext(deps, run);
   return {
     ok: true,
     routine: { id: skill.id, name: skill.name, kind: skill.kind, maxItems: skill.maxItems, purpose: skill.purpose, domain: skill.domain, minimum: spec?.minimum ?? skill.minimum, inputs: skill.inputs, craft: skill.prompt, outputSpec: skill.outputSpec, builtIn: !!SKILL_BY_ID[claims.routineId] },
@@ -320,6 +341,7 @@ export async function proposeAction(deps: ProxyDeps, auth: Extract<ProxyAuth, { 
   const now = deps.now ?? (() => new Date());
   const idGen = deps.idGen ?? newId;
   const { claims, run } = auth;
+  await assertProxyRuntimeContext(deps, run);
   const spec = await specForStoredRun(deps, run);
   const permitted = spec ? allowedActions(spec) : [];
   if (!permitted.some((candidate) => candidate.platform === action.platform && candidate.action === action.action)) {
@@ -343,6 +365,7 @@ export async function proposeAction(deps: ProxyDeps, auth: Extract<ProxyAuth, { 
     expiresAt,
     createdAt: nowIso,
   };
+  await assertProxyRuntimeContext(deps, run);
   await deps.store.createApproval(approval);
   const receipt: Receipt = {
     id: idGen(),
@@ -355,6 +378,8 @@ export async function proposeAction(deps: ProxyDeps, auth: Extract<ProxyAuth, { 
     payload: { via: "n8n", proposal: true, mutation: { platform: action.platform, action: action.action, target: action.target ?? null, params: action.params }, approvalId: approval.id, executed: false, executes: "wave_2" },
     createdAt: nowIso,
   };
+  await assertProxyRuntimeContext(deps, run);
   await deps.store.appendReceipt(receipt);
+  await assertProxyRuntimeContext(deps, run);
   return { queued: true, approvalId: approval.id, receiptId: receipt.id, executed: false, executes: "wave_2", note: ACTION_NOTE };
 }

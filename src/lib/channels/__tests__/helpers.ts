@@ -14,8 +14,8 @@ export const T0 = "2026-09-02T09:00:00.000Z";
 export function channelDb(): FakeSupabase {
   const db = new FakeSupabase();
   db.seed("accounts", [
-    { id: ACCT, name: "Example Co" },
-    { id: OTHER, name: "Someone Else" },
+    { id: ACCT, name: "Example Co", context_generation: 0, automation_paused: false },
+    { id: OTHER, name: "Someone Else", context_generation: 0, automation_paused: false },
   ]);
   db.seed("account_members", [{ account_id: ACCT, user_id: USER, role: "owner" }]);
   return db;

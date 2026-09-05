@@ -419,6 +419,8 @@ export interface SpecMinimum {
 
 export interface AccountContext {
   accountId: string;
+  /** Captured before reading business inputs; never replaced when resuming old work. */
+  contextGeneration?: number;
   currency: string;
   /** resource_profiles.budget_monthly — the hard spend guardrail source. */
   budgetMonthly: number;

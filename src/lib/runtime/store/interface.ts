@@ -219,6 +219,8 @@ export interface ListArtifactsOptions {
 export interface RunRecord {
   id: string;
   accountId: string;
+  /** Immutable captured account generation. Legacy absence means generation zero only. */
+  contextGeneration?: number;
   routineId: RoutineId;
   version: number;
   mode: RunMode;

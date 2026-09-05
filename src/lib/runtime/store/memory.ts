@@ -60,6 +60,7 @@ export class MemoryStore implements Store {
     return run ? clone(run) : null;
   }
   async updateRun(runId: string, patch: Partial<Omit<RunRecord, "id" | "accountId">>) {
+    if ("contextGeneration" in patch) throw new Error("A run's captured context generation is immutable");
     const run = this.runs.get(runId);
     if (!run) throw new Error(`run ${runId} not found`);
     const next = { ...run, ...clone(patch) };

@@ -94,9 +94,9 @@ describe("accounts source", () => {
     const src = new DbAccountsSource(db);
     const listed = await src.listAccounts();
     expect(listed.map((a) => a.account.accountId)).toEqual([ACCT]);
-    expect(listed[0]).toEqual({ account: { accountId: ACCT, currency: "AUD", budgetMonthly: 4200, approver: "Sam" }, vars: { website: "example.com" } });
+    expect(listed[0]).toEqual({ account: { accountId: ACCT, contextGeneration: 0, currency: "AUD", budgetMonthly: 4200, approver: "Sam" }, vars: { website: "example.com" } });
     // getAccount resolves any account, enabled routines or not; defaults when the profile is missing
-    expect(await src.getAccount(IDLE)).toEqual({ account: { accountId: IDLE, currency: "NZD", budgetMonthly: 0, approver: DEFAULT_APPROVER }, vars: {} });
+    expect(await src.getAccount(IDLE)).toEqual({ account: { accountId: IDLE, contextGeneration: 0, currency: "NZD", budgetMonthly: 0, approver: DEFAULT_APPROVER }, vars: {} });
     expect(await src.getAccount("00000000-0000-4000-8000-00000000nope")).toBeNull();
   });
 });

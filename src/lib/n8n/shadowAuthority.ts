@@ -1,6 +1,7 @@
 import { stableHash } from "../runtime/context";
 import { validateSpec } from "../runtime/validate";
-import { authenticate, type ProxyDeps } from "./proxy";
+import { assertProxyRuntimeContext, authenticate, type ProxyDeps } from "./proxy";
+import { RuntimeContextError } from "../runtime/contextFence";
 import { assertShadowRequest, type KeywordShadowContract } from "./shadowContract";
 
 /** Read-only preflight, NOT a one-use provider-spend permit or execution attestation.
@@ -53,6 +54,12 @@ export async function shadowAuthority(deps: ProxyDeps, req: Request, receiverUrl
     client: { id: contract.client.id, primaryDomain: contract.client.primaryDomain,
       seedKeyword: contract.client.seedKeyword, locationCode: contract.client.locationCode, languageCode: contract.client.languageCode },
   };
+  try {
+    await assertProxyRuntimeContext(deps, run);
+  } catch (error) {
+    return deny(error instanceof RuntimeContextError && error.code === "context_changed" ? 409 : 503,
+      "The stored run's business context is stale, paused or unavailable");
+  }
   return Response.json({ ok: true, shadow,
     run: { id: run.id, accountId: run.accountId, routineId: run.routineId, mode: run.mode, status: run.status, startedAt: run.startedAt },
     authorizedAt: now.toISOString(), expiresAt: new Date(claims.exp).toISOString(),

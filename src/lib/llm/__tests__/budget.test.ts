@@ -26,8 +26,8 @@ beforeEach(() => {
   db = new FakeSupabase();
   db.now = () => NOW.toISOString();
   db.seed("accounts", [
-    { id: ACCT, name: "Example Co" },
-    { id: OTHER, name: "Other Co", monthly_llm_cap_usd: 40 },
+    { id: ACCT, name: "Example Co", context_generation: 0, automation_paused: false },
+    { id: OTHER, name: "Other Co", monthly_llm_cap_usd: 40, context_generation: 0, automation_paused: false },
   ]);
   resetBudgetCache();
   delete process.env.UNC_ACCOUNT_MONTHLY_USD_CAP;

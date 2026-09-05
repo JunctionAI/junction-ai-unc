@@ -78,6 +78,7 @@ import type {
   SpendCaps,
 } from "./types";
 import { assertValidSpec } from "./validate";
+import { assertSameRuntimeContext, runtimeGeneration, RuntimeContextError, type RuntimeContextIdentity } from "./contextFence";
 
 const UNSAFE_PROPOSAL_STATUSES = new Set(["BLOCKED", "HOLD", "PARTIAL"]);
 
@@ -117,6 +118,9 @@ export interface Adapters {
   decider: DecisionProvider;
   executor: Executor;
   store: Store;
+  /** Production DB runtimes revalidate the captured generation/pause. SQL separately
+   * fences persistence atomically; this guard does not hold a lock over provider calls. */
+  assertContext?: (identity: RuntimeContextIdentity) => Promise<void>;
   /** Makes the artifact at a produce node. Absent → a produce node fails the run closed. */
   producer?: Producer;
   /** Hands a produce step to a registered n8n workflow, or runs an explicit n8n node. */
@@ -161,6 +165,7 @@ class RunSession {
   readonly receipts: Receipt[] = [];
   private readonly now: () => Date;
   private readonly idGen: () => string;
+  private readonly fencedStore: Store;
 
   constructor(
     private readonly spec: RoutineSpec,
@@ -170,10 +175,26 @@ class RunSession {
   ) {
     this.now = adapters.now ?? (() => new Date());
     this.idGen = adapters.idGen ?? newId;
+    // Keep this identity independent of mutable provider context and run patches.
+    const captured = Object.freeze({ accountId: run.accountId, contextGeneration: runtimeGeneration(run.contextGeneration) });
+    this.assertContext = async () => {
+      assertSameRuntimeContext(captured, this.ctx.account);
+      await adapters.assertContext?.(captured);
+    };
+    this.fencedStore = new Proxy(adapters.store, { get: (target, key) => {
+      const value = Reflect.get(target, key);
+      if (typeof value !== "function") return value;
+      return async (...args: unknown[]) => {
+        await this.assertContext();
+        return value.apply(target, args);
+      };
+    } });
   }
 
+  private readonly assertContext: () => Promise<void>;
+
   get store(): Store {
-    return this.adapters.store;
+    return this.fencedStore;
   }
   private nowIso() {
     return this.now().toISOString();
@@ -234,8 +255,12 @@ class RunSession {
       const node = this.spec.nodes[i];
       let outcome: RunResult | undefined;
       try {
+        await this.assertContext();
         outcome = await this.step(node, i);
+        await this.assertContext();
       } catch (err) {
+        // Do not turn a stale result into a new-context failure receipt or retry.
+        if (err instanceof RuntimeContextError) throw err;
         const message = err instanceof Error ? err.message : String(err);
         return this.fail(node.id, `${node.kind} failed: ${message}`);
       }
@@ -634,7 +659,7 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
     version: spec.version,
     mode: opts.mode,
     startedAt,
-    account: input.account,
+    account: { ...input.account, contextGeneration: runtimeGeneration(input.account.contextGeneration) },
     caps: capsFor(input.account),
     triggeredBy: input.triggeredBy ?? "schedule",
     vars: input.vars ?? {},
@@ -642,9 +667,11 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
     reads: {},
     checks: {},
   };
+  await adapters.assertContext?.(ctx.account);
   const run = await adapters.store.createRun({
     id: ctx.runId,
-    accountId: input.account.accountId,
+    accountId: ctx.account.accountId,
+    contextGeneration: ctx.account.contextGeneration,
     routineId: spec.id,
     version: spec.version,
     mode: opts.mode,
@@ -663,6 +690,8 @@ export async function resumeRun(runId: string, decision: "approved" | "held", ad
   if (!run) throw new Error(`run ${runId} not found`);
   if (run.status !== "waiting_approval") throw new Error(`run ${runId} is ${run.status}, not waiting_approval`);
   if (!run.snapshot || !run.approvalId) throw new Error(`run ${runId} has no resumable snapshot`);
+  assertSameRuntimeContext(run, run.snapshot.ctx.account);
+  await adapters.assertContext?.(run);
   const approval = await store.getApproval(run.approvalId);
   if (!approval) throw new Error(`approval ${run.approvalId} not found`);
   if (approval.status !== "pending") throw new Error(`approval ${approval.id} already ${approval.status}`);
@@ -723,6 +752,8 @@ export async function resumeRunWithInput(runId: string, answers: Record<string, 
   if (!run) throw new Error(`run ${runId} not found`);
   if (run.status !== "waiting_input") throw new Error(`run ${runId} is ${run.status}, not waiting_input`);
   if (!run.snapshot) throw new Error(`run ${runId} has no resumable snapshot`);
+  assertSameRuntimeContext(run, run.snapshot.ctx.account);
+  await adapters.assertContext?.(run);
   const clean = cleanAnswers(answers);
   if (!Object.keys(clean).length) throw new Error("answers are empty");
   const { spec, ctx, nextNodeIndex } = run.snapshot;
@@ -740,6 +771,8 @@ export async function completeExternalArtifact(runId: string, result: { artifact
   const run = await store.getRun(runId);
   if (!run) throw new Error(`run ${runId} not found`);
   if (run.status !== "running" || run.snapshot?.awaiting !== "n8n") throw new Error(`run ${runId} is not waiting for an n8n artifact`);
+  assertSameRuntimeContext(run, run.snapshot.ctx.account);
+  await adapters.assertContext?.(run);
   const { spec, ctx, nextNodeIndex } = run.snapshot;
   const index = nextNodeIndex - 1;
   const node = spec.nodes[index];

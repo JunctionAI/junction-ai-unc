@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryStore } from "../../runtime/store/memory";
+import { FakeSupabase } from "../../db/__tests__/fakeSupabase";
 import { stableHash } from "../../runtime/context";
 import type { RunRecord } from "../../runtime/store/interface";
 import type { RoutineSpec, N8nWorkflow } from "../../runtime/types";
@@ -65,6 +66,16 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("keyword shadow receiver authority", () => {
+  it("rechecks captured context after registration lookup before disclosing authority", async () => {
+    const db = new FakeSupabase();
+    db.seed("accounts", [{ id: run.accountId, context_generation: 0, automation_paused: false }]);
+    deps.db = db;
+    vi.spyOn(store, "findN8nWorkflow").mockImplementation(async () => {
+      db.rows("accounts")[0].context_generation = 1;
+      return registration;
+    });
+    await expectDenied(request(), 409);
+  });
   it("returns only canonical run settings without reads, writes or account context", async () => {
     const credentials = vi.spyOn(deps.credentials, "get");
     const fetch = vi.fn();

@@ -56,7 +56,7 @@ beforeEach(() => {
   db.now = () => "2026-09-03T09:00:00.000Z";
   db.userId = USER;
   user = { id: USER, email: "founder@example.test" };
-  db.seed("accounts", [{ id: ACCT, name: "Deep Blue", currency: "NZD" }]);
+  db.seed("accounts", [{ id: ACCT, name: "Deep Blue", currency: "NZD", context_generation: 0, automation_paused: false }]);
   db.seed("account_members", [{ account_id: ACCT, user_id: USER, role: "owner" }]);
   db.seed("business_profiles", [{ account_id: ACCT, profile: { name: "Deep Blue Health", category: "Natural supplements", businessType: "ecommerce", sells: "products", storefront: "shopify" } }]);
   db.seed("resource_profiles", [{ account_id: ACCT, budget_monthly: 3000, gross_margin_pct: 60 }]);

@@ -50,6 +50,20 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("authenticate", () => {
+  it("rejects a run after account reset, pause or missing generation controls", async () => {
+    const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT, context_generation: 0, automation_paused: false }]);
+    const guarded = { ...deps, db };
+    expect(await authenticate(guarded, req("/x", token()))).toMatchObject({ ok: true });
+    db.rows("accounts")[0].context_generation = 1;
+    expect(await authenticate(guarded, req("/x", token()))).toMatchObject({ ok: false, status: 409 });
+    db.rows("accounts")[0].context_generation = 0;
+    db.rows("accounts")[0].automation_paused = true;
+    expect(await authenticate(guarded, req("/x", token()))).toMatchObject({ ok: false, status: 503 });
+    delete db.rows("accounts")[0].automation_paused;
+    expect(await authenticate(guarded, req("/x", token()))).toMatchObject({ ok: false, status: 503 });
+    expect(await store.listReceipts(ACCT)).toHaveLength(0);
+  });
   it("binds every token to a stored run's account, routine and spec scopes, then enforces status and rate limit", async () => {
     expect(await authenticate({ ...deps, secret: "" }, req("/x", token()))).toMatchObject({ ok: false, status: 503 });
     expect(await authenticate(deps, req("/x", null))).toMatchObject({ ok: false, status: 401, error: expect.stringContaining("Bearer") });
@@ -72,6 +86,18 @@ describe("authenticate", () => {
 });
 
 describe("reads", () => {
+  it("does not call a provider or write an error receipt after its authenticated context resets", async () => {
+    const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT, context_generation: 0, automation_paused: false }]);
+    const get = vi.fn();
+    const guarded = { ...deps, db, credentials: { get } };
+    const auth = await authenticate(guarded, req("/x", token()));
+    if (!auth.ok) throw new Error("auth failed");
+    db.rows("accounts")[0].context_generation = 1;
+    await expect(readForToken(guarded, auth, { platform: "shopify", resource: "products" })).rejects.toMatchObject({ code: "context_changed" });
+    expect(get).not.toHaveBeenCalled();
+    expect(await store.listReceipts(ACCT)).toHaveLength(0);
+  });
   it("records credential-service outages as operational failures, not disconnected accounts", async () => {
     const auth = await authenticate(deps, req("/x", token()));
     if (!auth.ok) throw new Error("auth failed");
@@ -140,9 +166,20 @@ describe("reads", () => {
 });
 
 describe("context", () => {
+  it("rejects a reset during context gathering instead of returning mixed business inputs", async () => {
+    const db = new FakeSupabase();
+    db.seed("accounts", [{ id: ACCT, context_generation: 0, automation_paused: false }]);
+    const guarded: ProxyDeps = { ...deps, db, playbooks: async () => {
+      db.rows("accounts")[0].context_generation = 1;
+      return [];
+    } };
+    const auth = await authenticate(guarded, req("/x", token()));
+    if (!auth.ok) throw new Error("auth failed");
+    await expect(contextForToken(guarded, auth)).rejects.toMatchObject({ code: "context_changed" });
+  });
   it("carries the skill card, the profile, memories recalled for the routine's purpose, goal, plan, prior artifacts and ≤ 3 playbooks", async () => {
     const db = new FakeSupabase();
-    db.seed("accounts", [{ id: ACCT, name: "Example Co" }]);
+    db.seed("accounts", [{ id: ACCT, name: "Example Co", context_generation: 0, automation_paused: false }]);
     db.seed("business_profiles", [{ account_id: ACCT, scan_status: "done", profile: { name: "Example Co", oneLiner: "Marine collagen from Auckland", products: ["Collagen 300g"], voice: { tone: "plain" } } }]);
     db.seed("goals", [{ account_id: ACCT, category: "revenue", tier: "governing", title: "NZ$40k/month by March", baseline: 21000, deadline: "2027-03-01" }]);
     db.seed("plans", [{ account_id: ACCT, title: "Brand-led organic", phases: [{ title: "Content", channel: "Content" }] }]);

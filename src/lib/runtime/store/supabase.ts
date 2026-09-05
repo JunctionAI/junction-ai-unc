@@ -79,6 +79,7 @@ function runToRow(r: RunRecord): Row {
   return {
     id: r.id,
     account_id: r.accountId,
+    ...(r.contextGeneration !== undefined ? { context_generation: r.contextGeneration } : {}),
     routine_id: r.routineId,
     version: r.version,
     mode: r.mode,
@@ -93,6 +94,7 @@ function runToRow(r: RunRecord): Row {
   };
 }
 const RUN_PATCH_COLUMNS: Record<keyof Omit<RunRecord, "id" | "accountId">, string> = {
+  contextGeneration: "context_generation",
   routineId: "routine_id",
   version: "version",
   mode: "mode",
@@ -106,6 +108,7 @@ const RUN_PATCH_COLUMNS: Record<keyof Omit<RunRecord, "id" | "accountId">, strin
   snapshot: "snapshot",
 };
 function runPatchToRow(patch: Partial<Omit<RunRecord, "id" | "accountId">>): Row {
+  if ("contextGeneration" in patch) throw new Error("A run's captured context generation is immutable");
   const row: Row = {};
   for (const k of Object.keys(patch) as (keyof typeof patch)[]) {
     const col = RUN_PATCH_COLUMNS[k];
@@ -117,6 +120,7 @@ function rowToRun(row: Row): RunRecord {
   return compact({
     id: row.id as string,
     accountId: row.account_id as string,
+    contextGeneration: opt<number>(row.context_generation),
     routineId: row.routine_id as RoutineId,
     version: Number(row.version),
     mode: row.mode as RunRecord["mode"],

@@ -76,6 +76,9 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect([...s.benchmarks.columns]).toEqual(expect.arrayContaining(["p50", "p75", "n", "computed_at"]));
     expect(s.benchmark_optins.primaryKey).toEqual(["account_id"]);
     expect([...s.routine_runs.columns]).toEqual(expect.arrayContaining(["approval_id", "dedup_key", "spec_hash", "snapshot"])); // 0002
+    // Schema-qualified ALTER must extend routine_runs, not invent a "public" table.
+    expect(s.routine_runs.columns.has("context_generation")).toBe(true);
+    expect(s).not.toHaveProperty("public");
     expect([...s.chat_messages.columns]).toEqual(expect.arrayContaining(["thread", "position", "meta"])); // 0003
     expect(s.team_members.columns.has("position")).toBe(true);
     expect(s.approvals.columns.has("client_key")).toBe(true);

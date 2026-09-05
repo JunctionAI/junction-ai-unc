@@ -36,6 +36,7 @@ import type { ScheduleCandidate } from "./scheduler";
 import { defaultCredentialProvider, serviceDb } from "./wiring";
 import { accountDataReader } from "../lib/data/datasets";
 import { AUTOMATION_PAUSED_MESSAGE } from "../lib/db/automationPause";
+import { assertRuntimeContext } from "../lib/db/runtimeContext";
 
 /** Hard constant. See the box above — flipping it is founder-gated (Wave 2). */
 export const LIVE_MODE_ENABLED: boolean = false;
@@ -119,6 +120,7 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
       log: deps.log,
     }),
     store: deps.store,
+    ...(db ? { assertContext: (identity: import("../lib/runtime/contextFence").RuntimeContextIdentity) => assertRuntimeContext(db, identity) } : {}),
     ...(producer ? { producer } : {}),
     ...(n8n ? { n8n } : {}),
     now,

@@ -91,7 +91,7 @@ export function loadSchema(dir = MIGRATIONS_DIR): Schema {
     }
 
     // alter table … add column | add constraint … check (col in (…))  (0013 widens routine_runs.status)
-    const alterRe = /alter table (\w+)([\s\S]*?);/g;
+    const alterRe = /alter table (?:public\.)?(\w+)\s+([\s\S]*?);/g;
     for (const m of sql.matchAll(alterRe)) {
       const con = m[2].match(/add constraint \w+ check \((\w+) in \(([^)]+)\)\)/i);
       if (con) table(m[1]).enums[con[1]] = new Set(con[2].split(",").map((v) => v.trim().replace(/^'|'$/g, "")));

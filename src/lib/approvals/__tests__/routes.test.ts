@@ -41,7 +41,7 @@ let NOW: Date;
 
 async function seedPaused(store: Store, accountId: string) {
   const clk = clock(NOW.toISOString());
-  const adapters = { ...buildAdapters({ store, accounts: new StaticAccountsSource(), now: clk.now }), reader: new StaticReader(SPEND_FIXTURE, clk.now) };
+  const adapters = { ...buildAdapters({ store, accounts: new StaticAccountsSource(), db: accountId === "demo" ? null : db, now: clk.now }), reader: new StaticReader(SPEND_FIXTURE, clk.now) };
   const r = await runRoutine(budgetMoveSpec(), input({ account: { accountId, currency: "NZD", budgetMonthly: 3000 }, triggeredBy: "manual" }), adapters, { mode: "live" });
   expect(r.status).toBe("waiting_approval");
   return r;
@@ -56,8 +56,8 @@ beforeEach(() => {
   db.userId = USER;
   user = { id: USER, email: "founder@example.test" };
   db.seed("accounts", [
-    { id: ACCT, name: "Example Co" },
-    { id: OTHER, name: "Other Co" },
+    { id: ACCT, name: "Example Co", context_generation: 0, automation_paused: false },
+    { id: OTHER, name: "Other Co", context_generation: 0, automation_paused: false },
   ]);
   db.seed("account_members", [{ account_id: ACCT, user_id: USER, role: "owner" }]);
   setStoreForTests(new SupabaseStore(db));
@@ -140,6 +140,7 @@ describe("POST /api/approvals/<id>", () => {
   });
   it("demo mode: MemoryStore, unbound — Approve fails closed under the refusing executor", async () => {
     clearBillingEnv();
+    serviceRole = false;
     const store = new MemoryStore();
     setStoreForTests(store);
     const paused = await seedPaused(store, "demo");
