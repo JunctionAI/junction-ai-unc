@@ -13,7 +13,15 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 38, 6 September NZ / 5 September UTC
+## Latest state — Batch 39, 6 September NZ / 5 September UTC
+
+**Repeatable real-worker keyword preflight implemented and run.** [Command, receipt and next-handoff fingerprint](integration/KEYWORD-READINESS-2026-09-06.md). Seventeen focused Node tests, syntax and ESLint pass; no deployment or provider/database mutation. The prior turn was verified progress, not an unchanged wait.
+
+At `2026-09-05T14:20:24.958Z`, the actual release-22 worker confirms matching canonical app/build, correct AVGAR generation/domain and unchanged published revision. Three precise gates remain: execution reader disabled (Codex), webhook Ignore Bots true (Nguyen correction requested), AVGAR paused (Codex's setup hold). Successful receiver authentication remains unproven. The preflight issues no permit, calls no webhook/provider, reads secrets only inside the existing worker and never turns flags on.
+
+Captured secret-free exact and ignoreBots-normalized definition hashes to verify the next revision has no unexpected changes. Identified the two applied SQL function bodies that must be deliberately repinned alongside the worker; changing only an env var or TypeScript constant will not be enough. Existing migration history is untouched. Nguyen had no new reply at this turn's single fresh conversation check; no duplicate message sent. Full original register/all-client scope stays active, with later lane contracts and customer acceptance still Codex-owned.
+
+## Previous state — Batch 38, 6 September NZ / 5 September UTC
 
 **Manual admission deployed; receiver replacement authorized and provisioned; real transport uncovered a webhook setting blocker.** [Release and exact remaining gate](integration/RECEIVER-RELEASE-2026-09-06.md). The full B01–B24/all-client goal remains active.
 
