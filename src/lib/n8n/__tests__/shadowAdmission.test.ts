@@ -39,7 +39,7 @@ function fixture() {
     if (!['dispatching','provider_authorized','verifying','uncertain'].includes(state)) return false;
     state=String(args.outcome); saved=args.saved_result; seenExecution=args.observed_execution; return true;
   };
-  db.rpcs.note_keyword_shadow_execution = args => {
+  db.rpcs.checkpoint_keyword_shadow_result = args => {
     if (state!=='provider_authorized') return false;
     state='verifying'; seenExecution=args.observed_execution; return true;
   };
@@ -119,7 +119,7 @@ describe('durable keyword admission wiring', () => {
     expect(f.fetch).not.toHaveBeenCalled();
   });
   it('checkpoint failure does not return an artifact or retry the paid call', async () => {
-    const f=fixture(); f.db.rpcs.note_keyword_shadow_execution=()=>false;
+    const f=fixture(); f.db.rpcs.checkpoint_keyword_shadow_result=()=>false;
     await expect(f.bridge().call(node,ctx,workflow)).rejects.toThrow('not checkpointed');
     expect(f.read).not.toHaveBeenCalled(); expect(f.state()).toBe('uncertain');
     await expect(f.bridge().call(node,ctx,workflow)).rejects.toThrow('unused shadow permit');

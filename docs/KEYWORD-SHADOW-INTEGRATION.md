@@ -6,10 +6,12 @@ Status: bridge, authority and concrete independent execution-reader code exist; 
 The integration owner is Codex/Unc, not Tom. Tom should not have to invent routine mappings,
 relay schema decisions, or manually join execution receipts.
 
-Latest source verification: 182 files / 2,160 tests PASS; app and standalone-worker TypeScript PASS;
+Latest source verification: 195 files / 2,379 tests PASS; app and standalone-worker TypeScript PASS;
 lint PASS (zero errors, 39 existing warnings); production webpack build PASS; `git diff --check` PASS. The new tests
 use synthetic responses and an in-memory store. They prove parsing, denial paths and linked
 storage behavior, not a fresh n8n/provider execution or phone end-to-end success.
+
+Internal recovery now checkpoints the validated response before independent verification and can reconcile it into its original private permit archive without redispatch. [Exact limits](KEYWORD-RECOVERY-2026-09-05.md): customer-visible completion and unknown-response discovery are still pending. Nguyen's frozen wrapper/receipt contract is unchanged.
 
 ## Live source inspected
 

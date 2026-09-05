@@ -133,3 +133,26 @@ export function verifyShadowExecution(value: unknown, observation: unknown, cont
     revisionVerification: { source: "n8n_execution_record", verifiedAt: now.toISOString(),
       startedAt: seen.startedAt, stoppedAt: seen.stoppedAt, requestDigest: expectedRequestDigest } };
 }
+
+/** Historical evidence has a different clock from a fresh webhook response. Only a
+ * durable, already-authorized dispatch may use this path. It grants no provider work
+ * and does not relabel old provider data as freshly fetched. */
+export function verifyHistoricalShadowExecution(value: unknown, observation: unknown, contract: KeywordShadowContract,
+  run: ShadowRunIdentity, now: Date, expectedRequestDigest: string,
+  admission: { dispatchedAt: string; authorizedAt: string }): Record<string, unknown> {
+  const seen = object(observation);
+  const started = Date.parse(String(seen?.startedAt)), stopped = Date.parse(String(seen?.stoppedAt));
+  const runStart = Date.parse(run.startedAt), dispatched = Date.parse(admission.dispatchedAt), authorized = Date.parse(admission.authorizedAt);
+  const clock = now.getTime(), slack = 30_000, window = 15 * 60_000;
+  if (![started, stopped, runStart, dispatched, authorized, clock].every(Number.isFinite) ||
+      dispatched < runStart - slack || dispatched > runStart + window || authorized < dispatched ||
+      authorized > dispatched + window || started < dispatched - slack || started > authorized + slack ||
+      stopped < started || stopped < authorized - slack || stopped > started + window || stopped > clock + slack)
+    throw new Error("Historical shadow evidence is outside the original authorized execution window");
+  // Validate the original receipt as of the authenticated execution's completion.
+  // The fresh path's 15-minute rule remains untouched. No timestamp is rewritten.
+  const verified = verifyShadowExecution(value, seen, contract, run, new Date(stopped), expectedRequestDigest);
+  return { ...verified, revisionVerification: { ...(verified.revisionVerification as Record<string, unknown>),
+    verifiedAt: now.toISOString(), method: "historical_reconciliation", dispatchedAt: admission.dispatchedAt,
+    authorizedAt: admission.authorizedAt } };
+}

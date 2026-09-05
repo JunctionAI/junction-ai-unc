@@ -10,7 +10,16 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 19, 5 September 2026, approximately 07:58 UTC
+## Latest state — Batch 20, 5 September 2026, approximately 08:11 UTC
+
+**Verified source and rollback-only database progress; no production rollout.** Batch 19 was committed/pushed as `c46b6b3b6114a54a4fedc2993ea213908f56bc64`. The pending n8n plan/API-key scope question was not answered by the automatic goal continuation; no purchase or key creation was attempted.
+
+- Added atomic immutable business-response + execution checkpoint before independent verification, and operator-only GET-based recovery into the original private permit archive. Historical verification preserves actual fetch/execution times, records a separate reconciliation time, and never weakens the normal fresh-response TTL or refunds the provider allowance.
+- **195 files / 2,379 tests PASS**, including a synthetic bridge failure → recreated recovery adapter test with only one webhook POST. App TypeScript, worker compilation, production build and diff checks pass; lint zero errors / 39 existing warnings. Both admission/recovery PostgreSQL rollback canaries pass together; no test/mock result is counted as a live provider receipt.
+- Independent **08:10:50 UTC** readback: staged tables absent, zero synthetic accounts, AVGAR generation 1 / paused, no registrations/enabled routines/AVGAR runs. Security advisors unchanged at six WARN/eight INFO. Canonical **08:11:01 UTC** health remains `00fc57cfd07b`, healthy DB/fresh worker. No persistent DDL, deployment, provider/model call, outgoing message, workflow mutation, purchase or key creation.
+- **B16 remains partial:** private archive recovery is not yet atomic customer-visible engine/artifact/receipt completion. Missing webhook responses/checkpoints still require supported discovery; no paid rerun. [Implementation, operator command, evidence and exact remaining limits](KEYWORD-RECOVERY-2026-09-05.md). Eight migrations await coordinated rollout. Atomic pilot issuance, receiver/access reconciliation, OAuth identity, full release and live browser/phone/second-client acceptance remain Codex work; the full B01–B24 goal is not complete.
+
+## Batch 19, 5 September 2026, approximately 07:58 UTC
 
 **Verified source, rollback database and live handoff progress; no production rollout.** The preceding user-facing handoff answer did not change backend state. This continuation started OAuth inspection, then prioritized Nguyen's newly configured revision and the remaining keyword admission gate. Full B01–B24 scope is unchanged.
 

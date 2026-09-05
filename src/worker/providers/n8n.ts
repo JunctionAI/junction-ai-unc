@@ -27,6 +27,7 @@ import { createShadowExecutionReader, type ShadowExecutionReader } from "./n8nEx
 import { shadowRequestDigest } from "../../lib/n8n/executionEvidence";
 import { shadowTokenDigest, type ShadowAdmission } from "../../lib/n8n/shadowAdmission";
 import { runtimeGeneration } from "../../lib/runtime/contextFence";
+import { shadowCandidate, verifiedShadowResult } from "../../lib/n8n/shadowCandidate";
 
 export const N8N_DEFAULT_TIMEOUT_MS = 60_000;
 export const N8N_SECRET_ENV = "N8N_SIGNING_SECRET";
@@ -211,9 +212,10 @@ export class HttpN8nBridge implements N8nBridge {
       if (shadow && out.kind === "artifact") {
         const reported = validateShadowReceipt((parsed as { executionReceipt?: unknown }).executionReceipt, shadow, identity, this.now());
         observedExecutionId = String(reported.executionId);
+        const candidate = shadowCandidate(out.artifact, reported);
         // Persist the known execution before the next network wait. A crash here
         // must leave a named execution to inspect, not a reason to call n8n again.
-        await this.opts.shadowAdmission!.observe(permitId!, observedExecutionId);
+        await this.opts.shadowAdmission!.observe(permitId!, observedExecutionId, candidate);
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
         let observation: unknown;
@@ -227,9 +229,7 @@ export class HttpN8nBridge implements N8nBridge {
           throw new Error(`n8n execution could not be independently verified; reconcile the execution before rerunning (workflow=${shadow.workflowId}, execution=${reported.executionId})`);
         } finally { clearTimeout(timer); }
         const receipt = verifyShadowExecution(reported, observation, shadow, identity, this.now(), shadowRequestDigest(JSON.parse(body)));
-        const ref = `https://junctionai8.app.n8n.cloud/workflow/${shadow.workflowId}/executions/${receipt.executionId}`;
-        out.artifact.meta = { executionReceipt: receipt, approval_status: "pending_approval", executed_action: "none" };
-        out.artifact.evidence = [...(out.artifact.evidence ?? []), { source: "n8n_execution", ref }];
+        return verifiedShadowResult(candidate, receipt);
       }
       this.opts.log?.info("n8n.replied", { runId: ctx.runId, routineId: ctx.routineId, kind: out.kind });
       return out;
