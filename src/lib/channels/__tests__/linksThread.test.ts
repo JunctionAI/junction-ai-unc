@@ -4,9 +4,9 @@
 
 import { describe, expect, it } from "vitest";
 import { loadAccountRows } from "@/lib/db/accountState";
-import { accountsWithLinks, consumeLinkCode, issueLinkCode, LINK_CODE_TTL_MS, listLinks, looksLikeLinkCode, normaliseLinkCode, normalisePrefs, unlink, updatePrefs, upsertVerifiedLink, verifiedLinks, findVerifiedLink } from "../links";
+import { accountsWithLinks, issueLinkCode, LINK_CODE_TTL_MS, listLinks, looksLikeLinkCode, normaliseLinkCode, normalisePrefs, unlink, updatePrefs, upsertVerifiedLink, verifiedLinks, findVerifiedLink } from "../links";
 import { appendInbound, appendOutbound, historyFor, listThread, POSITION_BAND, positionFor } from "../thread";
-import { ACCT, channelDb, clock, OTHER, seedLink, USER } from "./helpers";
+import { ACCT, channelDb, clock, OTHER, seedLink, USER, consumeCodeForTest as consumeLinkCode } from "./helpers";
 
 describe("link codes", () => {
   it("issue → consume from the device verifies the row and clears the code; the welcome names the channel", async () => {
@@ -38,9 +38,9 @@ describe("link codes", () => {
     expect(second.linkId).toBe(first.linkId);
     expect(second.code).not.toBe(first.code);
     expect(await consumeLinkCode(db, { code: first.code, channel: "whatsapp", externalId: "6421", now: clk.now() })).toEqual({ ok: false, reason: "unknown" });
-    expect(await consumeLinkCode(db, { code: second.code, channel: "sms", externalId: "+6421", now: clk.now() })).toEqual({ ok: false, reason: "channel_mismatch" });
+    expect(await consumeLinkCode(db, { code: second.code, channel: "sms", externalId: "+6421", now: clk.now() })).toEqual({ ok: false, reason: "unknown" });
     clk.advance(LINK_CODE_TTL_MS + 1000);
-    expect(await consumeLinkCode(db, { code: second.code, channel: "whatsapp", externalId: "6421", now: clk.now() })).toEqual({ ok: false, reason: "expired" });
+    expect(await consumeLinkCode(db, { code: second.code, channel: "whatsapp", externalId: "6421", now: clk.now() })).toEqual({ ok: false, reason: "unknown" });
     expect(await consumeLinkCode(db, { code: "hello there", channel: "whatsapp", externalId: "6421", now: clk.now() })).toEqual({ ok: false, reason: "unknown" });
   });
 

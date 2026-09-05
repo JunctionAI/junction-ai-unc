@@ -11,8 +11,10 @@ import { defaultAccountsSource, envKeyring } from "@/worker/wiring";
 import { availability, buildAdapters } from "./adapters/index";
 import { handleInbound, type InboundDeps } from "./inbound";
 import type { AdapterRegistry } from "./outbound";
-import type { InboundEvent } from "./types";
-import type { ReceiveDeps } from "./webhooks";
+import { toResponse, type Received, type ReceiveDeps } from "./webhooks";
+import { after } from "next/server";
+import { saveInboundEvents, drainInboundEvents } from "./inbox";
+import { messagingDisabled } from "./releaseGate";
 
 export const channelLog = (event: string, fields: Record<string, unknown>) => console.log(JSON.stringify({ event, ...fields }));
 
@@ -46,20 +48,25 @@ export function inboundDeps(): InboundDeps | null {
   return { db, store: getStore(), accounts: defaultAccountsSource(), adapters: envAdapters(db), now: () => new Date(), log: channelLog };
 }
 
-/** What the webhook routes run after the response went back. Never throws. */
-export async function processInbound(events: InboundEvent[]): Promise<void> {
-  if (!events.length) return;
+/** HTTP success means the authenticated events and their original identity are durable.
+ * after() only wakes the queue; it never carries raw events as a fallback. */
+export async function acknowledgeInbound(received: Received): Promise<Response> {
+  if (!received.events.length) return toResponse(received);
+  const db = serviceDbOrNull();
+  if (!db) return Response.json({ error: "message storage unavailable" }, { status: 503 });
+  try { await saveInboundEvents(db, received.events); }
+  catch { return Response.json({ error: "message was not acknowledged; retry with the same event ID" }, { status: 503 }); }
+  try { after(() => processInbound()); } catch { /* already saved; the worker recovers */ }
+  return toResponse(received);
+}
+
+/** A best-effort wake of durable work. Worker recovery uses the same atomic claim RPC. */
+export async function processInbound(): Promise<void> {
+  if (messagingDisabled(process.env)) return;
   const deps = inboundDeps();
-  if (!deps) {
-    channelLog("channels.inbound_skipped", { reason: "no database", events: events.length });
-    return;
-  }
-  for (const e of events) {
-    try {
-      const out = await handleInbound(deps, e);
-      channelLog("channels.inbound", { channel: e.channel, outcome: out.kind });
-    } catch (err) {
-      channelLog("channels.inbound_failed", { channel: e.channel, error: err instanceof Error ? err.message : String(err) });
-    }
-  }
+  if (!deps) return;
+  await drainInboundEvents(deps.db, async message => {
+    const out = await handleInbound(deps, message);
+    channelLog("channels.inbound", { channel: message.event.channel, outcome: out.kind });
+  });
 }

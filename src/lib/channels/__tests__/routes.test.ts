@@ -3,10 +3,12 @@
    next/server `after` run inline and the inbound processor captured. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHmac } from "node:crypto";
 import { FakeSupabase } from "@/lib/db/__tests__/fakeSupabase";
 import { clearBillingEnv, restoreEnv, setFakeEnv } from "@/lib/billing/__tests__/env";
 import { appendInbound } from "../thread";
 import { ACCT, seedLink, USER } from "./helpers";
+import { installInboxFixture } from "./inboxFixture";
 
 let db: FakeSupabase;
 let user: { id: string; email?: string } | null = null;
@@ -16,18 +18,17 @@ vi.mock("@/lib/db/server", () => ({
   getServiceSupabase: () => db,
   isServiceRoleConfigured: () => true,
 }));
-const processed = vi.hoisted(() => ({ events: [] as unknown[] }));
-vi.mock("next/server", () => ({ after: (fn: () => unknown) => void fn() }));
-vi.mock("@/lib/channels/server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/channels/server")>()),
-  processInbound: async (events: unknown[]) => void processed.events.push(...events),
-}));
+const processed = vi.hoisted(() => ({ wakes: [] as (() => unknown)[] }));
+vi.mock("next/server", () => ({ after: (fn: () => unknown) => void processed.wakes.push(fn) }));
 
 import { DELETE, GET, PATCH, POST } from "@/app/api/channels/links/route";
 import { instructionFor } from "@/lib/channels/instructions";
 import { GET as THREAD } from "@/app/api/channels/thread/route";
 import { GET as SLACK_START } from "@/app/api/channels/slack/start/route";
 import { POST as TELEGRAM } from "@/app/api/webhooks/telegram/route";
+import { POST as WHATSAPP } from "@/app/api/webhooks/whatsapp/route";
+import { POST as SLACK } from "@/app/api/webhooks/slack/route";
+import { POST as TWILIO } from "@/app/api/webhooks/twilio/route";
 
 const CHANNEL_ENV = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "TELEGRAM_BOT_USERNAME", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM", "APP_URL"] as const;
 const req = (method: string, body?: unknown, path = "/api/channels/links") => new Request(`http://unc.test${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -42,16 +43,63 @@ beforeEach(() => {
   process.env.TWILIO_FROM = "+15550001111";
   process.env.APP_URL = "https://unc.test";
   db = new FakeSupabase();
+  installInboxFixture(db);
   db.now = () => "2026-09-02T09:00:00.000Z";
   db.userId = USER;
   user = { id: USER, email: "founder@example.test" };
   db.seed("accounts", [{ id: ACCT, name: "Example Co" }]);
   db.seed("account_members", [{ account_id: ACCT, user_id: USER, role: "owner" }]);
-  processed.events.length = 0;
+  processed.wakes.length = 0;
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   restoreEnv();
   for (const k of CHANNEL_ENV) delete process.env[k];
+});
+
+describe("all supported general webhook routes use durable ingress", () => {
+  const channels = ["telegram", "whatsapp", "slack", "twilio"] as const;
+  function signed(channel: typeof channels[number]) {
+    vi.stubEnv("UNC_COMMANDS_ENABLED", "false"); // Conversation persistence does not depend on routine commands.
+    let body: string;
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (channel === "telegram") {
+      body = JSON.stringify({ message: { message_id: 50, chat: { id: 5 }, text: "hello" } });
+      headers["x-telegram-bot-api-secret-token"] = "tg-secret";
+    } else if (channel === "whatsapp") {
+      for (const [key, value] of Object.entries({ WHATSAPP_PHONE_NUMBER_ID: "phone", WHATSAPP_ACCESS_TOKEN: "fixture", WHATSAPP_VERIFY_TOKEN: "fixture", WHATSAPP_APP_SECRET: "wa-secret" })) vi.stubEnv(key, value);
+      body = JSON.stringify({ object: "whatsapp_business_account", entry: [{ changes: [{ value: { messages: [{ from: "6421", id: "wamid.durable", type: "text", text: { body: "hello" } }] } }] }] });
+      headers["x-hub-signature-256"] = `sha256=${createHmac("sha256", "wa-secret").update(body).digest("hex")}`;
+    } else if (channel === "slack") {
+      for (const [key, value] of Object.entries({ SLACK_CLIENT_ID: "fixture", SLACK_CLIENT_SECRET: "fixture", SLACK_SIGNING_SECRET: "slack-secret" })) vi.stubEnv(key, value);
+      body = JSON.stringify({ type: "event_callback", team_id: "T1", event: { type: "message", channel_type: "im", user: "U1", channel: "D1", ts: "1.1", text: "hello" } });
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      headers["x-slack-request-timestamp"] = timestamp;
+      headers["x-slack-signature"] = `v0=${createHmac("sha256", "slack-secret").update(`v0:${timestamp}:${body}`).digest("hex")}`;
+    } else {
+      const params = { Body: "hello", From: "+6421", MessageSid: "SM-durable" };
+      body = new URLSearchParams(params).toString();
+      headers["content-type"] = "application/x-www-form-urlencoded";
+      headers["x-twilio-signature"] = createHmac("sha1", "a").update("https://unc.test/api/webhooks/twilio" + Object.entries(params).map(([k, v]) => k + v).join("")).digest("base64");
+    }
+    return { request: new Request(`https://unc.test/api/webhooks/${channel}`, { method: "POST", headers, body }), handler: { telegram: TELEGRAM, whatsapp: WHATSAPP, slack: SLACK, twilio: TWILIO }[channel] };
+  }
+  it.each(channels)("%s saves the captured envelope before success, even with commands off", async channel => {
+    const { request, handler } = signed(channel);
+    const response = await handler(request);
+    expect(response.status).toBe(200);
+    expect(db.rows("channel_inbox")).toHaveLength(1);
+    expect(db.rows("channel_inbox")[0]).toMatchObject({ status: "queued", binding: { version: 1, kind: "unlinked" } });
+    expect(processed.wakes).toHaveLength(1);
+    expect(db.rows("chat_messages")).toHaveLength(0);
+  });
+  it.each(channels)("%s returns 503 without a wake on storage failure", async channel => {
+    const { request, handler } = signed(channel);
+    db.rpcs.accept_channel_inbound = () => { throw new Error("storage down"); };
+    expect((await handler(request)).status).toBe(503);
+    expect(processed.wakes).toHaveLength(0);
+    expect(db.rows("channel_inbox")).toHaveLength(0);
+  });
 });
 
 describe("/api/channels/links", () => {
@@ -157,14 +205,23 @@ describe("/api/channels/thread", () => {
 });
 
 describe("POST /api/webhooks/telegram", () => {
-  it("verifies first (401, nothing processed), then 200 and hands the events to the processor after responding", async () => {
+  it("verifies first, persists arrival identity before 200, then schedules only a durable queue wake", async () => {
     const update = JSON.stringify({ message: { message_id: 1, chat: { id: 5 }, text: "hi" } });
     const bad = await TELEGRAM(new Request("http://unc.test/api/webhooks/telegram", { method: "POST", headers: { "x-telegram-bot-api-secret-token": "wrong" }, body: update }));
     expect(bad.status).toBe(401);
-    expect(processed.events).toEqual([]);
+    expect(processed.wakes).toEqual([]);
+    expect(db.rows("channel_inbox")).toEqual([]);
     const ok = await TELEGRAM(new Request("http://unc.test/api/webhooks/telegram", { method: "POST", headers: { "x-telegram-bot-api-secret-token": "tg-secret" }, body: update }));
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ ok: true });
-    expect(processed.events).toMatchObject([{ channel: "telegram", externalId: "5", text: "hi" }]);
+    expect(processed.wakes).toHaveLength(1);
+    expect(db.rows("channel_inbox")).toMatchObject([{ event: { channel: "telegram", externalId: "5", text: "hi" }, binding: { version: 1, kind: "unlinked" }, status: "queued" }]);
+  });
+  it("does not acknowledge or schedule work when durable capture fails", async () => {
+    db.rpcs.accept_channel_inbound = () => { throw new Error("storage down"); };
+    const response = await TELEGRAM(new Request("http://unc.test/api/webhooks/telegram", { method: "POST", headers: { "x-telegram-bot-api-secret-token": "tg-secret" }, body: JSON.stringify({ message: { message_id: 1, chat: { id: 5 }, text: "hi" } }) }));
+    expect(response.status).toBe(503);
+    expect(processed.wakes).toHaveLength(0);
+    expect(db.rows("channel_inbox")).toHaveLength(0);
   });
 });

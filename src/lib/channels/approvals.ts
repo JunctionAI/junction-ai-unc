@@ -4,6 +4,7 @@
 
 import type { Store } from "../runtime/store/interface";
 import type { ApprovalRecord } from "../runtime/types";
+import { runtimeGeneration } from "../runtime/contextFence";
 import { approvalButtons, shortId, type OutboundPayload } from "./types";
 
 const clip = (s: string, n: number) => s.replace(/\s+/g, " ").trim().slice(0, n);
@@ -13,17 +14,21 @@ const clip = (s: string, n: number) => s.replace(/\s+/g, " ").trim().slice(0, n)
 export type ResolveResult = { ok: true; approval: ApprovalRecord } | { ok: false; reason: "none" | "ambiguous" | "unknown" | "decided"; pending: ApprovalRecord[]; approval?: ApprovalRecord };
 
 /** Live pending approvals a run created, newest first. */
-export async function livePending(store: Store, accountId: string, now: Date): Promise<ApprovalRecord[]> {
+export async function livePending(store: Store, accountId: string, now: Date, contextGeneration?: number): Promise<ApprovalRecord[]> {
   const nowIso = now.toISOString();
-  return (await store.listApprovals(accountId, "pending")).filter((a) => !!a.runId && a.expiresAt >= nowIso);
+  return (await store.listApprovals(accountId, "pending", contextGeneration)).filter((a) => !!a.runId && a.expiresAt >= nowIso);
 }
 
 /** By full id, by short id (first 8 hex chars), or — with no id — the single pending one. */
-export async function resolveApproval(store: Store, accountId: string, ref: { approvalId?: string | null; short?: string | null }, now: Date): Promise<ResolveResult> {
-  const pending = await livePending(store, accountId, now);
+export async function resolveApproval(store: Store, accountId: string, ref: { approvalId?: string | null; short?: string | null }, now: Date, contextGeneration?: number): Promise<ResolveResult> {
+  const pending = await livePending(store, accountId, now, contextGeneration);
   if (ref.approvalId) {
     const a = await store.getApproval(ref.approvalId);
     if (!a || a.accountId !== accountId) return { ok: false, reason: "unknown", pending };
+    if (contextGeneration !== undefined) {
+      const run = a.runId ? await store.getRun(a.runId) : null;
+      if (!run || run.accountId !== accountId || runtimeGeneration(run.contextGeneration) !== contextGeneration) return { ok: false, reason: "unknown", pending };
+    }
     if (a.status !== "pending") return { ok: false, reason: "decided", pending, approval: a };
     return { ok: true, approval: a };
   }
@@ -33,7 +38,7 @@ export async function resolveApproval(store: Store, accountId: string, ref: { ap
     if (hits.length === 1) return { ok: true, approval: hits[0] };
     if (hits.length > 1) return { ok: false, reason: "ambiguous", pending: hits };
     // maybe it was decided already
-    const all = await store.listApprovals(accountId);
+    const all = await store.listApprovals(accountId, undefined, contextGeneration);
     const decided = all.find((a) => shortId(a.id).startsWith(s));
     if (decided) return { ok: false, reason: "decided", pending, approval: decided };
     return { ok: false, reason: "unknown", pending };

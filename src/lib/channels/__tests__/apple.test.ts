@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/webhooks/apple/route";
 import { AppleAdapter, normaliseAppleEvent, type VerifiedAppleMessage } from "../adapters/apple";
 import { availability, buildAdapters } from "../adapters";
-import { handleInbound } from "../inbound";
+import { handleTestInbound as handleInbound } from "./helpers";
 import { findVerifiedLink, issueLinkCode } from "../links";
 import { sendOnLink } from "../outbound";
 import { MemoryStore } from "@/lib/runtime/store/memory";

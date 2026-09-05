@@ -10,7 +10,17 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 12, 5 September 2026, approximately 05:45 UTC
+## Latest state — Batch 13, 5 September 2026, approximately 06:10 UTC
+
+**Further verified, source-only progress; full goal remains active.** Connected authenticated webhook intake and app/worker consumption to immutable arrival identity. Accepted events are durable before acknowledgement; storage failure returns 503 without raw-event fallback. Code transfer, opt-out and handoff now use an atomic captured-control transaction. One database preflight checks the original account/generation/link/member/scope, including pause, without four serial REST reads.
+
+- **188 files / 2,271 tests**, application/worker TypeScript and production build pass; lint has zero errors/39 existing warnings. Two real PostgreSQL rollback canaries pass, including expiry during a delayed device transfer preserving the prior connection. No persistent DDL or synthetic data remains.
+- Captured generation reaches commands, approvals and model replies. Reconnection/reset/revocation or unavailable identity cannot turn into an old-answer fallback, including during optional reply-shortening. The legacy multi-statement code consumer is removed, and legacy WhatsApp queue rows are no longer flushed by new arrivals.
+- This is **not deployed**. Chat/thread database writers, durable pre-network outbox claims, queued/proactive/command delivery and remaining auth/profile hooks still need complete identity enforcement. Source depends on both staged channel migrations; do not release it against the old schema. Messaging stays off, AVGAR stays paused, and no n8n/provider/outward action occurred.
+- Live runtime remains `00fc57cfd07b`, with healthy database and fresh worker. AVGAR generation 1 / revision 15 / paused, channel tables empty, no canary accounts, staged columns absent. Security advisors unchanged at six WARN/eight INFO.
+- Detailed proofs, known gaps and next work: [channel ingress and controls](CHANNEL-INGRESS-CONTROLS-2026-09-05.md). The full 24-item register still determines goal completion.
+
+## Batch 12, 5 September 2026, approximately 05:45 UTC
 
 **Further verified, source-only progress; full goal remains active.** Prepared immutable message-arrival identity and database-managed channel binding revisions. New code captures account/generation/link/user separately from provider payloads; duplicate acceptance preserves the initial binding, unknown arrivals never inherit later links, and pending codes carry their issue generation. Atomic claim and terminal-state denial helpers are ready for the consumer migration.
 

@@ -1,5 +1,7 @@
 # Channel identity foundation — 5 September 2026
 
+Historical Batch 12 checkpoint. The subsequent [ingress/control checkpoint](CHANNEL-INGRESS-CONTROLS-2026-09-05.md) wires the source paths below; neither checkpoint is deployed and the remaining persistence/delivery release gates still apply.
+
 Status: **PASS for the bounded source/SQL rehearsal; PARTIAL for B01/B16/B19 and the full backend goal.** This is a source-only checkpoint. The migration is **not applied**, the new ingress/claim helpers are **not connected to the production routes/consumer**, and no app/worker deployment, provider call, channel message or n8n execution occurred. Do not enable messaging or remove AVGAR's pause based on this batch.
 
 ## Verified gap and intended behavior

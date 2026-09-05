@@ -14,7 +14,7 @@ import { keyringFromEnv } from "../lib/connectors/crypto";
 import { resolveAccount, type ServiceDeps } from "./service";
 import { drainInboundEvents } from "../lib/channels/inbox";
 import { handleInbound } from "../lib/channels/inbound";
-import { tnzConfig } from "../lib/channels/adapters/tnz";
+import { messagingDisabled } from "../lib/channels/releaseGate";
 import { assertRuntimeContext } from "../lib/db/runtimeContext";
 import { assertSameRuntimeContext, RuntimeContextError } from "../lib/runtime/contextFence";
 
@@ -64,11 +64,12 @@ export async function notifyCommand(db: DbClient, c: RoutineCommand): Promise<vo
 }
 
 export async function runCommandsTick(deps: ServiceDeps, adapters: Adapters, maxMs = 20_000): Promise<void> {
-  if ((!commandsEnabled() && !tnzConfig(process.env)) || !deps.db) return;
+  if (!deps.db) return;
   const start = Date.now();
   const db = deps.db;
   const channels = channelAdapters({ db, env: process.env, fetch: (url, init) => fetch(url, init), keyring: keyringFromEnv(process.env) });
-  await drainInboundEvents(db, (event) => handleInbound({ db, store: deps.store, accounts: deps.accounts, adapters: channels, now: deps.now ?? (() => new Date()) }, event), Math.floor(maxMs / 2));
+  if (!messagingDisabled(process.env) && Object.values(channels).some(adapter => adapter?.configured))
+    await drainInboundEvents(db, (message) => handleInbound({ db, store: deps.store, accounts: deps.accounts, adapters: channels, now: deps.now ?? (() => new Date()) }, message), Math.floor(maxMs / 2));
   if (!commandsEnabled()) return;
   const queue = new DbCommandQueue(db);
   // Callbacks or founder input can change a previously waiting run between ticks.

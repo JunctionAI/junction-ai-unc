@@ -3,7 +3,7 @@ import { TnzAdapter, tnzConfig, verifyTnzWebhook, parseTnzInbound, TNZ_API } fro
 import { availability, buildAdapters } from "../adapters";
 import { receiveTnz } from "../tnzReceiver";
 import { drainInboundEvents, saveInboundEvents } from "../inbox";
-import { handleInbound } from "../inbound";
+import { handleTestInbound as handleInbound } from "./helpers";
 import { issueLinkCode, findVerifiedLink } from "../links";
 import { MemoryStore } from "../../runtime/store/memory";
 import { StaticAccountsSource } from "../../../worker/accounts";
@@ -110,7 +110,7 @@ describe("TNZ durable ingress", () => {
     const db = channelDb(); seedLink(db, { account_id: OTHER, channel: "sms", external_id: env.TNZ_PILOT_PHONE });
     const respond = vi.fn();
     const out = await handleInbound({ db, adapters: fakeAdapters(), store: new MemoryStore(), accounts: new StaticAccountsSource(), now: () => now, respond }, parseTnzInbound(payload(), config)!);
-    expect(out).toMatchObject({ kind: "ignored" });
+    expect(out).toMatchObject({ kind: "unlinked" });
     expect(respond).not.toHaveBeenCalled();
     expect(db.rows("chat_messages")).toHaveLength(0);
   });

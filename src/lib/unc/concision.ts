@@ -13,6 +13,7 @@
    the evals measure what the product does). Pure apart from the `reask` callback. */
 
 import { findBannedPhrases, findFillerPhrases, findFormatIssues, findUnsupportedNumbers, numbersIn } from "../eval/chat-evals/rubric";
+import { RuntimeContextError } from "../runtime/contextFence";
 
 export const CONCISION_CAP = 3;
 export const CONCISION_RETRY = "Same answer in at most three sentences, answer first.";
@@ -91,7 +92,10 @@ export async function enforceConcision(input: ConcisionInput): Promise<Concision
   let shorter: string | null = null;
   try {
     shorter = await input.reask(CONCISION_RETRY);
-  } catch {
+  } catch (error) {
+    // Identity failure is not an optional wording failure. Never revive the first answer
+    // if a later identity check happens to recover from a transient unavailable state.
+    if (error instanceof RuntimeContextError) throw error;
     shorter = null;
   }
   if (shorter === null) return { reply: input.reply, attempted: true, shortened: false, rejected: ["no second reply"] };

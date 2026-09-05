@@ -24,6 +24,8 @@ export interface OutboundDeps {
   adapters: AdapterRegistry;
   now: () => Date;
   log?: (event: string, fields: Record<string, unknown>) => void;
+  /** Original message identity; never resolve a replacement after a model/provider wait. */
+  guard?: () => Promise<void>;
 }
 
 export const WHATSAPP_WINDOW_MS = 24 * 3_600_000;
@@ -149,6 +151,7 @@ export interface SendOnLinkOptions {
 }
 
 export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: OutboundKind, payload: OutboundPayload, opts: SendOnLinkOptions = {}): Promise<SendOutcome> {
+  await deps.guard?.();
   // No proactive Apple messages or automation during human handoff in the initial pilot.
   if (link.channel === "apple" && ((!prefAllows(link, kind)) || (link.meta.human_support_requested && kind !== "system"))) return { status: "skipped", reason: "pref_off" };
   if (!link.verifiedAt || !link.externalId) return { status: "skipped", reason: "unverified" };
@@ -162,15 +165,20 @@ export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: Ou
   if (!whatsappWindowOpen(link, now)) {
     if (opts.allowTemplate) template = true;
     else {
+      await deps.guard?.();
       const ledgerId = await recordOutbound(deps.db, { ...base, externalMsgId: null, status: "queued", error: null });
+      await deps.guard?.();
       deps.log?.("channels.queued", { accountId: link.accountId, channel: link.channel, kind, ref: opts.ref ?? null });
       return { status: "queued", ledgerId };
     }
   }
 
+  await deps.guard?.();
   const result = await adapter.send(link.externalId, payload, { link, template });
+  await deps.guard?.();
   if (result.ok) {
     const ledgerId = await recordOutbound(deps.db, { ...base, externalMsgId: result.externalMsgId, status: "sent", error: null });
+    await deps.guard?.();
     if (opts.appendToThread ?? true) {
       try {
         await appendOutbound(deps.db, { accountId: link.accountId, channel: link.channel, text: payload.text, externalMsgId: result.externalMsgId ? `out:${result.externalMsgId}` : null, delivery: { status: "sent", kind, ref: opts.ref ?? null, link_id: link.id }, now });

@@ -15,7 +15,8 @@ import { budgetMoveSpec, clock as rtClock, input, SPEND_FIXTURE } from "@/lib/ru
 import { StaticAccountsSource } from "@/worker/accounts";
 import { buildAdapters as buildRunAdapters, type ServiceDeps } from "@/worker/service";
 import { SMS_NO_MODEL_LINE } from "../approvals";
-import { handleInbound, OWNER_DECISION_LINE, type InboundDeps, type RespondFn } from "../inbound";
+import { OWNER_DECISION_LINE, type InboundDeps, type RespondFn } from "../inbound";
+import { handleTestInbound as handleInbound } from "./helpers";
 import { findVerifiedLink, issueLinkCode } from "../links";
 import { listOutbound } from "../outbound";
 import { listThread } from "../thread";

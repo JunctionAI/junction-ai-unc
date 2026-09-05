@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { acceptInboundEvent, claimAcceptedInbound, verifiedEventSnapshot } from "../acceptedInbox";
 import { assertInboundBinding, readCapturedInbound, readInboundBinding, type CapturedInbound } from "../binding";
 import { issueLinkCode } from "../links";
@@ -45,14 +45,23 @@ describe("accepted channel binding", () => {
     await db.from("account_members").delete().eq("account_id", ACCT);
     await expect(assertInboundBinding(db, captured)).rejects.toMatchObject({ code: "context_changed" });
   });
-  it("rechecks generation after the membership lookup", async () => {
+  it("uses one atomic verifier RPC, not separate link/account/member REST reads", async () => {
+    const { db, link, captured } = setup();
+    const rpc = vi.spyOn(db, "rpc");
+    const from = vi.spyOn(db, "from");
+    expect(await assertInboundBinding(db, captured)).toEqual(link);
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("verify_channel_inbound_binding", {
+      expected: captured.binding, inbound_event: event, allow_paused: true,
+    });
+    expect(from).not.toHaveBeenCalled();
+  });
+  it("distinguishes paused automation from unavailable identity without a late lookup fallback", async () => {
     const { db, captured } = setup();
-    const from = db.from.bind(db);
-    db.from = (table: string) => {
-      if (table === "account_members") db.rows("accounts").find(a => a.id === ACCT)!.context_generation = 1;
-      return from(table);
-    };
-    await expect(assertInboundBinding(db, captured)).rejects.toMatchObject({ code: "context_changed" });
+    db.rows("accounts").find(a => a.id === ACCT)!.automation_paused = true;
+    await expect(assertInboundBinding(db, captured, { allowPaused: false })).rejects.toMatchObject({ code: "automation_paused" });
+    db.rpcs.verify_channel_inbound_binding = () => { throw new Error("database unavailable"); };
+    await expect(assertInboundBinding(db, captured)).rejects.toMatchObject({ code: "context_unavailable" });
+    expect(db.calls).toHaveLength(0);
   });
   it.each([null, {}, { version: 0, kind: "unlinked" }, { version: 1, kind: "bad" },
     { version: 1, kind: "linked", accountId: ACCT, linkId: "l", userId: USER, bindingVersion: 0 },

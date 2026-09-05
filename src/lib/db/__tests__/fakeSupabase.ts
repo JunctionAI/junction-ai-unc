@@ -302,7 +302,8 @@ export class FakeSupabase implements DbClient {
       try {
         return { data: await handler(args), error: null };
       } catch (e) {
-        return { data: null, error: { message: e instanceof Error ? e.message : String(e) } };
+        const code = e && typeof e === "object" && "code" in e && typeof e.code === "string" ? e.code : undefined;
+        return { data: null, error: { message: e instanceof Error ? e.message : String(e), ...(code ? { code } : {}) } };
       }
     };
     return { then: (f, r) => run().then(f, r) };

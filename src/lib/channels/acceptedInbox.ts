@@ -1,5 +1,4 @@
-/** Prepared durable ingress contract. The legacy consumers are not switched over until
- * their thread writes, side effects and outbound claims use the captured envelope too. */
+/** Durable ingress contract shared by every authenticated channel webhook. */
 import { digest } from "../commands/queue";
 import { unwrap, type DbClient, type Row } from "../db/types";
 import { readCapturedInbound, type CapturedInbound } from "./binding";

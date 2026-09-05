@@ -4,7 +4,7 @@
 
    Link-code lifecycle:
      issueLinkCode      one pending row per (account, channel) — re-issuing replaces the code
-     consumeLinkCode    the device sends the code → the row gets external_id / handle /
+     captured control  the device sends the code → the row gets external_id / handle /
                         display_name / verified_at, the code is cleared. Expired or unknown
                         codes are refused; a previously linked external id moves to the new
                         account (the person holding the device proved it is theirs).
@@ -150,43 +150,10 @@ export async function issueLinkCode(db: DbClient, input: { accountId: string; us
   return { linkId: row.id, code, expiresAt };
 }
 
-export type ConsumeResult = { ok: true; link: ChannelLink; welcome: string } | { ok: false; reason: "unknown" | "expired" | "channel_mismatch" };
-
-export interface ConsumeInput {
-  code: string;
-  channel: Channel;
-  externalId: string;
-  handle?: string | null;
-  displayName?: string | null;
-  now: Date;
-  accountScope?: string;
-}
-
 export const welcomeLine = (channel: Channel) =>
   channel === "sms"
     ? "hey 👋 we're connected. it's the same conversation here and in the app, with every decision saved there. what do you want to tackle?"
-    : `Linked. Wherever you talk to me — here on ${CHANNEL_LABEL[channel]} or in the app — it's the same conversation, and every decision still lands in the app. I'll send the morning brief and anything that needs you here.`;
-
-export async function consumeLinkCode(db: DbClient, input: ConsumeInput): Promise<ConsumeResult> {
-  const code = normaliseLinkCode(input.code);
-  if (!code) return { ok: false, reason: "unknown" };
-  const row = await unwrap<Row | null>("channel_links.select", db.from("channel_links").select(LINK_COLS).eq("link_code", code).maybeSingle());
-  if (!row) return { ok: false, reason: "unknown" };
-  const pending = rowToLink(row);
-  if (input.accountScope && pending.accountId !== input.accountScope) return { ok: false, reason: "unknown" };
-  if (pending.channel !== input.channel) return { ok: false, reason: "channel_mismatch" };
-  if (!pending.linkCodeExpiresAt || new Date(pending.linkCodeExpiresAt).getTime() < input.now.getTime()) return { ok: false, reason: "expired" };
-
-  // The same device linked before (to this or another account): that row goes, this one wins.
-  const previous = await unwrap<{ id: string }[]>("channel_links.select", db.from("channel_links").select("id").eq("channel", input.channel).eq("external_id", input.externalId));
-  for (const p of previous) if (p.id !== pending.id) await unwrap("channel_links.delete", db.from("channel_links").delete().eq("id", p.id));
-
-  const nowIso = input.now.toISOString();
-  const patch: Row = { external_id: input.externalId, handle: input.handle ?? null, display_name: input.displayName ?? null, verified_at: nowIso, link_code: null, link_code_expires_at: null, last_inbound_at: nowIso };
-  const written = await unwrap<Row>("channel_links.update", db.from("channel_links").update(patch).eq("id", pending.id).select(LINK_COLS).single());
-  const link = rowToLink(written);
-  return { ok: true, link, welcome: welcomeLine(input.channel) };
-}
+    : `we're connected on ${CHANNEL_LABEL[channel]}. it's the same conversation here and in the app, with every decision saved there. what do you want to tackle?`;
 
 /** Slack has no code: the OAuth install verifies the installing user directly. */
 export async function upsertVerifiedLink(

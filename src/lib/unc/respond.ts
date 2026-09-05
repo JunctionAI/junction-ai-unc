@@ -36,6 +36,7 @@ import { enforceConcision } from "./concision";
 import { attachBrain, buildUncContext, type BrainContext } from "./context";
 import { buildUncSystemPrompt, recallPlaybookNotes, type UncSurface } from "./prompt";
 import type { UncVoice } from "./voice";
+import { RuntimeContextError } from "../runtime/contextFence";
 
 export const MAX_REPLY_TOKENS = 2000; // Sonnet 5 adaptive thinking counts against max_tokens; effort pinned low
 export const MAX_TURNS = 24; // most recent turns the model sees
@@ -53,6 +54,8 @@ export interface RespondInput {
   account: RespondAccount | null;
   /** Selected by the trusted channel adapter, never by account context text. */
   voice?: UncVoice;
+  /** Server-owned captured identity. A failed guard must not become a fallback. */
+  guard?: () => Promise<void>;
 }
 
 export type RespondFailure = "not_configured" | "invalid_history" | "refusal" | "error" | "empty";
@@ -92,6 +95,7 @@ export async function brainFor(account: RespondAccount | null, query: string): P
 }
 
 export async function respondAsUnc(input: RespondInput): Promise<RespondResult> {
+  await input.guard?.();
   if (!resolveModel("chat")) return { ok: false, reason: "not_configured" };
   const messages = windowHistory(input.history);
   if (!messages) return { ok: false, reason: "invalid_history" };
@@ -105,6 +109,7 @@ export async function respondAsUnc(input: RespondInput): Promise<RespondResult> 
       recallPlaybookNotes(question, input.context, account?.db ? { db: account.db } : {}),
       certifiedMetricsFor(account),
     ]);
+    await input.guard?.();
     const withNotes: BrainContext | null =
       notes || certified || brain
         ? { memories: brain?.memories ?? [], profile: brain?.profile ?? "", ...(notes ? { playbooks: notes } : {}), ...(certified ? { certifiedMetrics: certified } : {}) }
@@ -112,6 +117,7 @@ export async function respondAsUnc(input: RespondInput): Promise<RespondResult> 
     const system = buildUncSystemPrompt(attachBrain(input.context, withNotes), surface, input.voice);
     const llmCtx = { accountId: account?.accountId ?? null, db: account?.db };
     const response = await complete("chat", { system, messages, maxTokens: MAX_REPLY_TOKENS, effort: "low" }, llmCtx);
+    await input.guard?.();
     if (!response) return { ok: false, reason: "error" };
     // Over the month's cap (src/lib/llm/budget.ts): one honest line, no canned fallback, no learning hook.
     if (isBudgetExceeded(response)) return { ok: true, reply: BUDGET_EXHAUSTED_LINE };
@@ -127,16 +133,21 @@ export async function respondAsUnc(input: RespondInput): Promise<RespondResult> 
       reply: first,
       context: input.context,
       reask: async (instruction) => {
+        await input.guard?.();
         const again = await complete("chat", { system, messages: [...messages, { role: "assistant", content: first }, { role: "user", content: instruction }], maxTokens: MAX_REPLY_TOKENS, effort: "low" }, llmCtx);
+        await input.guard?.();
         return again && again.stopReason !== "refusal" && again.stopReason !== "error" ? again.text.trim() : null;
       },
     });
+    await input.guard?.();
     if (account?.db) {
       // Fire-and-forget: Unc learns from the exchange; the reply never waits on it.
       void afterChatReply({ accountId: account.accountId, surface, history: input.history, reply }, { db: account.db }).catch(() => {});
     }
     return { ok: true, reply };
-  } catch {
+  } catch (error) {
+    if (error instanceof RuntimeContextError) throw error;
+    await input.guard?.();
     // Never surface provider errors (or anything key-shaped) to the caller.
     return { ok: false, reason: "error" };
   }
