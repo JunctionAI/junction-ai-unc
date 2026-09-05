@@ -15,7 +15,7 @@ These are DCLogic/text-x-dc interactive prototypes, not a Next.js implementation
 
 | Surface | Actual existing backend | Remaining work / important distinction |
 |---|---|---|
-| Landing waitlist | POST `/api/waitlist`, validated durable database storage; supplied v2 port | Batch 28 local/unit/browser checks pass. Release and independent stored-record acceptance pending. No email/contact send is used |
+| Landing waitlist | POST `/api/waitlist`, validated durable database storage; supplied v2 port | Batch 28 production core journey PASS: form submission independently read back; repeat preserves one record; synthetic row removed. No email/contact send. Broader abuse/retention remains |
 | Today / agent selection | `/api/routines/state`, `/api/setup/progress`, `/api/telemetry/home` | Derive counts from server state. Enabled is not running; a schedule label is not a proven recurring run |
 | Draft inbox | `/api/artifacts`, `/api/artifacts/[id]` | Preserve account/context headers, artifact revisions and owner authorization. Draft approve/hold/edit/why is distinct from approval that resumes an action-bearing engine run |
 | Run approvals | `/api/approvals`, `/api/approvals/[id]` | Do not wire one generic Approve button to an external action. Read/draft scope and disabled executors remain enforced |

@@ -12,7 +12,16 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 27, 5 September 2026
+## Latest state — Batch 28, 5 September 2026
+
+**Supplied landing and durable signup journey.** The goal stays active with the all-screen/all-client acceptance overlay. No new numeric token budget or n8n purchase/key authorization is inferred.
+
+- Supplied v2 landing ported into the existing app. Interest controls are real form inputs, not account activation; channel samples are explicitly illustrative and unverified prototype performance/pricing claims are removed.
+- Signup now requires a confirmed durable database record. Failure, timeout, malformed confirmation and rate limiting do not display success. No public-path email or temporary file capture; duplicate email preserves the first record. Anonymous/member waitlist grants removed; post-apply boundary and rollback-canary evidence pass.
+- 201 test files / 2,548 tests; app/worker type checks, production build, seven browser journeys and diff check pass. Lint zero errors / 39 existing warnings. Source pushed/live as `97f832c57bf6eec4ceb7ece180cbe937d2ea4de3`; Vercel `dpl_DPLRUejf5H3mwTtYpx5VLEUGnrL7` READY/promoted. Real canonical form saved the exact synthetic record, independent SQL confirmed it, repeat signup preserved one row and exact cleanup is verified. Existing owner app hydrates; AVGAR paused, zero runs, all action flags remain off. No error/fatal logs in the bounded release window.
+- [Batch behavior, limitations and release receipt](LANDING-SIGNUP-2026-09-05.md). Worker code/dependency closure is unchanged; preserve its healthy Batch 27 release, document differing app/worker identities instead of causing an unnecessary restart. Next independent work is client Today/inbox and ops bindings, not more landing polish. Remaining n8n, client-system reconciliation, auth/data and original B01–B24 acceptance remain open.
+
+## Batch 27, 5 September 2026
 
 **Credential refresh and reader context progress.** The previous turn was Batch 26 deployment progress. This turn retains the original full B01–B24 goal and does not infer the unanswered n8n purchase/API-key authorization.
 
