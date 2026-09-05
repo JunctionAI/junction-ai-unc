@@ -62,9 +62,48 @@ Do not add browser policies merely to remove that informational notice.
 
 ## Release and remaining journey
 
-Source/database/browser-fixture checks pass; app/worker rollout and signed-in
-production readback follow this source checkpoint. No live customer save or
-calendar result is claimed by the tests above. Calendar receiver publication,
+**Released and independently read back**, source `4067b08aa4b895fa5bb4a7659529ba64d51ad6fe`.
+Built from clean detached worktree `/private/tmp/unc-calendar-settings-release.7L3zwI`;
+the unrelated `src/lib/runtime/context 2.ts` was excluded and untouched.
+
+## Deploy Result
+
+- URL: https://junction-unc.vercel.app/app
+- Immutable app: https://junction-5tb2rryh6-tom-junctionmedis-projects.vercel.app
+- Deployment: `dpl_3FkwzcnQeRzJFgKFH7aodZYD7PRj`, production, READY, Next 16.3.4.
+- Cloud build: 59 seconds as reported by CLI.
+- Worker: release 39, sole existing Sydney machine `1857466fd76998` started.
+- Worker image: `sha256:e12780b89affe9cc8fa71759f7a60f6e96db2b4dacd84b3d3ce4a1daf5705f5b`.
+
+The first production-config candidate `dpl_GTAm4LDrC6sA2xrsG19pk2A7D3i2`
+was not promoted to the main app URL: health exposed a null source SHA because
+that endpoint reads `VERCEL_GIT_COMMIT_SHA`, not `UNC_BUILD_SHA`. The same clean
+source was rebuilt with both build/runtime identifiers supplied. Candidate health
+then matched `4067b08aa4b8`; anonymous calendar settings returned HTTP 401 with
+`private, no-store`. Promotion succeeded. Canonical health at **21:52:35.356 UTC**
+reports that SHA, healthy database and a fresh worker heartbeat without lastError.
+
+At **21:51:15.884 UTC**, a bounded read inside the actual new worker verified the
+full SHA, compiled calendar modules, all four public calendar pins, presence of
+the dedicated secret distinct from keyword auth, and disabled action/command/sync
+flags. Actual RPC read returned owner/generation-bound null timezone, editable,
+unbound and paused. Counts remain eight runs/eight artifacts, zero calendar
+bindings/runs and zero enabled routines. No provider/workflow call or write.
+
+The signed-in production owner UI independently displays the new calendar setup
+with **Saved timezone: Not chosen**, binding incomplete and Save disabled for an
+empty input. Existing eight-work inbox and setup hold remain. No live save was
+performed because the owner's choice is pending. A deployment-specific bounded
+error-log scan returned no entries; this is not proof of delivered monitoring
+alerts or an observation period. Prior records reported zero drains; not freshly
+rechecked here. Full monitoring acceptance remains open.
+
+Rollback references: app `dpl_2nmd4t7GiyKmbRubE7MEzbLv4Xef` / source `aa3fba4`;
+worker release 38 image `sha256:f8e2e6b08d8da299594e7c0ef80be51455597320c56d4fbfe11c6c8b658abcaf`.
+Keep all action flags off during rollback; the additive preferences migration
+does not require deleting saved data to return to the previous app.
+
+No live customer save or calendar result is claimed. Calendar receiver publication,
 accepted account binding, bounded execution, client result/recovery and useful
 output acceptance remain Codex-owned. Other lanes/clients, sync, channels,
 monitoring, costs, security and retention remain in the original active goal.

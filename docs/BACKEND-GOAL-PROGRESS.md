@@ -15,14 +15,20 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 
 ## Latest state — Batch 71, 6 September NZ / 5 September UTC
 
-**Owner calendar timezone setup implemented and database migration verified.**
+**Owner calendar timezone setup released on matched app/worker; database verified.**
 [Exact scope, tests and release status](CALENDAR-CUSTOMER-PREFERENCES-2026-09-06.md).
 No default was selected. Private owner/generation-bound preferences cannot change
 while calendar bindings or outstanding work exist; new bindings must match the
 chosen timezone. Six browser-fixture tests and the full real-PostgreSQL calendar
 integration harness pass, along with 3,069 app tests, typechecks and build.
-App/worker rollout and production UI readback follow; no customer calendar run
-or full journey completion is claimed. Full B01–B24/all-client goal stays active.
+App `dpl_3FkwzcnQeRzJFgKFH7aodZYD7PRj` and worker release 39 run source `4067b08`.
+Canonical health, worker read-only RPC/config checks and signed-in production
+calendar UI pass; eight saved results preserved, zero routines enabled, owner
+timezone still unchosen. No customer calendar run or full journey completion is
+claimed. Full B01–B24/all-client goal stays active. Tom's revised work order now
+prioritizes existing-client routines and Slack continuity after this release;
+see the dated section in LAUNCH-ACCEPTANCE.md. No repeat calendar batch merely
+to fill the pending owner-choice wait.
 
 ## Previous state — Batch 70, 6 September NZ / 5 September UTC
 
