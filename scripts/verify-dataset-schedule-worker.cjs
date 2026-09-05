@@ -4,7 +4,8 @@
  * Explicit helper flags below are function arguments, not environment changes. */
 const assert = require('node:assert/strict');
 const { createClient } = require('@supabase/supabase-js');
-const { DbAccountsSource } = require('/app/dist/worker/worker/accounts.js');
+const { DbAccountsSource, StaticAccountsSource } = require('/app/dist/worker/worker/accounts.js');
+const { MemoryStore } = require('/app/dist/worker/lib/runtime/store/memory.js');
 const { SupabaseStore } = require('/app/dist/worker/lib/runtime/store/supabase.js');
 const { runDatasetSyncTick, scheduledDatasetsReady, inspectAccountDatasets } = require('/app/dist/worker/worker/datasets.js');
 
@@ -21,6 +22,23 @@ const { runDatasetSyncTick, scheduledDatasetsReady, inspectAccountDatasets } = r
   const accountId = 'aa5cfc84-2569-4c99-9b40-67003ae55eda';
   let databaseGets = 0, forbiddenAttempts = 0;
   const fail = () => { forbiddenAttempts++; throw new Error('No provider or credential access is allowed by this check'); };
+  // Exercise the deployed loop's pre-provider failure isolation with wholly
+  // synthetic metadata. These identities are never passed to the live database.
+  const syntheticIds = ['synthetic-unbound-a', 'synthetic-unbound-b'];
+  const syntheticStore = new MemoryStore(), inspectedIds = [];
+  for (const id of syntheticIds) await syntheticStore.putRoutineState({ accountId: id, routineId: 'D02-W01',
+    enabled: true, version: 1, liveSpec: null, draftSpec: null, updatedAt: new Date().toISOString() });
+  const syntheticDb = { rpc: fail, from: table => {
+    assert.equal(table, 'connectors');
+    let inspectedId;
+    const query = { select: () => query, eq: (key, value) => { if (key === 'account_id') inspectedId = value; return query; },
+      maybeSingle: async () => { inspectedIds.push(inspectedId); return { data: null, error: null }; } };
+    return query;
+  } };
+  assert.deepEqual(await runDatasetSyncTick({ db: syntheticDb, store: syntheticStore, credentials: { get: fail }, fetch: fail,
+    accounts: new StaticAccountsSource(syntheticIds.map(id => ({ account: { accountId: id, currency: 'NZD', budgetMonthly: 0 } }))) },
+    { UNC_DATA_SYNC_ENABLED: 'true', UNC_DATA_SYNC_ACCOUNTS: syntheticIds.join(',') }), { synced: 0, failed: 2 });
+  assert.deepEqual(inspectedIds, syntheticIds);
   const db = createClient(origin, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: async (input, init) => {
@@ -46,6 +64,7 @@ const { runDatasetSyncTick, scheduledDatasetsReady, inspectAccountDatasets } = r
   assert.equal(forbiddenAttempts, 0);
   console.log(JSON.stringify({ status: 'PASS', checkedAt: new Date().toISOString(), build: expected, databaseGets,
     actualPausedAccountExcluded: true, actualRuntimeSyncOff: true, scopedReadinessRefuses: true,
+    syntheticMissingConnectionIsolation: true,
     queryReadiness: report.queries.map(q => ({ availability: q.availability, maxAgeMs: q.maxAgeMs })),
     providerCalls: 0, credentialResolutions: 0, writes: 0, liveScheduleAcceptance: false }));
 })().catch(() => { console.error('Read-only worker schedule check failed; details suppressed'); process.exitCode = 1; });

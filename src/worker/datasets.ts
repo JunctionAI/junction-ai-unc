@@ -1,6 +1,6 @@
 import { CATALOG_SPECS } from "../lib/runtime/catalog-specs";
 import { effectiveSpec } from "../lib/runtime/versioning";
-import { DATASET_SYNC_INTERVAL_MS, DbDatasetStore, datasetQueryHash, datasetSyncEnabled, storedDataEnabled, syncDataset } from "../lib/data/datasets";
+import { DATASET_SYNC_INTERVAL_MS, DatasetConnectionUnavailableError, DbDatasetStore, datasetQueryHash, datasetSyncEnabled, storedDataEnabled, syncDataset } from "../lib/data/datasets";
 import { inspectDatasetReadiness, type DatasetRequirement } from "../lib/data/readiness";
 import { assertSameRuntimeContext } from "../lib/runtime/contextFence";
 import type { ReadNode, RoutineSpec, RunContext } from "../lib/runtime/types";
@@ -51,7 +51,7 @@ export async function runDatasetSyncTick(deps: ServiceDeps, env: Record<string, 
   if (env.UNC_DATA_SYNC_ENABLED !== "true" || !deps.db) return report;
   const now = deps.now ?? (() => new Date());
   const direct = new WorkerConnectorReader({ credentials: deps.credentials ?? defaultCredentialProvider(env), now, fetch: deps.fetch, log: deps.log });
-  for (const acct of await deps.accounts.listAccounts()) {
+  accounts: for (const acct of await deps.accounts.listAccounts()) {
     if (acct.automationPaused || !datasetSyncEnabled(acct.account.accountId, "meta_ads", env)) continue;
     const demand = new Map<string, { node: ReadNode; spec: RoutineSpec; refreshAfterMs: number }>();
     for (const catalog of CATALOG_SPECS) {
@@ -77,8 +77,15 @@ export async function runDatasetSyncTick(deps: ServiceDeps, env: Record<string, 
         report.synced++;
         deps.log?.info("dataset.synced", { accountId: acct.account.accountId, queryHash: key, routineId: spec.id });
         return report;
-      } catch {
+      } catch (error) {
         report.failed++;
+        if (error instanceof DatasetConnectionUnavailableError) {
+          // No credential, lease or provider call occurred. All Meta queries on
+          // this account share that unavailable connection. Do not let its setup
+          // block other admitted clients or borrow another client's connection.
+          deps.log?.warn("dataset.connection_unavailable", { accountId: acct.account.accountId, platform: "meta_ads" });
+          continue accounts;
+        }
         deps.log?.warn("dataset.sync_failed", { accountId: acct.account.accountId, queryHash: key, routineId: spec.id });
         // Later queries can still progress; provider calls remain bounded to one failure.
         return report;

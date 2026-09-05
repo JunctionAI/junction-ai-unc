@@ -126,12 +126,19 @@ export function accountDataReader(direct: ConnectorReader, db: DbClient | null, 
 
 /** Sync and read are separate paths. One distributed lease prevents duplicate fetches.
  * This stores exact reporting snapshots; daily-grain historical backfills remain separate work. */
+export class DatasetConnectionUnavailableError extends Error {
+  constructor() {
+    super("dataset sync has no verified connection identity");
+    this.name = "DatasetConnectionUnavailableError";
+  }
+}
+
 export async function syncDataset(db: DbClient, direct: ConnectorReader, platform: Platform, query: ReadQuery, ctx: RunContext, now = () => new Date(), refreshAfterMs = DATASET_SYNC_INTERVAL_MS): Promise<"synced" | "fresh" | "busy"> {
   if (!Number.isFinite(refreshAfterMs) || refreshAfterMs < 0 || refreshAfterMs > DATASET_SYNC_INTERVAL_MS)
     throw new Error("invalid dataset refresh interval");
   const store = new DbDatasetStore(db);
   const identity = await store.connection(ctx.account.accountId, platform);
-  if (!identity) throw new Error("dataset sync has no verified connection identity");
+  if (!identity) throw new DatasetConnectionUnavailableError();
   const hash = datasetQueryHash(query, now(), platform);
   const key = `dataset:${identity.accountId}:${identity.connectorId}:${hash}`;
   const holder = await claimLease(db, key, 120);
