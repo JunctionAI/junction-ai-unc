@@ -23,26 +23,40 @@ Event Subscriptions, interactivity and Socket Mode remain off. The runtime's
 messaging and command release gates also remain off. Adding scopes to an
 uninstalled app defines future consent; it does not grant access.
 
+## Verified installation — Batch 81
+
+Installed through the signed-in AVGAR owner's Junction flow at
+`2026-09-05T23:05:46.814891Z`, not the generic Slack dashboard link. One verified
+identity and sealed workspace credential were saved atomically; the install pin
+was removed. A fresh worker read using that stored credential returned matching
+workspace `T0BMD3LMWUQ`, bot `U0BV96TRXK4`, and the eight expected scopes.
+
+All three app keys are now in Vercel **Production** Secret variables and Fly's
+secret store. The bot token lives only in the sealed database credential, not an
+environment variable or repository file. Worker release 42 and final app
+`dpl_5Bg9bHmN5UPY98D54yaBfBZvQJQM` retain source `781dfe740026`.
+
+The first real attempt caught stale APP_URL/NEXT_PUBLIC_APP_URL values pointing
+to the separate marketing site. Their existing shared Production/Preview rows
+now use `https://junction-unc.vercel.app`; the website project/domain is untouched.
+Never register the marketing site's nonexistent callback to bypass this error.
+
 ## Remaining setup
 
-1. Provision this app's `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and
-   `SLACK_SIGNING_SECRET` into the exact production app/worker secret stores.
-   No secret belongs in this manifest, source control, logs or chat. Production
-   Vercel metadata currently has none of these keys. Do not reuse another app's
-   secret or copy a Hyperagent workspace token.
-2. Release with those settings while retaining all action gates, then verify
-   setup-only availability. Validate the signed callback handshake separately
-   from listening to customer events; setting env keys is not delivery proof.
-3. Owner consent must start inside the signed-in Junction account through
+1. Preserve production-only secret provisioning and disabled action gates.
+   A source-HMAC synthetic URL challenge passed; it is not a Slack-issued event
+   or customer message receipt. Other environments are not configured for this
+   app merely because their public origin setting exists.
+2. Future owner consent must start inside the signed-in Junction account through
    `/api/channels/slack/start`, not the generic dashboard Install link. Junction
    must create its owner/account/revision-bound nonce before the callback can
    atomically store a verified identity and sealed workspace token.
-4. Stage the exact channel with verified owner/membership and provider metadata.
+3. Stage the exact channel with verified owner/membership and provider metadata.
    Finish revision-bound route lifecycle/cutover, then obtain the scoped pilot
    channel/recipient/window approval before changing listeners or sending.
 
-No actual consent, bot token, channel route or Slack message exists from this
-setup batch. Token rotation is off in the manifest because the current channel
+Actual consent and the stored-token read now pass, but no channel route or Slack
+message exists from this setup batch. Token rotation is off because the current channel
 grant schema does not yet implement Slack refresh-token rotation. Do not turn it
 on without implementing and testing that lifecycle; revocation/reconnect and
 credential health remain required acceptance checks.

@@ -33,6 +33,70 @@ The agent is therefore a conversational entry point to tested routines, not a
 second unconstrained automation system. Enabling 1/7 or 3/7 routines changes the
 allowlist; it does not require seven combinations of duplicate workflows.
 
+## Real Slack install and origin fix — Batch 81
+
+6 September NZ. This closes the actual dedicated-app installation gap, not the
+channel/routine delivery gap. Runtime source remains
+`781dfe740026b9148396a2bf55c64b537d347c48`.
+
+- Provisioned app `A0BV96C6BFC` client ID/secret/signing secret directly from its
+  authorized settings into Vercel Production Secret variables and Fly secrets.
+  No plaintext secret was printed, written to a local file or committed. These
+  are new Junction credentials, not copied Hyperagent bot tokens.
+- Fly release **42**, machine `1857466fd76998`, source/image unchanged from
+  release 41: `sha256:72b81267d9b140225498ebf65dda335749d25698a19dfb67f3c13bb9129f97f0`.
+  Independent process fingerprint checks confirmed all three app values match;
+  only match booleans were emitted. No action flags changed.
+- Initial credential-config app `dpl_6UE5KBtMSB3mgkQpFm3Q6rtQhgCu` passed a
+  real-key synthetic signed URL challenge (200/exact echo) and invalid-signature
+  refusal (401). This was not an actual Slack event or delivery test.
+- Real owner OAuth then failed at Slack before code exchange: the runtime's
+  APP_URL was `https://getjunction.ai`, whose `/api/health` returned 404 because
+  it belongs to the separate marketing project. Corrected APP_URL and
+  NEXT_PUBLIC_APP_URL to `https://junction-unc.vercel.app`. CLI updates applied
+  to their existing **Production and Preview** rows. No domain reassignment or
+  additional Slack callback URI was made; worker APP_URL was already correct.
+- Final corrected app **`dpl_5Bg9bHmN5UPY98D54yaBfBZvQJQM`**, immutable URL
+  `https://junction-ecm262fvj-tom-junctionmedis-projects.vercel.app`, READY and
+  promoted after candidate health. Next 16.3.4 production build completed in
+  28 seconds. Clean release checkout excludes the user's `context 2.ts`.
+  Canonical health at `2026-09-05T23:05:10.226Z` reports source `781dfe740026`,
+  database healthy, worker fresh and lastError null.
+- Fresh Junction start superseded the failed nonce; Slack consent displayed
+  exactly Junction Unc / Junction AI and eight bot scopes, no user scopes.
+  Authorized installation saved link **`781b8885-8b1d-4181-894a-a3c9e977ccf7`**
+  at `2026-09-05T23:05:46.814891Z`, account
+  `aa5cfc84-2569-4c99-9b40-67003ae55eda`, owner
+  `74802c60-149a-4405-b719-dc058d174072`, Slack user `U0BLLM1NDNV`, workspace
+  `T0BMD3LMWUQ`, bot `U0BV96TRXK4`, identity revision 0. Independent DB read
+  confirms one sealed key-version-1 workspace credential, zero install pins
+  and zero routes. Ciphertext/token contents were not returned.
+- Independent worker `auth.test` with the stored, decrypted-in-process token at
+  **23:06:33.557 UTC** returned HTTP 200 / ok true, matching team and bot, bot ID
+  `B0BUTRX5JBZ`, granted scopes `chat:write,im:write,app_mentions:read,im:history,
+  im:read,channels:read,groups:read,users:read`. This proves app/worker keyring
+  interoperability and a fresh provider-auth read, not a message send.
+- Owner UI independently displays Linked / Junction AI and the new channel
+  staging form. Eight saved runs remain visible, AVGAR stays paused generation 1.
+  Worker flags UNC_COMMANDS_ENABLED, UNC_MESSAGING_ENABLED, LIVE_MODE_ENABLED,
+  TNZ_SMS_ENABLED and APPLE_MESSAGES_ENABLED all read **false**. No Events,
+  interactivity, Hyperagent listener, Nguyen workflow or customer send changed.
+  Bounded error/fatal scan of the final app returned no entries.
+
+**Remaining:** exact client channel/provider membership binding, route
+activation/deactivation/rebinding with revision-bound authority, scoped pilot
+approval and actual same-thread request/result delivery. Legacy digest switch
+copy is not a delivery receipt. Do not treat one owner install as all clients'
+membership or credential coverage.
+
+**Rollback:** the preceding app `dpl_6UE5KBtMSB3mgkQpFm3Q6rtQhgCu` contains the
+wrong-origin config and must not be promoted as an OAuth repair. Prior source
+and image are identical, so rebuild with the corrected origin for runtime
+rollback. Reverting a deployment does not uninstall Slack or revoke the stored
+grant; preserve the verified identity/history and use the explicit owner-bound
+unlink path if revocation is required. Do not delete the grant to simulate a
+successful rollback. Action gates remain off throughout.
+
 ## Setup-only install authority — Batch 78, local only
 
 Historical implementation status below; now released in Batch 79.

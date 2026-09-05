@@ -13,7 +13,41 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 80, 6 September NZ
+## Latest state — Batch 81, 6 September NZ
+
+**The dedicated Junction Slack connection now passes real owner OAuth and an
+independent stored-token provider read.** App `A0BV96C6BFC` is installed in
+Junction AI `T0BMD3LMWUQ`; installing Slack user `U0BLLM1NDNV` is bound to the
+existing AVGAR owner/account. The app atomically saved one verified identity and
+one sealed workspace credential at `2026-09-05T23:05:46.814891Z`. Independent
+worker `auth.test` at 23:06:33 UTC returned the matching workspace/bot and all
+eight expected scopes. No Hyperagent token was copied or listener changed.
+
+Securely provisioned the new app's three keys into production Vercel and Fly;
+worker release 42 uses the unchanged tested image/source `781dfe740026`.
+The first actual OAuth attempt exposed a stale app-origin setting pointing to
+the separate `getjunction.ai` marketing site. Corrected `APP_URL` and
+`NEXT_PUBLIC_APP_URL` to `https://junction-unc.vercel.app`. Vercel updated their
+existing shared Production/Preview rows; the marketing project/domain was not
+changed. Final production deployment is `dpl_5Bg9bHmN5UPY98D54yaBfBZvQJQM`,
+same runtime source. Candidate/canonical health and the real corrected callback
+pass. [Full receipts and rollback limits](integration/JUNCTION-OWNED-SLACK-RUNTIME.md#real-slack-install-and-origin-fix--batch-81).
+
+Owner Connections/Messaging now displays the persisted Junction AI link and
+channel-staging controls. There are zero channel routes and zero remaining
+install pins. Eight saved AVGAR runs remain visible, generation 1 remains
+paused, and all five worker action/messaging flags remain false. Event
+Subscriptions and interactivity were not enabled; no customer messages,
+routine executions or ad mutations were performed. Bounded error/fatal scan
+returned no entries; this is not monitoring/alert acceptance.
+
+Next is the exact existing-client channel mapping and revision-bound route
+lifecycle, followed by a scoped request-to-routine-to-same-thread pilot. The UI's
+legacy digest switches are saved preferences, not proof of enabled delivery.
+Installation is not all-client readiness. Full goal remains active/incomplete;
+this turn and the prior turn made verified progress.
+
+## Previous state — Batch 80, 6 September NZ
 
 **Dedicated Junction Slack app created and configured, not installed.**
 App `A0BV96C6BFC` (Junction Unc), owner workspace Junction AI
