@@ -60,10 +60,41 @@ real provider observations or production scheduling evidence.
 
 ## Release / remaining gates
 
-Worker-only release pending. No app route imports the changed scheduler/readiness
-entry points; its existing stored-reader interface is unchanged. No schema or
-provider API change, no new registration, no Nguyen workflow call/edit, and no
-routine/action/sync flag change is part of this batch.
+**Worker-only release complete.** Source
+`ced3eff809cc85863123dc4baa35153ebe2c2933` is pushed and independently matched by
+the remote branch ref. Clean build checkout:
+`/private/tmp/unc-schedule-ready-release.vdZpqk`. Fly **release 33**, sole Sydney
+machine `1857466fd76998`, image
+`sha256:66f2008f3687c55d6201e7b5b83b09912f5c4b901c1f3d9c7dbf0bf1ae3c7c24`,
+tag `deployment-01M1S9GJEGDMTAYGN014QR5HXH`. Remote TypeScript compilation,
+standalone import check, rolling smoke and machine health pass.
+
+No app route imports the changed scheduler/readiness entry points; its existing
+stored-reader interface is unchanged. The compatible app intentionally remains
+at `1e72947d12a5` / `dpl_BcR3ws4fPoDSg5Krx4RVDGyvT2QL`; this is not a claim
+that app/worker SHAs are identical. No schema/provider API change, new registration,
+Nguyen workflow call/edit or routine/action/sync flag change.
+
+At **17:24:26.541Z**, `scripts/verify-dataset-schedule-worker.cjs` ran inside the
+actual new worker. Full build SHA and actual disabled flags match. Its transport
+allowed only GETs to six allowlisted tables in the pinned Supabase project:
+**30 database GETs**, zero credential resolutions/provider calls/writes. Actual
+runtime sync is off; an explicitly scoped helper invocation still excludes the
+independently read paused account. Compiled readiness refuses it and reports both
+actual saved queries stale. Function arguments did not change environment flags
+or establish a live schedule test.
+
+Canonical app health at **17:24:45.203Z**: DB healthy, worker fresh at 20 seconds,
+one tick, no last error. Independent SQL at **17:24:47.364527Z** retains generation
+1, paused, zero enabled routines, four runs/one command/four snapshots, unchanged
+from the pre-release read. Fly machine is started with passing health. A buffered
+log read at 17:25:10Z returned no rows; that is not an error-free runtime-log proof.
+Independent alert delivery remains open.
+
+Rollback: worker release 32/image
+`sha256:02f11916e5a29f45a82956f77829f2ecac63412fb8dfcde90962d209bcf0a8c9`;
+retains prior dataset fencing/output validation but loses this producer ordering
+and consumer deferral. Keep sync/cutover/action holds unchanged if rolling back.
 
 Live two-interval refresh and process restart remain unproven. AVGAR stays paused;
 sync/reader cutover and all routines remain off. This fixes the prerequisites but
@@ -74,3 +105,14 @@ may paginate; total request cancellation across lease expiry remains separate.
 Full provider coverage, historical backfills, account/provider reporting timezone
 reconciliation, remaining lane adapters and the full B01–B24/all-client journeys
 are not closed by these synthetic tests.
+
+## Nguyen handoff update
+
+Fresh Upwork read at approximately 05:24 NZ confirms his **05:11 AM** response:
+he accepts the output-only keyword corrections, exact fixed-clock fixtures/edge
+cases, corrected Email/calendar packaging and honest inventory within the existing
+scope. ETA **within two hours**, approximately **07:11 AM NZ**. No new provider
+runs, credentials, sends, spend changes or later-lane adapter work agreed. No
+duplicate message was sent; do not poll the unchanged handoff before that ETA
+without a new notification or other concrete reason. Codex continues independent
+backend work; this is not proof that corrected files have arrived.
