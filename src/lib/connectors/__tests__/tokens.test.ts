@@ -69,8 +69,8 @@ describe("getAccessToken", () => {
     expect(db.rows("connectors")[0]).toMatchObject({ status: "needs_reconnect", last_sync_result: "error:token_refresh_http_400" });
   });
 
-  it("an expiring Meta token cannot be refreshed server-side → needs_reconnect", async () => {
-    const id = await connected("meta_ads", { accessToken: "a", expiresAt: inTwoMinutes, obtainedAt: NOW.toISOString() }, "act_1");
+  it("an expired non-renewable Meta token requires reconnection", async () => {
+    const id = await connected("meta_ads", { accessToken: "a", expiresAt: NOW.toISOString(), obtainedAt: NOW.toISOString() }, "act_1");
     const d = tokenDeps();
     expect(await getAccessToken(id, d)).toBeNull();
     expect(d.calls).toHaveLength(0);
@@ -80,8 +80,8 @@ describe("getAccessToken", () => {
   it("a bundle sealed under a key the ring no longer holds fails closed and marks the row", async () => {
     const other = keyringFromKeys({ version: 1, key: Buffer.alloc(32, 1) });
     const id = await connected("shopify", { accessToken: "x", obtainedAt: NOW.toISOString() }, "s.myshopify.com", other);
-    expect(await getAccessToken(id, tokenDeps())).toBeNull();
-    expect(db.rows("connectors")[0]).toMatchObject({ status: "needs_reconnect", last_sync_result: "error:secret_open_failed" });
+    await expect(getAccessToken(id, tokenDeps())).rejects.toMatchObject({ code: "configuration_error" });
+    expect(db.rows("connectors")[0]).toMatchObject({ status: "connected", last_sync_result: "error:auth_configuration_error" });
   });
 
   it("re-seals under the current key after a rotation (old version opened, new version written)", async () => {
@@ -98,6 +98,66 @@ describe("getAccessToken", () => {
     const id2 = await upsertConnector(db, accountId, "klaviyo", { status: "connected" });
     expect(await getAccessToken(id2, tokenDeps())).toBeNull();
     expect(db.rows("connectors").find((r) => r.id === id2)).toMatchObject({ status: "needs_reconnect", last_sync_result: "error:no_secret" });
+  });
+});
+
+describe("connection recovery", () => {
+  it("does not refresh when another process owns the database lease", async () => {
+    const id = await connected("ga4", { accessToken: "old", refreshToken: "r", expiresAt: inTwoMinutes, obtainedAt: NOW.toISOString() });
+    db.rpcs.claim_backend_lease = () => false;
+    const d = tokenDeps({ env: { ...FAKE_ENV, CONNECTOR_REFRESH_LEASES_ENABLED: "true" } });
+    await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "temporarily_unavailable" });
+    expect(d.calls).toHaveLength(0);
+    expect(db.rows("connectors")[0].status).toBe("connected");
+  });
+
+  it("rejects a refreshed token if its lease or previous ciphertext no longer matches", async () => {
+    const id = await connected("ga4", { accessToken: "old", refreshToken: "r", expiresAt: inTwoMinutes, obtainedAt: NOW.toISOString() });
+    const ciphertext = db.rows("connector_secrets")[0].ciphertext;
+    db.rpcs.claim_backend_lease = () => true;
+    db.rpcs.commit_connector_token = () => false;
+    const d = tokenDeps({ env: { ...FAKE_ENV, CONNECTOR_REFRESH_LEASES_ENABLED: "true" } });
+    d.routes.push(() => json({ access_token: "new", expires_in: 3600 }));
+    await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "temporarily_unavailable" });
+    expect(db.rows("connector_secrets")[0].ciphertext).toBe(ciphertext);
+    expect(db.callsFor("backend_leases", "delete")).toHaveLength(0);
+  });
+
+  it("uses a non-renewable token until its actual expiry", async () => {
+    const id = await connected("meta_ads", { accessToken: "valid", expiresAt: inTwoMinutes, obtainedAt: NOW.toISOString() }, "act_1");
+    expect(await getAccessToken(id, tokenDeps())).toMatchObject({ accessToken: "valid" });
+    expect(db.rows("connectors")[0].status).toBe("connected");
+  });
+
+  it.each([429, 500, 503])("recovers after HTTP %s without a second customer login", async (status) => {
+    const id = await connected("ga4", { accessToken: "old", refreshToken: "refresh", expiresAt: inTwoMinutes, obtainedAt: NOW.toISOString() });
+    const d = tokenDeps();
+    d.routes.push(() => json({ error: "server_error", error_description: "must-not-leak" }, status));
+    await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "temporarily_unavailable" });
+    expect(db.rows("connectors")[0]).toMatchObject({ status: "connected", last_sync_result: "error:auth_temporarily_unavailable" });
+    d.routes.splice(0, d.routes.length, () => json({ access_token: "new", expires_in: 3600 }));
+    expect(await getAccessToken(id, d)).toMatchObject({ accessToken: "new" });
+    expect(db.rows("connectors")[0].last_sync_result).toBeNull();
+    expect(d.logs.join(" ")).not.toContain("must-not-leak");
+  });
+
+  it("does not treat application credentials or an unknown 400 as revoked customer consent", async () => {
+    const id = await connected("ga4", { accessToken: "old", refreshToken: "refresh", expiresAt: inTwoMinutes, obtainedAt: NOW.toISOString() });
+    const d = tokenDeps();
+    d.routes.push(() => json({ error: "invalid_client" }, 401));
+    await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "configuration_error" });
+    d.routes.splice(0, d.routes.length, () => json({ error: "provider-specific-error" }, 400));
+    await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "temporarily_unavailable" });
+    expect(db.rows("connectors")[0].status).toBe("connected");
+  });
+
+  it("coalesces concurrent refreshes sharing a database client", async () => {
+    const id = await connected("ga4", { accessToken: "old", refreshToken: "refresh", expiresAt: inTwoMinutes, obtainedAt: NOW.toISOString() });
+    const d = tokenDeps();
+    d.routes.push(() => json({ access_token: "new", refresh_token: "rotated", expires_in: 3600 }));
+    const results = await Promise.all(Array.from({ length: 8 }, () => getAccessToken(id, d)));
+    expect(results.every(r => r?.accessToken === "new")).toBe(true);
+    expect(d.calls).toHaveLength(1);
   });
 });
 

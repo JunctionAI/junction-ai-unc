@@ -78,6 +78,7 @@ export class WorkerConnectorReader implements ConnectorReader {
       metrics: res.metrics,
       fetchedAt: res.provenance.fetchedAt,
       provenance: res.provenance.source === "fixture" ? "fixture" : res.count ? "ok" : "empty",
+      ...(res.provenance.note ? { sourceNote: res.provenance.note } : {}),
     };
   }
 }

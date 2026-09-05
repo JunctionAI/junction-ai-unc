@@ -305,7 +305,7 @@ class RunSession {
     }
     if (node.freshnessMinutes !== undefined) {
       const ageMin = (this.now().getTime() - new Date(result.fetchedAt).getTime()) / 60_000;
-      if (ageMin > node.freshnessMinutes) {
+      if (!Number.isFinite(ageMin) || ageMin < -0.5 || ageMin > node.freshnessMinutes) {
         return this.fail(node.id, `certified input from ${node.source} is ${Math.round(ageMin)} min old (limit ${node.freshnessMinutes})`, {
           platform: node.source,
           fetchedAt: result.fetchedAt,
@@ -316,7 +316,7 @@ class RunSession {
     await this.receipt(
       "read",
       `Read ${node.source} ${node.query.resource}${node.query.window ? ` over ${node.query.window}` : ""}: ${result.rows.length} rows.`,
-      { as: node.as, query: node.query, rowCount: result.rows.length, metrics: result.metrics, fetchedAt: result.fetchedAt, provenance: result.provenance ?? "ok" },
+      { as: node.as, query: node.query, rowCount: result.rows.length, metrics: result.metrics, fetchedAt: result.fetchedAt, provenance: result.provenance ?? "ok", ...(result.dataset ? { dataset: result.dataset } : {}), ...(result.sourceNote ? { sourceNote: result.sourceNote } : {}) },
       { platform: node.source },
     );
     return undefined;

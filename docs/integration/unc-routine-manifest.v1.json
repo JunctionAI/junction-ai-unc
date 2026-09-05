@@ -1,0 +1,3410 @@
+{
+  "schema": "unc.integration-manifest.v1",
+  "readiness": "contract inventory only; no deployment or provider readiness implied",
+  "keywordPilot": {
+    "routineId": "D03-W01",
+    "contract": "unc.keyword-shadow.v1",
+    "reply": [
+      "artifact",
+      "executionReceipt"
+    ],
+    "fallbackAllowed": false,
+    "timeoutMs": 60000
+  },
+  "routines": [
+    {
+      "routineId": "D01-W01",
+      "version": 1,
+      "name": "Founder content engine",
+      "outputKind": "post_set",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a scanned site profile or three things I know about the business",
+        "platforms": [],
+        "inputs": [
+          "about_the_business"
+        ],
+        "helpful": [
+          "gorgias",
+          "linkedin",
+          "shopify"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_questions",
+          "as": "questions",
+          "platform": "gorgias",
+          "query": {
+            "resource": "tickets",
+            "window": "7d",
+            "fields": [
+              "subject",
+              "body",
+              "tags"
+            ],
+            "limit": 200
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_posts",
+          "as": "posts",
+          "platform": "linkedin",
+          "query": {
+            "resource": "posts",
+            "window": "28d",
+            "fields": [
+              "text",
+              "impressions",
+              "reactions",
+              "comments"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_products",
+          "as": "products",
+          "platform": "shopify",
+          "query": {
+            "resource": "products",
+            "fields": [
+              "title",
+              "body_html",
+              "tags"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "gorgias:tickets",
+        "linkedin:posts",
+        "shopify:products"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_questions",
+          "kind": "read"
+        },
+        {
+          "id": "read_posts",
+          "kind": "read"
+        },
+        {
+          "id": "read_products",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D01-W02",
+      "version": 1,
+      "name": "Viral hook mining",
+      "outputKind": "hook_list",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a scanned site profile or a note about the niche; TikTok / Instagram rows turn a hypothesis into a measured library",
+        "platforms": [],
+        "inputs": [
+          "about_the_business"
+        ],
+        "helpful": [
+          "tiktok",
+          "instagram"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_niche",
+          "as": "niche",
+          "platform": "tiktok",
+          "query": {
+            "resource": "videos",
+            "window": "7d",
+            "filter": {
+              "niche": "{{vars.niche}}",
+              "minViews": 100000
+            },
+            "fields": [
+              "caption",
+              "views",
+              "likes",
+              "hook_transcript"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_ig",
+          "as": "ig",
+          "platform": "instagram",
+          "query": {
+            "resource": "hashtag_search",
+            "window": "7d",
+            "filter": {
+              "hashtags": "{{vars.hashtags}}"
+            },
+            "fields": [
+              "caption",
+              "plays",
+              "likes"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "instagram:hashtag_search",
+        "tiktok:videos"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_niche",
+          "kind": "read"
+        },
+        {
+          "id": "read_ig",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D01-W03",
+      "version": 1,
+      "name": "Customer-question mining",
+      "outputKind": "question_list",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "customer questions from support, reviews or comments — or the scanned site's FAQ/product text",
+        "platforms": [],
+        "inputs": [
+          "customer_questions"
+        ],
+        "helpful": [
+          "gorgias",
+          "shopify",
+          "instagram"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_tickets",
+          "as": "tickets",
+          "platform": "gorgias",
+          "query": {
+            "resource": "tickets",
+            "window": "14d",
+            "fields": [
+              "subject",
+              "body"
+            ],
+            "limit": 500
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_reviews",
+          "as": "reviews",
+          "platform": "shopify",
+          "query": {
+            "resource": "products",
+            "fields": [
+              "title",
+              "reviews"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_comments",
+          "as": "comments",
+          "platform": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "14d",
+            "fields": [
+              "comments"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "gorgias:tickets",
+        "instagram:media",
+        "shopify:products"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_tickets",
+          "kind": "read"
+        },
+        {
+          "id": "read_reviews",
+          "kind": "read"
+        },
+        {
+          "id": "read_comments",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D01-W04",
+      "version": 1,
+      "name": "UGC creator pipeline",
+      "outputKind": "outreach_draft",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a description of who you want (niche, follower band, region); Instagram rows let me name real handles",
+        "platforms": [],
+        "inputs": [
+          "creator_brief"
+        ],
+        "helpful": [
+          "instagram",
+          "shopify"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_creators",
+          "as": "creators",
+          "platform": "instagram",
+          "query": {
+            "resource": "hashtag_search",
+            "window": "28d",
+            "filter": {
+              "hashtags": "{{vars.hashtags}}",
+              "minFollowers": 2000,
+              "maxFollowers": 50000
+            },
+            "fields": [
+              "username",
+              "followers",
+              "engagement_rate"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_customers",
+          "as": "customers",
+          "platform": "shopify",
+          "query": {
+            "resource": "customers",
+            "window": "90d",
+            "filter": {
+              "ordersCount": {
+                "gte": 2
+              }
+            },
+            "fields": [
+              "email",
+              "orders_count"
+            ],
+            "limit": 200
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "instagram:hashtag_search",
+        "shopify:customers"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_creators",
+          "kind": "read"
+        },
+        {
+          "id": "read_customers",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D01-W05",
+      "version": 1,
+      "name": "Social repurposing",
+      "outputKind": "post_set",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "at least one recent post — from a connected social account or pasted by you",
+        "platforms": [],
+        "inputs": [
+          "source_post"
+        ],
+        "helpful": [
+          "instagram",
+          "linkedin",
+          "youtube"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_ig",
+          "as": "ig",
+          "platform": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "7d",
+            "fields": [
+              "caption",
+              "media_type",
+              "plays",
+              "likes",
+              "saves"
+            ],
+            "limit": 30
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_li",
+          "as": "li",
+          "platform": "linkedin",
+          "query": {
+            "resource": "posts",
+            "window": "7d",
+            "fields": [
+              "text",
+              "impressions",
+              "reactions"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_yt",
+          "as": "yt",
+          "platform": "youtube",
+          "query": {
+            "resource": "videos",
+            "window": "28d",
+            "fields": [
+              "title",
+              "views",
+              "transcript"
+            ],
+            "limit": 10
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "instagram:media",
+        "linkedin:posts",
+        "youtube:videos"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_ig",
+          "kind": "read"
+        },
+        {
+          "id": "read_li",
+          "kind": "read"
+        },
+        {
+          "id": "read_yt",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D01-W06",
+      "version": 1,
+      "name": "Winning elements library",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a scanned site profile so I can structure the library; Meta ads rows are what make an entry a winner",
+        "platforms": [],
+        "inputs": [
+          "about_the_business"
+        ],
+        "helpful": [
+          "meta_ads",
+          "instagram"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_ads",
+          "as": "ads",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_name",
+              "spend",
+              "purchases",
+              "ctr",
+              "thumbstop"
+            ],
+            "limit": 200
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_organic",
+          "as": "organic",
+          "platform": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "28d",
+            "fields": [
+              "caption",
+              "media_type",
+              "plays",
+              "saves"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "instagram:media",
+        "meta_ads:insights"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_ads",
+          "kind": "read"
+        },
+        {
+          "id": "read_organic",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D01-W07",
+      "version": 1,
+      "name": "Trend watch",
+      "outputKind": "post_set",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "rising TikTok trends in your niche — or the niche itself so I can draft hypothetical angles",
+        "platforms": [],
+        "inputs": [
+          "niche"
+        ],
+        "helpful": [
+          "tiktok"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_trends",
+          "as": "trends",
+          "platform": "tiktok",
+          "query": {
+            "resource": "trends",
+            "window": "24h",
+            "filter": {
+              "region": "{{vars.region}}",
+              "category": "{{vars.niche}}"
+            },
+            "fields": [
+              "name",
+              "growth_rate",
+              "video_count"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_sounds",
+          "as": "sounds",
+          "platform": "tiktok",
+          "query": {
+            "resource": "trends",
+            "window": "24h",
+            "filter": {
+              "type": "sound"
+            },
+            "fields": [
+              "name",
+              "growth_rate"
+            ],
+            "limit": 20
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "tiktok:trends"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_trends",
+          "kind": "read"
+        },
+        {
+          "id": "read_sounds",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D01-W08",
+      "version": 1,
+      "name": "Content performance learning",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "recent posts with reach and saves — or a pasted post, or the site profile so I can say what I'd measure",
+        "platforms": [],
+        "inputs": [
+          "source_post"
+        ],
+        "helpful": [
+          "instagram",
+          "linkedin",
+          "ga4"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_ig",
+          "as": "ig",
+          "platform": "instagram",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "fields": [
+              "reach",
+              "plays",
+              "saves",
+              "follows"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_li",
+          "as": "li",
+          "platform": "linkedin",
+          "query": {
+            "resource": "posts",
+            "window": "28d",
+            "fields": [
+              "impressions",
+              "reactions",
+              "comments"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_ga",
+          "as": "ga",
+          "platform": "ga4",
+          "query": {
+            "resource": "report",
+            "window": "28d",
+            "fields": [
+              "sessions",
+              "conversions"
+            ],
+            "groupBy": [
+              "sessionSource",
+              "sessionMedium"
+            ],
+            "filter": {
+              "sessionMedium": "social"
+            }
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "ga4:report",
+        "instagram:insights",
+        "linkedin:posts"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_ig",
+          "kind": "read"
+        },
+        {
+          "id": "read_li",
+          "kind": "read"
+        },
+        {
+          "id": "read_ga",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D02-W01",
+      "version": 1,
+      "name": "Daily paid decisioning",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "Meta Ads spend this week plus Shopify orders to reconcile against",
+        "platforms": [
+          "meta_ads",
+          "shopify"
+        ],
+        "inputs": [],
+        "helpful": [
+          "ga4"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_spend",
+          "as": "spend",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "7d",
+            "filter": {
+              "level": "adset"
+            },
+            "fields": [
+              "adset_id",
+              "adset_name",
+              "spend",
+              "purchases",
+              "purchase_value",
+              "roas",
+              "frequency",
+              "ctr",
+              "daily_budget"
+            ],
+            "limit": 100
+          },
+          "optional": false,
+          "freshnessMinutes": 60
+        },
+        {
+          "nodeId": "read_adsets",
+          "as": "adsets",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "adsets",
+            "fields": [
+              "id",
+              "name",
+              "status",
+              "effective_status",
+              "campaign_id",
+              "daily_budget"
+            ],
+            "limit": 200
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_orders",
+          "as": "orders",
+          "platform": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "7d",
+            "fields": [
+              "id",
+              "total_price",
+              "landing_site",
+              "referring_site"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": 60
+        },
+        {
+          "nodeId": "read_ga",
+          "as": "ga",
+          "platform": "ga4",
+          "query": {
+            "resource": "report",
+            "window": "7d",
+            "fields": [
+              "sessions",
+              "conversions",
+              "purchaseRevenue"
+            ],
+            "groupBy": [
+              "sessionCampaignName"
+            ],
+            "filter": {
+              "sessionSource": "facebook"
+            }
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "ga4:report",
+        "meta_ads:adsets",
+        "meta_ads:insights",
+        "shopify:orders"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_spend",
+          "kind": "read"
+        },
+        {
+          "id": "read_adsets",
+          "kind": "read"
+        },
+        {
+          "id": "read_orders",
+          "kind": "read"
+        },
+        {
+          "id": "read_ga",
+          "kind": "read"
+        },
+        {
+          "id": "spend_present",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "{{decision.params.actionId}}",
+            "target": {
+              "adsetId": "{{decision.params.adsetId}}"
+            },
+            "params": {
+              "dailyBudget": "{{decision.params.dailyBudget}}",
+              "changePct": "{{decision.params.changePct}}",
+              "currentDailyBudget": "{{decision.params.currentDailyBudget}}",
+              "reason": "{{decision.params.reason}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D02-W02",
+      "version": 1,
+      "name": "Creative testing sprints",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "Meta Ads with live ads and test-ready creatives",
+        "platforms": [
+          "meta_ads"
+        ],
+        "inputs": [],
+        "helpful": []
+      },
+      "reads": [
+        {
+          "nodeId": "read_ads",
+          "as": "ads",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "14d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_id",
+              "ad_name",
+              "spend",
+              "purchases",
+              "ctr",
+              "cpa"
+            ],
+            "limit": 200
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_creatives",
+          "as": "creatives",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "ads",
+            "filter": {
+              "status": "PAUSED",
+              "tag": "unc-test-ready"
+            },
+            "fields": [
+              "ad_id",
+              "creative_id",
+              "name"
+            ],
+            "limit": 20
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "meta_ads:ads",
+        "meta_ads:insights"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_ads",
+          "kind": "read"
+        },
+        {
+          "id": "read_creatives",
+          "kind": "read"
+        },
+        {
+          "id": "has_candidates",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.campaign.create_from_brief",
+            "params": {
+              "name": "Creative test — {{today}}",
+              "objective": "OUTCOME_SALES",
+              "dailyBudget": "{{decision.spend.amount}}",
+              "audience": {
+                "countries": "{{vars.countries}}"
+              },
+              "creatives": "{{decision.params.creativeIds}}",
+              "pixelId": "{{vars.metaPixelId}}",
+              "pageId": "{{vars.metaPageId}}",
+              "durationDays": 7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D02-W03",
+      "version": 1,
+      "name": "Hook rotation engine",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "Meta Ads with ad-level frequency and CTR",
+        "platforms": [
+          "meta_ads"
+        ],
+        "inputs": [],
+        "helpful": []
+      },
+      "reads": [
+        {
+          "nodeId": "read_ads",
+          "as": "ads",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "14d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_id",
+              "ad_name",
+              "frequency",
+              "ctr",
+              "ctr_trend",
+              "days_live"
+            ],
+            "limit": 200
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_hooks",
+          "as": "hooks",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "ads",
+            "filter": {
+              "status": "PAUSED",
+              "tag": "unc-hook-variant"
+            },
+            "fields": [
+              "ad_id",
+              "creative_id"
+            ],
+            "limit": 20
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "meta_ads:ads",
+        "meta_ads:insights"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_ads",
+          "kind": "read"
+        },
+        {
+          "id": "read_hooks",
+          "kind": "read"
+        },
+        {
+          "id": "fatigue_seen",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.ad.rotate",
+            "params": {
+              "pauseAdId": "{{decision.params.adId}}",
+              "resumeAdId": "{{decision.params.nextAdId}}",
+              "reason": "hook fatigue"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D02-W04",
+      "version": 1,
+      "name": "Ad fatigue watch",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "Meta Ads with ad-level frequency and CPA",
+        "platforms": [
+          "meta_ads"
+        ],
+        "inputs": [],
+        "helpful": []
+      },
+      "reads": [
+        {
+          "nodeId": "read_ads",
+          "as": "ads",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "7d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_id",
+              "ad_name",
+              "spend",
+              "frequency",
+              "cpa",
+              "cpa_trend"
+            ],
+            "limit": 200
+          },
+          "optional": false,
+          "freshnessMinutes": 90
+        }
+      ],
+      "scopes": [
+        "meta_ads:insights"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_ads",
+          "kind": "read"
+        },
+        {
+          "id": "tired_ad",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.ad.pause",
+            "target": {
+              "adId": "{{decision.params.adId}}"
+            },
+            "params": {
+              "reason": "frequency {{reads.ads.worst_frequency}}, CPA {{reads.ads.worst_cpa_vs_target_pct}}% over target"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D02-W05",
+      "version": 1,
+      "name": "Creator whitelisting",
+      "outputKind": "outreach_draft",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "creator posts tagged to the brand — or paste a post URL/handle",
+        "platforms": [],
+        "inputs": [
+          "creator_post"
+        ],
+        "helpful": [
+          "instagram",
+          "meta_ads"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_creators",
+          "as": "creators",
+          "platform": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "28d",
+            "filter": {
+              "tagged": true
+            },
+            "fields": [
+              "username",
+              "plays",
+              "saves",
+              "permalink"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_ads",
+          "as": "ads",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "filter": {
+              "level": "ad",
+              "creative_type": "partnership"
+            },
+            "fields": [
+              "ad_name",
+              "cpa",
+              "ctr"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "instagram:media",
+        "meta_ads:insights"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_creators",
+          "kind": "read"
+        },
+        {
+          "id": "read_ads",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D02-W06",
+      "version": 1,
+      "name": "Creative test planner",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "the site profile (hooks, formats, offers to test); Meta ads make the cells measured",
+        "platforms": [],
+        "inputs": [
+          "about_the_business"
+        ],
+        "helpful": [
+          "meta_ads",
+          "instagram"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_ads",
+          "as": "ads",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_name",
+              "hook",
+              "format",
+              "offer",
+              "cpa",
+              "spend"
+            ],
+            "limit": 200
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_library",
+          "as": "library",
+          "platform": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "28d",
+            "fields": [
+              "caption",
+              "media_type",
+              "saves"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "instagram:media",
+        "meta_ads:insights"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_ads",
+          "kind": "read"
+        },
+        {
+          "id": "read_library",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D02-W07",
+      "version": 1,
+      "name": "Budget pacing guard",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "today's Meta account spend vs the daily cap",
+        "platforms": [
+          "meta_ads"
+        ],
+        "inputs": [],
+        "helpful": [
+          "google_ads"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_meta",
+          "as": "meta",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "1d",
+            "filter": {
+              "level": "account"
+            },
+            "fields": [
+              "spend",
+              "daily_budget_total"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": 60
+        },
+        {
+          "nodeId": "read_google",
+          "as": "google",
+          "platform": "google_ads",
+          "query": {
+            "resource": "campaigns",
+            "window": "1d",
+            "fields": [
+              "campaign_id",
+              "cost",
+              "budget_amount",
+              "status"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_mtd",
+          "as": "mtd",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "filter": {
+              "level": "account"
+            },
+            "fields": [
+              "spend"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": 60
+        },
+        {
+          "nodeId": "read_adsets",
+          "as": "adsets",
+          "platform": "meta_ads",
+          "query": {
+            "resource": "adsets",
+            "fields": [
+              "id",
+              "name",
+              "status",
+              "effective_status",
+              "daily_budget"
+            ],
+            "limit": 200
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "google_ads:campaigns",
+        "meta_ads:adsets",
+        "meta_ads:insights"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_meta",
+          "kind": "read"
+        },
+        {
+          "id": "read_google",
+          "kind": "read"
+        },
+        {
+          "id": "read_mtd",
+          "kind": "read"
+        },
+        {
+          "id": "read_adsets",
+          "kind": "read"
+        },
+        {
+          "id": "over_pace",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.adset.set_daily_budget",
+            "target": {
+              "adsetId": "{{decision.params.adsetId}}"
+            },
+            "params": {
+              "changePct": "{{decision.params.changePct}}",
+              "currentDailyBudget": "{{decision.params.currentDailyBudget}}",
+              "reason": "pacing {{reads.meta.projected_daily_spend}}/day over the {{caps.perDay}}/day cap"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D02-W08",
+      "version": 1,
+      "name": "Organic-to-paid promotion",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a proven Instagram post — from insights or pasted by you",
+        "platforms": [
+          "instagram"
+        ],
+        "inputs": [
+          "source_post"
+        ],
+        "helpful": [
+          "ga4"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_posts",
+          "as": "posts",
+          "platform": "instagram",
+          "query": {
+            "resource": "insights",
+            "window": "7d",
+            "fields": [
+              "media_id",
+              "caption",
+              "reach",
+              "plays",
+              "likes",
+              "saves",
+              "shares"
+            ],
+            "limit": 50
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_ga",
+          "as": "ga",
+          "platform": "ga4",
+          "query": {
+            "resource": "report",
+            "window": "7d",
+            "fields": [
+              "sessions",
+              "conversions"
+            ],
+            "filter": {
+              "sessionSource": "instagram"
+            }
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "ga4:report",
+        "instagram:insights"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_posts",
+          "kind": "read"
+        },
+        {
+          "id": "read_ga",
+          "kind": "read"
+        },
+        {
+          "id": "demand_not_just_reach",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.campaign.create_from_brief",
+            "params": {
+              "name": "Organic-to-paid test — {{today}}",
+              "objective": "OUTCOME_TRAFFIC",
+              "optimizationGoal": "LANDING_PAGE_VIEWS",
+              "dailyBudget": "{{decision.spend.amount}}",
+              "audience": {
+                "countries": "{{vars.countries}}"
+              },
+              "creatives": {
+                "instagramMediaId": "{{decision.params.mediaId}}"
+              },
+              "pageId": "{{vars.metaPageId}}",
+              "durationDays": 7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D03-W01",
+      "version": 1,
+      "name": "Keyword opportunity scan",
+      "outputKind": "keyword_list",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "the website's category and products (from the scan); Search Console makes it real",
+        "platforms": [],
+        "inputs": [
+          "about_the_business"
+        ],
+        "helpful": [
+          "search_console",
+          "shopify"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_gsc",
+          "as": "gsc",
+          "platform": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "28d",
+            "groupBy": [
+              "query",
+              "page"
+            ],
+            "fields": [
+              "clicks",
+              "impressions",
+              "ctr",
+              "position"
+            ],
+            "filter": {
+              "positionBetween": [
+                8,
+                30
+              ]
+            },
+            "limit": 500
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_pages",
+          "as": "pages",
+          "platform": "shopify",
+          "query": {
+            "resource": "pages",
+            "fields": [
+              "handle",
+              "title",
+              "body_summary"
+            ],
+            "limit": 200
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "search_console:search_analytics",
+        "shopify:pages"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_gsc",
+          "kind": "read"
+        },
+        {
+          "id": "read_pages",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D03-W02",
+      "version": 1,
+      "name": "Content gap analysis",
+      "outputKind": "content_gap",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "the site profile (its sections and category); competitor crawls sharpen it",
+        "platforms": [],
+        "inputs": [
+          "about_the_business"
+        ],
+        "helpful": [
+          "search_console"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_gsc",
+          "as": "gsc",
+          "platform": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "90d",
+            "groupBy": [
+              "query"
+            ],
+            "fields": [
+              "impressions",
+              "clicks",
+              "position"
+            ],
+            "limit": 1000
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_competitors",
+          "as": "competitors",
+          "platform": "web",
+          "query": {
+            "resource": "crawl",
+            "filter": {
+              "domains": "{{vars.competitorDomains}}"
+            },
+            "fields": [
+              "url",
+              "title",
+              "h1",
+              "topic"
+            ],
+            "limit": 300
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_own",
+          "as": "own",
+          "platform": "web",
+          "query": {
+            "resource": "crawl",
+            "filter": {
+              "domains": "{{vars.website}}"
+            },
+            "fields": [
+              "url",
+              "title",
+              "h1",
+              "topic"
+            ],
+            "limit": 300
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "search_console:search_analytics",
+        "web:crawl"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_gsc",
+          "kind": "read"
+        },
+        {
+          "id": "read_competitors",
+          "kind": "read"
+        },
+        {
+          "id": "read_own",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D03-W03",
+      "version": 1,
+      "name": "AI search visibility",
+      "outputKind": "content_gap",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "buyer prompts to test (set on the routine or pasted) plus what you sell; LLM search rows make it measured",
+        "platforms": [],
+        "inputs": [
+          "buyer_prompts"
+        ],
+        "helpful": [
+          "shopify"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_llm",
+          "as": "llm",
+          "platform": "llm_search",
+          "query": {
+            "resource": "prompts",
+            "filter": {
+              "prompts": "{{vars.buyerPrompts}}",
+              "engines": [
+                "chatgpt",
+                "perplexity",
+                "gemini"
+              ]
+            },
+            "fields": [
+              "prompt",
+              "engine",
+              "mentioned",
+              "cited_url",
+              "competitors_mentioned"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_pages",
+          "as": "pages",
+          "platform": "shopify",
+          "query": {
+            "resource": "pages",
+            "fields": [
+              "handle",
+              "title"
+            ],
+            "limit": 200
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "llm_search:prompts",
+        "shopify:pages"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_llm",
+          "kind": "read"
+        },
+        {
+          "id": "read_pages",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D03-W04",
+      "version": 1,
+      "name": "On-page SEO fixes",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a Shopify store whose pages I can read; Search Console impressions rank which fix is worth it",
+        "platforms": [
+          "shopify"
+        ],
+        "inputs": [],
+        "helpful": [
+          "search_console"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_gsc",
+          "as": "gsc",
+          "platform": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "28d",
+            "groupBy": [
+              "page"
+            ],
+            "fields": [
+              "clicks",
+              "impressions",
+              "ctr",
+              "position"
+            ],
+            "limit": 300
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_pages",
+          "as": "pages",
+          "platform": "shopify",
+          "query": {
+            "resource": "pages",
+            "fields": [
+              "id",
+              "handle",
+              "title",
+              "meta_title",
+              "meta_description",
+              "h1"
+            ],
+            "limit": 300
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "search_console:search_analytics",
+        "shopify:pages"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_gsc",
+          "kind": "read"
+        },
+        {
+          "id": "read_pages",
+          "kind": "read"
+        },
+        {
+          "id": "has_fixable",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "shopify",
+          "mutation": {
+            "action": "update_page_seo",
+            "target": {
+              "pageId": "{{decision.params.pageId}}"
+            },
+            "params": {
+              "metaTitle": "{{decision.params.newTitle}}",
+              "metaDescription": "{{decision.params.newDescription}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D03-W05",
+      "version": 1,
+      "name": "SERP position watch",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "Search Console ranking data — I can't watch positions I haven't read",
+        "platforms": [
+          "search_console"
+        ],
+        "inputs": [],
+        "helpful": []
+      },
+      "reads": [
+        {
+          "nodeId": "read_gsc",
+          "as": "gsc",
+          "platform": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "7d",
+            "groupBy": [
+              "query"
+            ],
+            "fields": [
+              "position",
+              "position_change_7d",
+              "clicks"
+            ],
+            "filter": {
+              "tracked": true
+            },
+            "limit": 200
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "search_console:search_analytics"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_gsc",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D03-W06",
+      "version": 1,
+      "name": "Competitor gap watch",
+      "outputKind": "content_gap",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "the site profile and competitor domains (set on the routine or pasted); crawls make the threats real",
+        "platforms": [],
+        "inputs": [
+          "competitors"
+        ],
+        "helpful": [
+          "search_console"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_competitors",
+          "as": "competitors",
+          "platform": "web",
+          "query": {
+            "resource": "crawl",
+            "window": "7d",
+            "filter": {
+              "domains": "{{vars.competitorDomains}}",
+              "changedOnly": true
+            },
+            "fields": [
+              "url",
+              "title",
+              "published_at",
+              "topic"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_gsc",
+          "as": "gsc",
+          "platform": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "28d",
+            "groupBy": [
+              "query"
+            ],
+            "fields": [
+              "position",
+              "position_change_28d"
+            ],
+            "limit": 300
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "search_console:search_analytics",
+        "web:crawl"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_competitors",
+          "kind": "read"
+        },
+        {
+          "id": "read_gsc",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D04-W01",
+      "version": 1,
+      "name": "Lead research & scoring",
+      "outputKind": "lead_brief",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a description of who you want to reach (I ask for it); HubSpot leads let me score real rows",
+        "platforms": [],
+        "inputs": [
+          "target_description"
+        ],
+        "helpful": [
+          "hubspot"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_leads",
+          "as": "leads",
+          "platform": "hubspot",
+          "query": {
+            "resource": "contacts",
+            "window": "1d",
+            "filter": {
+              "lifecycleStage": "lead",
+              "scored": false
+            },
+            "fields": [
+              "id",
+              "email",
+              "company",
+              "website",
+              "title"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "hubspot:contacts"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_leads",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D04-W02",
+      "version": 1,
+      "name": "Supervised outbound drafts",
+      "outputKind": "outreach_draft",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a lead brief from Lead research & scoring first; HubSpot leads give me real names to write to",
+        "platforms": [],
+        "inputs": [
+          "lead_brief"
+        ],
+        "helpful": [
+          "hubspot",
+          "gmail"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_leads",
+          "as": "leads",
+          "platform": "hubspot",
+          "query": {
+            "resource": "contacts",
+            "window": "7d",
+            "filter": {
+              "lifecycleStage": "lead",
+              "fitScore": {
+                "gte": 70
+              },
+              "contacted": false
+            },
+            "fields": [
+              "id",
+              "email",
+              "firstname",
+              "company",
+              "fit_reason"
+            ],
+            "limit": 20
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_threads",
+          "as": "threads",
+          "platform": "gmail",
+          "query": {
+            "resource": "threads",
+            "window": "28d",
+            "filter": {
+              "label": "sent",
+              "to": "{{reads.leads.emails}}"
+            },
+            "fields": [
+              "to",
+              "subject",
+              "snippet"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "gmail:threads",
+        "hubspot:contacts"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_leads",
+          "kind": "read"
+        },
+        {
+          "id": "read_threads",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D04-W03",
+      "version": 1,
+      "name": "Meeting brief builder",
+      "outputKind": "meeting_brief",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "today's meetings from a calendar or HubSpot, or tell me who you're meeting",
+        "platforms": [],
+        "inputs": [
+          "meeting"
+        ],
+        "helpful": [
+          "hubspot",
+          "gmail"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_meetings",
+          "as": "meetings",
+          "platform": "calendar",
+          "query": {
+            "resource": "events",
+            "window": "1d",
+            "filter": {
+              "external": true
+            },
+            "fields": [
+              "id",
+              "title",
+              "start",
+              "attendees"
+            ],
+            "limit": 20
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_contacts",
+          "as": "contacts",
+          "platform": "hubspot",
+          "query": {
+            "resource": "contacts",
+            "filter": {
+              "emails": "{{reads.meetings.attendee_emails}}"
+            },
+            "fields": [
+              "id",
+              "company",
+              "lifecycleStage",
+              "deal_stage",
+              "notes"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_threads",
+          "as": "threads",
+          "platform": "gmail",
+          "query": {
+            "resource": "threads",
+            "window": "90d",
+            "filter": {
+              "with": "{{reads.meetings.attendee_emails}}"
+            },
+            "fields": [
+              "subject",
+              "snippet",
+              "date"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "calendar:events",
+        "gmail:threads",
+        "hubspot:contacts"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_meetings",
+          "kind": "read"
+        },
+        {
+          "id": "read_contacts",
+          "kind": "read"
+        },
+        {
+          "id": "read_threads",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D04-W04",
+      "version": 1,
+      "name": "Follow-up cadence",
+      "outputKind": "outreach_draft",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "open deals gone quiet from HubSpot, or a list you paste; Gmail threads let me pick up the last conversation",
+        "platforms": [],
+        "inputs": [
+          "stale_deals"
+        ],
+        "helpful": [
+          "hubspot",
+          "gmail"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_deals",
+          "as": "deals",
+          "platform": "hubspot",
+          "query": {
+            "resource": "deals",
+            "filter": {
+              "stage": "open",
+              "lastActivityOlderThanDays": 5
+            },
+            "fields": [
+              "id",
+              "name",
+              "contact_email",
+              "stage",
+              "last_activity"
+            ],
+            "limit": 50
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_threads",
+          "as": "threads",
+          "platform": "gmail",
+          "query": {
+            "resource": "threads",
+            "window": "28d",
+            "filter": {
+              "with": "{{reads.deals.contact_emails}}"
+            },
+            "fields": [
+              "subject",
+              "snippet",
+              "date",
+              "replied"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "gmail:threads",
+        "hubspot:deals"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_deals",
+          "kind": "read"
+        },
+        {
+          "id": "read_threads",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D04-W05",
+      "version": 1,
+      "name": "Win/loss capture",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "closed HubSpot deals to capture a reason on; threads let me infer, otherwise I ask",
+        "platforms": [
+          "hubspot"
+        ],
+        "inputs": [],
+        "helpful": [
+          "gmail"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_closed",
+          "as": "closed",
+          "platform": "hubspot",
+          "query": {
+            "resource": "deals",
+            "window": "1d",
+            "filter": {
+              "stage": [
+                "closedwon",
+                "closedlost"
+              ],
+              "winLossCaptured": false
+            },
+            "fields": [
+              "id",
+              "name",
+              "amount",
+              "stage",
+              "contact_email"
+            ],
+            "limit": 20
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_threads",
+          "as": "threads",
+          "platform": "gmail",
+          "query": {
+            "resource": "threads",
+            "window": "90d",
+            "filter": {
+              "with": "{{reads.closed.contact_emails}}"
+            },
+            "fields": [
+              "subject",
+              "snippet",
+              "date"
+            ],
+            "limit": 100
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "gmail:threads",
+        "hubspot:deals"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_closed",
+          "kind": "read"
+        },
+        {
+          "id": "read_threads",
+          "kind": "read"
+        },
+        {
+          "id": "new_closes",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "hubspot",
+          "mutation": {
+            "action": "update_deal_properties",
+            "target": {
+              "dealIds": "{{decision.params.dealIds}}"
+            },
+            "params": {
+              "win_loss_reason": "{{decision.params.reasons}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D04-W06",
+      "version": 1,
+      "name": "Pipeline hygiene",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "open HubSpot deals — I only propose close-lost from rows that are actually stale",
+        "platforms": [
+          "hubspot"
+        ],
+        "inputs": [],
+        "helpful": []
+      },
+      "reads": [
+        {
+          "nodeId": "read_deals",
+          "as": "deals",
+          "platform": "hubspot",
+          "query": {
+            "resource": "deals",
+            "filter": {
+              "stage": "open"
+            },
+            "fields": [
+              "id",
+              "name",
+              "stage",
+              "amount",
+              "close_date",
+              "last_activity",
+              "days_stale"
+            ],
+            "limit": 500
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "hubspot:deals"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_deals",
+          "kind": "read"
+        },
+        {
+          "id": "dead_deals",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "hubspot",
+          "mutation": {
+            "action": "update_deal_stage",
+            "target": {
+              "dealIds": "{{decision.params.dealIds}}"
+            },
+            "params": {
+              "stage": "closedlost",
+              "reason": "no activity 30+ days (Unc pipeline hygiene)"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D05-W01",
+      "version": 1,
+      "name": "Welcome flow tuning",
+      "outputKind": "email",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a Klaviyo Welcome Series and a Shopify store — this routine is for stores",
+        "platforms": [
+          "klaviyo",
+          "shopify"
+        ],
+        "inputs": [],
+        "helpful": []
+      },
+      "reads": [
+        {
+          "nodeId": "read_flow",
+          "as": "flow",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "flows",
+            "filter": {
+              "name": "Welcome Series"
+            },
+            "fields": [
+              "id",
+              "status",
+              "messages"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_perf",
+          "as": "perf",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "metrics",
+            "window": "28d",
+            "filter": {
+              "flowName": "Welcome Series"
+            },
+            "groupBy": [
+              "message_id"
+            ],
+            "fields": [
+              "sends",
+              "opens",
+              "clicks",
+              "placed_orders",
+              "revenue"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_orders",
+          "as": "orders",
+          "platform": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "28d",
+            "filter": {
+              "firstOrder": true
+            },
+            "fields": [
+              "id",
+              "total_price",
+              "customer_id"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "klaviyo:flows",
+        "klaviyo:metrics",
+        "shopify:orders"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_flow",
+          "kind": "read"
+        },
+        {
+          "id": "read_perf",
+          "kind": "read"
+        },
+        {
+          "id": "read_orders",
+          "kind": "read"
+        },
+        {
+          "id": "enough_sends",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "klaviyo",
+          "mutation": {
+            "action": "update_flow_message",
+            "target": {
+              "messageId": "{{decision.params.messageId}}"
+            },
+            "params": {
+              "subject": "{{decision.params.subject}}",
+              "previewText": "{{decision.params.preview}}",
+              "body": "{{decision.params.body}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D05-W02",
+      "version": 1,
+      "name": "Abandoned cart recovery",
+      "outputKind": "email",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a Shopify store with abandoned checkouts this week — this routine is for stores",
+        "platforms": [
+          "shopify"
+        ],
+        "inputs": [],
+        "helpful": [
+          "klaviyo"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_checkouts",
+          "as": "checkouts",
+          "platform": "shopify",
+          "query": {
+            "resource": "checkouts",
+            "window": "7d",
+            "filter": {
+              "abandoned": true
+            },
+            "fields": [
+              "id",
+              "email",
+              "total_price",
+              "line_items",
+              "abandoned_at"
+            ],
+            "limit": 500
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_flow",
+          "as": "flow",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "flows",
+            "filter": {
+              "name": "Abandoned Cart"
+            },
+            "fields": [
+              "id",
+              "status",
+              "messages"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_perf",
+          "as": "perf",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "metrics",
+            "window": "28d",
+            "filter": {
+              "flowName": "Abandoned Cart"
+            },
+            "fields": [
+              "sends",
+              "clicks",
+              "placed_orders",
+              "revenue"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "klaviyo:flows",
+        "klaviyo:metrics",
+        "shopify:checkouts"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_checkouts",
+          "kind": "read"
+        },
+        {
+          "id": "read_flow",
+          "kind": "read"
+        },
+        {
+          "id": "read_perf",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D05-W03",
+      "version": 1,
+      "name": "Segmentation refresh",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a Shopify store with customer rows, plus Klaviyo segments — this routine is for stores",
+        "platforms": [
+          "shopify",
+          "klaviyo"
+        ],
+        "inputs": [],
+        "helpful": []
+      },
+      "reads": [
+        {
+          "nodeId": "read_customers",
+          "as": "customers",
+          "platform": "shopify",
+          "query": {
+            "resource": "customers",
+            "window": "365d",
+            "fields": [
+              "id",
+              "email",
+              "orders_count",
+              "total_spent",
+              "last_order_at"
+            ],
+            "limit": 5000
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_segments",
+          "as": "segments",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "segments",
+            "fields": [
+              "id",
+              "name",
+              "definition",
+              "profile_count"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "klaviyo:segments",
+        "shopify:customers"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_customers",
+          "kind": "read"
+        },
+        {
+          "id": "read_segments",
+          "kind": "read"
+        },
+        {
+          "id": "drift",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "klaviyo",
+          "mutation": {
+            "action": "update_segment_definitions",
+            "target": {
+              "segmentIds": "{{decision.params.segmentIds}}"
+            },
+            "params": {
+              "definitions": "{{decision.params.definitions}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D05-W04",
+      "version": 1,
+      "name": "Winback campaign prep",
+      "outputKind": "email",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a Shopify store with lapsed customers — this routine is for stores",
+        "platforms": [
+          "shopify"
+        ],
+        "inputs": [],
+        "helpful": [
+          "klaviyo"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_lapsed",
+          "as": "lapsed",
+          "platform": "shopify",
+          "query": {
+            "resource": "customers",
+            "window": "365d",
+            "filter": {
+              "lastOrderOlderThanDays": 90,
+              "ordersCount": {
+                "gte": 1
+              }
+            },
+            "fields": [
+              "id",
+              "email",
+              "orders_count",
+              "total_spent",
+              "last_order_at"
+            ],
+            "limit": 5000
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_history",
+          "as": "history",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "campaigns",
+            "window": "180d",
+            "filter": {
+              "tag": "winback"
+            },
+            "fields": [
+              "id",
+              "subject",
+              "sends",
+              "clicks",
+              "revenue"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "klaviyo:campaigns",
+        "shopify:customers"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_lapsed",
+          "kind": "read"
+        },
+        {
+          "id": "read_history",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    },
+    {
+      "routineId": "D05-W05",
+      "version": 1,
+      "name": "Post-purchase education",
+      "outputKind": "email",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a Shopify store with recent orders — this routine is for stores",
+        "platforms": [
+          "shopify",
+          "klaviyo"
+        ],
+        "inputs": [],
+        "helpful": [
+          "gorgias"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_orders",
+          "as": "orders",
+          "platform": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "28d",
+            "fields": [
+              "id",
+              "line_items",
+              "customer_id",
+              "created_at"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_tickets",
+          "as": "tickets",
+          "platform": "gorgias",
+          "query": {
+            "resource": "tickets",
+            "window": "28d",
+            "filter": {
+              "tag": "how-to"
+            },
+            "fields": [
+              "subject",
+              "product"
+            ],
+            "limit": 200
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_flow",
+          "as": "flow",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "flows",
+            "filter": {
+              "name": "Post-Purchase"
+            },
+            "fields": [
+              "id",
+              "status",
+              "messages"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "gorgias:tickets",
+        "klaviyo:flows",
+        "shopify:orders"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_orders",
+          "kind": "read"
+        },
+        {
+          "id": "read_tickets",
+          "kind": "read"
+        },
+        {
+          "id": "read_flow",
+          "kind": "read"
+        },
+        {
+          "id": "has_questions",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "klaviyo",
+          "mutation": {
+            "action": "add_flow_message",
+            "target": {
+              "flowId": "{{decision.params.flowId}}"
+            },
+            "params": {
+              "position": "after_delivery_day_3",
+              "subject": "{{decision.params.subject}}",
+              "body": "{{decision.params.body}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D05-W06",
+      "version": 1,
+      "name": "Review request timing",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a Shopify store with deliveries to time the review request from — this routine is for stores",
+        "platforms": [
+          "shopify",
+          "klaviyo"
+        ],
+        "inputs": [],
+        "helpful": [
+          "gorgias"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_orders",
+          "as": "orders",
+          "platform": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "90d",
+            "fields": [
+              "id",
+              "created_at",
+              "delivered_at",
+              "customer_id"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_reviews",
+          "as": "reviews",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "metrics",
+            "window": "90d",
+            "filter": {
+              "metric": "Submitted Review"
+            },
+            "groupBy": [
+              "days_since_delivery"
+            ],
+            "fields": [
+              "count"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_flow",
+          "as": "flow",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "flows",
+            "filter": {
+              "name": "Review Request"
+            },
+            "fields": [
+              "id",
+              "status",
+              "delay_days"
+            ]
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_tickets",
+          "as": "tickets",
+          "platform": "gorgias",
+          "query": {
+            "resource": "tickets",
+            "window": "7d",
+            "filter": {
+              "status": "open"
+            },
+            "fields": [
+              "customer_email"
+            ],
+            "limit": 500
+          },
+          "optional": false,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "gorgias:tickets",
+        "klaviyo:flows",
+        "klaviyo:metrics",
+        "shopify:orders"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_orders",
+          "kind": "read"
+        },
+        {
+          "id": "read_reviews",
+          "kind": "read"
+        },
+        {
+          "id": "read_flow",
+          "kind": "read"
+        },
+        {
+          "id": "read_tickets",
+          "kind": "read"
+        },
+        {
+          "id": "enough_reviews",
+          "kind": "check"
+        },
+        {
+          "id": "decide",
+          "kind": "decide"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": [
+        {
+          "platform": "klaviyo",
+          "mutation": {
+            "action": "update_flow_delay",
+            "target": {
+              "flowId": "{{decision.params.flowId}}"
+            },
+            "params": {
+              "delayDays": "{{decision.params.delayDays}}",
+              "suppressIf": "open_support_ticket"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "routineId": "D05-W07",
+      "version": 1,
+      "name": "Campaign calendar prep",
+      "outputKind": "calendar",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "the goal + the plan + what the business sells; order history makes the timing real",
+        "platforms": [],
+        "inputs": [
+          "about_the_business"
+        ],
+        "helpful": [
+          "shopify",
+          "klaviyo"
+        ]
+      },
+      "reads": [
+        {
+          "nodeId": "read_orders",
+          "as": "orders",
+          "platform": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "365d",
+            "groupBy": [
+              "week"
+            ],
+            "fields": [
+              "count",
+              "revenue"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_campaigns",
+          "as": "campaigns",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "campaigns",
+            "window": "90d",
+            "fields": [
+              "id",
+              "subject",
+              "send_time",
+              "revenue",
+              "unsubscribes"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_products",
+          "as": "products",
+          "platform": "shopify",
+          "query": {
+            "resource": "products",
+            "filter": {
+              "launchingWithinDays": 60
+            },
+            "fields": [
+              "title",
+              "launch_date"
+            ],
+            "limit": 20
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "klaviyo:campaigns",
+        "shopify:orders",
+        "shopify:products"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_orders",
+          "kind": "read"
+        },
+        {
+          "id": "read_campaigns",
+          "kind": "read"
+        },
+        {
+          "id": "read_products",
+          "kind": "read"
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
+    }
+  ]
+}

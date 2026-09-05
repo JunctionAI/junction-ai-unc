@@ -34,6 +34,7 @@ import { HttpN8nBridge } from "./providers/n8n";
 import { createProducerClient, DbProducerContext, LlmProducer } from "./providers/producer";
 import type { ScheduleCandidate } from "./scheduler";
 import { defaultCredentialProvider, serviceDb } from "./wiring";
+import { accountDataReader } from "../lib/data/datasets";
 
 /** Hard constant. See the box above — flipping it is founder-gated (Wave 2). */
 export const LIVE_MODE_ENABLED: boolean = false;
@@ -102,7 +103,7 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
   const personalisation = new StorePersonalisation(deps.store, db, { now });
   const llmDecider = new LlmDecisionProvider(deps.llm ?? null, { log: deps.log, personalisation });
   return {
-    reader: new WorkerConnectorReader({ credentials, now, log: deps.log, fetch: deps.fetch }),
+    reader: accountDataReader(new WorkerConnectorReader({ credentials, now, log: deps.log, fetch: deps.fetch }), db, process.env, now),
     // Rule-bound routines (D02-W01) decide deterministically; the LLM only writes the line.
     decider: new RulesDecisionProvider(llmDecider, { presets, writer: deps.llm ?? null, log: deps.log ? (event, fields) => deps.log?.info(event, fields) : undefined }),
     executor: new ActionExecutor({

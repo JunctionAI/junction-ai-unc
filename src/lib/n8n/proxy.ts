@@ -31,6 +31,7 @@ import { skillContextFrom } from "../artifacts/material";
 import { ALL_SYSTEMS } from "../platform/catalog";
 import type { CredentialProvider } from "../../worker/credentials";
 import { WorkerConnectorReader } from "../../worker/providers/connectorReader";
+import { accountDataReader, storedDataEnabled } from "../data/datasets";
 import { DbProducerContext, EmptyProducerContext, PLAYBOOKS_PER_PRODUCE, renderProfile } from "../../worker/providers/producer";
 import type { Reader } from "../../worker/readers/types";
 import type { CredentialsKind } from "../../worker/wiring";
@@ -54,6 +55,7 @@ export interface ProxyDeps {
   now?: () => Date;
   idGen?: () => string;
   fetch?: typeof fetch;
+  dataEnv?: Record<string, string | undefined>;
   /** Playbook recall; undefined = recallPlaybooks (env-gated), null = none. */
   playbooks?: ((query: string, domains: Skill["domain"][] | null, limit: number) => Promise<Playbook[]>) | null;
 }
@@ -182,18 +184,19 @@ export async function readForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, { o
     return r.id;
   };
 
-  const creds = await deps.credentials.get(claims.accountId, platform);
-  if (!creds) {
-    const secretStore = deps.credentialsKind === "none";
-    const reason = secretStore ? "the secret store is unavailable (CONNECTOR_SECRET_KEY is not set), so no connection can be unsealed" : `${platform} is not connected for this account`;
-    await receipt("notification", `Your n8n workflow asked ${platform} ${q.resource} — couldn’t ask: ${reason}.`, { rowCount: 0, provenance: "unavailable", reason });
-    return { ok: false, code: secretStore ? "secret_store_unavailable" : "not_connected", reason, status: 200 };
-  }
-  const reader = new WorkerConnectorReader({ credentials: deps.credentials, readers: deps.readers, now, fetch: deps.fetch });
   try {
+    const stored = storedDataEnabled(claims.accountId, platform, deps.dataEnv ?? {});
+    const creds = stored ? null : await deps.credentials.get(claims.accountId, platform);
+    if (!stored && !creds) {
+      const secretStore = deps.credentialsKind === "none";
+      const reason = secretStore ? "the secret store is unavailable (CONNECTOR_SECRET_KEY is not set), so no connection can be unsealed" : `${platform} is not connected for this account`;
+      await receipt("notification", `Your n8n workflow asked ${platform} ${q.resource} — couldn’t ask: ${reason}.`, { rowCount: 0, provenance: "unavailable", reason });
+      return { ok: false, code: secretStore ? "secret_store_unavailable" : "not_connected", reason, status: 200 };
+    }
+    const reader = accountDataReader(new WorkerConnectorReader({ credentials: deps.credentials, readers: deps.readers, now, fetch: deps.fetch }), deps.db, deps.dataEnv ?? {}, now);
     const res = await reader.read(platform, query, ctx);
-    const receiptId = await receipt("read", `Read ${platform} ${q.resource}${q.window ? ` over ${q.window}` : ""} via n8n: ${res.rows.length} rows.`, { rowCount: res.rows.length, metrics: res.metrics, fetchedAt: res.fetchedAt, provenance: res.provenance ?? "ok" });
-    return { ok: true, rows: res.rows, count: res.rows.length, metrics: res.metrics, provenance: { platform, resource: q.resource, window: q.window ?? null, fetchedAt: res.fetchedAt, source: res.provenance ?? "ok", via: "n8n", receiptId } };
+    const receiptId = await receipt("read", `Read ${platform} ${q.resource}${q.window ? ` over ${q.window}` : ""} via n8n: ${res.rows.length} rows.`, { rowCount: res.rows.length, metrics: res.metrics, fetchedAt: res.fetchedAt, provenance: res.provenance ?? "ok", ...(res.dataset ? { dataset: res.dataset } : {}), ...(res.sourceNote ? { sourceNote: res.sourceNote } : {}) });
+    return { ok: true, rows: res.rows, count: res.rows.length, metrics: res.metrics, provenance: { platform, resource: q.resource, window: q.window ?? null, fetchedAt: res.fetchedAt, source: res.provenance ?? "ok", via: "n8n", receiptId, ...(res.dataset ? { dataset: res.dataset } : {}), ...(res.sourceNote ? { sourceNote: res.sourceNote } : {}) } };
   } catch (err) {
     const reason = stripCouldntAsk(err instanceof Error ? err.message : String(err));
     await receipt("notification", `Your n8n workflow asked ${platform} ${q.resource} — couldn’t ask: ${reason}.`, { rowCount: 0, provenance: "unavailable", reason });

@@ -227,33 +227,33 @@ describe("tokens.ts on a provider-held row", () => {
     assertNoLeak(d.logs, ["meta-tok-FIXTURE"]);
   });
 
-  it("provider not configured any more / no connection id / masked token / provider error / expired → null + needs_reconnect with a code", async () => {
+  it("provider infrastructure failures preserve the connection for recovery", async () => {
     const id = await connectedViaComposio();
     const d0 = live({});
-    expect(await getAccessTokenFor(accountId, "meta_ads", tokenDeps(d0))).toBeNull();
-    expect(db.rows("connectors")[0]).toMatchObject({ status: "needs_reconnect", last_sync_result: "error:provider_not_configured" });
+    await expect(getAccessTokenFor(accountId, "meta_ads", tokenDeps(d0))).rejects.toMatchObject({ code: "configuration_error" });
+    expect(db.rows("connectors")[0]).toMatchObject({ status: "connected", last_sync_result: "error:auth_configuration_error" });
 
     await upsertConnector(db, accountId, "meta_ads", { status: "connected", sync_ref: providerRefPatch({ provider: "composio", connectionId: null, integration: "ac_meta" }) });
-    expect(await getAccessTokenFor(accountId, "meta_ads", tokenDeps(live(COMPOSIO_ENV)))).toBeNull();
-    expect(db.rows("connectors")[0].last_sync_result).toBe("error:provider_no_connection");
+    await expect(getAccessTokenFor(accountId, "meta_ads", tokenDeps(live(COMPOSIO_ENV)))).rejects.toMatchObject({ code: "configuration_error" });
+    expect(db.rows("connectors")[0].last_sync_result).toBe("error:auth_configuration_error");
 
     await upsertConnector(db, accountId, "meta_ads", { status: "connected", sync_ref: providerRefPatch({ provider: "composio", connectionId: "ca_1", integration: "ac_meta" }) });
     const masked = live(COMPOSIO_ENV);
     composioRoutes(masked, { id: "ca_1", status: "ACTIVE", state: { val: { access_token: "REDACTED" } } });
-    expect(await getAccessTokenFor(accountId, "meta_ads", tokenDeps(masked))).toBeNull();
-    expect(db.rows("connectors")[0].last_sync_result).toBe("error:provider_no_token");
+    await expect(getAccessTokenFor(accountId, "meta_ads", tokenDeps(masked))).rejects.toMatchObject({ code: "temporarily_unavailable" });
+    expect(db.rows("connectors")[0].last_sync_result).toBe("error:auth_temporarily_unavailable");
 
     await upsertConnector(db, accountId, "meta_ads", { status: "connected" });
     const down = live(COMPOSIO_ENV);
     down.routes.push(() => json({ error: "x" }, 503));
-    expect(await getAccessTokenFor(accountId, "meta_ads", tokenDeps(down))).toBeNull();
-    expect(db.rows("connectors")[0].last_sync_result).toBe("error:provider_http_503");
+    await expect(getAccessTokenFor(accountId, "meta_ads", tokenDeps(down))).rejects.toMatchObject({ code: "temporarily_unavailable" });
+    expect(db.rows("connectors")[0].last_sync_result).toBe("error:auth_temporarily_unavailable");
 
     await upsertConnector(db, accountId, "meta_ads", { status: "connected" });
     const stale = live(COMPOSIO_ENV);
     composioRoutes(stale, { id: "ca_1", status: "ACTIVE", state: { val: { access_token: "old", expires_at: "2026-09-01T00:00:00Z" } } });
-    expect(await getAccessTokenFor(accountId, "meta_ads", tokenDeps(stale))).toBeNull();
-    expect(db.rows("connectors")[0].last_sync_result).toBe("error:provider_token_expired");
+    await expect(getAccessTokenFor(accountId, "meta_ads", tokenDeps(stale))).rejects.toMatchObject({ code: "temporarily_unavailable" });
+    expect(db.rows("connectors")[0].last_sync_result).toBe("error:auth_temporarily_unavailable");
     expect(id).toBe(db.rows("connectors")[0].id);
   });
 });

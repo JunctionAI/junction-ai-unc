@@ -3,9 +3,9 @@
    getAccessToken(connectorId): opens the sealed bundle, refreshes it first when it is within
    REFRESH_SKEW_MS of expiry and the platform supports a refresh grant (Google, Klaviyo),
    re-seals under the current key (so a key rotation completes itself over time), and
-   returns the live access token. A refresh that fails, or an expired token that cannot be
-   refreshed (Meta), flips the row to needs_reconnect / 'error:token_refresh' and returns
-   null — the card shows Reconnect and the sync records "couldn't ask", never "empty".
+   returns the live access token. Confirmed invalid grants / expired non-renewable tokens
+   require reconnection. Temporary and application-configuration failures preserve the
+   connection and throw a coded error so callers never confuse them with missing consent.
 
    ConnectorCredentialProvider matches src/worker/credentials.ts structurally:
      interface CredentialProvider { get(accountId, platform): Promise<PlatformCredential | null> }
@@ -13,8 +13,9 @@
    owned elsewhere and must stay importable without this module). When the worker is switched
    to live credentials it passes `new ConnectorCredentialProvider(deps)` as `credentials`. */
 
-import type { DbClient } from "../db/types";
-import { needsReseal, open, seal, SecretStoreError, type Keyring } from "./crypto";
+import { unwrap, type DbClient } from "../db/types";
+import { claimLease, releaseLease } from "./lease";
+import { needsReseal, open, seal, type Keyring } from "./crypto";
 import { bundleFromResponse, refreshTokens, TokenCallError, type FetchLike, type TokenBundle } from "./oauth";
 import { connectorEntry, platformCredentials } from "./registry";
 import { getConnector, getConnectorById, getSecret, putSecret, updateConnector, type ConnectorRow } from "./store";
@@ -23,6 +24,33 @@ import { AuthProviderError, providerRefOf, type ProviderRef } from "./providers/
 import type { Platform } from "../runtime/types";
 
 export const REFRESH_SKEW_MS = 5 * 60 * 1000;
+
+export class TokenAccessError extends Error {
+  constructor(readonly code: "temporarily_unavailable" | "configuration_error") {
+    super(code === "temporarily_unavailable" ? "connection temporarily unavailable; retry later" : "connection configuration requires operator attention");
+    this.name = "TokenAccessError";
+  }
+}
+
+// Coalesce calls sharing a database client. This is process-local; a distributed lease
+// is still required before multiple independent refresh owners are enabled.
+const tokenFlights = new WeakMap<DbClient, Map<string, Promise<AccessToken | null>>>();
+
+async function singleFlight(row: ConnectorRow, deps: TokenDeps): Promise<AccessToken | null> {
+  let flights = tokenFlights.get(deps.db);
+  if (!flights) { flights = new Map(); tokenFlights.set(deps.db, flights); }
+  const running = flights.get(row.id);
+  if (running) return running;
+  const flight = tokenForRow(row, deps);
+  flights.set(row.id, flight);
+  try { return await flight; } finally { if (flights.get(row.id) === flight) flights.delete(row.id); }
+}
+
+async function unavailable(deps: TokenDeps, row: ConnectorRow, code: TokenAccessError["code"]): Promise<never> {
+  deps.log?.(`connectors.token platform=${row.platform} connector=${row.id} result=${code}`);
+  try { await updateConnector(deps.db, row.id, { last_sync_result: `error:auth_${code}` }); } catch { /* preserve original error */ }
+  throw new TokenAccessError(code);
+}
 
 export interface TokenDeps {
   db: DbClient;
@@ -51,21 +79,21 @@ async function markReconnect(deps: TokenDeps, row: ConnectorRow, code: string) {
   }
 }
 
-/** Live token for a connector row, refreshed + re-sealed as needed. null = reconnect required. */
+/** null = absent/unusable connection; TokenAccessError = infrastructure/provider failure. */
 export async function getAccessToken(connectorId: string, deps: TokenDeps): Promise<AccessToken | null> {
   const row = await getConnectorById(deps.db, connectorId);
   if (!row) return null;
-  return tokenForRow(row, deps);
+  return singleFlight(row, deps);
 }
 
 /** Same, keyed by (account, platform). */
 export async function getAccessTokenFor(accountId: string, platform: Platform, deps: TokenDeps): Promise<AccessToken | null> {
   const row = await getConnector(deps.db, accountId, platform);
   if (!row) return null;
-  return tokenForRow(row, deps);
+  return singleFlight(row, deps);
 }
 
-async function tokenForRow(row: ConnectorRow, deps: TokenDeps): Promise<AccessToken | null> {
+async function tokenForRow(row: ConnectorRow, deps: TokenDeps, leaseHolder?: string): Promise<AccessToken | null> {
   if (row.status !== "connected") return null;
   const entry = connectorEntry(row.platform);
   if (!entry || entry.flow === "none") return null;
@@ -85,36 +113,71 @@ async function tokenForRow(row: ConnectorRow, deps: TokenDeps): Promise<AccessTo
   try {
     bundle = JSON.parse(open(sealed, deps.keyring, row.id)) as TokenBundle;
   } catch (e) {
-    await markReconnect(deps, row, e instanceof SecretStoreError ? `secret_${e.code}` : "secret_malformed");
-    return null;
+    // A missing decryption key is an operator issue; another customer login cannot fix it.
+    void e;
+    return unavailable(deps, row, "configuration_error");
   }
 
   const now = deps.now();
+  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) return unavailable(deps, row, "configuration_error");
   const expiresAt = bundle.expiresAt ? new Date(bundle.expiresAt).getTime() : null;
+  if (typeof bundle.accessToken !== "string" || !bundle.accessToken.trim() || (expiresAt !== null && !Number.isFinite(expiresAt))) return unavailable(deps, row, "configuration_error");
   const expiring = expiresAt !== null && expiresAt - now.getTime() < REFRESH_SKEW_MS;
+  const renewable = entry.refresh === "refresh_token" && typeof bundle.refreshToken === "string" && Boolean(bundle.refreshToken);
   let rewrite = needsReseal(sealed, deps.keyring);
 
-  if (expiring) {
-    if (entry.refresh !== "refresh_token" || !bundle.refreshToken) {
-      await markReconnect(deps, row, "token_expired");
-      return null;
-    }
-    const creds = platformCredentials(entry.id, deps.env);
-    if (!creds) {
-      await markReconnect(deps, row, "platform_not_configured");
-      return null;
-    }
+  if (((expiring && renewable) || rewrite) && !leaseHolder && deps.env.CONNECTOR_REFRESH_LEASES_ENABLED === "true") {
+    const key = `connector:${row.id}`;
+    const holder = await claimLease(deps.db, key);
+    if (!holder) return unavailable(deps, row, "temporarily_unavailable");
+    let completed = false;
     try {
-      const fresh = await refreshTokens(deps.fetch, entry, { refreshToken: bundle.refreshToken, clientId: creds.clientId, clientSecret: creds.clientSecret });
-      bundle = bundleFromResponse(fresh, now, bundle);
-      rewrite = true;
-    } catch (e) {
-      await markReconnect(deps, row, e instanceof TokenCallError ? `token_refresh_${e.code}` : "token_refresh");
-      return null;
+      // Another process may have renewed or disconnected it since our first read.
+      const current = await getConnectorById(deps.db, row.id);
+      const token = current ? await tokenForRow(current, deps, holder) : null;
+      completed = true;
+      return token;
+    } finally { if (completed) await releaseLease(deps.db, key, holder); }
+  }
+
+  if (expiring) {
+    if (!renewable) {
+      // A non-renewable token remains valid until actual expiry, not the refresh skew.
+      if (expiresAt !== null && expiresAt <= now.getTime()) {
+        await markReconnect(deps, row, "token_expired");
+        return null;
+      }
+    } else {
+      const creds = platformCredentials(entry.id, deps.env);
+      if (!creds) {
+        return unavailable(deps, row, "configuration_error");
+      }
+      try {
+        const fresh = await refreshTokens(deps.fetch, entry, { refreshToken: bundle.refreshToken!, clientId: creds.clientId, clientSecret: creds.clientSecret });
+        bundle = bundleFromResponse(fresh, now, bundle);
+        rewrite = true;
+      } catch (e) {
+        if (e instanceof TokenCallError && e.oauthError === "invalid_grant") {
+          await markReconnect(deps, row, `token_refresh_${e.code}`);
+          return null;
+        }
+        const config = e instanceof TokenCallError && ["invalid_client", "unauthorized_client", "invalid_scope", "unsupported_grant_type", "invalid_request"].includes(e.oauthError ?? "");
+        return unavailable(deps, row, config ? "configuration_error" : "temporarily_unavailable");
+      }
     }
   }
 
-  if (rewrite) await putSecret(deps.db, row.id, seal(JSON.stringify(bundle), deps.keyring, row.id), now.toISOString());
+  if (rewrite) {
+    const next = seal(JSON.stringify(bundle), deps.keyring, row.id);
+    if (leaseHolder) {
+      const committed = await unwrap<boolean>("commit connector token", deps.db.rpc("commit_connector_token", {
+        p_connector_id: row.id, p_holder: leaseHolder, p_expected_ciphertext: sealed.ciphertext,
+        p_ciphertext: next.ciphertext, p_iv: next.iv, p_tag: next.tag, p_key_version: next.keyVersion,
+      }));
+      if (!committed) return unavailable(deps, row, "temporarily_unavailable");
+    } else await putSecret(deps.db, row.id, next, now.toISOString());
+  }
+  if (row.last_sync_result?.startsWith("error:auth_")) await updateConnector(deps.db, row.id, { last_sync_result: null });
 
   return { accessToken: bundle.accessToken, platform: entry.id as Platform, externalRef: row.external_ref, expiresAt: bundle.expiresAt ?? null, ...(bundle.refreshToken ? { refreshToken: bundle.refreshToken } : {}) };
 }
@@ -122,24 +185,27 @@ async function tokenForRow(row: ConnectorRow, deps: TokenDeps): Promise<AccessTo
 async function tokenViaProvider(row: ConnectorRow, ref: ProviderRef, deps: TokenDeps, platform: Platform): Promise<AccessToken | null> {
   const provider = makeAuthProvider(ref.provider, { env: deps.env, fetch: deps.fetch, now: deps.now });
   if (!provider || !provider.supports(platform)) {
-    await markReconnect(deps, row, "provider_not_configured");
-    return null;
+    return unavailable(deps, row, "configuration_error");
   }
   if (!ref.connectionId) {
-    await markReconnect(deps, row, "provider_no_connection");
-    return null;
+    return unavailable(deps, row, "configuration_error");
   }
   try {
     const tok = await provider.getAccessToken({ accountId: row.account_id, platform, connectionId: ref.connectionId });
-    if (tok.expiresAt && new Date(tok.expiresAt).getTime() <= deps.now().getTime()) {
+    if (!tok.accessToken || (tok.expiresAt && (!Number.isFinite(Date.parse(tok.expiresAt)) || new Date(tok.expiresAt).getTime() <= deps.now().getTime()))) {
       // The provider handed back a token it did not refresh — treat as expired, never use it.
-      await markReconnect(deps, row, "provider_token_expired");
-      return null;
+      return unavailable(deps, row, "temporarily_unavailable");
     }
+    if (row.last_sync_result?.startsWith("error:auth_")) await updateConnector(deps.db, row.id, { last_sync_result: null });
     return { accessToken: tok.accessToken, platform, externalRef: row.external_ref, expiresAt: tok.expiresAt, ...(tok.refreshToken ? { refreshToken: tok.refreshToken } : {}) };
   } catch (e) {
-    await markReconnect(deps, row, e instanceof AuthProviderError ? `provider_${e.code}` : "provider_unexpected");
-    return null;
+    if (e instanceof TokenAccessError) throw e;
+    if (e instanceof AuthProviderError && e.code === "not_connected") {
+      await markReconnect(deps, row, "provider_not_connected");
+      return null;
+    }
+    const config = e instanceof AuthProviderError && ["not_configured", "no_integration", "http_401", "http_403"].includes(e.code);
+    return unavailable(deps, row, config ? "configuration_error" : "temporarily_unavailable");
   }
 }
 

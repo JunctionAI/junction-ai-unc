@@ -178,8 +178,8 @@ describe("meta — first live contact", () => {
     expect(res.count).toBe(3);
     expect(res.rows[0]).toMatchObject({ campaign_id: "c1", spend: 420.17, purchases: 19, purchase_value: 1302, roas: 3.098, cpa: 22.11, impressions: 51230 });
     expect(res.rows[1]).toMatchObject({ purchases: 9, purchase_value: 546, roas: 2.1 });
-    expect(res.rows[2]).toMatchObject({ purchases: 0, purchase_value: 0, roas: 0, cpa: null });
-    expect(res.metrics).toMatchObject({ spend: 690.17, purchases: 28, purchase_value: 1848, roas: 2.68, top_adset_name: "Prospecting", worst_ad_name: "Retargeting" });
+    expect(res.rows[2]).toMatchObject({ purchases: null, purchase_value: null, roas: null, cpa: null });
+    expect(res.metrics).toMatchObject({ spend: 690.17, purchases: null, purchase_value: null, roas: null, top_adset_name: null, worst_ad_name: null, daily_budget_total: null, projected_daily_spend: null });
     expect(res.provenance.note).toContain("2 pages");
     expect(JSON.stringify(res)).not.toContain(FAKE_META);
   });
@@ -192,10 +192,34 @@ describe("meta — first live contact", () => {
     expect(res.ok && res.metrics).toEqual({ daily_budget_total: 100, count: 2 });
   });
 
+  it("rejects capped pagination rather than returning partial totals", async () => {
+    const { calls } = routedFetch([() => ({ body: { data: [{ spend: "1" }], paging: { next: "https://example.invalid/next", cursors: { after: "cursor" } } } })]);
+    const res = await meta.read({ resource: "insights" }, creds, { now });
+    expect(res).toEqual({ ok: false, reason: "Meta pagination is incomplete after 5 pages; narrow the query or use a complete ingestion job" });
+    expect(calls).toHaveLength(5);
+  });
+
+  it.each([undefined, ""])("rejects an unusable next cursor %s", async after => {
+    routedFetch([() => ({ body: { data: [{ spend: "1" }], paging: { next: "https://example.invalid/next", cursors: { after } } } })]);
+    expect(await meta.read({ resource: "insights" }, creds, { now })).toMatchObject({ ok: false, reason: expect.stringContaining("no usable cursor") });
+  });
+
+  it("distinguishes an explicit empty action array from omitted purchase data", async () => {
+    routedFetch([() => ({ body: { data: [{ spend: "1", actions: [], action_values: [], purchase_roas: [] }] } })]);
+    const res = await meta.read({ resource: "insights" }, creds, { now });
+    expect(res.ok && res.metrics).toMatchObject({ purchases: 0, purchase_value: 0, roas: 0, cpa: null });
+  });
+
+  it("does not certify missing spend as zero", async () => {
+    routedFetch([() => ({ body: { data: [{ actions: [] }] } })]);
+    expect(await meta.read({ resource: "insights" }, creds, { now })).toMatchObject({ ok: false, reason: expect.stringContaining("spend") });
+  });
+
   it("rows without the purchase fields are named in provenance, and the platform's error is the reason", async () => {
     routedFetch([() => ({ body: { data: [{ campaign_id: "c9", spend: "1.00" }] } })]);
     const res = await meta.read({ resource: "insights", window: "1d" }, creds, { now });
-    expect(res.ok && res.provenance.note).toContain("fields absent from every row (read as 0): actions, action_values, purchase_roas");
+    expect(res.ok && res.provenance.note).toContain("fields absent from every row: actions, action_values, purchase_roas");
+    expect(res.ok && res.metrics).toMatchObject({ purchases: null, purchase_value: null, roas: null, cpa: null });
     routedFetch([() => ({ body: P.META_ERROR_190, status: 400 })]);
     expect(await meta.read({ resource: "insights" }, creds, { now })).toEqual({ ok: false, reason: `HTTP 400 from graph.facebook.com/${meta.META_GRAPH_VERSION}/act_1234567890/insights` });
   });

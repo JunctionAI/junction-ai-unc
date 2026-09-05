@@ -15,5 +15,6 @@ export function proxyDeps(env: Record<string, string | undefined> = process.env)
     credentials: defaultCredentialProvider(env),
     credentialsKind: credentialsKind({ db, keyring: envKeyring(env) }),
     db,
+    dataEnv: env,
   };
 }

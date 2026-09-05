@@ -72,6 +72,13 @@ describe("authenticate", () => {
 });
 
 describe("reads", () => {
+  it("records credential-service outages as operational failures, not disconnected accounts", async () => {
+    const auth = await authenticate(deps, req("/x", token()));
+    if (!auth.ok) throw new Error("auth failed");
+    deps.credentials = { get: async () => { throw new Error("connection temporarily unavailable; retry later"); } };
+    expect(await readForToken(deps, auth, { platform: "shopify", resource: "products" })).toMatchObject({ ok: false, code: "platform_error", reason: expect.stringContaining("temporarily unavailable") });
+    expect(await store.listReceipts(ACCT, { runId: "run-1" })).toHaveLength(1);
+  });
   it("parses the query (fields / filter as JSON) and rejects bad shapes", () => {
     const ok = parseReadQuery(new URLSearchParams({ platform: "shopify", resource: "products", window: "28d", limit: "20", fields: '["title","tags"]', filter: '{"status":"active"}' }));
     expect(ok).toMatchObject({ ok: true, query: { platform: "shopify", resource: "products", window: "28d", limit: 20, fields: ["title", "tags"], filter: { status: "active" } } });

@@ -34,6 +34,7 @@ import { createLogger, type Logger } from "./log";
 import { dueRoutines, type DueRoutine } from "./scheduler";
 import { buildAdapters, collectCandidates, LIVE_MODE_ENABLED, triggerRun, WORKER_RUN_MODE, type BuiltAdapters, type ServiceDeps } from "./service";
 import { runBenchmarks, runDailyBrief, runKpiSnapshot, runMeasure, runSelfReview, type TelemetryDeps } from "./telemetry";
+import { runDatasetSyncTick } from "./datasets";
 import { runChannelsTick, type ChannelsTickReport } from "./channels";
 import { keyringFromEnv } from "../lib/connectors/crypto";
 import type { SelfReviewLlm } from "../lib/telemetry/selfReview";
@@ -197,6 +198,7 @@ export class Worker {
       this.log.error("tick.error", { error: message });
     }
     // Housekeeping after the routines: each part isolates its own failures.
+    try { await runDatasetSyncTick(this.deps); } catch { this.log.warn("dataset.scheduler_failed", { reason: "data sync unavailable" }); }
     if (this.opts.jobs ?? true) report.jobs = await this.runDueJobs(now);
     if (this.opts.briefs ?? true) report.briefs = await this.runDueBriefs(now);
     if (this.deps.db) {

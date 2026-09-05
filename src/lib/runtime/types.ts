@@ -99,6 +99,8 @@ export interface ReadResult {
   /** Optional provenance: "ok" | "empty" | "error:<code>" — mirrors
       connectors.last_sync_result so "couldn't ask" ≠ "nothing happened". */
   provenance?: string;
+  sourceNote?: string;
+  dataset?: { id: string; servedFrom: "stored"; storedAt: string };
 }
 
 // ---------- spend ----------

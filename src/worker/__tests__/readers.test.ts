@@ -213,7 +213,7 @@ describe("meta reader", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.rows[0]).toMatchObject({ spend: 100.5, purchases: 5, purchase_value: 300, roas: 2.99 });
-    expect(res.metrics).toMatchObject({ spend: 150.5, purchases: 5, purchase_value: 300, top_adset_id: "a1", top_adset_name: "Prospecting", top_adset_roas: 2.99, worst_ad_name: "Retargeting", worst_frequency: 4.1 });
+    expect(res.metrics).toMatchObject({ spend: 150.5, purchases: 5, purchase_value: 300, top_adset_id: "a1", top_adset_name: "Prospecting", top_adset_roas: 2.99, worst_ad_name: null, worst_frequency: null, daily_budget_total: null });
     expect(res.provenance.note).toContain("dropped non-insights fields: daily_budget");
 
     const [{ url, init }] = calls;

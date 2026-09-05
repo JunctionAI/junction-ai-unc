@@ -243,10 +243,36 @@ export async function read(query: ReadQuery, creds: PlatformCredential, opts: Re
     if (!Array.isArray(data)) return fail(`meta_ads ${query.resource}: response had no data array`);
     raw.push(...(data as Row[]));
     pages++;
+    const paging = (res.json as { paging?: { next?: unknown; cursors?: { after?: unknown } } }).paging;
+    if (paging?.next && (typeof paging.next !== "string" || typeof paging.cursors?.after !== "string" || !paging.cursors.after.trim())) return fail("Meta pagination is incomplete: next page has no usable cursor");
     url = nextCursorUrl(url, res.json);
   }
+  if (url) return fail(`Meta pagination is incomplete after ${MAX_PAGES} pages; narrow the query or use a complete ingestion job`);
   const rows = query.resource === "insights" ? raw.map(normaliseInsightRow) : raw.map(normaliseBudgetRow);
   const missing = query.resource === "insights" ? missingInsightFields(rows) : [];
-  const note = `${shaped.note} (${pages} page${pages === 1 ? "" : "s"}${url ? ", more available — capped" : ""})${missing.length ? `; fields absent from every row (read as 0): ${missing.join(", ")}` : ""}${query.resource === "campaigns" || query.resource === "adsets" ? "; budgets converted from minor units" : ""}`;
-  return ok(PLATFORM, rows, metaMetrics(query.resource, rows), now().toISOString(), "live", note);
+  const note = `${shaped.note} (${pages} page${pages === 1 ? "" : "s"})${missing.length ? `; fields absent from every row: ${missing.join(", ")}; purchase metrics require source validation` : ""}${query.resource === "campaigns" || query.resource === "adsets" ? "; budgets converted from minor units" : ""}`;
+  if (query.resource === "insights" && raw.some(r => r.spend === undefined || r.spend === null || r.spend === "" || !Number.isFinite(Number(r.spend)))) return fail("Meta insights are incomplete: spend is missing or invalid");
+  const metrics = metaMetrics(query.resource, rows);
+  if (query.resource === "insights") {
+    // Budgets require a separate object read. A campaign-level report cannot identify
+    // an ad set or an ad to mutate, even if a campaign has a similar name.
+    metrics.daily_budget_total = null;
+    metrics.projected_daily_spend = null;
+    metrics.top_adset_daily_budget = null;
+    if (raw.some(r => !r.adset_id)) {
+      metrics.top_adset_id = null; metrics.top_adset_name = null; metrics.top_adset_roas = null;
+    }
+    if (raw.some(r => !r.ad_id)) {
+      metrics.worst_ad_id = null; metrics.worst_ad_name = null; metrics.worst_frequency = null; metrics.worst_spend = null;
+    }
+  }
+  if (query.resource === "insights" && raw.some(r => !Array.isArray(r.actions) && r.purchases === undefined)) {
+    for (const row of rows) { if (!Array.isArray(row.actions)) { row.purchases = null; row.cpa = null; } }
+    metrics.purchases = null; metrics.cpa = null;
+  }
+  if (query.resource === "insights" && raw.some(r => !Array.isArray(r.action_values) && r.purchase_value === undefined)) {
+    for (const row of rows) { if (!Array.isArray(row.action_values)) { row.purchase_value = null; if (!Array.isArray(row.purchase_roas)) row.roas = null; } }
+    metrics.purchase_value = null; metrics.roas = null;
+  }
+  return ok(PLATFORM, rows, metrics, now().toISOString(), "live", note);
 }

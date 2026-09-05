@@ -59,7 +59,7 @@ export function verifyShopifyHmac(params: URLSearchParams, clientSecret: string)
 // ---------- token endpoint ----------
 
 export class TokenCallError extends Error {
-  constructor(readonly code: "timeout" | "network" | `http_${number}` | "malformed") {
+  constructor(readonly code: "timeout" | "network" | `http_${number}` | "malformed", readonly oauthError?: string) {
     super(`token call failed: ${code}`);
     this.name = "TokenCallError";
   }
@@ -100,7 +100,14 @@ export async function postToken(
   } catch (e) {
     throw new TokenCallError(e instanceof Error && e.name === "TimeoutError" ? "timeout" : "network");
   }
-  if (!res.ok) throw new TokenCallError(`http_${res.status}`);
+  if (!res.ok) {
+    // Keep only known OAuth error codes. Never retain descriptions or response bodies,
+    // which can contain credentials. HTTP 400 alone does not establish revoked consent.
+    const errors = new Set(["invalid_grant", "invalid_client", "invalid_request", "unauthorized_client", "unsupported_grant_type", "invalid_scope", "temporarily_unavailable", "server_error"]);
+    const body = await res.json().catch(() => null) as { error?: unknown } | null;
+    const code = typeof body?.error === "string" && errors.has(body.error) ? body.error : undefined;
+    throw new TokenCallError(`http_${res.status}`, code);
+  }
   let json: unknown;
   try {
     json = await res.json();

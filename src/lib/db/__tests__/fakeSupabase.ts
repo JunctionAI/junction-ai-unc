@@ -66,7 +66,7 @@ export function loadSchema(dir = MIGRATIONS_DIR): Schema {
     const sql = stripComments(readFileSync(path.join(dir, f), "utf8"));
 
     // create table
-    const createRe = /create table (?:if not exists )?(\w+)\s*\(([\s\S]*?)\);/g;
+    const createRe = /create table (?:if not exists )?(?:public\.)?(\w+)\s*\(([\s\S]*?)\);/g;
     for (const m of sql.matchAll(createRe)) {
       const t = table(m[1]);
       for (const def of splitTopLevel(m[2])) {

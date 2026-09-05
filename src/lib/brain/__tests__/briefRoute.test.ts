@@ -29,6 +29,7 @@ const AP = "00000000-0000-4000-8000-00000000a001";
 const post = (body: unknown = {}) => POST(new Request("http://unc.test/api/unc/brief", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
 
 beforeEach(() => {
+  vi.useFakeTimers({ now: new Date("2026-09-02T18:31:00.000Z"), toFake: ["Date"] });
   setFakeEnv();
   clearLlmEnv();
   serviceRole = true;
@@ -45,6 +46,7 @@ beforeEach(() => {
   setStoreForTests(new SupabaseStore(db));
 });
 afterEach(() => {
+  vi.useRealTimers();
   restoreEnv();
   restoreLlmEnv();
   setProviderFactoryForTests(undefined);

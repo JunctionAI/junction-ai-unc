@@ -5,6 +5,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
   it("parses every table the app touches, with 0002/0003/0004/0005/0006/0007/0009/0010/0012/0013/0014/0015/0016 columns and keys", () => {
     const s = migrationSchema();
     expect(Object.keys(s).sort()).toEqual([
+      "account_dataset_snapshots",
       "account_members",
       "account_model_prefs",
       "account_presets",
@@ -15,6 +16,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "app_errors",
       "approvals",
       "artifacts",
+      "backend_leases",
       "benchmark_optins",
       "benchmarks",
       "beta_invites",
