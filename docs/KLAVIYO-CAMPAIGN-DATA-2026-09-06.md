@@ -77,4 +77,41 @@ The customer Connections data panel still explicitly reports required Meta reads
 only; the internal operator inspection includes campaign history. Optional calendar
 reads remain optional and are not falsely advertised as required readiness.
 
-App/worker release and runtime verification are recorded below once completed.
+## Matched production release
+
+- Source `dc41bc459c0e5b91188be88fd0b38d266b04dbd2` pushed and independently
+  matched with GitHub `ls-remote` on `codex/backend-foundation-20260905`.
+  Clean release worktree `/private/tmp/unc-campaign-data-release.8wh07H` excludes
+  the user's untracked `src/lib/runtime/context 2.ts`; no environment files copied.
+- **URL:** https://junction-unc.vercel.app/app
+  **Target/status:** production / READY. **Framework/build:** Next 16.3.4 / 34 seconds.
+  Vercel `dpl_4ig4xyZC5xHufxALRZ6zLQk2qB2P`; candidate
+  https://junction-ggg2t44ss-tom-junctionmedis-projects.vercel.app .
+  Candidate health matched source, DB healthy; anonymous connectors GET returned
+  401/no-store. Promoted only after the worker checks below passed.
+- Worker **release 36**, existing sole Sydney machine `1857466fd76998`, image
+  `sha256:dbecd419f0e04d2daf67224856ba1dde63901f6296b26508594ff27ead807cc3`,
+  tag `deployment-01M1SBYG226H4VK46P2TF80GBD`; started, health passing.
+- Deployed compiled verification **18:07:27.054 UTC**: campaign metadata/null
+  semantics and legacy admission isolation pass using synthetic transport;
+  pre-provider client isolation and whole-read deadline pass. Thirty real DB
+  GETs confirm pause/context/dataset readiness; no provider/credential calls,
+  real writes or live schedule tests. All five action flags are false. Existing
+  sync/reader flags and both new Klaviyo admission settings are absent/off.
+- Canonical health **18:07:58.642 UTC**: source `dc41bc459c0e`, DB healthy,
+  worker heartbeat fresh (53 seconds), one tick, no last error. Signed-in AVGAR
+  owner reload at **18:08 UTC** loads four work items/four historical shadow
+  runs/zero enabled routines, with pause and external-action holds visible.
+  SQL **18:08:14.691047 UTC** independently confirms generation 1, paused,
+  zero enabled routines, four runs and four datasets.
+- Migration recorded live as **20260905180349** under the same migration name.
+  Post-change security advisors remain six WARN / sixteen INFO, unchanged.
+- **Post-deploy observability:** bounded error/fatal scan from 18:06 UTC through
+  approximately 18:08 UTC returned no entries. Drains: zero. Independent alert
+  delivery/ongoing monitoring remain open; a short clean scan is not an SLA.
+
+Rollback references: prior app `dpl_68UEr2NZLMxs2wNvBi4EjfWvKGWQ`, prior worker
+release 35/image `e167bae69c7d21fb97df96657c1f6ad79a7a2fa0b996b3ea709cfd2196d46044`,
+both at `d86b2f6b4f8466a3b2b03b9022939922556f3508`. The additive database function
+remains compatible with that Meta-only caller. Preserve all holds on rollback.
+No Nguyen workflow, provider credential, registration or revision pin was changed.
