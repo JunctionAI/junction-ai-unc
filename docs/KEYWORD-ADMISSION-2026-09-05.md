@@ -29,6 +29,8 @@ Failure may terminate as `refused` or `uncertain`. No state returns to `reserved
 
 ## Remaining activation/recovery work
 
+**Batch 22 update:** [Operator-only atomic issuance/start](KEYWORD-PILOT-ISSUANCE-2026-09-05.md) is implemented and verified in source/rollback SQL. It does not issue a live allowance, enable a switch, grant API access or remove coordinated-release/original-run uncertainty gates.
+
 **Subsequent source update:** [Batch 20 recovery](KEYWORD-RECOVERY-2026-09-05.md) adds an immutable response checkpoint and read-only named-execution reconciliation into the original private permit archive. Customer-visible run/artifact completion, unknown-response discovery and live acceptance remain unfinished.
 
 1. Resolve supported saved-execution API entitlement and approved credential scope, securely reconcile receiver auth, and verify the actual API shape/retention/reader before issuing any live allowance. A configured key is not a healthy key.

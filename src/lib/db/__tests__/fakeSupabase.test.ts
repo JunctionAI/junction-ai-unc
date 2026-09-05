@@ -68,7 +68,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.n8n_shadow_permits.primaryKey).toEqual(["id"]);
     expect([...s.n8n_shadow_permits.columns]).toEqual(expect.arrayContaining([
       "account_id", "context_generation", "run_id", "registration_id", "authorized_by", "idempotency_key",
-      "spec", "contract", "request_digest", "token_digest", "execution_id", "result", "authorized_at",
+      "spec", "contract", "request_digest", "token_digest", "execution_id", "result", "authorized_at", "issuance",
     ]));
     expect(s.n8n_shadow_permits.uniques).toEqual(expect.arrayContaining([
       expect.objectContaining({ columns: ["run_id"] }),

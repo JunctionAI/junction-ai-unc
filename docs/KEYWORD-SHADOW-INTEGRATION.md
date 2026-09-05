@@ -6,12 +6,14 @@ Status: bridge, authority and concrete independent execution-reader code exist; 
 The integration owner is Codex/Unc, not Tom. Tom should not have to invent routine mappings,
 relay schema decisions, or manually join execution receipts.
 
-Latest source verification: 196 files / 2,398 tests PASS; app and standalone-worker TypeScript PASS;
+Latest source verification: 197 files / 2,430 tests PASS; app and standalone-worker TypeScript PASS;
 lint PASS (zero errors, 39 existing warnings); production webpack build PASS; `git diff --check` PASS. The new tests
 use synthetic responses and an in-memory store. They prove parsing, denial paths and linked
 storage behavior, not a fresh n8n/provider execution or phone end-to-end success.
 
 Internal recovery checkpoints the validated response before independent verification and can reconcile it into its original private permit archive without redispatch. [Atomic original-run completion](KEYWORD-COMPLETION-2026-09-05.md) now stages the original draft-review/final-receipt semantics and persists the artifact, receipts and run in one transaction. Live/browser acceptance and unknown-response discovery remain pending. Nguyen's frozen wrapper/receipt contract is unchanged.
+
+The [operator-only pilot entry](KEYWORD-PILOT-ISSUANCE-2026-09-05.md) now creates registration, original run and one-use permit atomically and starts only on the first issuance response. No switch/spec/schedule is changed; a paused account or duplicate/lost reply cannot silently restart work. This remains source-only, with API/receiver/release/customer acceptance gates outstanding.
 
 ## Live source inspected
 

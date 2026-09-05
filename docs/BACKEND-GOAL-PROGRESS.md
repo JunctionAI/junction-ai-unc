@@ -10,7 +10,17 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 21, 5 September 2026, approximately 08:23 UTC
+## Latest state — Batch 22, 5 September 2026, approximately 08:38 UTC
+
+**Verified source and rollback database progress; no production rollout.** The preceding bottleneck-status reply was **no progress** toward implementation, not a verified wait. This continuation revalidated the worktree, committed/pushed Batch 21 as `b0d665b139aa5022517611b915639b5967b8532c`, then completed the operator-only initial pilot issuance/start wiring. The unanswered n8n plan/key choice is not inferred from a goal continuation.
+
+- One service-only transaction binds original owner/approval/key, current account/generation/business settings, frozen wrapper/revision/market, matching registry row, exact start snapshot and one-use permit. Only the first created response starts the existing engine. Duplicate/lost replies never create another allowance or silently restart. Routine switches/specs/schedules and account pause are unchanged.
+- Live readback exposed the saved website's canonical URL (`https://avgarsport.com/`); checks accept it without rewriting the profile while preserving the workflow's bare domain. Ordinary built-in registration fallback cannot call the reserved keyword receiver.
+- **197 files / 2,430 tests PASS**, app/worker TypeScript, production build and diff checks pass; lint zero errors / 39 existing warnings. Four real PostgreSQL rollback canaries pass together, including exact hard-pinned AVGAR issuance, separate country allowances and partial-write rollback. No synthetic result counts as provider/customer acceptance.
+- Independent **08:38:12 UTC** readback: staged shadow tables/RPC absent, zero canary accounts, AVGAR generation 1 / paused, zero registrations/enabled routines/runs. Canonical **08:38:14 UTC** health remains `00fc57cfd07b`, healthy DB/fresh worker. Advisors unchanged (six WARN/eight INFO). No persistent DDL, deployment, provider/model call, message, workflow mutation, purchase or key creation.
+- [Exact semantics and limits](KEYWORD-PILOT-ISSUANCE-2026-09-05.md). Ten migrations await coordinated rollout. Receiver/access approval and actual API read proof, pre-start uncertainty recovery, unknown-response discovery, OAuth/delayed-writer identity, original-chat preservation, cost/scheduler/retention/security and full browser/phone/second-client acceptance remain open. Full B01–B24 scope stays active.
+
+## Batch 21, 5 September 2026, approximately 08:23 UTC
 
 **Verified source and rollback-only database progress; no production rollout.** The previous goal turn was progress: Batch 20 was pushed as `1d7caf8c8045d12f0412e92603cfd448f3d39a4a`. The n8n plan/API-key approval remains unanswered; the automatic continuation does not supply that authority.
 

@@ -140,6 +140,9 @@ export interface RunOptions {
   mode: RunMode;
   /** Trusted queue-assigned identity; never accepted from an unauthenticated request. */
   runId?: string;
+  /** Operator-only atomic registration/run/permit issuance. Not wired to chat, routes
+   * or schedules. Must throw on a previous/uncertain issuance, never restart it. */
+  reserveKeywordShadowRun?: (run: RunRecord) => Promise<RunRecord>;
 }
 
 export interface ResumeOptions {
@@ -695,7 +698,7 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
     checks: {},
   };
   await adapters.assertContext?.(ctx.account);
-  const run = await adapters.store.createRun({
+  const initial: RunRecord = {
     id: ctx.runId,
     accountId: ctx.account.accountId,
     contextGeneration: ctx.account.contextGeneration,
@@ -705,7 +708,22 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
     status: "running",
     startedAt,
     specHash: stableHash(spec),
-  });
+  };
+  let run: RunRecord;
+  if (opts.reserveKeywordShadowRun) {
+    const producers = spec.nodes.filter(node => node.kind === "produce" || node.kind === "n8n");
+    const node = producers[0];
+    if (producers.length !== 1 || node?.kind !== "n8n" || !node.shadowContract || ctx.triggeredBy !== "manual")
+      throw new Error("Pilot issuance requires an explicit manual keyword shadow specification");
+    assertShadowRequest(node.shadowContract, { ...initial, runId: initial.id });
+    assertKeywordShadowTail(spec, spec.nodes.indexOf(node));
+    initial.snapshot = { spec: structuredClone(spec), ctx: structuredClone(ctx), nextNodeIndex: 0, awaiting: "keyword_start" };
+    run = await opts.reserveKeywordShadowRun(structuredClone(initial));
+    if (run.id !== initial.id || run.accountId !== initial.accountId || run.contextGeneration !== initial.contextGeneration ||
+        run.status !== "running" || run.mode !== initial.mode || run.version !== initial.version || run.routineId !== initial.routineId ||
+        run.startedAt !== initial.startedAt || run.specHash !== initial.specHash || JSON.stringify(run.snapshot) !== JSON.stringify(initial.snapshot))
+      throw new Error("Issued keyword run differs from its captured original identity");
+  } else run = await adapters.store.createRun(initial);
   return new RunSession(spec, ctx, run, adapters).runFrom(0);
 }
 

@@ -19,7 +19,7 @@ import { isArtifactKind, validateArtifactObject } from "../../lib/artifacts/vali
 import { DATA_ENDPOINTS, dataBaseUrl, issueDataToken, scopesForRoutine } from "../../lib/n8n/dataToken";
 import { checkWebhookTarget, type HostLookup } from "../../lib/n8n/urlSecurity";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
-import { assertShadowRequest, validateShadowReceipt, verifyShadowExecution, type KeywordShadowContract } from "../../lib/n8n/shadowContract";
+import { assertShadowRequest, validateShadowReceipt, verifyShadowExecution, KEYWORD_SHADOW_RECEIVER_URL, type KeywordShadowContract } from "../../lib/n8n/shadowContract";
 import type { N8nBridge, N8nCallResult, N8nNode, N8nWorkflow, ProduceNeed, ProduceNode, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
 import { pinnedWebhookFetch, type WebhookFetch, type WebhookResponse } from "./pinnedWebhookFetch";
@@ -155,6 +155,8 @@ export class HttpN8nBridge implements N8nBridge {
     if (!url) throw new Error("no n8n webhook is registered for this routine");
     const target = await checkWebhookTarget(url, this.env, { maxLength: 2000, lookup: this.opts.lookup });
     if (!target.ok) throw new Error(`n8n webhook refused: ${target.reason}`);
+    if (!shadow && target.url.href === KEYWORD_SHADOW_RECEIVER_URL)
+      throw new Error("The keyword pilot receiver requires its explicit shadow contract and permit");
     const secret = (this.env[N8N_SECRET_ENV] ?? "").trim();
     if (!secret) throw new Error(`${N8N_SECRET_ENV} is not set — refusing to call n8n unsigned`);
     const receiverHeaders: Record<string, string> = {};

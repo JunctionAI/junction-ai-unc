@@ -3,6 +3,7 @@
 export const KEYWORD_SHADOW_CONTRACT = "unc.keyword-shadow.v1" as const;
 export const AVGAR_PILOT_ACCOUNT = "aa5cfc84-2569-4c99-9b40-67003ae55eda";
 export const AVGAR_SEO_WORKFLOW = "OUerIfgAkMnhkuen";
+export const KEYWORD_SHADOW_RECEIVER_URL = "https://junctionai8.app.n8n.cloud/webhook/unc/d03-w01/keyword-shadow";
 
 export interface KeywordShadowContract {
   contract: typeof KEYWORD_SHADOW_CONTRACT;
