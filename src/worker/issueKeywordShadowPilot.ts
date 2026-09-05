@@ -12,7 +12,7 @@ import { buildAdapters, type ServiceDeps } from "./service";
 import { createShadowExecutionReader } from "./providers/n8nExecutionReader";
 
 export const KEYWORD_PILOT_PIN = Object.freeze({ workflowId: "XiXJKuph1fAeH9pe",
-  workflowVersion: "1bce8c54-637e-4770-af90-2da36f38369a",
+  workflowVersion: "92135add-3c35-43e4-9649-5bb3d4557814",
   receiverUrl: KEYWORD_SHADOW_RECEIVER_URL });
 export const KEYWORD_PILOT_MARKETS = Object.freeze({ US: 2840, NZ: 2554, AU: 2036 });
 export interface KeywordPilotApproval {

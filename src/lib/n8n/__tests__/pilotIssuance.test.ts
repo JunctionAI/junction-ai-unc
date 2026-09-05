@@ -20,6 +20,9 @@ const approval = (): KeywordPilotApproval => ({ authorizedBy: "11111111-1111-411
   contextGeneration: 1, maxProviderCalls: 1, expiresAt: "2026-09-05T08:35:00.000Z" });
 
 describe("operator-only keyword pilot approval", () => {
+  it("uses the independently reviewed bot-filter handoff revision", () => {
+    expect(KEYWORD_PILOT_PIN.workflowVersion).toBe("92135add-3c35-43e4-9649-5bb3d4557814");
+  });
   it.each([["US", 2840], ["NZ", 2554], ["AU", 2036]] as const)("pins %s independently", (market, code) => {
     expect(keywordPilotContract({ ...approval(), market }, now())).toMatchObject({
       workflowId: KEYWORD_PILOT_PIN.workflowId, workflowVersion: KEYWORD_PILOT_PIN.workflowVersion,

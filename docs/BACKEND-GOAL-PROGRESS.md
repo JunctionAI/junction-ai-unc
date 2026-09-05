@@ -13,7 +13,23 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 41, 6 September NZ / 5 September UTC
+## Latest state — Batch 43, 6 September NZ / 5 September UTC
+
+**Nguyen's corrected handoff independently verified; database revision repinned.** At 14:51:36 UTC the actual worker's authenticated GET saw published/draft revision `92135add-3c35-43e4-9649-5bb3d4557814`, Ignore Bots false, same credential reference. Its exact definition hash equals the prior review's ignoreBots-only normalized hash `85c5010892e9d6c8d467a69e480ef57307192b23ddf6250f9c0f4561867f58b5`. No other node/connection/settings/pinData change was accepted.
+
+Applied `20260905145413_keyword_shadow_bot_filter_revision` (source `20260905145250`). It guards the two exact pre-change SQL body hashes, changes only their revision literal, asserts unchanged owner/ACL/search-path/security-invoker properties and refuses an existing registration/permit. Historical migration and execution revisions are preserved. Actual production rollback-only issuance and prepared-start canaries pass, including separate US/NZ/AU, duplicate/refusal/permission checks and 13 start refusal paths. Afterwards: seven accounts, zero runs/registrations/permits, AVGAR generation 1 / paused. Security advisors unchanged at 16 INFO / 6 WARN.
+
+Updated worker source pin and historical-access verifier; actual release-23 read-only access verification passes at 14:54:33 UTC, including current revision and historical #75's original revision, plus ungranted users 403. Source release of the new worker pin is the next step; reader remains disabled and no provider run was issued. Full goal remains active.
+
+Tom's delivery/value-reset message was sent and read back on Upwork at 2:50 AM NZ: request concrete draft/calendar deliverables, final-version QA, handoff inventory and ETA within the existing fee. No payment, cancellation, extra charges or unilateral workflow takeover. Codex owns integration; Nguyen's broader delivery responsibilities remain pending his response.
+
+## Previous state — Batch 42, 6 September NZ / 5 September UTC
+
+**Tenant-scoped saved-work history deployed and live-read verified.** [Release, security and acceptance evidence](WORKSPACE-HISTORY-2026-09-06.md). Source `ac16b16620e04d1cbcbbecf08adc713b20c6adfe`, Vercel `dpl_AcPu4CLmCGaBrfWYh3YYjtJoC8pH`, Fly release 23. Canonical app/actual worker SHA, database/heartbeat health, anonymous 401/private-no-store and signed-in AVGAR history/reload pass. Live empty state agrees with zero actual runs/artifacts; real provider-produced history is still unproven.
+
+50-row keyset history spans drafts, approvals, runs and receipts with retained microseconds/current tenant-generation membership, no raw internal snapshots or receipt payloads, and read-only historical controls. Applied `20260905144436_workspace_history`; local and actual-production rollback canaries cover 124 timestamp ties, isolation and private RPC access. Full suite 210 files / 2,646 tests; app/worker typechecks, production build, ten workspace browser cases and lint (zero errors, 44 existing warnings) pass. No action flags, account pause, routine switch or provider workflow changed. Previous goal work was progress, not a wait or blocked turn.
+
+## Previous state — Batch 41, 6 September NZ / 5 September UTC
 
 **Explicit pilot operator entry and lost-reply lookup implemented.** [Command and exact acceptance limits](integration/KEYWORD-OPERATOR-COMMAND.md). This invokes the existing reviewed pilot module on the actual worker with server-held credentials; it does not generalize keyword authority to later lanes. Exact release/revision and live preflight gate one owner-approved market/call. Original-key inspection works after expiry and never resumes or retries a provider request. SQL remains the atomic issuance guard.
 

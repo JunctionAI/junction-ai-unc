@@ -5,7 +5,8 @@
  */
 const ORIGIN="https://junctionai8.app.n8n.cloud/api/v1";
 const WORKFLOW="XiXJKuph1fAeH9pe";
-const REVISION="1bce8c54-637e-4770-af90-2da36f38369a";
+const REVISION="92135add-3c35-43e4-9649-5bb3d4557814";
+const HISTORICAL_REFUSAL_REVISION="1bce8c54-637e-4770-af90-2da36f38369a";
 const NODE="c934c229-1191-43b7-b035-5fc641fbe0d0";
 const key=process.env.N8N_EXECUTION_API_KEY??"";
 const expectedExpiry="2026-12-04T11:00:00.000Z";
@@ -30,8 +31,9 @@ try {
   if(workflow.status!==200 || w.id!==WORKFLOW || w.versionId!==REVISION || w.activeVersionId!==REVISION || w.active!==true)fail("Frozen published workflow does not match.");
   const hook=w.nodes?.find(n=>n.id===NODE);
   if(hook?.type!=="n8n-nodes-base.webhook" || hook.parameters?.path!=="unc/d03-w01/keyword-shadow" || hook.parameters?.httpMethod!=="POST" ||
-    hook.parameters?.authentication!=="headerAuth" || !hook.credentials?.httpHeaderAuth?.id)fail("Frozen webhook binding does not match.");
-  if(refusal.status!==200 || r.id!=="75" || r.workflowId!==WORKFLOW || r.workflowVersionId!==REVISION ||
+    hook.parameters?.authentication!=="headerAuth" || hook.parameters?.options?.ignoreBots!==false ||
+    hook.credentials?.httpHeaderAuth?.id!=="Y9Xu3zApLSrcWu1e")fail("Frozen webhook binding does not match.");
+  if(refusal.status!==200 || r.id!=="75" || r.workflowId!==WORKFLOW || r.workflowVersionId!==HISTORICAL_REFUSAL_REVISION ||
     r.mode!=="manual" || !r.finished || !r.workflowData?.nodes?.some(n=>n.id===NODE && n.type==="n8n-nodes-base.webhook"))fail("Saved refusal execution provenance does not match.");
   if(seo.status!==200 || s.id!=="59" || s.workflowId!=="OUerIfgAkMnhkuen" || s.status!=="success" || !s.finished || !s.workflowVersionId)fail("Saved SEO handoff evidence unavailable.");
   if(ungranted.status!==403)fail("Unrequested user-list scope was not denied. Review key permissions before use.");
