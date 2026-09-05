@@ -13,7 +13,37 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 78, 6 September NZ
+## Latest state — Batch 79, 6 September NZ
+
+**Batch 78's Slack install authority is now released and independently read back.**
+Production app/worker source is `781dfe740026b9148396a2bf55c64b537d347c48`.
+App `dpl_4n1o1YVNDRvnwHmgFYqkRYHmFAC5` is READY/promoted; worker release 41
+is healthy on the existing Sydney machine. Remote migration
+`20260905224817_slack_install_authority` matches the local migration's four
+function bodies exactly, with private RLS, invoker execution, empty search paths
+and service-only grants. Actual worker RPC rejects invalid install authority.
+[Full release and rollback evidence](integration/JUNCTION-OWNED-SLACK-RUNTIME.md#matched-install-release--batch-79).
+
+Canonical health and signed-in Connections/Messaging readback pass. The UI still
+shows Slack unavailable and no verified Junction identity: the actual Junction
+Slack app configuration/installation and grants remain unproven/unready. Do not
+confuse this code release with OAuth or existing client channel acceptance.
+No install attempt, link or route was created; AVGAR has eight saved runs and
+remains paused at generation 1. All five action/messaging flags remain false;
+no release scopes or data-sync activation were added. No Hyperagent listener or
+Nguyen workflow changed.
+
+Post-release bounded error/fatal scan returned no entries. Drains are absent;
+alert delivery remains a monitoring gap. Six pre-existing security warnings
+remain; INFO count is 22 because the intentionally private install table has
+RLS without browser policies. No privileges were widened to suppress advisories.
+
+Next: configure/verify the Junction-owned Slack app, complete revision-bound
+route lifecycle and controlled cutover, then prove each client's enabled routine
+and access mapping end to end. Full B01–B24/all-client/all-screen goal is active.
+Previous turn and this turn both made verified progress; neither is completion.
+
+## Previous state — Batch 78, 6 September NZ
 
 **Slack setup-only consent and atomic, owner-bound reconnect implemented locally.**
 The install now binds the consenting owner, account generation, current attempt

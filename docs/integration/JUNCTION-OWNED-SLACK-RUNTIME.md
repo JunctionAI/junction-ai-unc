@@ -35,6 +35,8 @@ allowlist; it does not require seven combinations of duplicate workflows.
 
 ## Setup-only install authority — Batch 78, local only
 
+Historical implementation status below; now released in Batch 79.
+
 The next install slice implements `begin_slack_install`, `check_slack_install`,
 `finish_slack_install` and `unlink_slack_identity` in
 `20260905223939_slack_install_authority.sql`. The private current-attempt pin
@@ -71,6 +73,54 @@ client Slack pilot. Do not treat a staged route or installed grant as permission
 to enable customer messaging. Dedicated expired-pin retention cleanup remains;
 pins expire after ten minutes and the next attempt replaces the same owner/client
 pin, but expiration alone does not delete it.
+
+## Matched install release — Batch 79
+
+6 September 2026 NZ. Source `781dfe740026b9148396a2bf55c64b537d347c48`,
+independently read back on GitHub branch `codex/backend-foundation-20260905`.
+Clean detached release checkout `/private/tmp/unc-slack-install-release.IJ7DTr`;
+the user's untracked `context 2.ts` was not included. No env files copied/pulled.
+
+- Remote migration `20260905224817_slack_install_authority` applied before
+  promotion; local filename remains CLI-created `20260905223939`.
+  At 22:48:33 UTC all four function body hashes match the local source:
+  begin `32782f3d3f0786a58e3fffb821fd28e5`, check
+  `a0f85309743617e5b1ef260feed5e397`, finish
+  `1de2b1096f5cba2da2d63f9fab9c7cf1`, unlink
+  `5661ea4c1c422734f403906fd8553392`. All use security invoker and empty
+  search paths, allow service execution, and deny anon/authenticated execution.
+  Private install table has RLS and no anon/member SELECT. A rollback-only
+  service-role invalid-context check returned false.
+- Vercel `dpl_4n1o1YVNDRvnwHmgFYqkRYHmFAC5`, immutable URL
+  `https://junction-hus22vzxu-tom-junctionmedis-projects.vercel.app`, production
+  target, READY, 41-second Next 16.3.4 build. Both build/runtime SHA variables
+  were pinned. Candidate health and unauthenticated setup refusal checked before
+  successful promotion. Canonical health at 22:50:34.814 UTC reports SHA
+  `781dfe740026`, database healthy, worker fresh, lastError null.
+- Fly release 41, Sydney machine `1857466fd76998`, image digest
+  `sha256:72b81267d9b140225498ebf65dda335749d25698a19dfb67f3c13bb9129f97f0`.
+  Existing machine update only; smoke/health checks pass. Actual running worker
+  readback at 22:50:18.709 UTC confirms full SHA, successful invalid-authority RPC
+  refusal, all five command/messaging/live/TNZ/Apple flags false, command scopes
+  absent and data sync unset. No secrets printed.
+- Signed-in canonical Connections → Messaging reload succeeds. It shows paused
+  account, eight inbox results, no verified Junction Slack identity, and Slack
+  unavailable. This confirms configuration/installation is still outstanding;
+  no OAuth consent, channel staging, activation or message delivery was tested.
+  DB at 22:50:53.229 UTC confirms 0 links, 0 routes, 0 install attempts and 8
+  AVGAR runs, with generation 1 / pause true preserved.
+- Error/fatal scan restricted to this deployment and the prior 15 minutes returns
+  no entries. Current Vercel drains list is empty. Security advisors remain six
+  pre-existing WARN, now 22 INFO (new private RLS-without-browser-policy table).
+  Monitoring/alert delivery is not claimed complete.
+
+Rollback target: previous app `dpl_HJhyQAPpUibCEsumu7k5Bca5ZRHU`, worker 40 image
+`sha256:650d32fb4d7cc349ce1e94e6ebe92feea4daa302463fabc77c20195e5f0e84b4`,
+source `8711a48b94e1d3e9e337ea6e9e5e35853a183603`. Keep all action flags off.
+The additive schema can remain, but rolling back reintroduces the old OAuth
+callback: disable/install-fence that old path before rollback if real identities
+have since been connected. Reconcile grants and pending attempts, never delete
+identity/route history as a rollback shortcut.
 
 ## Origin capture batch
 
