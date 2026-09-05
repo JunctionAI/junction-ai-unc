@@ -13,7 +13,19 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 37, 6 September NZ / 5 September UTC
+## Latest state — Batch 38, 6 September NZ / 5 September UTC
+
+**Manual admission deployed; receiver replacement authorized and provisioned; real transport uncovered a webhook setting blocker.** [Release and exact remaining gate](integration/RECEIVER-RELEASE-2026-09-06.md). The full B01–B24/all-client goal remains active.
+
+- Applied production migration `20260905140440_manual_routine_admission` after rollback rehearsal; post-apply canary and independent service-only grants/RLS checks pass. Seven accounts/two members remain; zero runs/manual requests/cancellations/canaries; AVGAR generation 1 remains paused. Security advisors: 16 INFO/6 WARN; the two added INFO are intentional service-only tables with RLS and no client grants/policies, not a permission expansion.
+- Canonical app and worker now report source `3408671a5569dc94ce6eac2e54bea52d5162e6a3`. App `dpl_CBWkHhrgFEq4DPYmjGMwAMeGfwSH` promoted; Fly existing machine/image verified at release 22. Production DB health, fresh worker heartbeat and signed-in AVGAR Today readback pass. External action flags remain false. Nonempty manual/provider/customer acceptance remains open.
+- Tom explicitly approved replacing the receiver secret. Updated the existing native n8n credential `Y9Xu3zApLSrcWu1e`, Vercel Production Sensitive secret and Fly secret using one privately generated value. A one-use HMAC verifies the Fly value matches, is 43 characters and separate from the signing root. No secret was printed or written to the repository; temporary binding cleared. n8n save metadata is verified, but successful receiver authentication is NOT yet proven.
+- Fresh worker API read at `2026-09-05T14:11:06.726Z` still shows frozen revision `1bce8c54-637e-4770-af90-2da36f38369a`, same header credential, saved execution reads and ungranted users 403. Reader stays disabled.
+- Two no-authority webhook probes created no saved execution; the second captured HTTP 403 / `Authorization data is wrong!`. Published trigger has `options.ignoreBots=true`. n8n source rejects bot user agents with this exact error before credential validation. The narrowly scoped request to disable Ignore Bots, preserve Header Auth/authority/provider credentials, validate, republish and supply a new frozen revision was sent to Nguyen and read back in the conversation; his reply remains pending. No browser-user-agent spoofing, wrapper edit or provider run by Codex.
+
+Next: inspect Nguyen's exact revision diff, explicitly update the reviewed pin, prove receiver and authority behavior, then issue separate authorized US/NZ/AU one-call keyword runs and independently reconcile artifacts/receipts. No switches, schedules or account pause were changed. Other lane contracts, all-client/channel/design acceptance and security/retention remain in scope.
+
+## Previous state — Batch 37, 6 September NZ / 5 September UTC
 
 **Manual recovery acceptance advanced; source not yet deployed.** Browser journals now store identity only (no answer body) and are bound to the signed-in owner. Initial manual requests check that owner against the session; explicit recovery uses the original server-held body. Claimed requests are read back, never restarted; missing/cancelled requests cannot be reconstructed. The legacy run-keyed approval route now requires captured current account context and refuses paused/stale requests. [Full evidence and remaining release gates](MANUAL-RECOVERY-ACCEPTANCE-2026-09-06.md).
 

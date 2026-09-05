@@ -1,5 +1,7 @@
 # Manual recovery — Batch 37 acceptance
 
+**Batch 38 release overlay:** this tested source is now deployed with production migration and matching app/worker; see [release receipts and remaining provider/customer gates](integration/RECEIVER-RELEASE-2026-09-06.md). The Batch 37 text below is historical, not current deployment status.
+
 6 September 2026 NZ / 5 September UTC. **PARTIAL: tested source, not a production release.** The B01–B24/all-client goal remains active. No client, provider, production app/worker or production database change was made in this batch.
 
 ## Implemented
