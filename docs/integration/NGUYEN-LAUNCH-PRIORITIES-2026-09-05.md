@@ -27,6 +27,8 @@ The worker receiver credential fails the existing format requirement. Confirm th
 
 ## Routine mappings and contract status
 
+**Batch 40 authoritative packaging update:** [full five-lane brief](FIVE-LANE-PACKAGING-2026-09-06.md) and regenerated manifest now include exact output guides, item limits and complete retained pipeline nodes for all 35 existing routines, plus all 18 reported-ready capability mappings. D03-W07 (backlink gap) and D02-W09 (Google Ads BOFU) are reserved by Codex, not executable yet. DataForSEO SERP vs GSC and Klaviyo vs Shopify segmentation require explicit source adapters. Independent saved Email output-shape reads show recommendations/timing plans rather than complete structured copy/calendar outputs; packaging must supply the actual promised deliverables, not just relabel the recommendation. Later callable authority/receipt contracts remain Codex-owned and pending.
+
 The generated `unc-routine-manifest.v1.json` is the actual source inventory. **A mapped ID is not an approved callable contract or a successful Unc integration.** Keyword is the only finalized callable pilot contract at present. Codex must provide each later request/result adapter and tests before treating registration as sufficient.
 
 | Area / capability | Existing Unc mapping | Packaging boundary |
@@ -39,12 +41,12 @@ The generated `unc-routine-manifest.v1.json` is the actual source inventory. **A
 | Meta budget pacing | D02-W07 | Preserve budget/window/currency semantics |
 | SEO keyword opportunity | D03-W01 | Finalized `unc.keyword-shadow.v1` pilot |
 | SEO content gap | D03-W02 | Confirm page/content output against actual outputSpec |
-| SEO SERP watch | D03-W05 | Confirm position/market/time/source schema |
-| SEO competitor backlink gap | No interchangeable existing mapping | Existing D03-W06 is page/content-gap behavior. Codex must add a distinct mapping/contract; do not silently reuse it for referring domains |
+| SEO SERP watch | D03-W05, source adaptation required | Current catalog requires GSC average position/clicks. Nguyen's DataForSEO observations have distinct source/grain; preserve that distinction |
+| SEO competitor backlink gap | D03-W07 reserved, not executable | Existing D03-W06 remains page/content-gap behavior. Codex owns distinct catalog/contract implementation |
 | Content viral hooks | D01-W02 | `hook_list`; confirm provider evidence and adapter |
 | Content customer questions | D01-W03 | `question_list`; real search evidence must not be presented as first-party support/customer data |
-| Email welcome / abandoned cart / segmentation / winback / post-purchase / review timing / calendar | D05-W01 / W02 / W03 / W04 / W05 / W06 / W07 respectively | Nguyen: identify exactly which five were proven and the two blocked capabilities. Codex supplies their specific adapters; five ready cannot be inferred from seven names |
-| Google Ads keyword-to-BOFU campaign plan | Dedicated mapping/contract not yet implemented | Codex-owned gap. Do not relabel it as Meta decisioning or SEO keyword output |
+| Email welcome / abandoned cart / segmentation / winback / post-purchase / review timing / calendar | D05-W01 / W02 / W03 / W04 / W05 / W06 / W07 respectively | Proven historical subset W01/W03/W05/W06/W07; blocked W02 frequency/W04 margin. Actual structured draft deliverables and adapters remain pending |
+| Google Ads keyword-to-BOFU campaign plan | D02-W09 reserved, not executable | Codex-owned catalog/contract gap. Distinct Paid Ads routine, not Meta decisioning or SEO keyword output |
 
 Do not copy a workflow for every switch combination. Each routine is independently selected, with explicit shared data/dependencies. Native n8n pilot credentials stay where they are; another customer cannot be routed through AVGAR's binding. Unc stores the correlated run, artifact and receipt. A failed, missing or unverified result remains incomplete; no generic model fallback labelled as workflow success.
 

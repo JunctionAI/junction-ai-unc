@@ -11,6 +11,317 @@
     "fallbackAllowed": false,
     "timeoutMs": 60000
   },
+  "packaging": {
+    "status": "No activation authority. Later-lane adapters and callable contracts remain Codex work.",
+    "evidenceStatus": "Nguyen-reported historical shadow results, not verified Unc executions",
+    "lanes": [
+      {
+        "area": "meta",
+        "capability": "daily_decisioning",
+        "routineId": "D02-W01",
+        "adapter": "n8n_owned_decision",
+        "requiredEvidence": [
+          "adset_id",
+          "reporting_window",
+          "account_currency",
+          "spend",
+          "purchases",
+          "purchase_value",
+          "product_price_binding",
+          "policy_inputs"
+        ],
+        "boundary": "CPA ceiling is 50% of the promoted product price, same currency. This is not a separate scaling target or authorization to change budgets."
+      },
+      {
+        "area": "meta",
+        "capability": "creative_testing",
+        "routineId": "D02-W02",
+        "adapter": "n8n_owned_decision",
+        "requiredEvidence": [
+          "ad_ids",
+          "creative_ids",
+          "test_ready_source",
+          "window",
+          "approved_test_budget_or_missing"
+        ],
+        "boundary": "A conceptual test plan is not three approved test-ready creatives or permission to create even paused ads."
+      },
+      {
+        "area": "meta",
+        "capability": "hook_rotation",
+        "routineId": "D02-W03",
+        "adapter": "n8n_owned_decision",
+        "requiredEvidence": [
+          "ad_id",
+          "frequency",
+          "ctr_windows",
+          "variant_ad_id_or_missing"
+        ],
+        "boundary": "An unbound proposed hook is a content request, not an executable ad rotation."
+      },
+      {
+        "area": "meta",
+        "capability": "ad_fatigue",
+        "routineId": "D02-W04",
+        "adapter": "n8n_owned_decision",
+        "requiredEvidence": [
+          "ad_id",
+          "window",
+          "frequency",
+          "spend",
+          "purchases",
+          "certified_cpa_policy",
+          "trend_baseline_or_missing"
+        ],
+        "boundary": "No invented fatigue trend, target CPA, purchase count or recommendation presented as a pause."
+      },
+      {
+        "area": "meta",
+        "capability": "creative_test_planner",
+        "routineId": "D02-W06",
+        "adapter": "produce_step_review",
+        "requiredEvidence": [
+          "creative_observations",
+          "measured_vs_hypothesized"
+        ],
+        "boundary": "Hypotheses remain hypotheses; no measured lift claim or mutation."
+      },
+      {
+        "area": "meta",
+        "capability": "budget_pacing",
+        "routineId": "D02-W07",
+        "adapter": "n8n_owned_decision",
+        "requiredEvidence": [
+          "account_or_adset_grain",
+          "account_timezone",
+          "window_start",
+          "as_of",
+          "currency",
+          "spend",
+          "budget_source",
+          "daily_vs_lifetime"
+        ],
+        "boundary": "Pacing requires a real budget/window. Unknown budget is not zero, and Meta evidence cannot be labelled Google Ads evidence."
+      },
+      {
+        "area": "seo",
+        "capability": "keyword_opportunity",
+        "routineId": "D03-W01",
+        "adapter": "existing_keyword_contract",
+        "requiredEvidence": [
+          "provider_task",
+          "seed",
+          "country",
+          "language",
+          "domain"
+        ],
+        "boundary": "Existing unc.keyword-shadow.v1 only; golf travel bag separately US/NZ/AU; first live Unc run still pending."
+      },
+      {
+        "area": "seo",
+        "capability": "content_gap",
+        "routineId": "D03-W02",
+        "adapter": "produce_step_review",
+        "requiredEvidence": [
+          "own_domain",
+          "competitor_domains",
+          "provider_queries",
+          "observed_pages_or_keywords",
+          "recommendation_basis"
+        ],
+        "boundary": "Separate an observed keyword gap from a crawled page/content claim. Page evidence is required to claim what a page contains."
+      },
+      {
+        "area": "seo",
+        "capability": "serp_position_watch",
+        "routineId": "D03-W05",
+        "adapter": "source_semantics_change_required",
+        "requiredEvidence": [
+          "query",
+          "country",
+          "language",
+          "device",
+          "search_engine",
+          "observed_url",
+          "observed_position",
+          "fetched_at",
+          "matched_prior_observation_or_missing"
+        ],
+        "boundary": "Current Unc D03-W05 requires Search Console average position/clicks. DataForSEO SERP snapshots are a different source and statistic; no GSC clicks, impressions or delta without matching observations. Codex must adapt before calling this routine integrated."
+      },
+      {
+        "area": "seo",
+        "capability": "competitor_backlink_gap",
+        "routineId": "D03-W07",
+        "adapter": "reserved_not_executable",
+        "requiredEvidence": [
+          "own_domain",
+          "competitor_domains",
+          "referring_domains",
+          "provider_task",
+          "fetched_at"
+        ],
+        "boundary": "Reserved new ID. Never reuse D03-W06 (competitor page/content analysis). No catalog/endpoint/allowlist exists yet."
+      },
+      {
+        "area": "content",
+        "capability": "viral_hooks",
+        "routineId": "D01-W02",
+        "adapter": "source_semantics_change_required",
+        "requiredEvidence": [
+          "search_query",
+          "source_urls",
+          "fetched_at",
+          "observed_vs_hypothesis"
+        ],
+        "boundary": "Search-derived hooks are hypotheses; do not claim TikTok/Instagram views or viral performance without those native observations."
+      },
+      {
+        "area": "content",
+        "capability": "customer_questions",
+        "routineId": "D01-W03",
+        "adapter": "source_semantics_change_required",
+        "requiredEvidence": [
+          "search_query",
+          "source_urls",
+          "fetched_at",
+          "question_source_type"
+        ],
+        "boundary": "Search questions are market-research questions, not first-party customer tickets/reviews or measured frequency."
+      },
+      {
+        "area": "email",
+        "capability": "welcome",
+        "routineId": "D05-W01",
+        "adapter": "n8n_owned_decision",
+        "reportedExecution": "63",
+        "requiredEvidence": [
+          "klaviyo_account",
+          "flow_id",
+          "message_id",
+          "current_copy",
+          "metric_window_or_missing"
+        ],
+        "boundary": "Return inspectable replacement copy. Campaign statistics are not automatically welcome-flow message performance."
+      },
+      {
+        "area": "email",
+        "capability": "segmentation",
+        "routineId": "D05-W03",
+        "adapter": "source_semantics_change_required",
+        "reportedExecution": "69",
+        "requiredEvidence": [
+          "klaviyo_account",
+          "segment_id_or_new_definition",
+          "definition",
+          "population_source",
+          "measured_size_or_missing"
+        ],
+        "boundary": "Current Unc prechecks require Shopify customer data; Klaviyo evidence cannot silently be relabelled Shopify rows. Definitions are proposals, not created segments."
+      },
+      {
+        "area": "email",
+        "capability": "post_purchase",
+        "routineId": "D05-W05",
+        "adapter": "n8n_owned_decision",
+        "reportedExecution": "70",
+        "requiredEvidence": [
+          "klaviyo_account",
+          "flow_id",
+          "product_context",
+          "delivery_timing_source_or_missing",
+          "current_message_or_missing"
+        ],
+        "boundary": "Draft copy only. Do not claim delivery timing, ticket counts or order history from an unrelated campaign read."
+      },
+      {
+        "area": "email",
+        "capability": "review_timing",
+        "routineId": "D05-W06",
+        "adapter": "n8n_owned_decision",
+        "reportedExecution": "71",
+        "requiredEvidence": [
+          "klaviyo_account",
+          "flow_id",
+          "current_delay",
+          "proposed_delay",
+          "delivery_or_review_source_or_missing",
+          "suppression_source_or_missing"
+        ],
+        "boundary": "A proposed delay is not measured peak review time. Missing delivery/review/suppression evidence remains visible."
+      },
+      {
+        "area": "email",
+        "capability": "campaign_calendar",
+        "routineId": "D05-W07",
+        "adapter": "produce_step_review",
+        "reportedExecution": "62",
+        "requiredEvidence": [
+          "klaviyo_account",
+          "campaign_window",
+          "business_context",
+          "approved_events_or_missing"
+        ],
+        "boundary": "Six-week draft calendar, not scheduled campaigns. Klaviyo attribution is not Shopify-reconciled revenue."
+      },
+      {
+        "area": "google_ads",
+        "capability": "bofu_campaign_plan",
+        "routineId": "D02-W09",
+        "adapter": "reserved_not_executable",
+        "requiredEvidence": [
+          "google_ads_customer_id",
+          "keyword_query",
+          "country",
+          "language",
+          "network",
+          "currency",
+          "historical_metrics_window",
+          "proposed_groups_and_negatives"
+        ],
+        "boundary": "Reserved Paid Ads ID distinct from Meta routines and SEO keywords. A plan is not a created or activated campaign. No catalog/endpoint/allowlist exists yet."
+      }
+    ],
+    "blockedInputs": [
+      {
+        "routineId": "D02-W05",
+        "needs": [
+          "approved_creator_handles",
+          "creator_rights"
+        ]
+      },
+      {
+        "routineId": "D02-W08",
+        "needs": [
+          "approved_organic_performance_source"
+        ]
+      },
+      {
+        "routineId": "D03-W03",
+        "needs": [
+          "intended_ai_search_probe_source"
+        ]
+      },
+      {
+        "routineId": "D03-W04",
+        "needs": [
+          "separately_reopened_cms_admin_authorization"
+        ]
+      },
+      {
+        "routineId": "D05-W02",
+        "needs": [
+          "contact_frequency_cap"
+        ]
+      },
+      {
+        "routineId": "D05-W04",
+        "needs": [
+          "margin_floor"
+        ]
+      }
+    ]
+  },
   "routines": [
     {
       "routineId": "D01-W01",
@@ -30,6 +341,11 @@
           "shopify"
         ]
       },
+      "outputGuide": "{\"kind\":\"post_set\",\"title\":\"3 founder posts: <theme in five words>\",\"body\":\"one paragraph in Unc's voice: what these three posts do and where the material came from\",\"items\":[{\"title\":\"<post hook line>\",\"body\":\"<the full post, markdown>\",\"meta\":{\"angle\":\"…\",\"platform\":\"…\"}}],\"evidence\":[{\"source\":\"site_profile|memory|read:questions|read:products\",\"ref\":\"<the line you used>\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 3,
+      "effectiveProduceMaxItems": 3,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_questions",
@@ -105,6 +421,80 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_questions",
+          "as": "questions",
+          "source": "gorgias",
+          "query": {
+            "resource": "tickets",
+            "window": "7d",
+            "fields": [
+              "subject",
+              "body",
+              "tags"
+            ],
+            "limit": 200
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_posts",
+          "as": "posts",
+          "source": "linkedin",
+          "query": {
+            "resource": "posts",
+            "window": "28d",
+            "fields": [
+              "text",
+              "impressions",
+              "reactions",
+              "comments"
+            ]
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_products",
+          "as": "products",
+          "source": "shopify",
+          "query": {
+            "resource": "products",
+            "fields": [
+              "title",
+              "body_html",
+              "tags"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}} — for your voice check",
+          "expiryHours": 48,
+          "detail": "Three posts in your voice, drafted from what I know about the business and what customers ask. Nothing publishes until you post it.",
+          "before": "No posts queued",
+          "after": "3 drafts in your queue, ready to copy or edit"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Founder content engine: {{artifact.title}} handed over.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -126,6 +516,11 @@
           "instagram"
         ]
       },
+      "outputGuide": "{\"kind\":\"hook_list\",\"title\":\"<n> hooks for <niche>\",\"body\":\"where the hooks came from (breakout rows vs hypothesis) and the mechanic pattern\",\"items\":[{\"title\":\"<the hook line>\",\"body\":\"<skeleton + why it fits + how to shoot it>\",\"meta\":{\"status\":\"hypothesis\",\"mechanic\":\"…\",\"views\":null,\"source\":\"…\"}}],\"evidence\":[{\"source\":\"read:niche|read:ig|site_profile|input:about_the_business\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 8,
+      "effectiveProduceMaxItems": 8,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_niche",
@@ -188,6 +583,71 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_niche",
+          "as": "niche",
+          "source": "tiktok",
+          "query": {
+            "resource": "videos",
+            "window": "7d",
+            "filter": {
+              "niche": "{{vars.niche}}",
+              "minViews": 100000
+            },
+            "fields": [
+              "caption",
+              "views",
+              "likes",
+              "hook_transcript"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_ig",
+          "as": "ig",
+          "source": "instagram",
+          "query": {
+            "resource": "hashtag_search",
+            "window": "7d",
+            "filter": {
+              "hashtags": "{{vars.hashtags}}"
+            },
+            "fields": [
+              "caption",
+              "plays",
+              "likes"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Hook skeletons from this week's breakouts — or hypotheses from the niche when I couldn't watch it. Nothing publishes.",
+          "after": "Hook library in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Viral hook mining: {{artifact.title}} drafted.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -210,6 +670,11 @@
           "instagram"
         ]
       },
+      "outputGuide": "{\"kind\":\"question_list\",\"title\":\"Top <n> customer questions → content ideas\",\"body\":\"one short paragraph: where the questions came from and what pattern you see\",\"items\":[{\"title\":\"<the question>\",\"body\":\"<why it matters + the idea + the format>\",\"meta\":{\"frequency\":null,\"format\":\"…\",\"stage\":\"…\"}}],\"evidence\":[{\"source\":\"read:tickets|read:reviews|read:comments|site_profile|input:customer_questions\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 10,
+      "effectiveProduceMaxItems": 10,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_tickets",
@@ -281,6 +746,75 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_tickets",
+          "as": "tickets",
+          "source": "gorgias",
+          "query": {
+            "resource": "tickets",
+            "window": "14d",
+            "fields": [
+              "subject",
+              "body"
+            ],
+            "limit": 500
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_reviews",
+          "as": "reviews",
+          "source": "shopify",
+          "query": {
+            "resource": "products",
+            "fields": [
+              "title",
+              "reviews"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_comments",
+          "as": "comments",
+          "source": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "14d",
+            "fields": [
+              "comments"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Ranked by how often customers ask (or how central to buying, when the material is your site). Each idea has a suggested format.",
+          "after": "Idea bank refreshed"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Customer-question mining: {{artifact.title}} drafted.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -302,6 +836,11 @@
           "shopify"
         ]
       },
+      "outputGuide": "{\"kind\":\"outreach_draft\",\"title\":\"<n> creator drafts: <niche>\",\"body\":\"the briefing (who, offer, usage, product) and that these are for you to send\",\"items\":[{\"title\":\"<first line or subject>\",\"body\":\"<the DM/email>\",\"meta\":{\"to\":\"[creator handle]\",\"followers\":null,\"channel\":\"instagram_dm\",\"source\":\"brief\"}}],\"evidence\":[{\"source\":\"input:creator_brief|read:creators|read:customers|site_profile\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 5,
+      "effectiveProduceMaxItems": 5,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_creators",
@@ -365,6 +904,72 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_creators",
+          "as": "creators",
+          "source": "instagram",
+          "query": {
+            "resource": "hashtag_search",
+            "window": "28d",
+            "filter": {
+              "hashtags": "{{vars.hashtags}}",
+              "minFollowers": 2000,
+              "maxFollowers": 50000
+            },
+            "fields": [
+              "username",
+              "followers",
+              "engagement_rate"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_customers",
+          "as": "customers",
+          "source": "shopify",
+          "query": {
+            "resource": "customers",
+            "window": "90d",
+            "filter": {
+              "ordersCount": {
+                "gte": 2
+              }
+            },
+            "fields": [
+              "email",
+              "orders_count"
+            ],
+            "limit": 200
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}} — you send",
+          "expiryHours": 48,
+          "detail": "Creator brief plus outreach drafts. Unc never sends; handles come from Instagram rows or stay as placeholders.",
+          "after": "Creator shortlist + outreach drafts in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "UGC creator pipeline: {{artifact.title}} drafted.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -387,6 +992,11 @@
           "youtube"
         ]
       },
+      "outputGuide": "{\"kind\":\"post_set\",\"title\":\"<source post, five ways>\",\"body\":\"which post you chose and why (its numbers if you have them)\",\"items\":[{\"title\":\"<format>: <hook>\",\"body\":\"<the full piece, markdown>\",\"meta\":{\"format\":\"…\",\"source_ref\":\"…\"}}],\"evidence\":[{\"source\":\"read:ig|read:li|read:yt|input:source_post\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 5,
+      "effectiveProduceMaxItems": 5,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_ig",
@@ -464,6 +1074,81 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_ig",
+          "as": "ig",
+          "source": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "7d",
+            "fields": [
+              "caption",
+              "media_type",
+              "plays",
+              "likes",
+              "saves"
+            ],
+            "limit": 30
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_li",
+          "as": "li",
+          "source": "linkedin",
+          "query": {
+            "resource": "posts",
+            "window": "7d",
+            "fields": [
+              "text",
+              "impressions",
+              "reactions"
+            ]
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_yt",
+          "as": "yt",
+          "source": "youtube",
+          "query": {
+            "resource": "videos",
+            "window": "28d",
+            "fields": [
+              "title",
+              "views",
+              "transcript"
+            ],
+            "limit": 10
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Reel script, carousel, LinkedIn post, email blurb, X thread — all drafted from one source post.",
+          "after": "5 drafts ready to publish where you choose"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Social repurposing: {{artifact.title}} handed over.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -485,6 +1170,11 @@
           "instagram"
         ]
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Winning elements: <window or schema>\",\"body\":\"account average (only if in the ads rows) or 'no ads in the window — structure only'\",\"items\":[{\"title\":\"<element>\",\"body\":\"<why it wins + how to reuse>\",\"meta\":{\"type\":\"hook\",\"status\":\"schema\",\"metric\":null,\"value\":null}}],\"evidence\":[{\"source\":\"read:ads|read:organic|site_profile|input:about_the_business\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 8,
+      "effectiveProduceMaxItems": 8,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_ads",
@@ -545,6 +1235,69 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_ads",
+          "as": "ads",
+          "source": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_name",
+              "spend",
+              "purchases",
+              "ctr",
+              "thumbstop"
+            ],
+            "limit": 200
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_organic",
+          "as": "organic",
+          "source": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "28d",
+            "fields": [
+              "caption",
+              "media_type",
+              "plays",
+              "saves"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Hooks, formats and offers that beat account average when I have ads — the library schema when I don't.",
+          "after": "Library entries in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Winning elements library: {{artifact.title}} drafted.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -565,6 +1318,11 @@
           "tiktok"
         ]
       },
+      "outputGuide": "{\"kind\":\"post_set\",\"title\":\"3 trend ideas (expire today)\",\"body\":\"these expire fast — only ride a trend still rising; where each idea came from\",\"items\":[{\"title\":\"<hook>\",\"body\":\"<the post/script>\",\"meta\":{\"trend\":\"…\",\"status\":\"hypothetical\",\"growth_rate\":null,\"platform\":\"tiktok\"}}],\"evidence\":[{\"source\":\"read:trends|read:sounds|site_profile|input:niche\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 3,
+      "effectiveProduceMaxItems": 3,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_trends",
@@ -624,6 +1382,69 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_trends",
+          "as": "trends",
+          "source": "tiktok",
+          "query": {
+            "resource": "trends",
+            "window": "24h",
+            "filter": {
+              "region": "{{vars.region}}",
+              "category": "{{vars.niche}}"
+            },
+            "fields": [
+              "name",
+              "growth_rate",
+              "video_count"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_sounds",
+          "as": "sounds",
+          "source": "tiktok",
+          "query": {
+            "resource": "trends",
+            "window": "24h",
+            "filter": {
+              "type": "sound"
+            },
+            "fields": [
+              "name",
+              "growth_rate"
+            ],
+            "limit": 20
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 24,
+          "detail": "Only trends still rising, with a brand angle — or hypothetical angles labelled as such. 24h life.",
+          "after": "Trend ideas in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Trend watch: {{artifact.title}} drafted.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -646,6 +1467,11 @@
           "ga4"
         ]
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"What to double down on this week\",\"body\":\"the readout: what moved, what to drop, or what I'd measure if I had no posts\",\"items\":[{\"title\":\"<learning>\",\"body\":\"<EVIDENCE · CONFIDENCE · ACTION>\",\"meta\":{\"move\":\"double_down\",\"format\":\"…\",\"topic\":\"…\",\"reach\":null,\"confidence\":\"low\"}}],\"evidence\":[{\"source\":\"read:ig|read:li|read:ga|input:source_post|site_profile\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 4,
+      "effectiveProduceMaxItems": 4,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_ig",
@@ -727,6 +1553,85 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_ig",
+          "as": "ig",
+          "source": "instagram",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "fields": [
+              "reach",
+              "plays",
+              "saves",
+              "follows"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_li",
+          "as": "li",
+          "source": "linkedin",
+          "query": {
+            "resource": "posts",
+            "window": "28d",
+            "fields": [
+              "impressions",
+              "reactions",
+              "comments"
+            ]
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_ga",
+          "as": "ga",
+          "source": "ga4",
+          "query": {
+            "resource": "report",
+            "window": "28d",
+            "fields": [
+              "sessions",
+              "conversions"
+            ],
+            "groupBy": [
+              "sessionSource",
+              "sessionMedium"
+            ],
+            "filter": {
+              "sessionMedium": "social"
+            }
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Formats and topics that moved reach and saves when I have them — what I'd measure when I don't.",
+          "after": "Next week's content plan in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Content performance learning: {{artifact.title}} drafted.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -748,6 +1653,11 @@
           "ga4"
         ]
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Today: <verdict> <ad set>\",\"body\":\"the 7-day numbers that are present and why this verdict, no invented reconciliation %\",\"items\":[{\"title\":\"<verdict>: <ad set>\",\"body\":\"<reasoning + rollback, markdown>\",\"meta\":{\"verdict\":\"scale|turn_off|hold\",\"adset_id\":null,\"adset_name\":\"…\",\"rollback\":\"…\"}}],\"evidence\":[{\"source\":\"read:spend|read:adsets|read:orders|read:ga|vars\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_spend",
@@ -870,6 +1780,187 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_spend",
+          "as": "spend",
+          "source": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "7d",
+            "filter": {
+              "level": "adset"
+            },
+            "fields": [
+              "adset_id",
+              "adset_name",
+              "spend",
+              "purchases",
+              "purchase_value",
+              "roas",
+              "frequency",
+              "ctr",
+              "daily_budget"
+            ],
+            "limit": 100
+          },
+          "freshnessMinutes": 60
+        },
+        {
+          "kind": "read",
+          "id": "read_adsets",
+          "as": "adsets",
+          "source": "meta_ads",
+          "query": {
+            "resource": "adsets",
+            "fields": [
+              "id",
+              "name",
+              "status",
+              "effective_status",
+              "campaign_id",
+              "daily_budget"
+            ],
+            "limit": 200
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_orders",
+          "as": "orders",
+          "source": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "7d",
+            "fields": [
+              "id",
+              "total_price",
+              "landing_site",
+              "referring_site"
+            ]
+          },
+          "freshnessMinutes": 60
+        },
+        {
+          "kind": "read",
+          "id": "read_ga",
+          "as": "ga",
+          "source": "ga4",
+          "query": {
+            "resource": "report",
+            "window": "7d",
+            "fields": [
+              "sessions",
+              "conversions",
+              "purchaseRevenue"
+            ],
+            "groupBy": [
+              "sessionCampaignName"
+            ],
+            "filter": {
+              "sessionSource": "facebook"
+            }
+          },
+          "optional": true
+        },
+        {
+          "kind": "check",
+          "id": "spend_present",
+          "predicate": {
+            "metric": "reads.spend.spend",
+            "op": "gt",
+            "value": 0,
+            "window": "7d"
+          },
+          "onFail": "skip",
+          "reason": "No paid spend in the last 7 days — nothing to rebalance."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Which ad set gets a change today — scale the winner, turn off a loser, or hold?",
+          "options": [
+            {
+              "id": "scale",
+              "label": "Scale {{reads.spend.top_adset_name}} by one budget step",
+              "spend": {
+                "amountMetric": "reads.spend.top_adset_daily_budget",
+                "multiplier": 0.2,
+                "period": "day"
+              },
+              "params": {
+                "actionId": "meta.adset.set_daily_budget",
+                "adsetId": "{{reads.spend.top_adset_id}}",
+                "currentDailyBudget": "{{reads.spend.top_adset_daily_budget}}",
+                "changePct": 20
+              }
+            },
+            {
+              "id": "turn_off",
+              "label": "Turn off {{reads.spend.worst_ad_name}}",
+              "params": {
+                "actionId": "meta.adset.pause",
+                "adsetId": "{{reads.spend.worst_ad_id}}"
+              }
+            },
+            {
+              "id": "hold",
+              "label": "Hold budgets as they are",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.spend.top_adset_roas",
+            "op": "gte",
+            "value": 2.5,
+            "ifTrue": "scale",
+            "ifFalse": "hold"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{decision.label}}",
+          "expiryHours": 24,
+          "detail": "7-day Meta spend and return read alongside Shopify orders. Verdict by your preset ({{decision.params.preset}}): {{decision.params.verdict}}.",
+          "before": "{{reads.spend.top_adset_name}} at {{account.currency}} {{reads.spend.top_adset_daily_budget}}/day",
+          "after": "{{decision.label}} — inside your cap of {{account.currency}} {{caps.perDay}}/day"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "{{decision.params.actionId}}",
+            "target": {
+              "adsetId": "{{decision.params.adsetId}}"
+            },
+            "params": {
+              "dailyBudget": "{{decision.params.dailyBudget}}",
+              "changePct": "{{decision.params.changePct}}",
+              "currentDailyBudget": "{{decision.params.currentDailyBudget}}",
+              "reason": "{{decision.params.reason}}"
+            }
+          },
+          "rollback": "the inverse action: restore the previous daily budget / resume the ad set",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Daily paid decisioning: {{decision.label}} — read back and receipted.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -904,6 +1995,11 @@
         "inputs": [],
         "helpful": []
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Creative test: <3 names in five words>\",\"body\":\"which three creatives, from which rows, and the sprint budget only if vars/decision named it\",\"items\":[{\"title\":\"<ad name from the row>\",\"body\":\"<concept + present numbers + rollback, markdown>\",\"meta\":{\"creative_id\":null,\"ad_name\":\"…\",\"role\":\"…\"}}],\"evidence\":[{\"source\":\"read:ads|read:creatives|vars\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 3,
+      "effectiveProduceMaxItems": 3,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_ads",
@@ -975,6 +2071,135 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_ads",
+          "as": "ads",
+          "source": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "14d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_id",
+              "ad_name",
+              "spend",
+              "purchases",
+              "ctr",
+              "cpa"
+            ],
+            "limit": 200
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_creatives",
+          "as": "creatives",
+          "source": "meta_ads",
+          "query": {
+            "resource": "ads",
+            "filter": {
+              "status": "PAUSED",
+              "tag": "unc-test-ready"
+            },
+            "fields": [
+              "ad_id",
+              "creative_id",
+              "name"
+            ],
+            "limit": 20
+          }
+        },
+        {
+          "kind": "check",
+          "id": "has_candidates",
+          "predicate": {
+            "metric": "reads.creatives.count",
+            "op": "gte",
+            "value": 3
+          },
+          "onFail": "skip",
+          "reason": "Fewer than 3 approved creatives waiting to test."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Which creatives go into this week's test cell?",
+          "options": [
+            {
+              "id": "launch",
+              "label": "Prepare a PAUSED 3-creative test at the sprint budget",
+              "spend": {
+                "amount": 30,
+                "period": "day"
+              },
+              "params": {
+                "creativeIds": "{{reads.creatives.rows}}"
+              }
+            },
+            {
+              "id": "wait",
+              "label": "Wait — test cell still running",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.ads.active_tests",
+            "op": "lt",
+            "value": 2,
+            "ifTrue": "launch",
+            "ifFalse": "wait"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Prepare this week's PAUSED creative test ({{reads.creatives.count}} creatives, {{account.currency}} {{decision.spend.amount}}/day)",
+          "expiryHours": 48,
+          "detail": "Testing fresh concepts creates evidence for future decisions. This proposal shapes a 7-day test cell; activation remains a separate founder-controlled step.",
+          "before": "No new test cell prepared",
+          "after": "PAUSED test objects ready for separate activation"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.campaign.create_from_brief",
+            "params": {
+              "name": "Creative test — {{today}}",
+              "objective": "OUTCOME_SALES",
+              "dailyBudget": "{{decision.spend.amount}}",
+              "audience": {
+                "countries": "{{vars.countries}}"
+              },
+              "creatives": "{{decision.params.creativeIds}}",
+              "pixelId": "{{vars.metaPixelId}}",
+              "pageId": "{{vars.metaPageId}}",
+              "durationDays": 7
+            }
+          },
+          "rollback": "everything is created PAUSED; switch it off in Ads Manager",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Creative testing sprint proposal prepared.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -1012,6 +2237,11 @@
         "inputs": [],
         "helpful": []
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Hook rotation: <ad name or none ready>\",\"body\":\"which ad is tired, the numbers that are present, whether a variant is ready\",\"items\":[{\"title\":\"<rotate|flag>: <ad>\",\"body\":\"<evidence + next hook or content-engine ask + rollback, markdown>\",\"meta\":{\"action\":\"rotate|flag\",\"ad_id\":null,\"next_ad_id\":null,\"rollback\":\"pause the new, resume the old\"}}],\"evidence\":[{\"source\":\"read:ads|read:hooks\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_ads",
@@ -1082,6 +2312,126 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 */6 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_ads",
+          "as": "ads",
+          "source": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "14d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_id",
+              "ad_name",
+              "frequency",
+              "ctr",
+              "ctr_trend",
+              "days_live"
+            ],
+            "limit": 200
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_hooks",
+          "as": "hooks",
+          "source": "meta_ads",
+          "query": {
+            "resource": "ads",
+            "filter": {
+              "status": "PAUSED",
+              "tag": "unc-hook-variant"
+            },
+            "fields": [
+              "ad_id",
+              "creative_id"
+            ],
+            "limit": 20
+          }
+        },
+        {
+          "kind": "check",
+          "id": "fatigue_seen",
+          "predicate": {
+            "metric": "reads.ads.fatigued_count",
+            "op": "gte",
+            "value": 1
+          },
+          "onFail": "skip",
+          "reason": "No ad past its two-week hook life yet."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Rotate a fresh hook into the fatigued ad?",
+          "options": [
+            {
+              "id": "rotate",
+              "label": "Swap in the next hook variant",
+              "params": {
+                "actionId": "meta.ad.rotate",
+                "adId": "{{reads.ads.most_fatigued_ad_id}}",
+                "nextAdId": "{{reads.hooks.next_ad_id}}",
+                "creativeId": "{{reads.hooks.next_creative_id}}"
+              }
+            },
+            {
+              "id": "none_ready",
+              "label": "No fresh hook ready — flag for the content engine",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.hooks.count",
+            "op": "gte",
+            "value": 1,
+            "ifTrue": "rotate",
+            "ifFalse": "none_ready"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Rotate a fresh hook into {{reads.ads.most_fatigued_ad_name}}",
+          "expiryHours": 24,
+          "detail": "Frequency {{reads.ads.most_fatigued_frequency}}, CTR down {{reads.ads.most_fatigued_ctr_drop}}% since launch.",
+          "before": "Current hook running",
+          "after": "Next hook variant live, old one paused"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.ad.rotate",
+            "params": {
+              "pauseAdId": "{{decision.params.adId}}",
+              "resumeAdId": "{{decision.params.nextAdId}}",
+              "reason": "hook fatigue"
+            }
+          },
+          "rollback": "meta.ad.rotate the other way (pause the new, resume the old)",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Hook rotation: {{decision.label}}.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -1112,6 +2462,11 @@
         "inputs": [],
         "helpful": []
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Fatigue: <pause|keep> <ad name>\",\"body\":\"the frequency/CPA/spend that are present and why this verdict\",\"items\":[{\"title\":\"<pause|keep>: <ad>\",\"body\":\"<evidence + rollback, markdown>\",\"meta\":{\"action\":\"pause|keep\",\"ad_id\":null,\"ad_name\":\"…\",\"rollback\":\"meta.ad.resume\"}}],\"evidence\":[{\"source\":\"read:ads\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_ads",
@@ -1158,6 +2513,116 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 */6 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_ads",
+          "as": "ads",
+          "source": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "7d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_id",
+              "ad_name",
+              "spend",
+              "frequency",
+              "cpa",
+              "cpa_trend"
+            ],
+            "limit": 200
+          },
+          "freshnessMinutes": 90
+        },
+        {
+          "kind": "check",
+          "id": "tired_ad",
+          "predicate": {
+            "all": [
+              {
+                "metric": "reads.ads.worst_frequency",
+                "op": "gte",
+                "value": 4
+              },
+              {
+                "metric": "reads.ads.worst_cpa_vs_target_pct",
+                "op": "gte",
+                "value": 40
+              }
+            ]
+          },
+          "onFail": "skip",
+          "reason": "No ad is both saturated and over CPA target."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Pause the tired ad?",
+          "options": [
+            {
+              "id": "pause",
+              "label": "Pause {{reads.ads.worst_ad_name}}",
+              "params": {
+                "actionId": "meta.ad.pause",
+                "adId": "{{reads.ads.worst_ad_id}}"
+              }
+            },
+            {
+              "id": "keep",
+              "label": "Keep running — spend too small to matter",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.ads.worst_spend",
+            "op": "gte",
+            "value": 50,
+            "ifTrue": "pause",
+            "ifFalse": "keep"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Pause {{reads.ads.worst_ad_name}} — frequency {{reads.ads.worst_frequency}}, CPA {{reads.ads.worst_cpa_vs_target_pct}}% over target",
+          "expiryHours": 12,
+          "before": "Ad active, {{account.currency}} {{reads.ads.worst_spend}} spent in 7d",
+          "after": "Ad paused; budget flows to the rest of the ad set"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.ad.pause",
+            "target": {
+              "adId": "{{decision.params.adId}}"
+            },
+            "params": {
+              "reason": "frequency {{reads.ads.worst_frequency}}, CPA {{reads.ads.worst_cpa_vs_target_pct}}% over target"
+            }
+          },
+          "rollback": "meta.ad.resume",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Ad fatigue watch: {{decision.label}}.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -1192,6 +2657,11 @@
           "meta_ads"
         ]
       },
+      "outputGuide": "{\"kind\":\"outreach_draft\",\"title\":\"<n> whitelist requests\",\"body\":\"which posts, why those, and that you send the request\",\"items\":[{\"title\":\"<handle>: <post hook>\",\"body\":\"<the permission request>\",\"meta\":{\"to\":\"…\",\"permalink\":null,\"subject\":\"…\"}}],\"evidence\":[{\"source\":\"read:creators|read:ads|input:creator_post\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 3,
+      "effectiveProduceMaxItems": 3,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_creators",
@@ -1254,6 +2724,71 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_creators",
+          "as": "creators",
+          "source": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "28d",
+            "filter": {
+              "tagged": true
+            },
+            "fields": [
+              "username",
+              "plays",
+              "saves",
+              "permalink"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_ads",
+          "as": "ads",
+          "source": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "filter": {
+              "level": "ad",
+              "creative_type": "partnership"
+            },
+            "fields": [
+              "ad_name",
+              "cpa",
+              "ctr"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}} — you send",
+          "expiryHours": 48,
+          "detail": "Partnership-ad permission requests written for you to send. Ads only run after the creator accepts.",
+          "after": "Requests in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Creator whitelisting: {{artifact.title}} drafted.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -1275,6 +2810,11 @@
           "instagram"
         ]
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Test matrix: <n> cells to run next\",\"body\":\"what is measured vs hypothesized, how you ranked the untested cells (no lift %)\",\"items\":[{\"title\":\"<hook> × <format> × <offer>\",\"body\":\"<hypothesis · brief · what would measure it>\",\"meta\":{\"hook\":\"…\",\"format\":\"…\",\"offer\":\"…\",\"status\":\"hypothesized\"}}],\"evidence\":[{\"source\":\"site_profile|read:ads|read:library\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 8,
+      "effectiveProduceMaxItems": 8,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_ads",
@@ -1335,6 +2875,69 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_ads",
+          "as": "ads",
+          "source": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "filter": {
+              "level": "ad"
+            },
+            "fields": [
+              "ad_name",
+              "hook",
+              "format",
+              "offer",
+              "cpa",
+              "spend"
+            ],
+            "limit": 200
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_library",
+          "as": "library",
+          "source": "instagram",
+          "query": {
+            "resource": "media",
+            "window": "28d",
+            "fields": [
+              "caption",
+              "media_type",
+              "saves"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Untested combinations ranked when I have results; a hypothesis matrix from the brand when I don't. No invented lift %.",
+          "after": "Test plan ready for the content engine"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Creative test planner: {{artifact.title}} drafted.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -1355,6 +2958,11 @@
           "google_ads"
         ]
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Pacing: <cut|fine>\",\"body\":\"today's Meta numbers that are present, Google only if read, why this verdict\",\"items\":[{\"title\":\"<cut|fine>: <ad set or account>\",\"body\":\"<evidence + rollback, markdown>\",\"meta\":{\"action\":\"cut|fine\",\"adset_id\":null,\"adset_name\":\"…\",\"rollback\":\"restore the previous daily budget\"}}],\"evidence\":[{\"source\":\"read:meta|read:google|read:mtd|read:adsets|vars\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_meta",
@@ -1462,6 +3070,173 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 */6 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_meta",
+          "as": "meta",
+          "source": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "1d",
+            "filter": {
+              "level": "account"
+            },
+            "fields": [
+              "spend",
+              "daily_budget_total"
+            ]
+          },
+          "freshnessMinutes": 60
+        },
+        {
+          "kind": "read",
+          "id": "read_google",
+          "as": "google",
+          "source": "google_ads",
+          "query": {
+            "resource": "campaigns",
+            "window": "1d",
+            "fields": [
+              "campaign_id",
+              "cost",
+              "budget_amount",
+              "status"
+            ]
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_mtd",
+          "as": "mtd",
+          "source": "meta_ads",
+          "query": {
+            "resource": "insights",
+            "window": "28d",
+            "filter": {
+              "level": "account"
+            },
+            "fields": [
+              "spend"
+            ]
+          },
+          "freshnessMinutes": 60
+        },
+        {
+          "kind": "read",
+          "id": "read_adsets",
+          "as": "adsets",
+          "source": "meta_ads",
+          "query": {
+            "resource": "adsets",
+            "fields": [
+              "id",
+              "name",
+              "status",
+              "effective_status",
+              "daily_budget"
+            ],
+            "limit": 200
+          }
+        },
+        {
+          "kind": "check",
+          "id": "over_pace",
+          "predicate": {
+            "any": [
+              {
+                "metric": "reads.meta.projected_daily_spend",
+                "op": "gt",
+                "value": {
+                  "ref": "caps.perDay"
+                }
+              },
+              {
+                "metric": "reads.google.projected_daily_spend",
+                "op": "gt",
+                "value": {
+                  "ref": "caps.perDay"
+                }
+              }
+            ]
+          },
+          "onFail": "skip",
+          "reason": "Pacing inside the {{account.currency}} {{caps.perDay}}/day cap."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Is the account pacing over its hard cap?",
+          "options": [
+            {
+              "id": "cut",
+              "label": "Cut {{reads.adsets.largest_adset_name}} by 25% to pull pacing back under the cap",
+              "params": {
+                "actionId": "meta.adset.set_daily_budget",
+                "adsetId": "{{reads.adsets.largest_adset_id}}",
+                "currentDailyBudget": "{{reads.adsets.largest_daily_budget}}",
+                "changePct": -25,
+                "reduceTo": "{{caps.perDay}}"
+              }
+            },
+            {
+              "id": "fine",
+              "label": "Pacing inside the cap",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.meta.projected_daily_spend",
+            "op": "gt",
+            "value": {
+              "ref": "caps.perDay"
+            },
+            "ifTrue": "cut",
+            "ifFalse": "fine"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Spend pacing at {{account.currency}} {{reads.meta.projected_daily_spend}}/day vs cap {{account.currency}} {{caps.perDay}} — cut the largest ad set by 25%?",
+          "expiryHours": 6,
+          "before": "Budgets total {{account.currency}} {{reads.meta.daily_budget_total}}/day",
+          "after": "25% reduction proposed; a fresh pacing read is required before any further change"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.adset.set_daily_budget",
+            "target": {
+              "adsetId": "{{decision.params.adsetId}}"
+            },
+            "params": {
+              "changePct": "{{decision.params.changePct}}",
+              "currentDailyBudget": "{{decision.params.currentDailyBudget}}",
+              "reason": "pacing {{reads.meta.projected_daily_spend}}/day over the {{caps.perDay}}/day cap"
+            }
+          },
+          "rollback": "restore the previous daily budget",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Budget pacing guard: {{decision.label}}.",
+          "measurementWindowDays": 1
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -1499,6 +3274,11 @@
           "ga4"
         ]
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Organic-to-paid: <promote|skip> <post>\",\"body\":\"which post, the organic numbers that are present, conversions only if GA4 measured them\",\"items\":[{\"title\":\"<promote|skip>: <post hook>\",\"body\":\"<evidence + budget-if-present + rollback, markdown>\",\"meta\":{\"action\":\"promote|skip\",\"media_id\":null,\"rollback\":\"created PAUSED; switch it off in Ads Manager\"}}],\"evidence\":[{\"source\":\"read:posts|read:ga|input:source_post|vars\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_posts",
@@ -1566,6 +3346,143 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_posts",
+          "as": "posts",
+          "source": "instagram",
+          "query": {
+            "resource": "insights",
+            "window": "7d",
+            "fields": [
+              "media_id",
+              "caption",
+              "reach",
+              "plays",
+              "likes",
+              "saves",
+              "shares"
+            ],
+            "limit": 50
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_ga",
+          "as": "ga",
+          "source": "ga4",
+          "query": {
+            "resource": "report",
+            "window": "7d",
+            "fields": [
+              "sessions",
+              "conversions"
+            ],
+            "filter": {
+              "sessionSource": "instagram"
+            }
+          }
+        },
+        {
+          "kind": "check",
+          "id": "demand_not_just_reach",
+          "predicate": {
+            "all": [
+              {
+                "metric": "reads.posts.top_post_reach",
+                "op": "gte",
+                "value": 5000
+              },
+              {
+                "metric": "reads.posts.top_post_like_rate_pct",
+                "op": "gte",
+                "value": 1
+              }
+            ]
+          },
+          "onFail": "skip",
+          "reason": "Best post either lacks reach or its like-rate is under 1% — reach is not demand."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Promote the proven post as a paid test?",
+          "options": [
+            {
+              "id": "promote",
+              "label": "Prepare {{reads.posts.top_post_caption}} as a PAUSED paid test",
+              "spend": {
+                "amount": 20,
+                "period": "day"
+              },
+              "params": {
+                "actionId": "meta.campaign.create_from_brief",
+                "mediaId": "{{reads.posts.top_post_id}}"
+              }
+            },
+            {
+              "id": "skip",
+              "label": "Not yet — wait for conversions from it",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.ga.conversions",
+            "op": "gte",
+            "value": 1,
+            "ifTrue": "promote",
+            "ifFalse": "skip"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Prepare your top post as a PAUSED {{account.currency}} {{decision.spend.amount}}/day ad test",
+          "expiryHours": 48,
+          "detail": "Reach {{reads.posts.top_post_reach}}, like-rate {{reads.posts.top_post_like_rate_pct}}%, {{reads.ga.conversions}} conversions from Instagram this week. Activation remains a separate founder-controlled step.",
+          "before": "Organic only",
+          "after": "PAUSED paid-test proposal ready for separate activation"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "meta_ads",
+          "mutation": {
+            "action": "meta.campaign.create_from_brief",
+            "params": {
+              "name": "Organic-to-paid test — {{today}}",
+              "objective": "OUTCOME_TRAFFIC",
+              "optimizationGoal": "LANDING_PAGE_VIEWS",
+              "dailyBudget": "{{decision.spend.amount}}",
+              "audience": {
+                "countries": "{{vars.countries}}"
+              },
+              "creatives": {
+                "instagramMediaId": "{{decision.params.mediaId}}"
+              },
+              "pageId": "{{vars.metaPageId}}",
+              "durationDays": 7
+            }
+          },
+          "rollback": "everything is created PAUSED; switch it off in Ads Manager",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Organic-to-paid proposal: {{decision.label}}.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -1608,6 +3525,11 @@
           "shopify"
         ]
       },
+      "outputGuide": "{\"kind\":\"keyword_list\",\"title\":\"<n> keyword opportunities to validate in Search Console\",\"body\":\"themes and how to validate them (Search Console → Performance → filter query)\",\"items\":[{\"title\":\"<search phrase>\",\"body\":\"<intent · owning page · the move>\",\"meta\":{\"intent\":\"…\",\"target_page\":\"…\",\"move\":\"…\",\"status\":\"hypothesis\"}}],\"evidence\":[{\"source\":\"site_profile|read:gsc|read:pages\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 15,
+      "effectiveProduceMaxItems": 15,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_gsc",
@@ -1672,6 +3594,73 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_gsc",
+          "as": "gsc",
+          "source": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "28d",
+            "groupBy": [
+              "query",
+              "page"
+            ],
+            "fields": [
+              "clicks",
+              "impressions",
+              "ctr",
+              "position"
+            ],
+            "filter": {
+              "positionBetween": [
+                8,
+                30
+              ]
+            },
+            "limit": 500
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_pages",
+          "as": "pages",
+          "source": "shopify",
+          "query": {
+            "resource": "pages",
+            "fields": [
+              "handle",
+              "title",
+              "body_summary"
+            ],
+            "limit": 200
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Searches you can plausibly win with pages you already have — each with the page that should own it and the move. Hypotheses until Search Console confirms them.",
+          "after": "Opportunity list in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Keyword opportunity scan: {{artifact.title}} drafted.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -1692,6 +3681,11 @@
           "search_console"
         ]
       },
+      "outputGuide": "{\"kind\":\"content_gap\",\"title\":\"<n> content gaps on <site name>\",\"body\":\"what the site covers well, what the category expects, how you ranked\",\"items\":[{\"title\":\"<working H1>\",\"body\":\"<why · must contain · link from>\",\"meta\":{\"stage\":\"…\",\"page_type\":\"…\",\"proof\":\"…\"}}],\"evidence\":[{\"source\":\"site_profile|read:competitors|read:own|read:gsc\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 10,
+      "effectiveProduceMaxItems": 10,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_gsc",
@@ -1776,6 +3770,89 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_gsc",
+          "as": "gsc",
+          "source": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "90d",
+            "groupBy": [
+              "query"
+            ],
+            "fields": [
+              "impressions",
+              "clicks",
+              "position"
+            ],
+            "limit": 1000
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_competitors",
+          "as": "competitors",
+          "source": "web",
+          "query": {
+            "resource": "crawl",
+            "filter": {
+              "domains": "{{vars.competitorDomains}}"
+            },
+            "fields": [
+              "url",
+              "title",
+              "h1",
+              "topic"
+            ],
+            "limit": 300
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_own",
+          "as": "own",
+          "source": "web",
+          "query": {
+            "resource": "crawl",
+            "filter": {
+              "domains": "{{vars.website}}"
+            },
+            "fields": [
+              "url",
+              "title",
+              "h1",
+              "topic"
+            ],
+            "limit": 300
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "The pages a business in your category is expected to have, against what your site has. One brief per gap, ranked by buying proximity.",
+          "after": "Gap briefs ready for the content engine"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Content gap analysis: {{artifact.title}} drafted.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -1796,6 +3873,11 @@
           "shopify"
         ]
       },
+      "outputGuide": "{\"kind\":\"content_gap\",\"title\":\"<n> AI-search gaps on <site name>\",\"body\":\"which prompts you tested (or could not yet), what the site already covers, how you ranked — no mention rate unless it is in the LLM rows\",\"items\":[{\"title\":\"<buyer prompt>\",\"body\":\"<engine · mentioned? · owning page · the move>\",\"meta\":{\"engine\":\"…\",\"mentioned\":null,\"status\":\"not_yet_tested\",\"target_page\":\"…\",\"move\":\"…\"}}],\"evidence\":[{\"source\":\"site_profile|read:llm|read:pages|input:buyer_prompts|vars\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 8,
+      "effectiveProduceMaxItems": 8,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_llm",
@@ -1857,6 +3939,70 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_llm",
+          "as": "llm",
+          "source": "llm_search",
+          "query": {
+            "resource": "prompts",
+            "filter": {
+              "prompts": "{{vars.buyerPrompts}}",
+              "engines": [
+                "chatgpt",
+                "perplexity",
+                "gemini"
+              ]
+            },
+            "fields": [
+              "prompt",
+              "engine",
+              "mentioned",
+              "cited_url",
+              "competitors_mentioned"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_pages",
+          "as": "pages",
+          "source": "shopify",
+          "query": {
+            "resource": "pages",
+            "fields": [
+              "handle",
+              "title"
+            ],
+            "limit": 200
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Which prompts name competitors, which pages need entity and FAQ structure. Untested prompts stay labelled as such.",
+          "after": "Fix list in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "AI search visibility: {{artifact.title}} drafted.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -1877,6 +4023,11 @@
           "search_console"
         ]
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"On-page SEO: rewrite /<handle>\",\"body\":\"which page, why this one, current vs proposed — impressions only if Search Console had them\",\"items\":[{\"title\":\"/<handle>\",\"body\":\"<markdown: current · proposed · why>\",\"meta\":{\"page_id\":\"…\",\"handle\":\"…\",\"new_title\":\"…\",\"new_description\":\"…\",\"impressions\":null,\"ctr\":null}}],\"evidence\":[{\"source\":\"read:pages|read:gsc\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_gsc",
@@ -1945,6 +4096,123 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_gsc",
+          "as": "gsc",
+          "source": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "28d",
+            "groupBy": [
+              "page"
+            ],
+            "fields": [
+              "clicks",
+              "impressions",
+              "ctr",
+              "position"
+            ],
+            "limit": 300
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_pages",
+          "as": "pages",
+          "source": "shopify",
+          "query": {
+            "resource": "pages",
+            "fields": [
+              "id",
+              "handle",
+              "title",
+              "meta_title",
+              "meta_description",
+              "h1"
+            ],
+            "limit": 300
+          }
+        },
+        {
+          "kind": "check",
+          "id": "has_fixable",
+          "predicate": {
+            "metric": "reads.pages.missing_meta_count",
+            "op": "gte",
+            "value": 1
+          },
+          "onFail": "skip",
+          "reason": "Every indexed page already has a title and description."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Which on-page fix is worth making this week?",
+          "options": [
+            {
+              "id": "fix",
+              "label": "Fix meta title + description on {{reads.pages.worst_page_handle}}",
+              "params": {
+                "pageId": "{{reads.pages.worst_page_id}}"
+              }
+            },
+            {
+              "id": "none",
+              "label": "No fix with meaningful impressions",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.gsc.worst_page_impressions",
+            "op": "gte",
+            "value": 200,
+            "ifTrue": "fix",
+            "ifFalse": "none"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Rewrite the meta title + description on /{{reads.pages.worst_page_handle}}",
+          "expiryHours": 48,
+          "detail": "{{reads.gsc.worst_page_impressions}} impressions at {{reads.gsc.worst_page_ctr}}% CTR. New copy attached.",
+          "before": "Current: {{reads.pages.worst_page_meta_title}}",
+          "after": "Proposed copy attached in {{artifact.title}}"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "shopify",
+          "mutation": {
+            "action": "update_page_seo",
+            "target": {
+              "pageId": "{{decision.params.pageId}}"
+            },
+            "params": {
+              "metaTitle": "{{decision.params.newTitle}}",
+              "metaDescription": "{{decision.params.newDescription}}"
+            }
+          },
+          "rollback": "restore previous meta fields",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "On-page SEO proposal prepared: {{decision.label}}.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -1977,6 +4245,11 @@
         "inputs": [],
         "helpful": []
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"<n> ranking moves this week\",\"body\":\"what moved, what didn't, the one thing to do — positions only from Search Console\",\"items\":[{\"title\":\"<query>\",\"body\":\"<position · change · the response>\",\"meta\":{\"query\":\"…\",\"position\":null,\"change\":null,\"clicks\":null,\"response\":\"…\"}}],\"evidence\":[{\"source\":\"read:gsc\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 6,
+      "effectiveProduceMaxItems": 6,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_gsc",
@@ -2015,6 +4288,52 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_gsc",
+          "as": "gsc",
+          "source": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "7d",
+            "groupBy": [
+              "query"
+            ],
+            "fields": [
+              "position",
+              "position_change_7d",
+              "clicks"
+            ],
+            "filter": {
+              "tracked": true
+            },
+            "limit": 200
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 24,
+          "detail": "Tracked keywords that moved 3+ positions, with a suggested response. I don't invent a ranking I didn't read.",
+          "after": "Movement note in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "SERP position watch: {{artifact.title}} drafted.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -2035,6 +4354,11 @@
           "search_console"
         ]
       },
+      "outputGuide": "{\"kind\":\"content_gap\",\"title\":\"<n> competitor moves vs <site name>\",\"body\":\"what you watched, what is measured vs hypothesized, how you ranked the threats\",\"items\":[{\"title\":\"<competitor H1 or URL>\",\"body\":\"<who · which query it threatens · the counter-move>\",\"meta\":{\"competitor\":\"…\",\"url\":null,\"status\":\"hypothesis\",\"target_query\":\"…\",\"move\":\"…\"}}],\"evidence\":[{\"source\":\"site_profile|read:competitors|read:gsc|input:competitors|vars\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 8,
+      "effectiveProduceMaxItems": 8,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_competitors",
@@ -2096,6 +4420,70 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_competitors",
+          "as": "competitors",
+          "source": "web",
+          "query": {
+            "resource": "crawl",
+            "window": "7d",
+            "filter": {
+              "domains": "{{vars.competitorDomains}}",
+              "changedOnly": true
+            },
+            "fields": [
+              "url",
+              "title",
+              "published_at",
+              "topic"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_gsc",
+          "as": "gsc",
+          "source": "search_console",
+          "query": {
+            "resource": "search_analytics",
+            "window": "28d",
+            "groupBy": [
+              "query"
+            ],
+            "fields": [
+              "position",
+              "position_change_28d"
+            ],
+            "limit": 300
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Which of your rankings each new competitor page targets, and the counter-move. Hypotheses labelled when I haven't crawled.",
+          "after": "Report in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Competitor gap watch: {{artifact.title}} drafted.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -2116,6 +4504,11 @@
           "hubspot"
         ]
       },
+      "outputGuide": "{\"kind\":\"lead_brief\",\"title\":\"Lead brief: <ICP in five words>\",\"body\":\"<ICP paragraph + rubric, markdown>\",\"items\":[{\"title\":\"…\",\"body\":\"…\",\"meta\":{\"type\":\"…\",\"score\":null,\"company\":null}}],\"evidence\":[{\"source\":\"input:target_description|site_profile|read:leads\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 8,
+      "effectiveProduceMaxItems": 8,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_leads",
@@ -2154,6 +4547,52 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_leads",
+          "as": "leads",
+          "source": "hubspot",
+          "query": {
+            "resource": "contacts",
+            "window": "1d",
+            "filter": {
+              "lifecycleStage": "lead",
+              "scored": false
+            },
+            "fields": [
+              "id",
+              "email",
+              "company",
+              "website",
+              "title"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 24,
+          "detail": "Your ICP, a scoring rubric and the research checklist — plus provisional scores when there are real leads to score. Scores are suggestions until you accept.",
+          "after": "Lead brief ready for outreach drafts"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Lead research & scoring: {{artifact.title}} handed over.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -2175,6 +4614,11 @@
           "gmail"
         ]
       },
+      "outputGuide": "{\"kind\":\"outreach_draft\",\"title\":\"<n> first-touch drafts: <segment>\",\"body\":\"who these go to and what to personalise before sending\",\"items\":[{\"title\":\"<subject>\",\"body\":\"<the email>\",\"meta\":{\"to\":\"…\",\"company\":null,\"subject\":\"…\"}}],\"evidence\":[{\"source\":\"artifact:lead_brief|read:leads|site_profile\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 3,
+      "effectiveProduceMaxItems": 3,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_leads",
@@ -2242,6 +4686,76 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_leads",
+          "as": "leads",
+          "source": "hubspot",
+          "query": {
+            "resource": "contacts",
+            "window": "7d",
+            "filter": {
+              "lifecycleStage": "lead",
+              "fitScore": {
+                "gte": 70
+              },
+              "contacted": false
+            },
+            "fields": [
+              "id",
+              "email",
+              "firstname",
+              "company",
+              "fit_reason"
+            ],
+            "limit": 20
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_threads",
+          "as": "threads",
+          "source": "gmail",
+          "query": {
+            "resource": "threads",
+            "window": "28d",
+            "filter": {
+              "label": "sent",
+              "to": "{{reads.leads.emails}}"
+            },
+            "fields": [
+              "to",
+              "subject",
+              "snippet"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}} — you send",
+          "expiryHours": 24,
+          "detail": "First-touch emails personalised from the lead brief. Copy them into your mail client; Unc never sends.",
+          "after": "Drafts ready to send"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Supervised outbound: {{artifact.title}} handed over.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -2263,6 +4777,11 @@
           "gmail"
         ]
       },
+      "outputGuide": "{\"kind\":\"meeting_brief\",\"title\":\"Briefs for <n> meeting(s) today\",\"body\":\"one line per meeting: the point of it\",\"items\":[{\"title\":\"…\",\"body\":\"<markdown sections>\",\"meta\":{\"company\":\"…\",\"stage\":null,\"attendees\":[]}}],\"evidence\":[{\"source\":\"read:meetings|read:contacts|read:threads|input:meeting\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 5,
+      "effectiveProduceMaxItems": 5,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_meetings",
@@ -2350,6 +4869,91 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_meetings",
+          "as": "meetings",
+          "source": "calendar",
+          "query": {
+            "resource": "events",
+            "window": "1d",
+            "filter": {
+              "external": true
+            },
+            "fields": [
+              "id",
+              "title",
+              "start",
+              "attendees"
+            ],
+            "limit": 20
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_contacts",
+          "as": "contacts",
+          "source": "hubspot",
+          "query": {
+            "resource": "contacts",
+            "filter": {
+              "emails": "{{reads.meetings.attendee_emails}}"
+            },
+            "fields": [
+              "id",
+              "company",
+              "lifecycleStage",
+              "deal_stage",
+              "notes"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_threads",
+          "as": "threads",
+          "source": "gmail",
+          "query": {
+            "resource": "threads",
+            "window": "90d",
+            "filter": {
+              "with": "{{reads.meetings.attendee_emails}}"
+            },
+            "fields": [
+              "subject",
+              "snippet",
+              "date"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 12,
+          "detail": "Who they are, where the deal sits, the last threads, and the question to open with.",
+          "after": "Briefs in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Meeting brief builder: {{artifact.title}} delivered.",
+          "measurementWindowDays": 1
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -2371,6 +4975,11 @@
           "gmail"
         ]
       },
+      "outputGuide": "{\"kind\":\"outreach_draft\",\"title\":\"<n> follow-ups for deals gone quiet\",\"body\":\"which deals, what the last thread was, what to personalise before sending — Unc does not send\",\"items\":[{\"title\":\"<subject>\",\"body\":\"<the email>\",\"meta\":{\"to\":\"…\",\"company\":null,\"deal\":\"…\",\"subject\":\"…\",\"last_activity\":null}}],\"evidence\":[{\"source\":\"read:deals|read:threads|input:stale_deals\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 5,
+      "effectiveProduceMaxItems": 5,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_deals",
@@ -2434,6 +5043,72 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_deals",
+          "as": "deals",
+          "source": "hubspot",
+          "query": {
+            "resource": "deals",
+            "filter": {
+              "stage": "open",
+              "lastActivityOlderThanDays": 5
+            },
+            "fields": [
+              "id",
+              "name",
+              "contact_email",
+              "stage",
+              "last_activity"
+            ],
+            "limit": 50
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_threads",
+          "as": "threads",
+          "source": "gmail",
+          "query": {
+            "resource": "threads",
+            "window": "28d",
+            "filter": {
+              "with": "{{reads.deals.contact_emails}}"
+            },
+            "fields": [
+              "subject",
+              "snippet",
+              "date",
+              "replied"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}} — you send",
+          "expiryHours": 24,
+          "detail": "Each draft picks up the last thread. Nothing sends without you.",
+          "after": "Follow-up drafts in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Follow-up cadence: {{artifact.title}} handed over.",
+          "measurementWindowDays": 7
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -2454,6 +5129,11 @@
           "gmail"
         ]
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Win/loss on <n> closed deals\",\"body\":\"which closes, which reasons are from the thread, which still need you\",\"items\":[{\"title\":\"<deal> — won|lost\",\"body\":\"<reason · evidence · ask>\",\"meta\":{\"deal_id\":\"…\",\"stage\":\"…\",\"reason\":null,\"confidence\":\"ask\"}}],\"evidence\":[{\"source\":\"read:closed|read:threads\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 5,
+      "effectiveProduceMaxItems": 5,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_closed",
@@ -2528,6 +5208,129 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_closed",
+          "as": "closed",
+          "source": "hubspot",
+          "query": {
+            "resource": "deals",
+            "window": "1d",
+            "filter": {
+              "stage": [
+                "closedwon",
+                "closedlost"
+              ],
+              "winLossCaptured": false
+            },
+            "fields": [
+              "id",
+              "name",
+              "amount",
+              "stage",
+              "contact_email"
+            ],
+            "limit": 20
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_threads",
+          "as": "threads",
+          "source": "gmail",
+          "query": {
+            "resource": "threads",
+            "window": "90d",
+            "filter": {
+              "with": "{{reads.closed.contact_emails}}"
+            },
+            "fields": [
+              "subject",
+              "snippet",
+              "date"
+            ],
+            "limit": 100
+          }
+        },
+        {
+          "kind": "check",
+          "id": "new_closes",
+          "predicate": {
+            "metric": "reads.closed.count",
+            "op": "gte",
+            "value": 1
+          },
+          "onFail": "skip",
+          "reason": "No deals closed since yesterday."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "What is the honest reason each deal closed or died?",
+          "options": [
+            {
+              "id": "capture",
+              "label": "Write the win/loss reason to {{reads.closed.count}} deals",
+              "params": {
+                "dealIds": "{{reads.closed.ids}}",
+                "reasons": "{{reads.closed.inferred_reasons}}"
+              }
+            },
+            {
+              "id": "unclear",
+              "label": "Reason unclear — ask you instead",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.threads.count",
+            "op": "gte",
+            "value": 1,
+            "ifTrue": "capture",
+            "ifFalse": "unclear"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Review proposed win/loss reasons for {{reads.closed.count}} closed deals",
+          "expiryHours": 48,
+          "detail": "Drafted from the email trail and marked HOLD where evidence is missing. Edit every reason before any future HubSpot write.",
+          "before": "Deals closed, no verified reason recorded",
+          "after": "Exact reason-and-evidence proposal ready for a separately supported write"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "hubspot",
+          "mutation": {
+            "action": "update_deal_properties",
+            "target": {
+              "dealIds": "{{decision.params.dealIds}}"
+            },
+            "params": {
+              "win_loss_reason": "{{decision.params.reasons}}"
+            }
+          },
+          "rollback": "clear the win_loss_reason property",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Win/loss proposal prepared: {{decision.label}}.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -2559,6 +5362,11 @@
         "inputs": [],
         "helpful": []
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Close-lost: <n> stale deals\",\"body\":\"the rule, the list (name · stage · amount · last activity) — counts only from the rows\",\"items\":[{\"title\":\"Close-lost list\",\"body\":\"<markdown list or 'nothing stale on these rows'>\",\"meta\":{\"deal_ids\":[],\"stale_over_days\":30,\"count\":0}}],\"evidence\":[{\"source\":\"read:deals\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_deals",
@@ -2605,6 +5413,108 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_deals",
+          "as": "deals",
+          "source": "hubspot",
+          "query": {
+            "resource": "deals",
+            "filter": {
+              "stage": "open"
+            },
+            "fields": [
+              "id",
+              "name",
+              "stage",
+              "amount",
+              "close_date",
+              "last_activity",
+              "days_stale"
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "kind": "check",
+          "id": "dead_deals",
+          "predicate": {
+            "metric": "reads.deals.stale_over_30d_count",
+            "op": "gte",
+            "value": 1
+          },
+          "onFail": "skip",
+          "reason": "Nothing stale — pipeline is clean."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Which deals are actually dead?",
+          "options": [
+            {
+              "id": "close",
+              "label": "Mark {{reads.deals.stale_over_30d_count}} deals closed-lost (no activity 30+ days)",
+              "params": {
+                "dealIds": "{{reads.deals.stale_over_30d_ids}}"
+              }
+            },
+            {
+              "id": "review",
+              "label": "Too many to auto-close — hand you the list",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.deals.stale_over_30d_count",
+            "op": "lte",
+            "value": 15,
+            "ifTrue": "close",
+            "ifFalse": "review"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Review {{reads.deals.stale_over_30d_count}} stale deals ({{account.currency}} {{reads.deals.stale_over_30d_amount}} of pipeline)",
+          "expiryHours": 48,
+          "detail": "Stale is not dead. The attached review separates evidenced closure candidates from deals that need an owner decision.",
+          "before": "{{reads.deals.count}} open deals",
+          "after": "Only explicitly approved deals close; held deals stay open",
+          "reasoning": "No activity for 30+ days is a review trigger, not proof that a deal is lost."
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "hubspot",
+          "mutation": {
+            "action": "update_deal_stage",
+            "target": {
+              "dealIds": "{{decision.params.dealIds}}"
+            },
+            "params": {
+              "stage": "closedlost",
+              "reason": "no activity 30+ days (Unc pipeline hygiene)"
+            }
+          },
+          "rollback": "reopen the deals at their previous stage",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Pipeline hygiene proposal prepared: {{decision.label}}.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -2638,6 +5548,11 @@
         "inputs": [],
         "helpful": []
       },
+      "outputGuide": "{\"kind\":\"email\",\"title\":\"Welcome flow: replacement for step <n or weakest>\",\"body\":\"which step you are replacing and why (CTOR only if measured) plus the angle of the new message\",\"items\":[{\"title\":\"<subject>\",\"body\":\"<preview + body, markdown>\",\"meta\":{\"position\":null,\"message_id\":null,\"subject\":\"…\",\"preview\":\"…\"}}],\"evidence\":[{\"source\":\"read:flow|read:perf|read:orders|site_profile|memory|input:flow_note\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_flow",
@@ -2732,6 +5647,145 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_flow",
+          "as": "flow",
+          "source": "klaviyo",
+          "query": {
+            "resource": "flows",
+            "filter": {
+              "name": "Welcome Series"
+            },
+            "fields": [
+              "id",
+              "status",
+              "messages"
+            ]
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_perf",
+          "as": "perf",
+          "source": "klaviyo",
+          "query": {
+            "resource": "metrics",
+            "window": "28d",
+            "filter": {
+              "flowName": "Welcome Series"
+            },
+            "groupBy": [
+              "message_id"
+            ],
+            "fields": [
+              "sends",
+              "opens",
+              "clicks",
+              "placed_orders",
+              "revenue"
+            ]
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_orders",
+          "as": "orders",
+          "source": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "28d",
+            "filter": {
+              "firstOrder": true
+            },
+            "fields": [
+              "id",
+              "total_price",
+              "customer_id"
+            ]
+          }
+        },
+        {
+          "kind": "check",
+          "id": "enough_sends",
+          "predicate": {
+            "metric": "reads.perf.sends",
+            "op": "gte",
+            "value": 200,
+            "window": "28d"
+          },
+          "onFail": "skip",
+          "reason": "Fewer than 200 welcome sends this month — not enough to tune on."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Which welcome message is underperforming, and what replaces it?",
+          "options": [
+            {
+              "id": "swap",
+              "label": "Replace the weakest message with the drafted variant",
+              "params": {
+                "messageId": "{{reads.perf.weakest_message_id}}"
+              }
+            },
+            {
+              "id": "keep",
+              "label": "All messages within range — keep",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.perf.weakest_ctor_pct",
+            "op": "lt",
+            "value": 8,
+            "ifTrue": "swap",
+            "ifFalse": "keep"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Review the proposed welcome-message replacement for position {{reads.perf.weakest_message_position}} (CTOR {{reads.perf.weakest_ctor_pct}}%)",
+          "expiryHours": 48,
+          "detail": "New subject, preview and body are attached in the proposal. Current-copy readback and a typed Klaviyo action are required before it can go live.",
+          "before": "CTOR {{reads.perf.weakest_ctor_pct}}% on {{reads.perf.sends}} sends",
+          "after": "Exact variant proposal ready for a separately supported write and 14-day measurement"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "klaviyo",
+          "mutation": {
+            "action": "update_flow_message",
+            "target": {
+              "messageId": "{{decision.params.messageId}}"
+            },
+            "params": {
+              "subject": "{{decision.params.subject}}",
+              "previewText": "{{decision.params.preview}}",
+              "body": "{{decision.params.body}}"
+            }
+          },
+          "rollback": "restore the previous message content",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Welcome-flow proposal prepared: {{decision.label}}.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -2767,6 +5821,11 @@
           "klaviyo"
         ]
       },
+      "outputGuide": "{\"kind\":\"email\",\"title\":\"Abandoned cart flow: 3 messages\",\"body\":\"what the carts show (top products, count, value if measured) and the angle of each message\",\"items\":[{\"title\":\"<delay>: <subject>\",\"body\":\"<preview + body, markdown>\",\"meta\":{\"delay\":\"…\",\"subject\":\"…\",\"preview\":\"…\"}}],\"evidence\":[{\"source\":\"read:checkouts|read:perf|site_profile|memory\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 3,
+      "effectiveProduceMaxItems": 3,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_checkouts",
@@ -2852,6 +5911,88 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 7 * * *"
+        },
+        {
+          "kind": "read",
+          "id": "read_checkouts",
+          "as": "checkouts",
+          "source": "shopify",
+          "query": {
+            "resource": "checkouts",
+            "window": "7d",
+            "filter": {
+              "abandoned": true
+            },
+            "fields": [
+              "id",
+              "email",
+              "total_price",
+              "line_items",
+              "abandoned_at"
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_flow",
+          "as": "flow",
+          "source": "klaviyo",
+          "query": {
+            "resource": "flows",
+            "filter": {
+              "name": "Abandoned Cart"
+            },
+            "fields": [
+              "id",
+              "status",
+              "messages"
+            ]
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_perf",
+          "as": "perf",
+          "source": "klaviyo",
+          "query": {
+            "resource": "metrics",
+            "window": "28d",
+            "filter": {
+              "flowName": "Abandoned Cart"
+            },
+            "fields": [
+              "sends",
+              "clicks",
+              "placed_orders",
+              "revenue"
+            ]
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}} — from {{reads.checkouts.count}} carts abandoned this week",
+          "expiryHours": 48,
+          "detail": "Three messages with subject, preview and body, drafted from what people leave in their carts — for you to paste into Klaviyo.",
+          "after": "Recovery drafts in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Abandoned cart recovery: {{artifact.title}} handed over.",
+          "measurementWindowDays": 14
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -2871,6 +6012,11 @@
         "inputs": [],
         "helpful": []
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"<n> segment definitions re-fitted\",\"body\":\"what the customer rows show (counts only if measured) and which definitions you are proposing or refreshing — no invented drift %\",\"items\":[{\"title\":\"<segment name>\",\"body\":\"<definition + why + who it is for>\",\"meta\":{\"name\":\"…\",\"definition\":\"…\",\"size\":null}}],\"evidence\":[{\"source\":\"read:customers|read:segments|site_profile|memory\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 5,
+      "effectiveProduceMaxItems": 5,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_customers",
@@ -2934,6 +6080,118 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_customers",
+          "as": "customers",
+          "source": "shopify",
+          "query": {
+            "resource": "customers",
+            "window": "365d",
+            "fields": [
+              "id",
+              "email",
+              "orders_count",
+              "total_spent",
+              "last_order_at"
+            ],
+            "limit": 5000
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_segments",
+          "as": "segments",
+          "source": "klaviyo",
+          "query": {
+            "resource": "segments",
+            "fields": [
+              "id",
+              "name",
+              "definition",
+              "profile_count"
+            ]
+          }
+        },
+        {
+          "kind": "check",
+          "id": "drift",
+          "predicate": {
+            "metric": "reads.segments.drift_pct",
+            "op": "gte",
+            "value": 10
+          },
+          "onFail": "skip",
+          "reason": "Segments still match the customer base (drift under 10%)."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Which segment definitions have drifted from the customer base?",
+          "options": [
+            {
+              "id": "refresh",
+              "label": "Refresh {{reads.segments.drifted_count}} segment definitions",
+              "params": {
+                "segmentIds": "{{reads.segments.drifted_ids}}",
+                "definitions": "{{reads.segments.proposed_definitions}}"
+              }
+            },
+            {
+              "id": "hold",
+              "label": "Drift too broad to auto-refresh — review with you",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.segments.drifted_count",
+            "op": "lte",
+            "value": 5,
+            "ifTrue": "refresh",
+            "ifFalse": "hold"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Review proposed changes to {{reads.segments.drifted_count}} Klaviyo segments (drift {{reads.segments.drift_pct}}%)",
+          "expiryHours": 48,
+          "detail": "The attached proposal shows each current definition, measured drift and exact replacement. Consent, suppression and identity checks must be verified before any write.",
+          "before": "Definitions from {{reads.segments.oldest_definition_date}}",
+          "after": "Exact definition proposal ready for a separately supported write"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "klaviyo",
+          "mutation": {
+            "action": "update_segment_definitions",
+            "target": {
+              "segmentIds": "{{decision.params.segmentIds}}"
+            },
+            "params": {
+              "definitions": "{{decision.params.definitions}}"
+            }
+          },
+          "rollback": "restore previous definitions",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Segmentation-refresh proposal prepared: {{decision.label}}.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -2967,6 +6225,11 @@
           "klaviyo"
         ]
       },
+      "outputGuide": "{\"kind\":\"email\",\"title\":\"Winback campaign: 3 messages\",\"body\":\"who the lapsed customers are (count from the rows), the throughline of the three, and whether an offer is allowed (only from memories)\",\"items\":[{\"title\":\"<delay>: <subject>\",\"body\":\"<preview + body, markdown>\",\"meta\":{\"delay\":\"…\",\"subject\":\"…\",\"preview\":\"…\",\"offer\":false}}],\"evidence\":[{\"source\":\"read:lapsed|read:history|site_profile|memory|input:winback_note\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 3,
+      "effectiveProduceMaxItems": 3,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_lapsed",
@@ -3033,6 +6296,74 @@
           "kind": "read"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_lapsed",
+          "as": "lapsed",
+          "source": "shopify",
+          "query": {
+            "resource": "customers",
+            "window": "365d",
+            "filter": {
+              "lastOrderOlderThanDays": 90,
+              "ordersCount": {
+                "gte": 1
+              }
+            },
+            "fields": [
+              "id",
+              "email",
+              "orders_count",
+              "total_spent",
+              "last_order_at"
+            ],
+            "limit": 5000
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_history",
+          "as": "history",
+          "source": "klaviyo",
+          "query": {
+            "resource": "campaigns",
+            "window": "180d",
+            "filter": {
+              "tag": "winback"
+            },
+            "fields": [
+              "id",
+              "subject",
+              "sends",
+              "clicks",
+              "revenue"
+            ]
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Segment, subject lines, body and the offer rule. Nothing schedules until you approve it in Klaviyo. No invented % off.",
+          "after": "Campaign draft in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Winback campaign prep: {{artifact.title}} handed over.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
@@ -3054,6 +6385,11 @@
           "gorgias"
         ]
       },
+      "outputGuide": "{\"kind\":\"email\",\"title\":\"Post-purchase education: <product>\",\"body\":\"which how-to you are answering (ticket count only if measured) and where it sits in the flow\",\"items\":[{\"title\":\"<subject>\",\"body\":\"<preview + body, markdown>\",\"meta\":{\"delay\":\"after_delivery_day_3\",\"product\":null,\"subject\":\"…\",\"preview\":\"…\"}}],\"evidence\":[{\"source\":\"read:orders|read:tickets|read:flow|site_profile|memory|input:flow_note\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_orders",
@@ -3141,6 +6477,138 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_orders",
+          "as": "orders",
+          "source": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "28d",
+            "fields": [
+              "id",
+              "line_items",
+              "customer_id",
+              "created_at"
+            ]
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_tickets",
+          "as": "tickets",
+          "source": "gorgias",
+          "query": {
+            "resource": "tickets",
+            "window": "28d",
+            "filter": {
+              "tag": "how-to"
+            },
+            "fields": [
+              "subject",
+              "product"
+            ],
+            "limit": 200
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_flow",
+          "as": "flow",
+          "source": "klaviyo",
+          "query": {
+            "resource": "flows",
+            "filter": {
+              "name": "Post-Purchase"
+            },
+            "fields": [
+              "id",
+              "status",
+              "messages"
+            ]
+          }
+        },
+        {
+          "kind": "check",
+          "id": "has_questions",
+          "predicate": {
+            "metric": "reads.tickets.count",
+            "op": "gte",
+            "value": 5
+          },
+          "onFail": "skip",
+          "reason": "Fewer than 5 how-to questions this month."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "Which product question should the post-purchase flow answer next?",
+          "options": [
+            {
+              "id": "add",
+              "label": "Add an education message about {{reads.tickets.top_product}}",
+              "params": {
+                "flowId": "{{reads.flow.id}}",
+                "product": "{{reads.tickets.top_product}}"
+              }
+            },
+            {
+              "id": "covered",
+              "label": "Already covered in the flow",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.flow.covers_top_product",
+            "op": "eq",
+            "value": false,
+            "ifTrue": "add",
+            "ifFalse": "covered"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Review a post-purchase education email about {{reads.tickets.top_product}}",
+          "expiryHours": 48,
+          "detail": "{{reads.tickets.count}} how-to tickets this month; {{reads.tickets.top_product_share_pct}}% about this product. Product-faithful copy is attached for review; eligibility must be verified before any write.",
+          "before": "Flow has {{reads.flow.message_count}} messages",
+          "after": "Exact day-3 message proposal ready for a separately supported write"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "klaviyo",
+          "mutation": {
+            "action": "add_flow_message",
+            "target": {
+              "flowId": "{{decision.params.flowId}}"
+            },
+            "params": {
+              "position": "after_delivery_day_3",
+              "subject": "{{decision.params.subject}}",
+              "body": "{{decision.params.body}}"
+            }
+          },
+          "rollback": "remove the added message",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Post-purchase education proposal prepared: {{decision.label}}.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -3177,6 +6645,11 @@
           "gorgias"
         ]
       },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"Review request: day <n> after delivery\",\"body\":\"the measured peak (only if peak_day is in the metrics), the current delay, the proposed change, and the open-ticket suppress\",\"items\":[{\"title\":\"Move to day <n> after delivery (or keep day <n>)\",\"body\":\"<why, who is suppressed, what 'worked' looks like — a behaviour, not an invented review count>\",\"meta\":{\"current_delay\":null,\"proposed_delay\":null,\"peak_day\":null,\"suppress_open_tickets\":true}}],\"evidence\":[{\"source\":\"read:orders|read:reviews|read:flow|read:tickets|site_profile|memory|input:flow_note\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_orders",
@@ -3288,6 +6761,155 @@
           "kind": "decide"
         }
       ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_orders",
+          "as": "orders",
+          "source": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "90d",
+            "fields": [
+              "id",
+              "created_at",
+              "delivered_at",
+              "customer_id"
+            ]
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_reviews",
+          "as": "reviews",
+          "source": "klaviyo",
+          "query": {
+            "resource": "metrics",
+            "window": "90d",
+            "filter": {
+              "metric": "Submitted Review"
+            },
+            "groupBy": [
+              "days_since_delivery"
+            ],
+            "fields": [
+              "count"
+            ]
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_flow",
+          "as": "flow",
+          "source": "klaviyo",
+          "query": {
+            "resource": "flows",
+            "filter": {
+              "name": "Review Request"
+            },
+            "fields": [
+              "id",
+              "status",
+              "delay_days"
+            ]
+          }
+        },
+        {
+          "kind": "read",
+          "id": "read_tickets",
+          "as": "tickets",
+          "source": "gorgias",
+          "query": {
+            "resource": "tickets",
+            "window": "7d",
+            "filter": {
+              "status": "open"
+            },
+            "fields": [
+              "customer_email"
+            ],
+            "limit": 500
+          }
+        },
+        {
+          "kind": "check",
+          "id": "enough_reviews",
+          "predicate": {
+            "metric": "reads.reviews.count",
+            "op": "gte",
+            "value": 30
+          },
+          "onFail": "skip",
+          "reason": "Fewer than 30 reviews in 90 days — timing signal too weak."
+        },
+        {
+          "kind": "decide",
+          "id": "decide",
+          "question": "When do customers actually leave reviews?",
+          "options": [
+            {
+              "id": "retime",
+              "label": "Move the request to day {{reads.reviews.peak_day}} after delivery",
+              "params": {
+                "flowId": "{{reads.flow.id}}",
+                "delayDays": "{{reads.reviews.peak_day}}"
+              }
+            },
+            {
+              "id": "keep",
+              "label": "Current timing already matches the peak",
+              "terminal": true
+            }
+          ],
+          "rule": {
+            "kind": "threshold",
+            "metric": "reads.reviews.peak_day_delta",
+            "op": "gte",
+            "value": 2,
+            "ifTrue": "retime",
+            "ifFalse": "keep"
+          }
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "Review moving requests from day {{reads.flow.delay_days}} to day {{reads.reviews.peak_day}} after delivery",
+          "expiryHours": 48,
+          "detail": "The attached proposal states the sample and delivery-relative evidence. Consent and open-support-ticket suppression must remain verified before any write.",
+          "before": "Day {{reads.flow.delay_days}}",
+          "after": "Exact timing proposal ready for a separately supported write"
+        },
+        {
+          "kind": "execute",
+          "id": "execute",
+          "platform": "klaviyo",
+          "mutation": {
+            "action": "update_flow_delay",
+            "target": {
+              "flowId": "{{decision.params.flowId}}"
+            },
+            "params": {
+              "delayDays": "{{decision.params.delayDays}}",
+              "suppressIf": "open_support_ticket"
+            }
+          },
+          "rollback": "restore previous delay",
+          "idempotencyKey": "{{routine.id}}:{{run.id}}"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Review-request timing proposal prepared: {{decision.label}}.",
+          "measurementWindowDays": 28
+        }
+      ],
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": [
@@ -3323,6 +6945,11 @@
           "klaviyo"
         ]
       },
+      "outputGuide": "{\"kind\":\"calendar\",\"title\":\"Next 6 weeks of campaigns\",\"body\":\"the throughline (goal → phase → these six), the anchors you used, what you're unsure of\",\"items\":[{\"title\":\"Week of …: …\",\"body\":\"…\",\"meta\":{\"week_start\":\"…\",\"channel\":\"…\",\"theme\":\"…\",\"phase\":\"…\"}}],\"evidence\":[{\"source\":\"goal|plan|site_profile|memory|read:orders|read:campaigns|read:products\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 6,
+      "effectiveProduceMaxItems": 6,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
       "reads": [
         {
           "nodeId": "read_orders",
@@ -3400,6 +7027,83 @@
         {
           "id": "read_products",
           "kind": "read"
+        }
+      ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "0 8 * * 1"
+        },
+        {
+          "kind": "read",
+          "id": "read_orders",
+          "as": "orders",
+          "source": "shopify",
+          "query": {
+            "resource": "orders",
+            "window": "365d",
+            "groupBy": [
+              "week"
+            ],
+            "fields": [
+              "count",
+              "revenue"
+            ]
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_campaigns",
+          "as": "campaigns",
+          "source": "klaviyo",
+          "query": {
+            "resource": "campaigns",
+            "window": "90d",
+            "fields": [
+              "id",
+              "subject",
+              "send_time",
+              "revenue",
+              "unsubscribes"
+            ]
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_products",
+          "as": "products",
+          "source": "shopify",
+          "query": {
+            "resource": "products",
+            "filter": {
+              "launchingWithinDays": 60
+            },
+            "fields": [
+              "title",
+              "launch_date"
+            ],
+            "limit": 20
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "Sequenced from your goal, the plan and the anchors I know about (events, launches, seasonality when there is order history). Each week has a theme and a working subject.",
+          "after": "Calendar in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Campaign calendar prep: {{artifact.title}} handed over.",
+          "measurementWindowDays": 42
         }
       ],
       "replacesWholeWorkflow": false,

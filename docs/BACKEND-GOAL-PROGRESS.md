@@ -13,7 +13,15 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 39, 6 September NZ / 5 September UTC
+## Latest state — Batch 40, 6 September NZ / 5 September UTC
+
+**Broader five-lane packaging progressed from names to exact output/pipeline contracts.** [Developer brief and independent saved-execution shape evidence](integration/FIVE-LANE-PACKAGING-2026-09-06.md). The regenerated, regression-tested manifest supplies all 35 output guides/limits and complete pre/post-producer definitions, plus the 18 reported-ready capability mappings and six blocked-input lanes. D03-W07 backlink gap and D02-W09 Google Ads BOFU are explicitly reserved, not executable or enabled. No runtime catalog, provider configuration or endpoint changed.
+
+Independent authenticated reads of saved Meta #53, SEO #59 and Email #63/#69/#70/#71/#62 confirm their actual terminal status, saved revisions and output structure. Email's tests have distinct revisions and return recommendations/classifications/timing plans/recent titles, not the complete structured email/calendar deliverables Unc promises. DataForSEO SERP does not satisfy the current GSC-only D03-W05 semantics; Klaviyo segmentation evidence does not satisfy the current Shopify-customer prechecks. These are concrete adapter/deliverable gaps, not reasons to reconnect all platforms or discard Nguyen's working logic.
+
+Five focused manifest tests, app/worker TypeScript and focused ESLint/diff checks pass. Generated examples are explicitly labelled guides, not schemas or observed facts; a structurally valid artifact still does not prove execution. This metadata generator is not imported by production routes/runtime dispatch. No rebuild/deployment, workflow invocation/republish, provider mutation, account unpause or action enablement. The previous turn was progress; the full B01–B24/all-client goal remains active. Nguyen's bot-filter correction was still unanswered at this turn's first conversation check; no repeated webhook probing.
+
+## Previous state — Batch 39, 6 September NZ / 5 September UTC
 
 **Repeatable real-worker keyword preflight implemented and run.** [Command, receipt and next-handoff fingerprint](integration/KEYWORD-READINESS-2026-09-06.md). Seventeen focused Node tests, syntax and ESLint pass; no deployment or provider/database mutation. The prior turn was verified progress, not an unchanged wait.
 
