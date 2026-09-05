@@ -1,0 +1,48 @@
+/** Display-to-execution mapping. Unknown design jobs never receive invented routine IDs. */
+export const AGENT_AREAS = ["Paid ads", "Email & SMS", "Sales", "Content", "SEO"] as const;
+export type AgentArea = typeof AGENT_AREAS[number];
+export interface AgentJob { key: string; area: AgentArea; label: string; designLabels: string[]; routineId: string | null; note?: string }
+const job = (area: AgentArea, id: string, label: string, designLabels: string[] = [label], note?: string): AgentJob => ({ key:id, area, label, designLabels, routineId:id, note });
+const pending = (area: AgentArea, key: string, label: string, note: string): AgentJob => ({ key,area,label,designLabels:[label],routineId:null,note });
+export const AGENT_JOBS: readonly AgentJob[] = [
+  job("Paid ads","D02-W01","Recommend paid-ad decisions",["Move spend to what’s working"],"Recommendations only; no budget is moved."),
+  job("Paid ads","D02-W06","Plan the next ad test"),
+  job("Paid ads","D02-W02","Plan creative testing sprints",[],"A separate existing routine, omitted from the supplied design."),
+  job("Paid ads","D02-W03","Plan hook rotation",["Rotate hooks before they tire"]),
+  job("Paid ads","D02-W04","Catch ads going stale"),
+  job("Paid ads","D02-W07","Check budget pacing",["Keep spend inside your budget"],"Flags pacing; does not change spend."),
+  job("Paid ads","D02-W08","Find organic-to-paid candidates",["Promote posts that already work"],"No promotion is applied."),
+  pending("Paid ads","competitor-ads","Watch competitor ads","No implemented routine or approved data source yet."),
+  job("Paid ads","D02-W05","Review creator whitelisting",["Brief creator ads"],"Requires approved creator rights; this is not the content-brief routine."),
+  pending("Paid ads","google-bofu","Plan Google Ads BOFU campaigns","Separate Nguyen contract and Unc routine mapping required; not a Meta routine."),
+  job("Email & SMS","D05-W02","Draft abandoned-cart recovery",["Win back abandoned carts"]),
+  job("Email & SMS","D05-W01","Tune your welcome flow",["Turn first orders into second"],"Welcome-flow analysis is not proof of repeat purchases."),
+  job("Email & SMS","D05-W04","Draft lapsed-customer campaigns",["Revive lapsed customers"]),
+  job("Email & SMS","D05-W06","Plan review-request timing",["Ask for reviews at the right time"]),
+  job("Email & SMS","D05-W05","Draft post-purchase education",["Teach buyers to get results"]),
+  job("Email & SMS","D05-W03","Review customer segments",["Group customers by behaviour"]),
+  job("Email & SMS","D05-W07","Plan next month’s campaigns"),
+  job("Sales","D04-W01","Find and score leads that fit",["Find leads that fit","Score them before you call"],"One routine handles both research and scoring; one switch, not two runs."),
+  job("Sales","D04-W02","Write the first message"),
+  pending("Sales","lead-calls","Call leads to book meetings","Automated calling is not implemented or approved."),
+  job("Sales","D04-W04","Draft follow-up plans",["Chase the ones who went quiet"]),
+  job("Sales","D04-W03","Brief you before a call"),
+  job("Sales","D04-W05","Note why deals win or die"),
+  job("Sales","D04-W06","Review pipeline hygiene",["Tidy your pipeline"]),
+  job("Content","D01-W01","Draft posts in your voice"),
+  job("Content","D01-W03","Answer what customers keep asking"),
+  job("Content","D01-W02","Find hooks working in your niche"),
+  job("Content","D01-W05","Draft variations from one post",["Turn one post into five"]),
+  pending("Content","industry-positioning","Make you known in your industry","No separate positioning routine is implemented; ordinary content drafts do not prove this outcome."),
+  job("Content","D01-W04","Brief creators to film for you"),
+  job("Content","D01-W07","Flag rising trends"),
+  job("Content","D01-W08","Learn what your audience rewards"),
+  job("Content","D01-W06","Keep a library of what worked"),
+  job("SEO","D03-W01","Find searches you can win"),
+  job("SEO","D03-W02","Spot the content you’re missing"),
+  job("SEO","D03-W04","Draft on-page SEO fixes",["Fix what holds pages back"],"No CMS or page changes are published."),
+  job("SEO","D03-W05","Watch your rankings move"),
+  job("SEO","D03-W03","Draft an AI-search visibility plan",["Get cited by AI search"],"A planning draft is not an actual AI-search probe or evidence of citations."),
+  job("SEO","D03-W06","Watch competitor pages",["Track competitor moves"],"Existing page/content comparison, not referring-domain or backlink gap."),
+  pending("SEO","backlink-gap","Find competitor backlink gaps","Nguyen’s referring-domain analysis needs its own contract and routine ID."),
+];

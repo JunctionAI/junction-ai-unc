@@ -33,6 +33,8 @@ import ModelSettings from "./ModelSettings";
 import SkillsSettings from "./SkillsSettings";
 import WhatUncKnows from "./WhatUncKnows";
 import ClientWorkspace from "./ClientWorkspace";
+import AgentsView from "./AgentsView";
+import ConnectionsWorkspace from "./ConnectionsWorkspace";
 import { isOpen } from "@/lib/billing/gate";
 import type { BillingProps } from "@/lib/billing/server";
 
@@ -243,8 +245,8 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
       onModels={() => setModelsOpen(true)} onSkills={() => setSkillsOpen(true)} onContext={() => setKnowsOpen(true)}
       legacy={<>
         {V.isStrategy && <StrategyView V={V} />}
-        {V.isConnectors && <ConnectorsView V={V} />}
-        {V.isSystems && <RoutinesView V={V} run={runTarget} />}
+        {V.isConnectors && <ConnectionsWorkspace V={V} />}
+        {V.isSystems && (V.noSel ? <AgentsView key={`${persistence.accountId}:${S.contextGeneration}`} accountId={persistence.accountId!} contextGeneration={S.contextGeneration ?? 0} onInspect={V.openRoutineById} onSaved={V.setRoutineLocal} /> : <RoutinesView V={V} run={runTarget} />)}
         {V.isChannels && <ChannelsSettings />}
       </>} />
     {modelsOpen && <ModelSettings onClose={() => setModelsOpen(false)} />}

@@ -11,6 +11,7 @@ import { knownPlatformSlugs, SUGGESTION_COPY } from "@/lib/setup/channels";
 import { connectorHasRealSync } from "@/lib/connectors/sync";
 import { connectorEvidence, connectorRecoveryMessage } from "@/lib/connectors/readiness";
 import { useConnectorsState, type ConnectorsStateListing, type ConnectorStateView } from "./useConnectorsState";
+import connectionStyles from "./connections.module.css";
 
 /* Connect / Reconnect: in demo mode (no Supabase configured) the button does exactly what the
    prototype did — flips the card to Connected client-side. With accounts on, it asks
@@ -50,7 +51,7 @@ export function readLine(c: ConnectorStateView): { text: string; tone: "cyan" | 
   return null;
 }
 
-export default function ConnectorsView({ V, initialLive = null }: { V: PlatformVals; initialLive?: ConnectorsStateListing | null }) {
+export default function ConnectorsView({ V, initialLive = null, modern = false }: { V: PlatformVals; initialLive?: ConnectorsStateListing | null; modern?: boolean }) {
   // Seeded from the OAuth return (if any) on first render; cleared once shown so it doesn't replay.
   const [notes, setNotes] = useState<Record<string, string>>(() => {
     const r = peekConnectReturn();
@@ -63,8 +64,8 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   // In accounts mode the server's membership role is authoritative. Demo controls stay
   // interactive, while a member can inspect status but cannot connect, select or disconnect.
   const dbConfigured = isDbConfigured();
-  const accountsMode = dbConfigured || initialLive !== null;
-  const live = useConnectorsState(dbConfigured, initialLive);
+  const accountsMode = modern || dbConfigured || initialLive !== null;
+  const live = useConnectorsState(modern || dbConfigured, initialLive);
   const liveBy: Record<string, ConnectorStateView> = Object.fromEntries((live.data?.connectors ?? []).map((c) => [c.name, c]));
   const owner = live.data?.role === "owner";
   const canManage = !accountsMode || owner;
@@ -77,10 +78,11 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
     if (!live.active) return accountsMode ? false : fallbackOk;
     const row = liveBy[name];
     if (!row) return false;
+    if (modern && (!row.externalRef || !row.lastSyncAt || connectorRecoveryMessage(row))) return false;
     return connectorHasRealSync(row.status, row.lastSyncResult);
   };
   const googleAllOk = googleCards.length > 0 && googleCards.every((c) => cardSynced(c.name, c.ok));
-  const googleAnyExpired = googleCards.some((c) => c.expired);
+  const googleAnyExpired = googleCards.some((c) => modern ? liveBy[c.name]?.status === "needs_reconnect" : c.expired);
 
   // Accounts mode: the founder's own platforms (known_platforms) and what the scan spotted carry a quiet chip — the rest are just the library.
   const pickedSlugs = new Set(accountsMode ? knownPlatformSlugs(V.obNarrativeRequest.resources.platforms) : []);
@@ -123,7 +125,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   // Which Connected cards may still need an account chosen (accounts mode only).
   const pickerKey = accountsMode && owner
     ? V.connectors
-        .filter((c) => c.ok && (PICKER_PLATFORMS as string[]).includes(CONNECTOR_PLATFORMS[c.name] ?? ""))
+        .filter((c) => (modern ? liveBy[c.name]?.status === "connected" && !liveBy[c.name]?.externalRef : c.ok) && (PICKER_PLATFORMS as string[]).includes(CONNECTOR_PLATFORMS[c.name] ?? ""))
         .map((c) => c.name)
         .join("|")
     : "";
@@ -197,7 +199,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   }
 
   async function start(name: string, demoConnect: () => void, shopDomain?: string) {
-    if (!isDbConfigured()) {
+    if (!accountsMode) {
       demoConnect();
       return;
     }
@@ -268,21 +270,22 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
   return (
     <div
       data-buddy="Least privilege, always — I list every scope before you approve it. Each connection unlocks more of the library."
-      style={{ maxWidth: 940, margin: "0 auto", padding: "50px 48px 96px" }}
+      className={modern ? connectionStyles.data : undefined}
+      style={modern ? undefined : { maxWidth: 940, margin: "0 auto", padding: "50px 48px 96px" }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+      {modern ? <div className={connectionStyles.summary}><span>{live.data ? `${live.data.connectors.filter(c => c.status === "connected" && !!c.externalRef && !!c.lastSyncAt && !connectorRecoveryMessage(c) && connectorHasRealSync(c.status,c.lastSyncResult)).length} platforms with a selected asset and dated read` : "Connection status not verified"} · not a freshness guarantee</span><button onClick={live.refresh}>Refresh status</button></div> : <><div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <h1 style={{ fontWeight: 600, fontSize: 28, margin: 0, letterSpacing: "-0.015em" }}>Connectors</h1>
         <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{V.connSummary}</div>
-      </div>
+      </div></>}
       <div style={{ fontSize: 13.5, color: "var(--muted)", marginTop: 8, maxWidth: 560, lineHeight: 1.55 }}>
-        Exact, least-privilege connections to the systems that hold your source truth. Junction reads what each workflow needs — nothing more — and every credential lives in the secret store.
+        {modern ? "Review each platform’s selected business asset, dated read and recovery state below. OAuth scopes and data coverage vary by provider; routine availability is checked separately." : "Exact, least-privilege connections to the systems that hold your source truth. Junction reads what each workflow needs — nothing more — and every credential lives in the secret store."}
       </div>
       {live.error && (
         <div data-testid="connectors-live-error" style={{ fontSize: 12.5, color: "var(--amber-text)", marginTop: 10, lineHeight: 1.5 }}>
           Couldn’t verify connector status ({live.error}). <button onClick={live.refresh} className="hov-underline" style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer" }}>try again</button>
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 26 }}>
+      <div className={modern ? connectionStyles.grid : undefined} style={modern ? undefined : { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 26 }}>
         {googleOn && (
           <div data-testid="connector-google" style={{ gridColumn: "1 / -1", background: "white", border: `1px solid ${googleAllOk ? "var(--card-border)" : "oklch(0.78 0.13 220 / 0.6)"}`, borderRadius: 13, padding: "16px 19px", display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -312,7 +315,9 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
             )}
           </div>
         )}
-        {V.connectors.map((cn) => {
+        {V.connectors.map((original) => {
+          const current = liveBy[original.name];
+          const cn = modern ? { ...original, ok:current?.status === "connected", expired:current?.status === "needs_reconnect", off:current?.status === "disconnected" || current?.status === "error" } : original;
           const lc = liveBy[cn.name];
           const platform = CONNECTOR_PLATFORMS[cn.name] as ManualPlatform | undefined;
           const tokenPath = !!(live.active && owner && lc?.tokenPath && platform && MANUAL_FORMS[platform]);
@@ -322,7 +327,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
           const evidence = lc ? connectorEvidence(lc) : null;
           const form = tokenFor === cn.name && platform ? MANUAL_FORMS[platform] : null;
           return (
-            <div key={cn.name} data-testid={`connector-${platform ?? cn.name}`} style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "16px 19px", display: "flex", alignItems: "center", gap: 16 }}>
+            <div key={cn.name} className={modern ? connectionStyles.card : undefined} data-testid={`connector-${platform ?? cn.name}`} style={{ background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "16px 19px", display: "flex", alignItems: "center", gap: 16 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 14, fontWeight: 600 }}>{cn.name}</span>
@@ -339,10 +344,11 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                   )}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-                  {cn.note} · unlocks {cn.unlocks} routines
+                  {cn.note}{!accountsMode && <> · unlocks {cn.unlocks} routines</>}
                 </div>
                 {evidence && <div data-testid="connector-evidence" style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, overflowWrap: "anywhere" }}>{evidence.identity}<br />{evidence.read}</div>}
                 {accountsMode && !lc && <div role="status" style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>connection status is unverified.</div>}
+                {modern && lc?.status === "connected" && !cardSynced(cn.name, cn.ok) && <p style={{fontSize:12,color:"var(--muted)"}}>Authorization saved · {lc.externalRef ? "data read not verified" : "choose the business asset before reading"}. Not shown as ready.</p>}
                 {rl && (
                   <div data-testid="read-line" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginTop: 6, color: rl.tone === "cyan" ? "var(--cyan-text)" : rl.tone === "amber" ? "var(--amber-text)" : "var(--muted)", fontWeight: 500 }}>
                     <span>{rl.text}</span>

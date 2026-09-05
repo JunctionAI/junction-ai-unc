@@ -53,6 +53,7 @@ function BoundWorkspace({ S, V, account, send, legacy, onModels, onSkills, onCon
   }, []);
   useEffect(() => { if (tab === "ask") chatEnd.current?.scrollIntoView({ block: "nearest" }); }, [S.messages.length, tab]);
   const navigate = (next: Tab) => {
+    if (next === "today" || next === "inbox") work.refresh();
     window.location.assign(`#${next}`);
     if (next === "agents") V.goSystems();
     else if (next === "connections") V.goConnectors();

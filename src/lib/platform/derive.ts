@@ -1178,6 +1178,11 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
       const s2 = ALL_SYSTEMS.find((x) => x.id === id);
       if (s2) set((s) => ({ routineOn: { ...s.routineOn, [s2.name]: true } }));
     },
+    /** UI mirror only; the dedicated switch API already persisted this change. */
+    setRoutineLocal: (id: string, enabled: boolean) => {
+      const row = ALL_SYSTEMS.find(x => x.id === id);
+      if (row) set(s => ({ routineOn: { ...s.routineOn, [row.name]: enabled } }));
+    },
     /** Real connector state only (never the demo `|| "expired"` default): Klaviyo really needs a reconnect. */
     klaviyoNeedsReconnect: account ? klaviyoState === "expired" : S.connState["Klaviyo"] === "expired",
     /** Which world this view model describes — see DeriveOptions. */

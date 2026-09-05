@@ -1,0 +1,29 @@
+.content { max-width:1040px; margin:auto; padding:44px 44px 80px; }
+.content p { font-size:.83rem; color:var(--muted); line-height:1.6; max-width:70ch; }
+.heading,.areaHeading { display:flex; justify-content:space-between; align-items:center; gap:14px; }
+.heading button,.filters button { border:1px solid var(--card-border); background:white; padding:9px 14px; border-radius:99px; font-size:.78rem; }
+.summary { display:flex; gap:12px; flex-wrap:wrap; margin:26px 0 18px; font-size:.85rem; }
+.summary span,.areaHeading span { color:var(--muted); font-size:.74rem; }
+.filters { display:flex; flex-wrap:wrap; gap:6px; }
+.filters [aria-pressed=true] { background:var(--navy); color:var(--on-navy); }
+.search { display:grid; gap:7px; font-size:.75rem; margin:22px 0; }
+.search input { border:1px solid var(--card-border); background:white; border-radius:9px; padding:11px; width:100%; }
+.area { background:white; border:1px solid var(--card-border); border-radius:14px; margin-top:22px; overflow:hidden; }
+.areaHeading { padding:20px; border-bottom:1px solid var(--hairline); }
+.areaHeading h2 { margin:0; }
+.job { display:flex; gap:16px; padding:18px 20px; border-bottom:1px solid var(--hairline); align-items:flex-start; }
+.job:last-child { border-bottom:0; }
+.description { flex:1; min-width:0; }
+.description p { margin:5px 0; font-size:.74rem; }
+.description small { font-size:.7rem; color:var(--muted); overflow-wrap:anywhere; }
+.toggle { position:relative; flex:none; border:0; width:40px; height:23px; border-radius:20px; background:var(--hairline); margin-top:3px; }
+.toggle span { display:block; position:absolute; top:3px; left:3px; width:17px; height:17px; border-radius:50%; background:white; transition:transform .18s; }
+.toggle[aria-checked=true] { background:var(--cyan-link); }
+.toggle[aria-checked=true] span { transform:translateX(17px); }
+.actions { display:grid; gap:10px; text-align:right; font-size:.72rem; }
+.actions span { color:var(--muted); }
+.actions button { background:transparent; color:var(--cyan-link); border:0; padding:5px 0; }
+.content .notice { padding:12px 15px; border-radius:9px; background:var(--amber-wash); color:var(--amber-text); }
+.foot { margin-top:26px; }
+@media(max-width:700px) { .content { padding:28px 18px 60px; }.job { gap:10px; padding:16px 12px; }.actions { max-width:65px; }.areaHeading { padding:16px 12px; } }
+@media(prefers-reduced-motion:reduce) { .toggle span { transition:none; } }

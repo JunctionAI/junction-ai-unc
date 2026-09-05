@@ -120,11 +120,11 @@ export async function businessModelFor(db: DbClient | null, accountId: string): 
   return modelFromProfile(row?.profile ?? null);
 }
 
-export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId: string, opts: { routineId?: string } = {}): Promise<RoutinesStateListing> {
+export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId: string, opts: { routineId?: string; contextGeneration?: number } = {}): Promise<RoutinesStateListing> {
   const [states, runs, drafts, connected, phases, business, workflows] = await Promise.all([
     deps.store.listRoutineStates(accountId),
-    deps.store.listRuns(accountId, { limit: RUNS_WINDOW }),
-    deps.store.listReceipts(accountId, { kind: "draft", limit: DRAFTS_WINDOW }),
+    deps.store.listRuns(accountId, { limit: RUNS_WINDOW, ...(opts.contextGeneration !== undefined ? { contextGeneration: opts.contextGeneration } : {}) }),
+    deps.store.listReceipts(accountId, { kind: "draft", limit: DRAFTS_WINDOW, ...(opts.contextGeneration !== undefined ? { contextGeneration: opts.contextGeneration } : {}) }),
     connectedPlatformsFor(deps.db, accountId),
     latestPlanPhases(deps.db, accountId),
     businessModelFor(deps.db, accountId),
