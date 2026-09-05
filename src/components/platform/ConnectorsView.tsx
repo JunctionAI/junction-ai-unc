@@ -9,8 +9,8 @@ import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
 import type { PlatformVals } from "@/lib/platform/derive";
 import { knownPlatformSlugs, SUGGESTION_COPY } from "@/lib/setup/channels";
 import { connectorHasRealSync } from "@/lib/connectors/sync";
-import { connectorEvidence } from "@/lib/connectors/readiness";
-import { isReading, useConnectorsState, type ConnectorsStateListing, type ConnectorStateView } from "./useConnectorsState";
+import { connectorEvidence, connectorRecoveryMessage } from "@/lib/connectors/readiness";
+import { useConnectorsState, type ConnectorsStateListing, type ConnectorStateView } from "./useConnectorsState";
 
 /* Connect / Reconnect: in demo mode (no Supabase configured) the button does exactly what the
    prototype did — flips the card to Connected client-side. With accounts on, it asks
@@ -40,11 +40,13 @@ type Picker = { externalRef: string | null; options: AccountOption[]; note?: str
 /** The one line under a connected card, from the real row. */
 export function readLine(c: ConnectorStateView): { text: string; tone: "cyan" | "muted" | "amber"; reconnect: boolean } | null {
   if (c.status !== "connected") return null;
-  if (isReading(c)) return { text: MANUAL_COPY.readingLong, tone: "cyan", reconnect: false };
+  const recovery = connectorRecoveryMessage(c);
+  if (recovery) return { text: recovery, tone: "amber", reconnect: false };
+  if (c.lastSyncResult === null) return { text: "no completed data read yet.", tone: "muted", reconnect: false };
   if (c.lastSyncResult === "ok") return { text: c.lastReadMetrics === null ? "Read ✓" : c.lastReadMetrics === 0 ? "Read ✓ · answered" : MANUAL_COPY.readOk(c.lastReadMetrics), tone: "cyan", reconnect: false };
   if (c.lastSyncResult === "empty") return { text: MANUAL_COPY.readEmpty, tone: "muted", reconnect: false };
   if (c.lastSyncResult === "error:no_reader") return { text: MANUAL_COPY.sealedNoReader, tone: "muted", reconnect: false };
-  if (c.lastSyncResult && c.lastSyncResult.startsWith("error:")) return { text: MANUAL_COPY.readFailed(c.lastSyncResult.slice("error:".length).replace(/_/g, " ")), tone: "amber", reconnect: true };
+  if (c.lastSyncResult && c.lastSyncResult.startsWith("error:")) return { text: MANUAL_COPY.readFailed(c.lastSyncResult.slice("error:".length).replace(/_/g, " ")), tone: "amber", reconnect: false };
   return null;
 }
 
@@ -343,7 +345,6 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
                 {accountsMode && !lc && <div role="status" style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>connection status is unverified.</div>}
                 {rl && (
                   <div data-testid="read-line" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginTop: 6, color: rl.tone === "cyan" ? "var(--cyan-text)" : rl.tone === "amber" ? "var(--amber-text)" : "var(--muted)", fontWeight: 500 }}>
-                    {isReading(lc!) && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan-link)", animation: "jpulse 1.6s infinite", flex: "none" }}></span>}
                     <span>{rl.text}</span>
                     {rl.reconnect && canManage && (
                       <button onClick={() => (tokenPath && !oauthOn ? openToken(cn.name) : void start(cn.name, cn.connect))} disabled={busy === cn.name} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--amber-text)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
@@ -498,7 +499,7 @@ export default function ConnectorsView({ V, initialLive = null }: { V: PlatformV
               {cn.off &&
                 !viaGoogle &&
                 canManage &&
-                !(lc && isReading(lc)) &&
+                lc?.status !== "connected" &&
                 (tokenPath && !oauthOn ? (
                   <button data-testid="token-primary" onClick={() => openToken(cn.name)} disabled={busy === cn.name} className="hov-border-cyanlink" style={{ flex: "none", border: "1px solid var(--card-border-2)", background: "white", color: "var(--ink)", borderRadius: 999, padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                     {MANUAL_COPY.link}

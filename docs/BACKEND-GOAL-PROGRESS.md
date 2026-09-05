@@ -10,7 +10,15 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 26, 5 September 2026, approximately 10:02 UTC
+## Latest state — Batch 27, 5 September 2026
+
+**Credential refresh and reader context progress.** The previous turn was Batch 26 deployment progress. This turn retains the original full B01–B24 goal and does not infer the unanswered n8n purchase/API-key authorization.
+
+- Captured grant/account/owner guards, mandatory leases, durable refresh-attempt uncertainty, classified bounded retries, atomic settlement, per-page worker checks and redacted dashboard recovery evidence. Removed fictitious running-read copy and generic reconnect prescriptions.
+- **200 files / 2,542 tests PASS**, app/worker TypeScript, production build, lint zero errors / 39 existing warnings. Real service-role SQL rehearsal and post-migration rollback canary passed. No provider call or credential replacement during verification.
+- [Exact behavior, acceptance limitations and release readback](CONNECTOR-TOKEN-CONTEXT-2026-09-05.md). B07 remains partial: shared Google grants, disconnect/revoke and hosted/manual/picker races, operator recovery and actual provider acceptance remain. n8n and frontend gates are unchanged. Matched release verification is in progress.
+
+## Batch 26, 5 September 2026, approximately 10:02 UTC
 
 **Verified native OAuth / first-read source, database and matched live deployment progress.** The previous turn was Batch 25 deployment progress. This turn keeps the full B01–B24 scope and does not infer the unanswered n8n purchase/API-key authorization.
 

@@ -27,6 +27,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "channel_links",
       "channel_secrets",
       "chat_messages",
+      "connector_refresh_attempts",
       "connector_secrets",
       "connectors",
       "daily_briefs",

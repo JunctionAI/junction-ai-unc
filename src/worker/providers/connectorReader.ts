@@ -53,7 +53,7 @@ export class WorkerConnectorReader implements ConnectorReader {
 
   async read(source: Platform, query: ReadQuery, ctx: RunContext): Promise<ReadResult> {
     const accountId = ctx.account.accountId;
-    const creds = await this.deps.credentials.get(accountId, source);
+    const creds = await this.deps.credentials.get(accountId, source, ctx.account);
     if (!creds) throw new Error(`couldn't ask ${source} ${query.resource}: nothing connected for this account`);
 
     const reader = this.readers[source];
@@ -66,8 +66,17 @@ export class WorkerConnectorReader implements ConnectorReader {
       throw new Error(`couldn't ask ${source} ${query.resource}: no reader for this platform yet (Wave 2)`);
     }
 
-    const opts: ReaderOptions = { now: this.now, fetch: this.deps.fetch, timeoutMs: this.deps.timeoutMs };
+    const validate = () => this.deps.credentials.validate?.(creds);
+    await validate();
+    const guardedFetch: typeof fetch | undefined = this.deps.credentials.validate ? async (input, init) => {
+      await validate();
+      const response = await (this.deps.fetch ?? fetch)(input, init);
+      await validate();
+      return response;
+    } : this.deps.fetch;
+    const opts: ReaderOptions = { now: this.now, fetch: guardedFetch, timeoutMs: this.deps.timeoutMs };
     const res = await reader(query, creds, opts);
+    await validate();
     if (!res.ok) {
       this.deps.log?.warn("read.failed", { accountId, platform: source, resource: query.resource, credKind: describeCredential(creds), reason: res.reason });
       throw new Error(`couldn't ask ${source} ${query.resource}: ${res.reason}`);

@@ -11,6 +11,7 @@
    below inline with fake values and stub global fetch. */
 
 import type { Platform } from "../lib/runtime/types";
+import type { RuntimeContextIdentity } from "../lib/runtime/contextFence";
 
 export type PlatformCredential =
   | { kind: "fixture"; platform: Platform; marker: string }
@@ -23,7 +24,9 @@ export type PlatformCredential =
 
 export interface CredentialProvider {
   /** null = nothing connected for this account + platform. */
-  get(accountId: string, platform: Platform): Promise<PlatformCredential | null>;
+  get(accountId: string, platform: Platform, context?: RuntimeContextIdentity): Promise<PlatformCredential | null>;
+  /** Server-owned guard. Recheck the captured grant before/after every provider request. */
+  validate?(credential: PlatformCredential): Promise<void>;
 }
 
 /** Fixture markers for every platform. Never returns a real token. */

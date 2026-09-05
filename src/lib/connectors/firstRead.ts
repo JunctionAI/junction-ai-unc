@@ -74,7 +74,8 @@ export async function readNowAfterConnect(deps: FirstReadDeps, accountId: string
     }
     await record(null, `Reading your recent data from ${name} now…`);
     const baseReader = deps.reader ?? new WorkerConnectorReader({
-      credentials: new ConnectorCredentialProvider({ db: deps.db, keyring: deps.keyring, env: deps.env, fetch: deps.fetch, now: deps.now, log: deps.log }),
+      credentials: new ConnectorCredentialProvider({ db: deps.db, keyring: deps.keyring, env: deps.env, fetch: deps.fetch, now: deps.now, log: deps.log,
+        expectedOwner: capture.initiatedBy ?? undefined }),
       fetch: deps.fetch as typeof fetch, now: deps.now,
     });
     const reader: ConnectorReader = { read: async (source, query, context) => {

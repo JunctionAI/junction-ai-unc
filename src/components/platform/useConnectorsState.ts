@@ -20,7 +20,8 @@ export interface ConnectorsLive {
   watch: (platform: string) => void;
 }
 
-/** A connected row that has never been read yet — the first read is (or should be) running. */
+/** A missing result permits bounded polling after a user-triggered read, but is
+ * not evidence that any read is actually running. Do not use for a progress label. */
 export function isReading(c: ConnectorStateView): boolean {
   return c.status === "connected" && c.lastSyncResult === null;
 }

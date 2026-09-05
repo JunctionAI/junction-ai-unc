@@ -43,4 +43,24 @@ describe("handleConnectorsState", () => {
     const res = await handleConnectorsState(makeDeps({ db, userId: "m2" }));
     expect((res.body as { role: string }).role).toBe("member");
   });
+
+  it("exposes only redacted recovery for the current account generation and grant", async () => {
+    const c = db.insertRow("connectors", { account_id: accountId, platform: "ga4", status: "connected", sync_ref: {} });
+    db.insertRow("connector_secrets", { connector_id: c.id, ciphertext: "synthetic-cipher", iv: "iv", tag: "tag", key_version: 1 });
+    const binding = db.rpcs.native_oauth_binding({ connector: c.id }) as { secretDigest: string };
+    db.insertRow("connector_refresh_attempts", { connector_id: c.id, context_generation: 0, secret_digest: binding.secretDigest, holder: "synthetic-holder", status: "pending", attempts: 1 });
+    const result = await handleConnectorsState(makeDeps({ db, userId }));
+    expect(JSON.stringify(result.body)).toContain('"status":"uncertain"');
+    for (const secret of ["synthetic-cipher", "synthetic-holder", binding.secretDigest, "secret_digest", "ciphertext"]) expect(JSON.stringify(result.body)).not.toContain(secret);
+    db.rows("accounts")[0].context_generation = 1;
+    expect(JSON.stringify((await handleConnectorsState(makeDeps({ db, userId }))).body)).not.toContain("authRecovery");
+    db.rows("accounts")[0].context_generation = 0;
+    db.rows("connector_secrets")[0].ciphertext = "new-login";
+    expect(JSON.stringify((await handleConnectorsState(makeDeps({ db, userId }))).body)).not.toContain("authRecovery");
+  });
+
+  it("fails closed when membership disappears during the health read", async () => {
+    db.rpcs.connector_recovery_state = () => null;
+    expect((await handleConnectorsState(makeDeps({ db, userId }))).status).toBe(403);
+  });
 });

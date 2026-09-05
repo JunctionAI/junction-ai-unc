@@ -163,13 +163,24 @@ describe("ConnectorsView — the owner's token path and the first-read line", ()
     expect(member).toContain("Owner managed");
   });
 
-  it("connected cards say Reading… → Read ✓ · N metrics → the honest failure with Reconnect", () => {
+  it("connected cards distinguish an unproven read, a completed read and a generic failure without prescribing login", () => {
     const reading = render(state("owner", [{ platform: "shopify", status: "connected", externalRef: "acme.myshopify.com" }]));
-    expect(reading).toContain("Reading your last 90 days…");
+    expect(reading).toContain("no completed data read yet.");
+    expect(reading).not.toContain("Reading your last 90 days…");
     const done = render(state("owner", [{ platform: "shopify", status: "connected", lastSyncAt: "2026-09-02T09:00:00.000Z", lastSyncResult: "ok", lastReadMetrics: 4 }]));
     expect(done).toContain("Read ✓ · 4 metrics");
     const failed = render(state("owner", [{ platform: "shopify", status: "connected", lastSyncAt: "2026-09-02T09:00:00.000Z", lastSyncResult: "error:first_read" }]));
     expect(failed).toContain("t read: first read");
-    expect(failed).toContain("— Reconnect");
+    expect(failed).not.toContain("— Reconnect");
+  });
+  it("shows held refreshes and temporary/configuration errors without a reconnect instruction", () => {
+    for (const lastSyncResult of ["error:auth_temporarily_unavailable", "error:auth_configuration_error"]) {
+      const html = render(state("owner", [{ platform: "shopify", status: "connected", lastSyncResult }]));
+      expect(html).not.toContain("— Reconnect");
+    }
+    const html = render(state("owner", [{ platform: "shopify", status: "connected", authRecovery: { status: "uncertain", attempts: 1, retryAt: null } }]));
+    expect(html).toContain("retries are held");
+    expect(html).not.toContain("Reading your last 90 days…");
+    expect(html).not.toContain("— Reconnect");
   });
 });

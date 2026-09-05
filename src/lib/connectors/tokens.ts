@@ -1,211 +1,171 @@
-/* SERVER ONLY — token access for the sync layer and the worker.
-
-   getAccessToken(connectorId): opens the sealed bundle, refreshes it first when it is within
-   REFRESH_SKEW_MS of expiry and the platform supports a refresh grant (Google, Klaviyo),
-   re-seals under the current key (so a key rotation completes itself over time), and
-   returns the live access token. Confirmed invalid grants / expired non-renewable tokens
-   require reconnection. Temporary and application-configuration failures preserve the
-   connection and throw a coded error so callers never confuse them with missing consent.
-
-   ConnectorCredentialProvider matches src/worker/credentials.ts structurally:
-     interface CredentialProvider { get(accountId, platform): Promise<PlatformCredential | null> }
-   with the same PlatformCredential union (declared here, not imported — the worker tree is
-   owned elsewhere and must stay importable without this module). When the worker is switched
-   to live credentials it passes `new ConnectorCredentialProvider(deps)` as `credentials`. */
-
+/* Server-only credential access. Every outcome is bound to its original account,
+ * selected connector and sealed grant. Refresh claims persist across process death;
+ * a timed-out POST is not permission to retry a potentially rotated grant. */
 import { unwrap, type DbClient } from "../db/types";
+import { RuntimeContextError, type RuntimeContextIdentity } from "../runtime/contextFence";
 import { claimLease, releaseLease } from "./lease";
 import { needsReseal, open, seal, type Keyring } from "./crypto";
 import { bundleFromResponse, refreshTokens, TokenCallError, type FetchLike, type TokenBundle } from "./oauth";
 import { connectorEntry, platformCredentials } from "./registry";
-import { getConnector, getConnectorById, getSecret, putSecret, updateConnector, type ConnectorRow } from "./store";
+import { getConnector, getConnectorById, type ConnectorRow } from "./store";
+import { assertTokenContext, captureToken, settleToken, type TokenCapture, type TokenContext } from "./tokenContext";
 import { makeAuthProvider } from "./providers/index";
-import { AuthProviderError, providerRefOf, type ProviderRef } from "./providers/interface";
+import { AuthProviderError, providerRefOf } from "./providers/interface";
 import type { Platform } from "../runtime/types";
 
 export const REFRESH_SKEW_MS = 5 * 60 * 1000;
-
 export class TokenAccessError extends Error {
   constructor(readonly code: "temporarily_unavailable" | "configuration_error") {
     super(code === "temporarily_unavailable" ? "connection temporarily unavailable; retry later" : "connection configuration requires operator attention");
     this.name = "TokenAccessError";
   }
 }
-
-// Coalesce calls sharing a database client. This is process-local; a distributed lease
-// is still required before multiple independent refresh owners are enabled.
-const tokenFlights = new WeakMap<DbClient, Map<string, Promise<AccessToken | null>>>();
+export interface TokenDeps {
+  db: DbClient; keyring: Keyring; env: Record<string, string | undefined>; fetch: FetchLike; now: () => Date;
+  log?: (line: string) => void;
+  /** Present for a running workflow: never resolve a new business for old work. */
+  expectedContext?: RuntimeContextIdentity;
+  expectedOwner?: string;
+}
+export interface AccessToken {
+  accessToken: string; platform: Platform; externalRef: string | null; expiresAt: string | null; refreshToken?: string;
+}
+interface Resolution { token: AccessToken | null; context: TokenContext }
+const tokenFlights = new WeakMap<DbClient, Map<string, Promise<Resolution>>>();
+const resolvedContexts = new WeakMap<AccessToken, TokenContext>();
 
 async function singleFlight(row: ConnectorRow, deps: TokenDeps): Promise<AccessToken | null> {
+  const captured = await captureToken(deps.db, row, deps.expectedContext, deps.expectedOwner);
+  if (!captured) return null;
   let flights = tokenFlights.get(deps.db);
   if (!flights) { flights = new Map(); tokenFlights.set(deps.db, flights); }
-  const running = flights.get(row.id);
-  if (running) return running;
-  const flight = tokenForRow(row, deps);
-  flights.set(row.id, flight);
-  try { return await flight; } finally { if (flights.get(row.id) === flight) flights.delete(row.id); }
-}
-
-async function unavailable(deps: TokenDeps, row: ConnectorRow, code: TokenAccessError["code"]): Promise<never> {
-  deps.log?.(`connectors.token platform=${row.platform} connector=${row.id} result=${code}`);
-  try { await updateConnector(deps.db, row.id, { last_sync_result: `error:auth_${code}` }); } catch { /* preserve original error */ }
-  throw new TokenAccessError(code);
-}
-
-export interface TokenDeps {
-  db: DbClient;
-  keyring: Keyring;
-  env: Record<string, string | undefined>;
-  fetch: FetchLike;
-  now: () => Date;
-  log?: (line: string) => void;
-}
-
-export interface AccessToken {
-  accessToken: string;
-  platform: Platform;
-  externalRef: string | null;
-  expiresAt: string | null;
-  /** Present only for platforms whose sync source needs it (Google refresh flows). */
-  refreshToken?: string;
-}
-
-async function markReconnect(deps: TokenDeps, row: ConnectorRow, code: string) {
-  deps.log?.(`connectors.token platform=${row.platform} connector=${row.id} result=${code}`);
-  try {
-    await updateConnector(deps.db, row.id, { status: "needs_reconnect", last_sync_result: `error:${code}` });
-  } catch {
-    /* status is advisory; the null return is the contract */
+  // New generation/grant/asset/provider/status must not join an older request.
+  const key = JSON.stringify(captured.context);
+  let flight = flights.get(key);
+  if (!flight) {
+    flight = tokenForCapture(captured, deps);
+    flights.set(key, flight);
   }
+  try {
+    const result = await flight;
+    await assertTokenContext(deps.db, result.context);
+    if (result.token) {
+      if (result.token.expiresAt && Date.parse(result.token.expiresAt) <= deps.now().getTime()) throw new TokenAccessError("temporarily_unavailable");
+      resolvedContexts.set(result.token, result.context);
+    }
+    return result.token;
+  } finally { if (flights.get(key) === flight) flights.delete(key); }
 }
 
-/** null = absent/unusable connection; TokenAccessError = infrastructure/provider failure. */
+/** null = absent/unusable; coded failures never masquerade as revoked consent. */
 export async function getAccessToken(connectorId: string, deps: TokenDeps): Promise<AccessToken | null> {
   const row = await getConnectorById(deps.db, connectorId);
-  if (!row) return null;
-  return singleFlight(row, deps);
+  return row ? singleFlight(row, deps) : null;
 }
-
-/** Same, keyed by (account, platform). */
 export async function getAccessTokenFor(accountId: string, platform: Platform, deps: TokenDeps): Promise<AccessToken | null> {
+  if (deps.expectedContext && deps.expectedContext.accountId !== accountId) throw new RuntimeContextError("context_changed", "Credential account mismatch.");
   const row = await getConnector(deps.db, accountId, platform);
-  if (!row) return null;
-  return singleFlight(row, deps);
+  return row ? singleFlight(row, deps) : null;
 }
 
-async function tokenForRow(row: ConnectorRow, deps: TokenDeps, leaseHolder?: string): Promise<AccessToken | null> {
-  if (row.status !== "connected") return null;
+async function tokenForCapture(captured: TokenCapture, deps: TokenDeps): Promise<Resolution> {
+  const { row, sealed, context } = captured;
   const entry = connectorEntry(row.platform);
-  if (!entry || entry.flow === "none") return null;
+  if (!entry || entry.flow === "none") return { token: null, context };
+  let holder: string | undefined;
+  let refreshAttempt = false;
+  let settled = false;
+  const record = async (kind: "success" | "reconnect" | "temporary" | "configuration", extra: { code?: string; sealed?: ReturnType<typeof seal>; retryable?: boolean } = {}) => {
+    const next = await settleToken(deps.db, context, { kind, holder, refreshAttempt, ...extra });
+    settled = true;
+    return next;
+  };
+  const unavailable = async (code: TokenAccessError["code"], retryable = false): Promise<never> => {
+    deps.log?.(`connectors.token platform=${row.platform} connector=${row.id} result=${code}`);
+    await record(code === "configuration_error" ? "configuration" : "temporary", { retryable });
+    throw new TokenAccessError(code);
+  };
+  const reconnect = async (code: string): Promise<Resolution> => {
+    deps.log?.(`connectors.token platform=${row.platform} connector=${row.id} result=${code}`);
+    return { token: null, context: await record("reconnect", { code }) };
+  };
+  const result = (bundle: TokenBundle, next: TokenContext): Resolution => {
+    if (next.binding.externalRef !== row.external_ref) throw new RuntimeContextError("context_changed", "The selected asset changed while its grant was being read.");
+    return {
+    context: next, token: { accessToken: bundle.accessToken, platform: entry.id as Platform, externalRef: row.external_ref,
+      expiresAt: bundle.expiresAt ?? null, ...(bundle.refreshToken ? { refreshToken: bundle.refreshToken } : {}) },
+    };
+  };
 
-  // Hosted-provider rows (PROTOTYPE): the token lives in the provider's vault, not in
-  // connector_secrets — fetch it per call; the provider refreshes on its side. Same contract:
-  // null = reconnect, the row flipped, a code (never a value) in the log.
-  const providerRef = providerRefOf(row);
-  if (providerRef) return tokenViaProvider(row, providerRef, deps, entry.id as Platform);
-
-  const sealed = await getSecret(deps.db, row.id);
-  if (!sealed) {
-    await markReconnect(deps, row, "no_secret");
-    return null;
-  }
-  let bundle: TokenBundle;
   try {
-    bundle = JSON.parse(open(sealed, deps.keyring, row.id)) as TokenBundle;
-  } catch (e) {
-    // A missing decryption key is an operator issue; another customer login cannot fix it.
-    void e;
-    return unavailable(deps, row, "configuration_error");
-  }
-
-  const now = deps.now();
-  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) return unavailable(deps, row, "configuration_error");
-  const expiresAt = bundle.expiresAt ? new Date(bundle.expiresAt).getTime() : null;
-  if (typeof bundle.accessToken !== "string" || !bundle.accessToken.trim() || (expiresAt !== null && !Number.isFinite(expiresAt))) return unavailable(deps, row, "configuration_error");
-  const expiring = expiresAt !== null && expiresAt - now.getTime() < REFRESH_SKEW_MS;
-  const renewable = entry.refresh === "refresh_token" && typeof bundle.refreshToken === "string" && Boolean(bundle.refreshToken);
-  let rewrite = needsReseal(sealed, deps.keyring);
-
-  if (((expiring && renewable) || rewrite) && !leaseHolder && deps.env.CONNECTOR_REFRESH_LEASES_ENABLED === "true") {
-    const key = `connector:${row.id}`;
-    const holder = await claimLease(deps.db, key);
-    if (!holder) return unavailable(deps, row, "temporarily_unavailable");
-    let completed = false;
-    try {
-      // Another process may have renewed or disconnected it since our first read.
-      const current = await getConnectorById(deps.db, row.id);
-      const token = current ? await tokenForRow(current, deps, holder) : null;
-      completed = true;
-      return token;
-    } finally { if (completed) await releaseLease(deps.db, key, holder); }
-  }
-
-  if (expiring) {
-    if (!renewable) {
-      // A non-renewable token remains valid until actual expiry, not the refresh skew.
-      if (expiresAt !== null && expiresAt <= now.getTime()) {
-        await markReconnect(deps, row, "token_expired");
-        return null;
-      }
-    } else {
-      const creds = platformCredentials(entry.id, deps.env);
-      if (!creds) {
-        return unavailable(deps, row, "configuration_error");
-      }
+    const ref = providerRefOf(row);
+    if (ref) {
+      const provider = makeAuthProvider(ref.provider, { env: deps.env, fetch: deps.fetch, now: deps.now });
+      if (!provider || !provider.supports(entry.id as Platform) || !ref.connectionId) return await unavailable("configuration_error");
+      let tok;
       try {
-        const fresh = await refreshTokens(deps.fetch, entry, { refreshToken: bundle.refreshToken!, clientId: creds.clientId, clientSecret: creds.clientSecret });
+        await assertTokenContext(deps.db, context);
+        tok = await provider.getAccessToken({ accountId: row.account_id, platform: entry.id as Platform, connectionId: ref.connectionId });
+      } catch (e) {
+        if (e instanceof RuntimeContextError) throw e;
+        if (e instanceof AuthProviderError && e.code === "not_connected") return await reconnect("provider_not_connected");
+        const config = e instanceof AuthProviderError && ["not_configured", "no_integration", "http_401", "http_403"].includes(e.code);
+        return await unavailable(config ? "configuration_error" : "temporarily_unavailable");
+      }
+      if (!tok.accessToken || (tok.expiresAt && (!Number.isFinite(Date.parse(tok.expiresAt)) || Date.parse(tok.expiresAt) <= deps.now().getTime())))
+        return await unavailable("temporarily_unavailable");
+      return result({ accessToken: tok.accessToken, obtainedAt: deps.now().toISOString(), expiresAt: tok.expiresAt ?? undefined,
+        ...(tok.refreshToken ? { refreshToken: tok.refreshToken } : {}) }, await record("success"));
+    }
+
+    if (!sealed) return await reconnect("no_secret");
+    let bundle: TokenBundle;
+    try { bundle = JSON.parse(open(sealed, deps.keyring, row.id)) as TokenBundle; }
+    catch { return await unavailable("configuration_error"); }
+    if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) return await unavailable("configuration_error");
+    const now = deps.now();
+    const expiresAt = bundle.expiresAt ? Date.parse(bundle.expiresAt) : null;
+    if (typeof bundle.accessToken !== "string" || !bundle.accessToken.trim() || (expiresAt !== null && !Number.isFinite(expiresAt)))
+      return await unavailable("configuration_error");
+    const expiring = expiresAt !== null && expiresAt - now.getTime() < REFRESH_SKEW_MS;
+    const renewable = entry.refresh === "refresh_token" && typeof bundle.refreshToken === "string" && Boolean(bundle.refreshToken);
+    let rewrite = needsReseal(sealed, deps.keyring);
+    if (expiring && !renewable && expiresAt! <= now.getTime()) return await reconnect("token_expired");
+    const creds = expiring && renewable ? platformCredentials(entry.id, deps.env) : null;
+    if (expiring && renewable && !creds) return await unavailable("configuration_error");
+
+    if ((expiring && renewable) || rewrite) {
+      // Mandatory for every native refresh/reseal, regardless of the legacy flag.
+      const claimed = await claimLease(deps.db, `connector:${row.id}`);
+      if (!claimed) throw new TokenAccessError("temporarily_unavailable");
+      holder = claimed;
+      await assertTokenContext(deps.db, context);
+    }
+    if (expiring && renewable) {
+      const admitted = await unwrap<boolean>("connector.refresh.begin", deps.db.rpc("begin_connector_refresh", { input: { context, holder } }));
+      if (admitted !== true) { settled = true; throw new TokenAccessError("temporarily_unavailable"); }
+      refreshAttempt = true;
+      try {
+        const fresh = await refreshTokens(deps.fetch, entry, { refreshToken: bundle.refreshToken!, clientId: creds!.clientId, clientSecret: creds!.clientSecret });
         bundle = bundleFromResponse(fresh, now, bundle);
         rewrite = true;
       } catch (e) {
-        if (e instanceof TokenCallError && e.oauthError === "invalid_grant") {
-          await markReconnect(deps, row, `token_refresh_${e.code}`);
-          return null;
-        }
+        if (e instanceof TokenCallError && e.oauthError === "invalid_grant") return await reconnect(`token_refresh_${e.code}`);
         const config = e instanceof TokenCallError && ["invalid_client", "unauthorized_client", "invalid_scope", "unsupported_grant_type", "invalid_request"].includes(e.oauthError ?? "");
-        return unavailable(deps, row, config ? "configuration_error" : "temporarily_unavailable");
+        // Only a classified failed OAuth response permits a bounded retry. A
+        // timeout/network/malformed response may conceal a successfully rotated grant.
+        const retryable = e instanceof TokenCallError && e.code.startsWith("http_") &&
+          ["temporarily_unavailable", "server_error"].includes(e.oauthError ?? "");
+        return await unavailable(config ? "configuration_error" : "temporarily_unavailable", retryable);
       }
     }
-  }
-
-  if (rewrite) {
-    const next = seal(JSON.stringify(bundle), deps.keyring, row.id);
-    if (leaseHolder) {
-      const committed = await unwrap<boolean>("commit connector token", deps.db.rpc("commit_connector_token", {
-        p_connector_id: row.id, p_holder: leaseHolder, p_expected_ciphertext: sealed.ciphertext,
-        p_ciphertext: next.ciphertext, p_iv: next.iv, p_tag: next.tag, p_key_version: next.keyVersion,
-      }));
-      if (!committed) return unavailable(deps, row, "temporarily_unavailable");
-    } else await putSecret(deps.db, row.id, next, now.toISOString());
-  }
-  if (row.last_sync_result?.startsWith("error:auth_")) await updateConnector(deps.db, row.id, { last_sync_result: null });
-
-  return { accessToken: bundle.accessToken, platform: entry.id as Platform, externalRef: row.external_ref, expiresAt: bundle.expiresAt ?? null, ...(bundle.refreshToken ? { refreshToken: bundle.refreshToken } : {}) };
-}
-
-async function tokenViaProvider(row: ConnectorRow, ref: ProviderRef, deps: TokenDeps, platform: Platform): Promise<AccessToken | null> {
-  const provider = makeAuthProvider(ref.provider, { env: deps.env, fetch: deps.fetch, now: deps.now });
-  if (!provider || !provider.supports(platform)) {
-    return unavailable(deps, row, "configuration_error");
-  }
-  if (!ref.connectionId) {
-    return unavailable(deps, row, "configuration_error");
-  }
-  try {
-    const tok = await provider.getAccessToken({ accountId: row.account_id, platform, connectionId: ref.connectionId });
-    if (!tok.accessToken || (tok.expiresAt && (!Number.isFinite(Date.parse(tok.expiresAt)) || new Date(tok.expiresAt).getTime() <= deps.now().getTime()))) {
-      // The provider handed back a token it did not refresh — treat as expired, never use it.
-      return unavailable(deps, row, "temporarily_unavailable");
+    const next = await record("success", rewrite ? { sealed: seal(JSON.stringify(bundle), deps.keyring, row.id) } : {});
+    return result(bundle, next);
+  } finally {
+    // Unknown commits retain both the short lease and durable pending attempt.
+    if (holder && settled) {
+      try { await releaseLease(deps.db, `connector:${row.id}`, holder); } catch { /* expiry handles cleanup, never overwrite a confirmed token outcome */ }
     }
-    if (row.last_sync_result?.startsWith("error:auth_")) await updateConnector(deps.db, row.id, { last_sync_result: null });
-    return { accessToken: tok.accessToken, platform, externalRef: row.external_ref, expiresAt: tok.expiresAt, ...(tok.refreshToken ? { refreshToken: tok.refreshToken } : {}) };
-  } catch (e) {
-    if (e instanceof TokenAccessError) throw e;
-    if (e instanceof AuthProviderError && e.code === "not_connected") {
-      await markReconnect(deps, row, "provider_not_connected");
-      return null;
-    }
-    const config = e instanceof AuthProviderError && ["not_configured", "no_integration", "http_401", "http_403"].includes(e.code);
-    return unavailable(deps, row, config ? "configuration_error" : "temporarily_unavailable");
   }
 }
 
@@ -223,35 +183,48 @@ export type PlatformCredential =
   | { kind: "hubspot"; accessToken: string; portalId?: string };
 
 export interface CredentialProviderShape {
-  get(accountId: string, platform: Platform): Promise<PlatformCredential | null>;
+  get(accountId: string, platform: Platform, context?: RuntimeContextIdentity): Promise<PlatformCredential | null>;
+  validate?(credential: PlatformCredential): Promise<void>;
 }
 
 /** Real credentials from connector_secrets. Returns null (= "nothing connected") whenever a
     piece is missing — a token without its external_ref (GA4 property, Ads customer) is not a
     usable credential yet, and the reader's "couldn't ask" path is the honest outcome. */
 export class ConnectorCredentialProvider implements CredentialProviderShape {
+  private readonly contexts = new WeakMap<PlatformCredential, { context: TokenContext; expiresAt: string | null }>();
   constructor(private readonly deps: TokenDeps) {}
 
-  async get(accountId: string, platform: Platform): Promise<PlatformCredential | null> {
-    const tok = await getAccessTokenFor(accountId, platform, this.deps);
+  async validate(credential: PlatformCredential): Promise<void> {
+    const captured = this.contexts.get(credential);
+    if (!captured) throw new RuntimeContextError("context_unavailable", "No captured credential identity.");
+    if (captured.expiresAt && Date.parse(captured.expiresAt) <= this.deps.now().getTime()) throw new TokenAccessError("temporarily_unavailable");
+    await assertTokenContext(this.deps.db, captured.context);
+  }
+
+  async get(accountId: string, platform: Platform, context?: RuntimeContextIdentity): Promise<PlatformCredential | null> {
+    const tok = await getAccessTokenFor(accountId, platform, { ...this.deps, expectedContext: context ?? this.deps.expectedContext });
     if (!tok) return null;
+    const remember = (credential: PlatformCredential): PlatformCredential => {
+      this.contexts.set(credential, { context: resolvedContexts.get(tok)!, expiresAt: tok.expiresAt });
+      return credential;
+    };
     switch (platform) {
       case "shopify":
-        return tok.externalRef ? { kind: "shopify", shopDomain: tok.externalRef, accessToken: tok.accessToken } : null;
+        return tok.externalRef ? remember({ kind: "shopify", shopDomain: tok.externalRef, accessToken: tok.accessToken }) : null;
       case "klaviyo":
-        return { kind: "klaviyo", apiKey: tok.accessToken };
+        return remember({ kind: "klaviyo", apiKey: tok.accessToken });
       case "ga4":
-        return tok.externalRef ? { kind: "ga4", propertyId: tok.externalRef, accessToken: tok.accessToken } : null;
+        return tok.externalRef ? remember({ kind: "ga4", propertyId: tok.externalRef, accessToken: tok.accessToken }) : null;
       case "meta_ads":
-        return tok.externalRef ? { kind: "meta_ads", adAccountId: tok.externalRef, accessToken: tok.accessToken } : null;
+        return tok.externalRef ? remember({ kind: "meta_ads", adAccountId: tok.externalRef, accessToken: tok.accessToken }) : null;
       case "google_ads": {
         const developerToken = (this.deps.env.GOOGLE_ADS_DEVELOPER_TOKEN || "").trim();
         const loginCustomerId = (this.deps.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || "").trim() || undefined;
         if (!tok.externalRef || !developerToken) return null;
-        return { kind: "google_ads", customerId: tok.externalRef, developerToken, accessToken: tok.accessToken, ...(loginCustomerId ? { loginCustomerId } : {}) };
+        return remember({ kind: "google_ads", customerId: tok.externalRef, developerToken, accessToken: tok.accessToken, ...(loginCustomerId ? { loginCustomerId } : {}) });
       }
       case "hubspot":
-        return { kind: "hubspot", accessToken: tok.accessToken, ...(tok.externalRef ? { portalId: tok.externalRef } : {}) };
+        return remember({ kind: "hubspot", accessToken: tok.accessToken, ...(tok.externalRef ? { portalId: tok.externalRef } : {}) });
       default:
         return null;
     }

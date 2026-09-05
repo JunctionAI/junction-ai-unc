@@ -114,11 +114,10 @@ describe("connection recovery", () => {
   it("rejects a refreshed token if its lease or previous ciphertext no longer matches", async () => {
     const id = await connected("ga4", { accessToken: "old", refreshToken: "r", expiresAt: inTwoMinutes, obtainedAt: NOW.toISOString() });
     const ciphertext = db.rows("connector_secrets")[0].ciphertext;
-    db.rpcs.claim_backend_lease = () => true;
-    db.rpcs.commit_connector_token = () => false;
+    db.rpcs.settle_connector_token = () => null;
     const d = tokenDeps({ env: { ...FAKE_ENV, CONNECTOR_REFRESH_LEASES_ENABLED: "true" } });
     d.routes.push(() => json({ access_token: "new", expires_in: 3600 }));
-    await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "temporarily_unavailable" });
+    await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "context_changed" });
     expect(db.rows("connector_secrets")[0].ciphertext).toBe(ciphertext);
     expect(db.callsFor("backend_leases", "delete")).toHaveLength(0);
   });
@@ -136,6 +135,8 @@ describe("connection recovery", () => {
     await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "temporarily_unavailable" });
     expect(db.rows("connectors")[0]).toMatchObject({ status: "connected", last_sync_result: "error:auth_temporarily_unavailable" });
     d.routes.splice(0, d.routes.length, () => json({ access_token: "new", expires_in: 3600 }));
+    const retryNow = new Date(NOW.getTime() + 31_000);
+    db.now = () => retryNow.toISOString(); d.now = () => retryNow;
     expect(await getAccessToken(id, d)).toMatchObject({ accessToken: "new" });
     expect(db.rows("connectors")[0].last_sync_result).toBeNull();
     expect(d.logs.join(" ")).not.toContain("must-not-leak");
@@ -146,6 +147,8 @@ describe("connection recovery", () => {
     const d = tokenDeps();
     d.routes.push(() => json({ error: "invalid_client" }, 401));
     await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "configuration_error" });
+    const retryNow = new Date(NOW.getTime() + 31_000);
+    db.now = () => retryNow.toISOString(); d.now = () => retryNow;
     d.routes.splice(0, d.routes.length, () => json({ error: "provider-specific-error" }, 400));
     await expect(getAccessToken(id, d)).rejects.toMatchObject({ code: "temporarily_unavailable" });
     expect(db.rows("connectors")[0].status).toBe("connected");
