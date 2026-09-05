@@ -13,7 +13,13 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 52, 6 September NZ / 5 September UTC
+## Latest state — Batch 53, 6 September NZ / 5 September UTC
+
+**Dataset completion fence implemented and database-applied.** [Exact evidence and limits](DATASET-SYNC-FENCE-2026-09-06.md). Late or superseded sync workers can no longer use the normal save path without atomic holder/expiry/account/context/connector checks. Snapshot insertion consumes that lease in the same transaction. 2,828 tests and 28 isolated real-PostgreSQL checks pass, including independently observed lock waits crossing expiry and concurrent one-winner completion. Production function-body/grant readback and paused-account refusal pass, with four datasets/four runs/one command unchanged. Worker release/readback is next; app compatibility is unchanged and sync/actions remain off.
+
+The previous advice turn was no implementation progress. This continuation changes source and production database authority with evidence; the full B01–B24/all-client goal remains active. Recovered n8n review confirms Nguyen's output-builder-only change by reconstructing the prior definition hash; output semantics and delivered files still need acceptance. No workflow edit, repin or provider run.
+
+## Previous state — Batch 52, 6 September NZ / 5 September UTC
 
 **Verified source and production saved-data correction.** [Semantics, SQL/readback and tests](META-BUDGET-CORRECTION-2026-09-06.md). `unc.meta-budget.v2` excludes paused/ineligible targets, separates daily/lifetime/unknown configurations and retires misleading aliases. Versioned hashes plus reader/save/readiness/reuse reject old normalization. Native pacing refuses configuration-only data without a verified forecast; broader cap/projection/catalog work remains.
 

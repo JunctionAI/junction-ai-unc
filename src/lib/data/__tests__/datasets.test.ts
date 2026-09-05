@@ -87,6 +87,10 @@ describe("database snapshot synchronization", () => {
     run = { ...ctx, account: { ...ctx.account, accountId: seeded.accountId } };
     direct = { read: vi.fn(async () => result) };
     seeded.db.rpcs.claim_backend_lease = () => true; // SQL locking verified separately in database canary.
+    seeded.db.rpcs.commit_dataset_sync = args => {
+      seeded.db.insertRow("account_dataset_snapshots", { ...(args.p_snapshot as Record<string, unknown>), stored_at: NOW.toISOString() });
+      return NOW.toISOString();
+    }; // Call-shape stub only; actual fencing and concurrency tested in PostgreSQL.
   });
   it("persists a complete read and reuses it without another API call", async () => {
     expect(await syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW)).toBe("synced");
@@ -101,6 +105,47 @@ describe("database snapshot synchronization", () => {
     seeded.db.rpcs.claim_backend_lease = () => false;
     expect(await syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW)).toBe("busy");
     expect(direct.read).not.toHaveBeenCalled();
+  });
+  it("commits with the exact claimed holder and captured context, without a direct insert", async () => {
+    let holder: unknown;
+    seeded.db.rpcs.claim_backend_lease = args => { holder = args.p_holder; return true; };
+    const commit = vi.fn(seeded.db.rpcs.commit_dataset_sync);
+    seeded.db.rpcs.commit_dataset_sync = commit;
+    run.account.contextGeneration = 7;
+    expect(await syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW)).toBe("synced");
+    expect(commit).toHaveBeenCalledWith(expect.objectContaining({ p_holder: holder, p_context_generation: 7,
+      p_snapshot: expect.objectContaining({ account_id: seeded.accountId, query_hash: datasetQueryHash(query, NOW), source_fetched_at: result.fetchedAt }) }));
+    expect(seeded.db.callsFor("account_dataset_snapshots", "insert")).toHaveLength(0);
+    expect(seeded.db.callsFor("backend_leases", "delete")).toHaveLength(0);
+  });
+  it("does not accept a lost lease or revoked context, and never releases a successor", async () => {
+    seeded.db.rpcs.commit_dataset_sync = () => null;
+    await expect(syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW)).rejects.toThrow("completion refused");
+    expect(seeded.db.rows("account_dataset_snapshots")).toHaveLength(0);
+    expect(seeded.db.callsFor("backend_leases", "delete")).toHaveLength(0);
+    expect(direct.read).toHaveBeenCalledTimes(1);
+  });
+  it("fails closed if the new database RPC is unavailable, without direct-insert fallback", async () => {
+    seeded.db.rpcs.commit_dataset_sync = () => { throw new Error("RPC unavailable"); };
+    await expect(syncDataset(seeded.db, direct, "meta_ads", query, run, () => NOW)).rejects.toThrow("RPC unavailable");
+    expect(seeded.db.callsFor("account_dataset_snapshots", "insert")).toHaveLength(0);
+    expect(seeded.db.callsFor("backend_leases", "delete")).toHaveLength(0);
+  });
+  it("uses the server's storage timestamp, not the caller's clock", async () => {
+    const store = new DbDatasetStore(seeded.db);
+    const id = (await store.connection(seeded.accountId, "meta_ads"))!;
+    const serverTime = new Date(NOW.getTime() + 2000).toISOString();
+    seeded.db.rpcs.commit_dataset_sync = () => serverTime;
+    expect(await store.save(id, query, datasetQueryHash(query, NOW), result, NOW, { holder: "holder", contextGeneration: 0 }))
+      .toMatchObject({ storedAt: serverTime, result: { fetchedAt: result.fetchedAt } });
+  });
+  it.each([-1, NaN, 0.5, Number.MAX_SAFE_INTEGER + 1])("rejects invalid captured generation %s", async contextGeneration => {
+    const store = new DbDatasetStore(seeded.db);
+    const id = (await store.connection(seeded.accountId, "meta_ads"))!;
+    const commit = vi.fn(seeded.db.rpcs.commit_dataset_sync);
+    seeded.db.rpcs.commit_dataset_sync = commit;
+    await expect(store.save(id, query, datasetQueryHash(query, NOW), result, NOW, { holder: "holder", contextGeneration })).rejects.toThrow("captured context");
+    expect(commit).not.toHaveBeenCalled();
   });
   it("never persists failed/fixture reads and leaves the lease as a bounded cooldown", async () => {
     direct.read = vi.fn(async () => ({ ...result, provenance: "fixture" }));
@@ -143,7 +188,7 @@ describe("database snapshot synchronization", () => {
     const budgetQuery = { resource: "adsets" };
     const store = new DbDatasetStore(seeded.db);
     const id = (await store.connection(seeded.accountId, "meta_ads"))!;
-    await expect(store.save(id, budgetQuery, datasetQueryHash(budgetQuery, NOW), result, NOW)).rejects.toThrow("normalization contract");
+    await expect(store.save(id, budgetQuery, datasetQueryHash(budgetQuery, NOW), result, NOW, { holder: "holder", contextGeneration: 0 })).rejects.toThrow("normalization contract");
     seeded.db.insertRow("account_dataset_snapshots", { id: "legacy", account_id: id.accountId, connector_id: id.connectorId,
       external_ref: id.externalRef, platform: id.platform, query_hash: datasetQueryHash(budgetQuery, NOW), result,
       source_fetched_at: NOW.toISOString(), stored_at: NOW.toISOString() });

@@ -40,6 +40,7 @@ function sameIdentity(a: DatasetIdentity, b: DatasetIdentity): boolean {
   return a.accountId === b.accountId && a.connectorId === b.connectorId && a.externalRef === b.externalRef && a.platform === b.platform;
 }
 export interface DatasetSnapshot { id: string; identity: DatasetIdentity; queryHash: string; result: ReadResult; storedAt: string }
+export interface DatasetSyncFence { holder: string; contextGeneration: number }
 export type DatasetAvailability = "missing" | "identity_mismatch" | "unverified" | "stale" | "ready";
 
 /** Shared by actual readers and read-only rollout inspection. Storage time never
@@ -55,7 +56,7 @@ export function datasetAvailability(snapshot: DatasetSnapshot | null, identity: 
 export interface DatasetStore {
   connection(accountId: string, platform: Platform): Promise<DatasetIdentity | null>;
   latest(identity: DatasetIdentity, queryHash: string): Promise<DatasetSnapshot | null>;
-  save(identity: DatasetIdentity, query: ReadQuery, queryHash: string, result: ReadResult, now: Date): Promise<DatasetSnapshot>;
+  save(identity: DatasetIdentity, query: ReadQuery, queryHash: string, result: ReadResult, now: Date, fence: DatasetSyncFence): Promise<DatasetSnapshot>;
 }
 
 export class DbDatasetStore implements DatasetStore {
@@ -71,7 +72,7 @@ export class DbDatasetStore implements DatasetStore {
       .order("source_fetched_at", { ascending: false }).limit(1).maybeSingle());
     return r ? { id: r.id, identity, queryHash, result: { ...r.result, fetchedAt: r.source_fetched_at }, storedAt: r.stored_at } : null;
   }
-  async save(identity: DatasetIdentity, query: ReadQuery, queryHash: string, result: ReadResult, now: Date): Promise<DatasetSnapshot> {
+  async save(identity: DatasetIdentity, query: ReadQuery, queryHash: string, result: ReadResult, now: Date, fence: DatasetSyncFence): Promise<DatasetSnapshot> {
     if (!["ok", "empty"].includes(result.provenance ?? "") || !Number.isFinite(Date.parse(result.fetchedAt))) throw new Error("only complete provider reads can enter stored datasets");
     if (datasetAvailability({ id: "pending", identity, queryHash, result, storedAt: now.toISOString() }, identity, queryHash, now) !== "ready")
       throw new Error("dataset sync returned stale or invalid source timestamp");
@@ -81,11 +82,16 @@ export class DbDatasetStore implements DatasetStore {
       throw new Error("dataset reporting day changed during data sync");
     if (!datasetNormalizationCurrent(identity.platform, query, result))
       throw new Error("dataset budget normalization contract is not current");
+    if (!fence?.holder || !Number.isSafeInteger(fence.contextGeneration) || fence.contextGeneration < 0)
+      throw new Error("dataset sync completion requires its lease and captured context");
     const id = randomUUID();
-    await unwrap("save account dataset", this.db.from("account_dataset_snapshots").insert({ id, account_id: identity.accountId,
+    const storedAt = await unwrap<string | null>("commit account dataset", this.db.rpc("commit_dataset_sync", { p_holder: fence.holder,
+      p_context_generation: fence.contextGeneration, p_snapshot: { id, account_id: identity.accountId,
       connector_id: identity.connectorId, external_ref: identity.externalRef, platform: identity.platform, query_hash: queryHash,
-      query: stable(query), result, source_fetched_at: result.fetchedAt, stored_at: now.toISOString() }));
-    return { id, identity, queryHash, result, storedAt: now.toISOString() };
+      query: stable(query), result, source_fetched_at: result.fetchedAt } }));
+    if (typeof storedAt !== "string" || !Number.isFinite(Date.parse(storedAt)))
+      throw new Error("dataset sync completion refused: lease expired or account/connection changed");
+    return { id, identity, queryHash, result, storedAt };
   }
 }
 
@@ -136,8 +142,8 @@ export async function syncDataset(db: DbClient, direct: ConnectorReader, platfor
     const result = await direct.read(platform, query, ctx);
     const current = await store.connection(ctx.account.accountId, platform);
     if (!current || !sameIdentity(current, identity)) throw new Error("connection changed during data sync");
-    await store.save(identity, query, hash, result, now());
-    completed = true;
+    await store.save(identity, query, hash, result, now(), { holder, contextGeneration: ctx.account.contextGeneration ?? 0 });
+    // Successful completion already consumed this holder's lease atomically.
     return "synced";
   } finally {
     // A failure keeps the bounded lease as a cooldown, letting the next tick skip
