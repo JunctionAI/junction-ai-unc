@@ -1,6 +1,6 @@
 # Meta budget normalization and saved-data correction
 
-Batch 52. PASS: source validation and real saved-data correction/reuse. Release evidence will be recorded separately. This advances B09/B11, not completion of the B01–B24/all-client goal.
+Batch 52. PASS: source validation, real saved-data correction/reuse and matched production release. This advances B02/B09/B11, not completion of the B01–B24/all-client goal.
 
 ## Corrected semantics
 
@@ -31,4 +31,31 @@ Normal 60-minute source expiry still applies. No background sync or read-routing
 
 Full Vitest: 216 files / 2,820 tests passed. Ten Node derivation tests passed (identity, query, provenance, source time, units, cardinality, deterministic ID, preserved history). App/worker TypeScript and Next.js 16.3.4 production webpack build passed. Full lint: zero errors, 44 existing warnings; changed-file lint and diff whitespace check passed.
 
-Next: matched app/worker release, actual runtime readback, scoped ongoing producer cadence/restart proof before stored-reader cutover. Complete query/metric joins, product-price CPA policy, auth lifecycle, customer/channel/second-client acceptance and remaining original register items. Nguyen owns his agreed five-lane delivery; no workflow, contract/payment or Upwork message changed in this batch.
+Next: scoped ongoing producer cadence/restart proof before stored-reader cutover, including late-holder acceptance. Complete query/metric joins, product-price CPA policy, auth lifecycle, customer/channel/second-client acceptance and remaining original register items. Nguyen owns his agreed five-lane delivery; no workflow or contract/payment changed. The later handoff-file request below is the only outgoing message in this batch.
+
+## Deploy Result
+
+- URL: https://junction-unc.vercel.app/app
+- Immutable URL: https://junction-m66b9m0pp-tom-junctionmedis-projects.vercel.app
+- Target: production, existing junction-unc project; candidate checked before promotion.
+- Status: READY; deployment `dpl_qwBs38btjfsjNhEM5m1fmkgmJUzX`.
+- Commit: `bb538e2e3638e297b259369ce6ebb467dc67b2cb`, independently verified on GitHub before release.
+- Framework: Next.js 16.3.4. Build duration: 47.407 seconds (API buildingAt 1788626537458 → ready 1788626584865).
+- Clean source worktree: `/tmp/unc-budget-release.VdNyuu`; unrelated `context 2.ts` untouched, no secrets copied.
+- Fly worker: release 30, sole Sydney machine `1857466fd76998`, started, smoke/health checks pass.
+- Image: `registry.fly.io/unc-worker@sha256:30b3fc937427ec3c4debe539d6d894cad74e3142d99265faa82ab1a6dfd201ba`; tag `deployment-01M1S760639E58EAP75V3CHZQH`.
+
+Actual worker verification `2026-09-05T16:44:14.125Z` checks the full source SHA and executes its compiled StoredDatasetReader. It serves derived snapshot `a1223279-93b6-59fe-a6a2-089222fe77f3`, exact 62 rows, preserved source time, total 32.61 and largest eligible daily 22.61. Four database GETs, no provider calls/writes. Account pause/generation/currency verified; commands/messaging/live/TNZ/Apple false, command scopes empty, producer and consumer opt-ins absent.
+
+Canonical app health `16:44:45.587Z`: build bb538e2e3638, database healthy, worker fresh (8 seconds), ticks 2, no last error. Signed-in owner reload confirms AVGAR, four saved runs/work items, zero enabled routines, pause and disabled-action notices. SQL `16:44:50.394341Z` retains pause/generation 1/NZD, four runs, one command and four datasets.
+
+### Post-Deploy Observability
+
+- Error and fatal scans: no entries returned, deployment-specific since 1 hour, limit 20 each.
+- Drains: zero. Independent alert delivery remains unverified; a fresh heartbeat is not scheduled-routine acceptance.
+- Anonymous keyword-request denial: HTTP 401, private/no-store. Canonical account-state denial: 401, public/max-age=0/must-revalidate; no private data returned. These are different cache policies, not blanket no-store proof.
+- Rollback: app `dpl_5jXKUjsrnTgYCK6c9Kt1qr6EydZC`, source `7cf363cadee7e1c72e86a014812550f7b000fee0`; worker release 29 image `sha256:aa617890ce47dce3d2d45bf848a157ff12f9fd7fc1e209449857b3545b2f6e7f`. Keep all producer/consumer/action flags off. No schema changes; derived snapshot can remain as immutable history.
+
+## New Nguyen handoff received
+
+Fresh Upwork read after release found his 4:27 AM message: claimed output-only revision `e5ae41ae-d025-4231-9f5c-99589c43e88a`, only Build Artifact And Receipt/jsCode changed; US/NZ/AU saved-data fixtures reportedly pass. He also reports completed Email drafts, six-week calendar and five-lane inventory under `scripts/issue45_artifacts/`. This is a reported delivery, not independent acceptance or a repin. The named files are absent from the shared Junction workspace. Codex requested actual attachments/access links and exact commit, retaining freeze and no-new-provider-run boundaries. No additional scope, charges or n8n changes authorized. Next integration action: inspect the actual published diff and delivered artifacts, then repin and clear only the bounded tests justified by that review.

@@ -45,7 +45,7 @@ The active pilot is generation 1 / paused. Its two dated reads are Meta and Shop
 
 ## Immediate work order and owners
 
-**Batch 52 update:** [Versioned Meta budget correction and saved-data acceptance](META-BUDGET-CORRECTION-2026-09-06.md) pass: active daily configurations NZD 32.61, one derived snapshot, historical rows/time preserved, no provider calls. Native pacing still requires its actual forecast/cap contract. Matched release and ongoing sync acceptance remain next; no stored-reader cutover or routine enablement.
+**Batch 52 update:** [Versioned Meta budget correction, saved-data acceptance and matched release](META-BUDGET-CORRECTION-2026-09-06.md) pass: active daily configurations NZD 32.61, one derived snapshot, history/source time preserved, no provider calls. Source bb538e2 is live in app/worker, actual worker stored-reader and owner reload pass. Native pacing still requires its actual forecast/cap contract. Ongoing sync/cadence and lease-expiry acceptance remain next; no stored-reader cutover or routine enablement.
 
 **Batch 51 update:** matched source `7cf363c` is live and the first two required Meta datasets now have real, independently read-back ingestion/reuse evidence. [Release and metric finding](DATASET-LIVE-RELEASE-2026-09-06.md). Keep cutover off: the ad-set aggregate currently includes paused configurations and an ineligible largest target. Correct/version that metric contract using saved observations, then prove scoped ongoing sync. AVGAR is paused again, zero routines enabled, four existing runs/artifacts unchanged. No background refresh, paid-ad execution or broader launch acceptance is claimed. Nguyen's correction publication was cleared at 4:09 AM; no newer handoff was visible at the latest check.
 

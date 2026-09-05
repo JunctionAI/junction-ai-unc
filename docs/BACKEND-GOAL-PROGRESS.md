@@ -21,6 +21,10 @@ Saved AVGAR data was reprocessed without provider calls into snapshot `a1223279-
 
 The preceding conversational turn was advice, not implementation progress. This continuation changes source and stored state with readback evidence. Full B01–B24/all-client goal remains active; no Nguyen workflow or external action changed.
 
+**Release completed:** source `bb538e2e3638e297b259369ce6ebb467dc67b2cb` is live in Vercel `dpl_qwBs38btjfsjNhEM5m1fmkgmJUzX` and Fly release 30/image `30b3fc937427ec3c4debe539d6d894cad74e3142d99265faa82ab1a6dfd201ba`. Actual worker compiled-reader proof serves corrected saved data using four database GETs and no provider calls/writes. Canonical health, signed-in AVGAR/reload, four runs/one command/four datasets and all holds pass. Error/fatal scans empty; zero drains/independent alert gap retained. Next: ongoing scoped producer coverage/cadence, lease-expiry fencing, remaining adapters and full-client acceptance.
+
+**New handoff, not yet accepted:** fresh Upwork read finds Nguyen's 4:27 AM report of frozen output-only revision `e5ae41ae-d025-4231-9f5c-99589c43e88a` and completed Email/calendar/inventory files. Their relative paths are absent from the shared workspace. Requested actual attachments/access links with commit; no new execution cleared, no repin or n8n edit. Next: independent published diff/artifact review, alongside remaining Codex work. This is a new deliverable to inspect, not a reason to repeat the earlier complaint or treat Nguyen as the sole blocker.
+
 ## Batch 51, 6 September NZ / 5 September UTC
 
 **Matched release and actual two-query AVGAR Meta ingestion/reuse pass.** [Deployment, runtime, saved-data receipts and limits](DATASET-LIVE-RELEASE-2026-09-06.md). Source `7cf363cadee7e1c72e86a014812550f7b000fee0`, Vercel `dpl_5jXKUjsrnTgYCK6c9Kt1qr6EydZC`, Fly release 29/image `aa617890ce47dce3d2d45bf848a157ff12f9fd7fc1e209449857b3545b2f6e7f`. Canonical health, actual worker SHA, anonymous denial and signed-in AVGAR/reload pass. Error/fatal scans empty; zero drains/alert-delivery gap retained.
