@@ -2,6 +2,8 @@
 
 Checked 5 September 2026, approximately 04:43 UTC. This records Nguyen's delivery and Codex's independent browser inspection. It is not an execution attestation or permission to start paid provider calls.
 
+Runtime update at approximately 05:09 UTC: both app and worker now run `3b001703b65fe3dd0edeb421b2eef9a6ae43ccdb`, including captured-context command fencing. See [latest release evidence](../COMMAND-CONTEXT-RELEASE-2026-09-05.md). The n8n contract, final-revision requirement and configuration/access gates below are unchanged; no keyword execution is claimed.
+
 ## Confirmed identifiers
 
 | Field | Value / evidence |

@@ -4,6 +4,8 @@ Status: implemented, covered by synthetic tests and deployed to matching app/wor
 
 ## Evidence path
 
+Subsequent matching runtime release: `3b001703b65fe3dd0edeb421b2eef9a6ae43ccdb`, with [command-context safeguards](../COMMAND-CONTEXT-RELEASE-2026-09-05.md). The reader remains disabled and not live-proven; the later release does not resolve API access, signing or dispatch admission.
+
 1. Unc sends its server-pinned expected revision and authorized business payload to the authenticated keyword wrapper.
 2. Nguyen returns the actual workflow/execution IDs, `workflowVersion: null`, and `revisionEvidence: "pending_unc_verification"`.
 3. Unc separately reads `GET /api/v1/executions/<executionId>?includeData=true` from the fixed `junctionai8.app.n8n.cloud` origin using its own server-only `X-N8N-API-KEY` credential.
