@@ -10,12 +10,13 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 26, 5 September 2026, approximately 09:58 UTC
+## Latest state — Batch 26, 5 September 2026, approximately 10:02 UTC
 
-**Verified native OAuth / first-read source and database progress; matched deployment pending.** The previous turn was Batch 25 deployment progress. This turn keeps the full B01–B24 scope and does not infer the unanswered n8n purchase/API-key authorization.
+**Verified native OAuth / first-read source, database and matched live deployment progress.** The previous turn was Batch 25 deployment progress. This turn keeps the full B01–B24 scope and does not infer the unanswered n8n purchase/API-key authorization.
 
 - Originating-owner/account-generation/latest-attempt binding and atomic native callback token/status commits; Google three-child rollback and stale callback tests. Healthy connections are preserved. A first-read generation-zero bug is fixed; metrics/status/receipt commit under one account/selected-connector check, and paused/stale reads no longer recommend reconnecting.
 - **199 files / 2,510 tests PASS**, app/worker TypeScript, production build and real service-role PostgreSQL rollback canary. New schema applied as `20260905095705_native_connector_oauth_context`. Readback: no fixture accounts/OAuth states/runs/enabled routines; AVGAR generation 1 / paused, 19 connectors and two sealed credentials retained. Security advisors six WARN/twelve INFO; no broadening of grants.
+- Pushed/live source `0c673111e1867181d938919d8f01509c58624aa0`; Vercel `dpl_BhJ3V2t2TGqfSFutWHxjKhNJBwYC`, worker release 18 / image `b33071940bad4b066521c890a842ee3c54cbcb484c8ccdf0d2e20876c1776c69`. Canonical/worker health match, two fresh worker ticks, zero runs, five action flags false. Owner Home and Connectors readback preserves AVGAR/Meta/Shopify; 401/disabled-Apple 503 and SQL checks pass. Transient worker cutover timeout resolved. Bounded error scan empty. Stale “Reading your last 90 days” copy on unverified social cards is an additional frontend fix, not successful provider acceptance.
 - [Exact changes, evidence and remaining auth gaps](NATIVE-OAUTH-CONTEXT-2026-09-05.md). B07 is still partial: refresh/shared-grant, hosted/manual/picker and disconnect/revoke races plus actual OAuth acceptance remain. n8n entitlement/key/receiver and real country tests remain external gates. Frontend ZIP still not deployed; frontend/backend wiring remains Codex work.
 
 ## Batch 25, 5 September 2026, approximately 09:34 UTC
