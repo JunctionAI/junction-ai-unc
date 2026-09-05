@@ -13,7 +13,41 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 77, 6 September NZ
+## Latest state — Batch 78, 6 September NZ
+
+**Slack setup-only consent and atomic, owner-bound reconnect implemented locally.**
+The install now binds the consenting owner, account generation, current attempt
+and existing identity revisions. A service-only transaction seals/stores the
+workspace grant and verifies the identity together, preserving its original
+account rather than transferring it on reinstall. Changed owner/context/bot,
+superseded consent and intervening credential changes are refused. Unlink is
+revision-bound, preserves history, and retains a shared workspace credential
+until its last verified direct identity is unlinked.
+
+Signed Slack URL verification and preparatory consent are now separate from the
+messaging gate. Metadata scopes are requested for channel verification; this
+does not grant them or activate a listener. Code exchange has a bounded timeout,
+forbids redirects, validates provider identity fields and does not retry after
+uncertain saves. Installation never sends a welcome message. The UI labels
+setup-only availability and requires affirmative unlink evidence.
+
+Validation: **3,144 tests / 231 files**, app/worker typechecks, production build,
+focused ESLint (zero errors, two existing warnings) and diff check pass. The real
+local PostgreSQL pipeline harness also passes exact install/unlink authority,
+credential preservation, rollback-on-refusal and private service-only access
+checks. The credential-race test exercises ordered interleavings, not a complete
+concurrent stress test. No provider calls, live credentials or customer messages
+were used for this batch.
+
+**Not deployed:** migration `20260905223939_slack_install_authority.sql` and
+matching app/worker code still need the coordinated release. Production remains
+Batch 77. Actual Slack app/grant readback, explicit route lifecycle/cutover and
+client-by-client end-to-end acceptance remain outstanding. Expired install pins
+contain no credentials and are superseded on the next attempt, but dedicated
+retention cleanup is not added here. Full goal remains active; this is progress,
+not complete or blocked.
+
+## Previous state — Batch 77, 6 September NZ
 
 **Slack registry/intake/outbox and owner setup now released together.**
 [Exact migration, app/worker, readback and rollback evidence](integration/JUNCTION-OWNED-SLACK-RUNTIME.md#matched-release--batch-77-6-september-nz).

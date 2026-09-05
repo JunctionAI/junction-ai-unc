@@ -5,10 +5,37 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { KEYRING, stubFetch, json } from "@/lib/connectors/__tests__/helpers";
 import { getChannelSecret } from "../secrets";
-import { finishSlackInstall, SLACK_STATE_PLATFORM, startSlackInstall } from "../slackOauth";
+import { finishSlackInstall, SLACK_STATE_PLATFORM, startSlackInstall as beginInstall } from "../slackOauth";
 import { EMPTY_TWIML, receiveSlack, receiveTelegram, receiveTwilio, receiveWhatsApp, receiveWhatsAppVerify, toResponse } from "../webhooks";
-import { verifiedLinks } from "../links";
-import { ACCT, channelDb, clock, fakeAdapters, T0, USER } from "./helpers";
+import { verifiedLinks, upsertVerifiedLink } from "../links";
+import { ACCT, channelDb as baseDb, clock, fakeAdapters, T0, USER } from "./helpers";
+import type { Row } from "@/lib/db/types";
+import { slackExchangeCode } from "../adapters/slack";
+
+// Application orchestration fixtures only. Exact authority/transaction semantics
+// are exercised independently by verify-slack-routed-pipeline.mjs on PostgreSQL.
+function channelDb() {
+  const db=baseDb();let pin:{state:string;context:Row}|null=null;
+  db.rpcs.begin_slack_install=async ({input})=>{
+    const i=input as Row;
+    const context={protocol:"slack_install_v1",accountId:i.accountId,actorId:i.actorId,contextGeneration:0,issuedAt:db.now()};
+    pin={state:String(i.state),context};
+    await db.from("oauth_states").insert({state:i.state,account_id:i.accountId,platform:SLACK_STATE_PLATFORM,code_verifier:null,shop:null,
+      redirect_to:i.redirectTo,created_at:db.now(),expires_at:new Date(new Date(db.now()).getTime()+600000).toISOString(),auth_context:context});
+  };
+  db.rpcs.check_slack_install=({state_value,context_value,actor})=>!!pin&&pin.state===state_value&&pin.context.actorId===actor&&JSON.stringify(pin.context)===JSON.stringify(context_value);
+  db.rpcs.finish_slack_install=async(args)=>{
+    if(!db.rpcs.check_slack_install(args))throw Error("changed authority");
+    const i=args.installation as Row,s=args.sealed as Row,c=args.context_value as Row;
+    await db.from("channel_secrets").upsert({account_id:c.accountId,channel:"slack",scope_id:i.teamId,ciphertext:s.ciphertext,iv:s.iv,tag:s.tag,key_version:s.keyVersion,updated_at:db.now()},{onConflict:"channel,scope_id"});
+    const l=await upsertVerifiedLink(db,{accountId:String(c.accountId),userId:String(args.actor),channel:"slack",externalId:String(i.userId),displayName:String(i.teamName),handle:String(i.teamName),meta:{team_id:i.teamId,team_name:i.teamName,bot_user_id:i.botUserId},now:new Date(db.now())});
+    pin=null;return db.rows("channel_links").find(x=>x.id===l.id);
+  };return db;
+}
+function startSlackInstall(deps:Omit<Parameters<typeof beginInstall>[0],"actorId">) {
+  (deps.db as ReturnType<typeof channelDb>).now=()=>deps.now.toISOString();
+  return beginInstall({...deps,actorId:USER});
+}
 
 const ENV = {
   TELEGRAM_BOT_TOKEN: "123:tok",
@@ -80,6 +107,46 @@ describe("receivers", () => {
 
 describe("Slack install", () => {
   const config = { clientId: "cid", clientSecret: "csec", signingSecret: "ssec" };
+
+  it.each(["superseded", "different_actor"])("refuses %s consent before exchanging a code", async (mode) => {
+    const db = channelDb();
+    const f = stubFetch();
+    const input = { db, config, appUrl: "https://unc.test", accountId: ACCT, now: now() };
+    const { state } = await startSlackInstall(input);
+    if (mode === "superseded") await startSlackInstall(input);
+    const result = await finishSlackInstall({ ...input, keyring: KEYRING, fetch: f.fetch, userId: mode === "different_actor" ? "another-owner" : USER }, new URLSearchParams({ state, code: "synthetic-code" }));
+    expect(result).toMatchObject({ ok: false, reason: "session_mismatch" });
+    expect(f.calls).toHaveLength(0);
+    expect(db.rows("channel_secrets")).toHaveLength(0);
+  });
+
+  it("does not retry the provider or claim success after a committed install loses its response", async () => {
+    const db = channelDb();
+    const finish = db.rpcs.finish_slack_install;
+    db.rpcs.finish_slack_install = async (args) => { await finish(args); throw Error("synthetic response loss"); };
+    const f = stubFetch([() => json({ ok: true, access_token: "synthetic-bot", team: { id: "T1" }, authed_user: { id: "U1" }, bot_user_id: "UB" })]);
+    const input = { db, config, appUrl: "https://unc.test", accountId: ACCT, now: now() };
+    const { state } = await startSlackInstall(input);
+    const deps = { ...input, keyring: KEYRING, fetch: f.fetch, userId: USER };
+    const query = new URLSearchParams({ state, code: "synthetic-code" });
+    expect(await finishSlackInstall(deps, query)).toMatchObject({ ok: false, reason: "save_unconfirmed" });
+    expect(db.rows("channel_secrets")).toHaveLength(1);
+    expect(await finishSlackInstall(deps, query)).toMatchObject({ ok: false, reason: "bad_state" });
+    expect(f.calls).toHaveLength(1);
+  });
+
+  it("bounds code exchange and refuses malformed provider identities before storage", async () => {
+    const valid = { ok: true, access_token: "synthetic-bot", team: { id: "T1", name: "Example" }, authed_user: { id: "U1" }, bot_user_id: "UB" };
+    for (const response of [null, { ...valid, ok: "true" }, { ...valid, access_token: 42 }, { ...valid, bot_user_id: null }, { ...valid, team: { id: "C1" } }, { ...valid, authed_user: { id: "T1" } }]) {
+      expect(await slackExchangeCode(async () => json(response), config, "synthetic-code", "https://unc.test/callback")).toBeNull();
+    }
+    const result = await slackExchangeCode(async (_url, init) => {
+      expect(init?.redirect).toBe("error");
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return json(valid);
+    }, config, "synthetic-code", "https://unc.test/callback");
+    expect(result).toMatchObject({ teamId: "T1", userId: "U1", botUserId: "UB" });
+  });
 
   it("start writes a single-use state under the channel platform and points at Slack with the callback", async () => {
     const db = channelDb();
@@ -161,7 +228,7 @@ describe("Slack install", () => {
     expect((await getChannelSecret(db, KEYRING, "slack", "T1"))?.accessToken).toBe("xoxb-workspace-token");
     await expect(getChannelSecret(db, KEYRING, "slack", "T2")).resolves.toBeNull();
     expect((await verifiedLinks(db, ACCT)).map((l) => l.channel)).toEqual(["slack"]);
-    // the welcome went through the adapter
-    expect(adapters.slack.sent[0].payload.text).toContain("Slack");
+    // Installing a connection is not permission to send an unsolicited welcome.
+    expect(adapters.slack.sent).toHaveLength(0);
   });
 });

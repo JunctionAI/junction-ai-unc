@@ -3,7 +3,7 @@
    GET                        → { links: [...], channels: [{channel, configured, botUsername?, number?}] }
    POST   { channel }         → { linkId, code, expiresAt, instruction: { url, text } }   issue a one-time link code
    PATCH  { linkId, prefs }   → { link }                                                   brief / approvals / drafts / quiet_hours
-   DELETE { linkId }          → { ok: true }                                               unlink (Slack: the workspace token goes too)
+   DELETE { linkId, bindingVersion? } → { ok: true }                                       unlink (Slack preserves shared credentials/history)
    or { fallback: true } in demo mode · 401 / 403 / 503 { error }.
 
    Codes are issued under the service role (members only read channel_links); the session
@@ -12,7 +12,7 @@
 import { CHANNEL_LABEL, isChannel } from "@/lib/channels/types";
 import { instructionFor } from "@/lib/channels/instructions";
 import { getLink, issueLinkCode, listLinks, normalisePrefs, unlink, updatePrefs } from "@/lib/channels/links";
-import { deleteChannelSecret } from "@/lib/channels/secrets";
+import { captureArtifactContext } from "@/lib/artifacts/context";
 import { channelAvailability } from "@/lib/channels/server";
 import { requireAccountOwnerSession, requireAccountSession } from "@/lib/db/session";
 import { withErrorCapture } from "@/lib/observability/errors";
@@ -24,6 +24,7 @@ const json = (body: unknown, status: number) => Response.json(body, { status });
 
 const wireLink = (l: Awaited<ReturnType<typeof listLinks>>[number]) => ({
   id: l.id,
+  bindingVersion: l.bindingVersion,
   channel: l.channel,
   label: CHANNEL_LABEL[l.channel],
   verified: !!l.verifiedAt,
@@ -95,19 +96,24 @@ async function handlePATCH(req: Request) {
 async function handleDELETE(req: Request) {
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
-  const body = await readBody<{ linkId?: unknown }>(req);
+  const body = await readBody<{ linkId?: unknown; bindingVersion?: unknown }>(req);
   if (!body || typeof body.linkId !== "string") return json({ error: "linkId required" }, 400);
   try {
     const link = await getLink(session.service, body.linkId);
     if (!link || link.accountId !== session.accountId) return json({ error: "link not found" }, 404);
-    const ok = await unlink(session.service, session.accountId, body.linkId);
-    if (ok && link.channel === "slack" && typeof link.meta.team_id === "string") {
-      const others = (await listLinks(session.service, session.accountId)).some((l) => l.channel === "slack" && l.meta.team_id === link.meta.team_id);
-      if (!others) await deleteChannelSecret(session.service, "slack", link.meta.team_id);
+    if (link.channel === "slack") {
+      const context = await captureArtifactContext(session.service, session.accountId, req);
+      if (context instanceof Response) return context;
+      if (!Number.isSafeInteger(body.bindingVersion) || Number(body.bindingVersion) < 0 || link.slackRouteId) return json({ error: "Refresh the Slack identity before unlinking." }, 409);
+      const result = await session.service.rpc("unlink_slack_identity", { input: { ...context, actorId: session.userId, linkId: link.id, bindingVersion: body.bindingVersion } });
+      if (result.error) return json({ error: "Slack unlink not confirmed. Refresh before retrying." }, result.error.code === "PT409" ? 409 : 503);
+      if (result.data !== true) return json({ error: "Slack unlink not confirmed. Refresh before retrying." }, 409);
+      return json({ ok: true }, 200);
     }
+    const ok = await unlink(session.service, session.accountId, body.linkId);
     return json({ ok }, 200);
-  } catch (err) {
-    return json({ error: err instanceof Error ? err.message : "unlink failed" }, 500);
+  } catch {
+    return json({ error: "Unlink not confirmed. Refresh before retrying." }, 503);
   }
 }
 

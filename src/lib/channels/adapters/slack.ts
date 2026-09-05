@@ -14,7 +14,7 @@ import type { ChannelAdapter, Env, FetchLike, InboundEvent, OutboundPayload, Sen
 
 export const SLACK_API = "https://slack.com/api";
 export const SLACK_SIGNATURE_WINDOW_S = 5 * 60;
-export const SLACK_SCOPES = ["chat:write", "im:history", "im:write", "im:read", "app_mentions:read", "users:read"];
+export const SLACK_SCOPES = ["chat:write", "im:history", "im:write", "im:read", "app_mentions:read", "users:read", "channels:read", "groups:read"];
 
 export interface SlackConfig {
   clientId: string;
@@ -130,11 +130,17 @@ export async function slackExchangeCode(fetchFn: FetchLike, config: SlackConfig,
   try {
     const res = await fetchFn(`${SLACK_API}/oauth.v2.access`, {
       method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000),
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ client_id: config.clientId, client_secret: config.clientSecret, code, redirect_uri: redirectUri }).toString(),
     });
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; access_token?: string; team?: { id?: string; name?: string }; authed_user?: { id?: string }; bot_user_id?: string };
-    if (!res.ok || !j.ok || !j.access_token || !j.team?.id || !j.authed_user?.id) return null;
+    if (!res.ok || j?.ok !== true || typeof j.access_token !== "string" || !j.access_token.trim()
+      || !isSlackId(j.team?.id) || !j.team.id.startsWith("T")
+      || !isSlackId(j.authed_user?.id) || !/^[UW]/.test(j.authed_user.id)
+      || !isSlackId(j.bot_user_id) || !j.bot_user_id.startsWith("U")
+      || (j.team.name !== undefined && typeof j.team.name !== "string")) return null;
     return { botToken: j.access_token, teamId: j.team.id, teamName: j.team.name ?? null, botUserId: j.bot_user_id ?? null, userId: j.authed_user.id };
   } catch {
     return null;

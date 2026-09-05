@@ -17,6 +17,7 @@ import { pollLink } from "@/lib/channels/linkPolling";
 
 export interface WireLink {
   id: string;
+  bindingVersion?: number;
   channel: Channel;
   label: string;
   verified: boolean;
@@ -31,6 +32,7 @@ export interface WireLink {
 export interface WireAvailability {
   channel: Channel;
   configured: boolean;
+  setupOnly?: boolean;
   botUsername?: string | null;
   number?: string | null;
   setupNote?: string;
@@ -199,7 +201,7 @@ export default function ConnectChannelStep({ onDone, initial, compact }: { onDon
                 <span style={{ fontSize: 13.5, fontWeight: 700 }}>{CHANNEL_LABEL[channel]}</span>
                 {already && <span style={pill("var(--cyan-text)", "var(--cyan-wash)")}>Linked</span>}
               </span>
-              <span style={{ fontSize: 12, color: configured ? "var(--ink-soft)" : "var(--muted)", lineHeight: 1.4 }}>{configured ? (already ? `${already.displayName ?? already.handle ?? already.workspace ?? "this device"} — add another or leave it.` : line) : (avail?.setupNote ?? NOT_ON_LINE)}</span>
+              <span style={{ fontSize: 12, color: configured ? "var(--ink-soft)" : "var(--muted)", lineHeight: 1.4 }}>{avail?.setupOnly ? avail.setupNote : configured ? (already ? `${already.displayName ?? already.handle ?? already.workspace ?? "this device"} — add another or leave it.` : line) : (avail?.setupNote ?? NOT_ON_LINE)}</span>
             </button>
           );
         })}

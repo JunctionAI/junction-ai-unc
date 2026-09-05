@@ -18,10 +18,10 @@ async function handleGET(req: Request) {
   if (!config) return Response.json({ error: "Slack is not switched on yet" }, { status: 503 });
   const redirectTo = new URL(req.url).searchParams.get("redirect_to");
   try {
-    const { url } = await startSlackInstall({ db: session.service, config, appUrl: appUrlFor(req), accountId: session.accountId, now: new Date(), redirectTo });
+    const { url } = await startSlackInstall({ db: session.service, config, appUrl: appUrlFor(req), accountId: session.accountId, actorId: session.userId, now: new Date(), redirectTo });
     return Response.redirect(url, 302);
-  } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "could not start the Slack install" }, { status: 500 });
+  } catch {
+    return Response.json({ error: "Could not confirm Slack setup. Refresh before trying again." }, { status: 503, headers: { "cache-control": "private, no-store" } });
   }
 }
 

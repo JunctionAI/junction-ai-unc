@@ -33,6 +33,45 @@ The agent is therefore a conversational entry point to tested routines, not a
 second unconstrained automation system. Enabling 1/7 or 3/7 routines changes the
 allowlist; it does not require seven combinations of duplicate workflows.
 
+## Setup-only install authority — Batch 78, local only
+
+The next install slice implements `begin_slack_install`, `check_slack_install`,
+`finish_slack_install` and `unlink_slack_identity` in
+`20260905223939_slack_install_authority.sql`. The private current-attempt pin
+survives single-use OAuth state consumption, so the final transaction can
+independently check the exact owner/account generation and consent snapshot.
+No bot token or provider secret is placed in that pin. Existing OAuth identities
+and workspace credential ownership are preserved across legitimate client reuse.
+
+The callback stores grant plus identity atomically, refuses changed bot identity
+as an explicit cutover dependency, and never sends a welcome message. Unlink
+invalidates verification without deleting historical identity/FK records and
+preserves credentials still used by another verified direct identity. The app
+requires current account generation and identity revision for Slack unlink and
+does not display success for missing/negative/uncertain acknowledgements.
+
+`channels:read` and `groups:read` are now in the requested consent scopes. Signed
+URL-verification challenges can be answered with messaging disabled; normal
+message events remain refused. Availability exposes setup-only status rather
+than claiming delivery. This has not granted provider scopes or changed Slack's
+Event Subscriptions, installed bot, channel membership or Hyperagent listener.
+
+Local verification: 3,144 tests in 231 files, both typechecks, Next production
+build and focused lint pass (two existing component warnings). Exact migration
+SQL passes the real local PostgreSQL harness, including superseded consent,
+owner/context changes, one-use completion, no account transfer, changed bot,
+credential-race refusal, no grant mutation after refusal, revision-bound unlink,
+shared credential/history preservation and private/service-only access. Provider
+transport tests use synthetic responses; there is no live OAuth acceptance yet.
+
+Release this additive schema and matching app/worker before asking the owner to
+reconnect. Then verify actual app configuration and grants, build the explicit
+revision-bound route activation/deactivation/cutover path, and perform a scoped
+client Slack pilot. Do not treat a staged route or installed grant as permission
+to enable customer messaging. Dedicated expired-pin retention cleanup remains;
+pins expire after ten minutes and the next attempt replaces the same owner/client
+pin, but expiration alone does not delete it.
+
 ## Origin capture batch
 
 The Slack event and message-button parsers now preserve `conversationId` and the

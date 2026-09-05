@@ -18,6 +18,11 @@ const channels: LinksListing["channels"] = [
 const tg: WireLink = { id: "l1", channel: "telegram", label: "Telegram", verified: true, handle: "tomh", displayName: "Tom", verifiedAt: "2026-09-02T09:00:00.000Z", codeExpiresAt: null, prefs: { brief: true, approvals: true, drafts: false, quiet_hours: { start: "22:00", end: "07:00" } }, lastInboundAt: null, workspace: null };
 
 describe("ConnectChannelStep", () => {
+  it("labels preparatory Slack consent as setup only while messaging is disabled", () => {
+    const html = renderToStaticMarkup(createElement(ConnectChannelStep, { initial: { links: [], channels: [{ channel: "slack", configured: true, setupOnly: true, setupNote: "Connect Slack for setup only. Messages remain disabled." }] } }));
+    expect(html).toContain("Connect Slack for setup only. Messages remain disabled.");
+    expect(html).toContain('data-testid="choice-slack" data-configured="1"');
+  });
   it("asks where to reach you, names the same-conversation promise, and is honest about what is switched on", () => {
     const html = renderToStaticMarkup(createElement(ConnectChannelStep, { initial: { links: [], channels } }));
     expect(html).toContain(STEP_TITLE);

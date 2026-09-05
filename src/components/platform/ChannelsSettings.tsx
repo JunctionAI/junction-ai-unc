@@ -9,6 +9,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import type { AgentContext } from "@/lib/agents/client";
+import { artifactHeaders } from "@/lib/artifacts/client";
 import SlackRouteSetupPanel from "./SlackRouteSetupPanel";
 import ConnectChannelStep, { fetchListing, type FetchedListing, type LinksListing, type WireLink } from "./ConnectChannelStep";
 
@@ -78,14 +79,18 @@ export default function ChannelsSettings({ initial, context }: { initial?: Links
   }
 
   async function remove(link: WireLink) {
+    if (link.channel === "slack" && (!context || link.bindingVersion === undefined)) {
+      setNote("Refresh this account’s Slack connection before unlinking."); setConfirmUnlink(null); return;
+    }
     try {
-      const res = await fetch("/api/channels/links", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ linkId: link.id }) });
-      if (res.ok) {
-        setNote(`Unlinked ${link.label}. I’ll only reach you in the app from there.`);
+      const res = await fetch("/api/channels/links", { method: "DELETE", headers: { "content-type": "application/json", ...(link.channel === "slack" && context ? artifactHeaders(context.accountId, context.contextGeneration) : {}) }, body: JSON.stringify({ linkId: link.id, ...(link.channel === "slack" ? { bindingVersion: link.bindingVersion } : {}) }) });
+      const result = await res.json().catch(() => null);
+      if (res.ok && result?.ok === true) {
+        setNote(`Unlinked this ${link.label} connection. Other connections are unchanged.`);
         setListing((l) => (l ? { ...l, links: l.links.filter((x) => x.id !== link.id) } : l));
-      } else setNote("couldn’t unlink — try again");
+      } else setNote("Unlink not confirmed. Refresh connections before retrying.");
     } catch {
-      setNote("couldn’t unlink — try again");
+      setNote("Unlink not confirmed. Refresh connections before retrying.");
     } finally {
       setConfirmUnlink(null);
     }

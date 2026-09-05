@@ -26,6 +26,8 @@ try {
     create schema auth;create schema unc_private;create table auth.users(id uuid primary key);
     ${['accounts','account_members','routine_runs','chat_messages'].map(t=>table(base,t)).join('\n')}
     ${['channel_links','outbound_messages','channel_secrets'].map(t=>table(channels,t)).join('\n')}
+    ${table(await sql('0005_connector_secrets.sql'),'oauth_states')}
+    alter table oauth_states add column auth_context jsonb;
     ${table(await sql('0010_client_brain.sql'),'account_profiles')}
     alter table accounts add column context_generation bigint not null default 0,add column automation_paused boolean not null default false;
     alter table routine_runs add column context_generation bigint not null default 0;
@@ -42,7 +44,7 @@ try {
   for(const name of ['20260905053820_channel_inbox_identity.sql','20260905054958_channel_inbound_controls.sql',
     '20260905065409_channel_outbound_claims.sql','20260905071413_command_delivery_identity.sql',
     '20260905220557_slack_conversation_registry.sql','20260905221238_slack_routed_inbox.sql',
-    '20260905222650_slack_route_owner_setup.sql'])await admin.query(await sql(name));
+    '20260905222650_slack_route_owner_setup.sql','20260905223939_slack_install_authority.sql'])await admin.query(await sql(name));
   await admin.query('create trigger command_context before insert or update on routine_commands for each row execute function unc_private.guard_command_context()');
   const accountA=randomUUID(),accountB=randomUUID(),owner=randomUUID(),identity=randomUUID();
   await admin.query('insert into auth.users values($1)',[owner]);
@@ -158,5 +160,64 @@ try {
     from pg_proc where oid='public.slack_route_owner_view(jsonb)'::regprocedure`)).rows[0];
   assert.deepEqual(security,{invoker_only:true,pinned_path:true,server_allowed:true,anon_allowed:false,member_allowed:false});
   checks.push('owner view security catalog confirms invoker execution, pinned search path and service-only execute grants; only credential-presence boolean is exposed');
+  // Separate synthetic install clients: do not change the routed-pipeline fixtures.
+  const installOwner=randomUUID(),installA=randomUUID(),installB=randomUUID();
+  await admin.query('insert into auth.users values($1)',[installOwner]);
+  await admin.query("insert into accounts(id,name) values($1,'Install A'),($2,'Install B')",[installA,installB]);
+  await admin.query("insert into account_members(account_id,user_id,role) values($1,$3,'owner'),($2,$3,'owner')",[installA,installB,installOwner]);
+  async function beginInstall(accountId=installA){
+    const state=randomUUID().replaceAll('-','');
+    await a.query('select begin_slack_install($1)',[{accountId,actorId:installOwner,state,redirectTo:'/app'}]);
+    const row=(await a.query("delete from oauth_states where state=$1 and platform='slack_channel' returning auth_context",[state])).rows[0];
+    return {state,context:row.auth_context};
+  }
+  const checkInstall=p=>a.query('select check_slack_install($1,$2,$3) ok',[p.state,p.context,installOwner]).then(x=>x.rows[0].ok);
+  const installation={teamId:'TINSTALL',teamName:'Synthetic install',userId:'UINSTALL',botUserId:'UBINSTALL'};
+  const sealed={ciphertext:'fixture-sealed-only',iv:'fixture',tag:'fixture',keyVersion:1};
+  const finishInstall=(p,patch={})=>a.query('select finish_slack_install($1,$2,$3,$4,$5) r',[p.state,p.context,installOwner,{...installation,...patch},sealed]).then(x=>x.rows[0].r);
+  const oldInstall=await beginInstall(),currentInstall=await beginInstall();
+  assert.equal(await checkInstall(oldInstall),false);assert.equal(await checkInstall(currentInstall),true);
+  const installed=await finishInstall(currentInstall);assert.equal(installed.account_id,installA);
+  assert.equal(await checkInstall(currentInstall),false);await assert.rejects(finishInstall(currentInstall),{code:'PT409'});
+  const reusable=await beginInstall(installB),reinstalled=await finishInstall(reusable);
+  assert.equal(reinstalled.id,installed.id);assert.equal(reinstalled.account_id,installA);
+  assert.equal((await admin.query("select account_id from channel_secrets where scope_id='TINSTALL'")).rows[0].account_id,installA);
+  const changed=await beginInstall();await admin.query('update accounts set context_generation=1 where id=$1',[installA]);
+  assert.equal(await checkInstall(changed),false);await assert.rejects(finishInstall(changed),{code:'PT409'});
+  const beforeRefusal=(await admin.query("select to_jsonb(s) r from channel_secrets s where scope_id='TINSTALL'")).rows[0].r;
+  const botChange=await beginInstall();await assert.rejects(finishInstall(botChange,{botUserId:'UOTHERBOT'}),{code:'PT409'});
+  assert.deepEqual((await admin.query("select to_jsonb(s) r from channel_secrets s where scope_id='TINSTALL'")).rows[0].r,beforeRefusal);
+  const lostOwner=await beginInstall();
+  await admin.query("update account_members set role='member' where account_id=$1 and user_id=$2",[installA,installOwner]);
+  assert.equal(await checkInstall(lostOwner),false);await assert.rejects(finishInstall(lostOwner),{code:'PT409'});
+  await admin.query("update account_members set role='owner' where account_id=$1 and user_id=$2",[installA,installOwner]);
+  const concurrentA=await beginInstall(),concurrentB=await beginInstall(installB);
+  await finishInstall(concurrentB);await assert.rejects(finishInstall(concurrentA),{code:'PT409'});
+  // A second legitimate identity shares the workspace credential. Unlinking the
+  // first must invalidate its identity without removing the shared token/history.
+  const peerLink=randomUUID();
+  await admin.query("insert into channel_links(id,account_id,user_id,channel,external_id,verified_at,meta) values($1,$2,$3,'slack','UPEER',now(),'{\"team_id\":\"TINSTALL\",\"bot_user_id\":\"UBINSTALL\"}')",[peerLink,installB,installOwner]);
+  const liveLink=(await admin.query('select binding_version from channel_links where id=$1',[installed.id])).rows[0];
+  const unlinkInput={accountId:installA,actorId:installOwner,contextGeneration:1,linkId:installed.id,bindingVersion:Number(liveLink.binding_version)};
+  await assert.rejects(a.query('select unlink_slack_identity($1)',[{...unlinkInput,bindingVersion:0}]),{code:'PT409'});
+  assert.equal((await a.query('select unlink_slack_identity($1) ok',[unlinkInput])).rows[0].ok,true);
+  assert.equal((await admin.query('select verified_at from channel_links where id=$1',[installed.id])).rows[0].verified_at,null);
+  assert.equal((await admin.query("select count(*)::int n from channel_secrets where scope_id='TINSTALL'")).rows[0].n,1);
+  assert.equal((await a.query('select unlink_slack_identity($1) ok',[{accountId:installB,actorId:installOwner,contextGeneration:0,linkId:peerLink,bindingVersion:0}])).rows[0].ok,true);
+  assert.equal((await admin.query("select count(*)::int n from channel_secrets where scope_id='TINSTALL'")).rows[0].n,0);
+  for(const role of ['anon','authenticated']){
+    await b.query(`set role ${role}`);
+    for(const statement of ['select begin_slack_install(\'{}\')','select check_slack_install(\'s\',\'{}\',null)','select finish_slack_install(\'s\',\'{}\',null,\'{}\',\'{}\')','select unlink_slack_identity(\'{}\')'])
+      await assert.rejects(b.query(statement),{code:'42501'});
+    await assert.rejects(b.query('select * from unc_slack_private.install_attempts'),{code:'42501'});
+  }
+  const installSecurity=(await admin.query(`select count(*)::int n,bool_and(not prosecdef) invoker_only,
+    bool_and(proconfig=array['search_path=""']::text[]) pinned_path
+    from pg_proc where oid in ('public.begin_slack_install(jsonb)'::regprocedure,
+    'public.check_slack_install(text,jsonb,uuid)'::regprocedure,
+    'public.finish_slack_install(text,jsonb,uuid,jsonb,jsonb)'::regprocedure,
+    'public.unlink_slack_identity(jsonb)'::regprocedure)`)).rows[0];
+  assert.deepEqual(installSecurity,{n:4,invoker_only:true,pinned_path:true});
+  checks.push('real install SQL proves one current attempt, committed nonce refusal, no OAuth account transfer, context/bot/credential-race refusal and shared-token-safe revision-bound unlink with retained identity history');
   console.log(JSON.stringify({status:'PASS',checks,providerCalls:0,customerMessages:0,productionChanges:0,database:directory},null,2));
 } finally {await Promise.all(clients.map(c=>c.end()));await cluster.stop();}

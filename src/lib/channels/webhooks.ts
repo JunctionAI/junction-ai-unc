@@ -74,12 +74,12 @@ export function receiveWhatsApp(deps: ReceiveDeps, req: { signature: string | nu
 // ---------- Slack (Events API + Interactivity on one URL) ----------
 
 export function receiveSlack(deps: ReceiveDeps, req: { signature: string | null; timestamp: string | null; contentType: string | null; rawBody: string }): Received {
-  if (messagingDisabled(deps.env)) return bad(503, "messaging_disabled");
   const config = slackConfig(deps.env);
   if (!config) return bad(503, "slack is not configured");
   if (!verifySlackWebhook(req.rawBody, { signature: req.signature, timestamp: req.timestamp }, config.signingSecret, deps.now())) return bad(401, "invalid signature");
   const parsed = parseSlackBody(req.rawBody, req.contentType);
   if (parsed.kind === "challenge") return { status: 200, body: { challenge: parsed.challenge }, events: [] };
+  if (messagingDisabled(deps.env)) return bad(503, "messaging_disabled");
   return { status: 200, body: { ok: true }, events: parsed.events };
 }
 

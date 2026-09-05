@@ -41,6 +41,7 @@ export function buildAdapters(inputs: AdapterInputs): AdapterRegistry {
 export interface ChannelAvailability {
   channel: Channel;
   configured: boolean;
+  setupOnly?: boolean;
   /** Public facts the connect step shows (bot username, the number to message). Never a token. */
   botUsername?: string | null;
   number?: string | null;
@@ -49,7 +50,10 @@ export interface ChannelAvailability {
 }
 
 export function availability(env: Env): ChannelAvailability[] {
-  if (messagingDisabled(env)) return (["telegram", "whatsapp", "slack", "sms", "email", "apple"] as Channel[]).map(channel => ({ channel, configured: false, setupNote: MESSAGING_DISABLED_NOTE }));
+  if (messagingDisabled(env)) return (["telegram", "whatsapp", "slack", "sms", "email", "apple"] as Channel[]).map(channel =>
+    channel === "slack" && slackConfig(env)
+      ? { channel, configured: true, setupOnly: true, setupNote: "Connect Slack for setup only. Messages remain disabled." }
+      : { channel, configured: false, setupNote: MESSAGING_DISABLED_NOTE });
   const tg = telegramConfig(env);
   const wa = whatsappConfig(env);
   const sl = slackConfig(env);
