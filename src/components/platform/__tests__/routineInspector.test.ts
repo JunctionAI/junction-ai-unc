@@ -115,6 +115,14 @@ describe("RoutineInspector", () => {
 });
 
 describe("RoutineDetail mounts it in accounts mode only", () => {
+  it("does not display an unanswered budget as a zero-dollar guardrail",()=>{
+    const sel=ALL_SYSTEMS.find(s=>s.id==="D02-W01")!;
+    const V=dv({...accountInitialState("NZD"),onboarded:true,sel},ACCOUNT);
+    expect(V.accountCtx.budgetKnown).toBe(false);
+    const live={active:true,loading:false,data:listingOff(),error:null,refresh:noop,patch:noop};
+    const html=renderToStaticMarkup(createElement(RoutineDetail,{V,run:{...acctRun,account:V.accountCtx},live}));
+    expect(html).toContain("Not set yet");expect(html).not.toContain("NZD 0/mo");
+  });
   it("accounts: the inspector is on the page and the prototype's param editor is not", () => {
     const sel = ALL_SYSTEMS.find((s) => s.id === "D02-W01")!;
     const live = { active: true, loading: false, data: listingOff(), error: null, refresh: noop, patch: noop };

@@ -402,7 +402,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
             })}
             <span style={{ fontSize: 12, border: "1px solid oklch(0.88 0.015 260)", color: "oklch(0.35 0.05 262)", background: "white", borderRadius: 999, padding: "5px 12px" }}>Currency · {run.account.currency}</span>
             <span style={{ fontSize: 12, border: "1px solid oklch(0.88 0.015 260)", color: "oklch(0.35 0.05 262)", background: "white", borderRadius: 999, padding: "5px 12px" }}>
-              Budget guardrail · {run.account.currency} {Math.round(run.account.budgetMonthly).toLocaleString("en-NZ")}/mo
+              Budget guardrail · {run.account.budgetKnown===false ? "Not set yet" : `${run.account.currency} ${Math.round(run.account.budgetMonthly).toLocaleString("en-NZ")}/mo`}
             </span>
           </div>
           {minimum && (

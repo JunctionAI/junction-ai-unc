@@ -1,5 +1,7 @@
 import {beforeEach,expect,it,vi} from "vitest";
-const mocks=vi.hoisted(()=>({snapshot:vi.fn(),trigger:vi.fn(),resume:vi.fn(),account:vi.fn(),getRun:vi.fn()}));
+const mocks=vi.hoisted(()=>({snapshot:vi.fn(),trigger:vi.fn(),resume:vi.fn(),account:vi.fn(),getRun:vi.fn(),manual:vi.fn(),editor:vi.fn()}));
+vi.mock("@/lib/runtime/manual",()=>({executeManual:mocks.manual,ManualRequestError:class ManualRequestError extends Error{constructor(message:string,public status=409){super(message);}}}));
+vi.mock("@/lib/runtime/presets/editor",()=>({readEditor:mocks.editor}));
 vi.mock("@/lib/db/client",()=>({isDbConfigured:()=>true}));
 vi.mock("../server",()=>({agentSnapshot:mocks.snapshot}));
 vi.mock("@/lib/runtime/store",()=>({getStore:()=>({getRun:mocks.getRun})}));
@@ -16,7 +18,7 @@ beforeEach(()=>{
   vi.clearAllMocks();mocks.snapshot.mockResolvedValue({session:{},data:snapshot()});
   mocks.account.mockResolvedValue({account:{accountId,contextGeneration:1,currency:"NZD",budgetMonthly:0}});
   mocks.getRun.mockResolvedValue({id:"run",accountId,contextGeneration:1,routineId:"D01-W01"});
-  mocks.trigger.mockImplementation(async(deps,input)=>{await deps.accounts.getAccount(input.accountId);return {runId:"run",routineId:input.routineId,version:2,status:"done",mode:"dry_run",summary:"Synthetic only",receipts:[]};});
+  mocks.manual.mockImplementation(async()=>({requestId:"request",phase:"claimed",result:{runId:"run",routineId:row.routineId,version:2,status:"done",mode:"dry_run",summary:"Synthetic only",receipts:[]}}));
 });
 it("rejects member, paused, off, keyword and unavailable requests before dispatch",async()=>{
   for(const change of [{role:"member"},{paused:true},{routines:[{...row,enabled:false}]},{routines:[{...row,selectionBlock:"Keyword pilot requires independent verification"}]}]){
@@ -28,10 +30,9 @@ it("rejects stale revisions, foreign accounts and browser-supplied business inpu
   for(const change of [{accountId:"foreign"},{version:1},{stateUpdatedAt:null},{vars:{website:"other.example"}},{account:{currency:"USD",budgetMonthly:900}}])expect((await start(req({...body(),...change}))).status).toBeGreaterThanOrEqual(400);
   expect(mocks.trigger).not.toHaveBeenCalled();
 });
-it("returns the captured account with the exact saved run and refuses a changed account resolver",async()=>{
+it("returns the captured account and delegates only to durable admission",async()=>{
   expect(await (await start(req(body()))).json()).toMatchObject({accountId,contextGeneration:1,run:{runId:"run",routineId:"D01-W01",version:2}});
-  mocks.account.mockResolvedValue({account:{accountId,contextGeneration:2}});
-  const r=await start(req(body()));expect(r.status).toBe(400);expect(await r.text()).toContain("context changed");
+  expect(mocks.manual).toHaveBeenCalledOnce();expect(mocks.trigger).not.toHaveBeenCalled();
 });
 it("does not resume a run from another generation or an off routine",async()=>{
   mocks.getRun.mockResolvedValue({id:"run",accountId,contextGeneration:0,routineId:"D01-W01"});

@@ -138,6 +138,9 @@ export interface Adapters {
 
 export interface RunOptions {
   mode: RunMode;
+  /** Authenticated manual admission. Only the durable claim winner executes;
+   * a replay returns the original saved result without invoking any nodes. */
+  admitManualStart?: (run: RunRecord) => Promise<{ start: true; run: RunRecord } | { start: false; result: RunResult }>;
   /** Trusted queue-assigned identity; never accepted from an unauthenticated request. */
   runId?: string;
   /** Operator-only atomic registration/run/permit issuance. Not wired to chat, routes
@@ -713,7 +716,22 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
     specHash: stableHash(spec),
   };
   let run: RunRecord;
-  if (opts.reserveKeywordShadowRun) {
+  if (opts.admitManualStart) {
+    if (opts.reserveKeywordShadowRun || spec.id === "D03-W01" || opts.mode !== "dry_run" || ctx.triggeredBy !== "manual")
+      throw new Error("Manual admission cannot start the keyword pilot or live work");
+    initial.snapshot = { spec: structuredClone(spec), ctx: structuredClone(ctx), nextNodeIndex: 0, startProtocol: "manual_claim_v1" };
+    const admitted = await opts.admitManualStart(structuredClone(initial));
+    if (!admitted.start) return admitted.result;
+    const original = admitted.run, saved = original.snapshot;
+    if (!saved || saved.startProtocol !== "manual_claim_v1" || saved.nextNodeIndex !== 0 || original.status !== "running" ||
+      original.mode !== "dry_run" || original.routineId !== spec.id || original.version !== spec.version ||
+      original.accountId !== ctx.account.accountId || original.contextGeneration !== ctx.account.contextGeneration ||
+      saved.ctx.runId !== original.id || saved.ctx.mode !== "dry_run" || saved.ctx.triggeredBy !== "manual" ||
+      saved.spec.id !== original.routineId || saved.spec.version !== original.version || stableHash(saved.spec) !== original.specHash)
+      throw new Error("Original manual run identity unavailable; reconcile without restarting");
+    assertSameRuntimeContext(original, saved.ctx.account);
+    return new RunSession(saved.spec, saved.ctx, original, adapters).runFrom(0);
+  } else if (opts.reserveKeywordShadowRun) {
     if (!opts.claimKeywordShadowStart) throw new Error("Keyword pilot requires an atomic start claim before issuance");
     const producers = spec.nodes.filter(node => node.kind === "produce" || node.kind === "n8n");
     const node = producers[0];
@@ -836,9 +854,16 @@ export function cleanAnswers(answers: Record<string, unknown>): Record<string, s
     re-run the produce step (the snapshot points at it). */
 export async function resumeRunWithInput(runId: string, answers: Record<string, unknown>, adapters: Adapters): Promise<RunResult> {
   const store = adapters.store;
-  const now = adapters.now ?? (() => new Date());
   const run = await store.getRun(runId);
   if (!run) throw new Error(`run ${runId} not found`);
+  return resumeCapturedInput(run, answers, adapters);
+}
+
+/** A durable manual claim supplies the original waiting snapshot. Claiming changes
+ * the stored status atomically before any receipt/provider work takes place. */
+export async function resumeCapturedInput(run: RunRecord, answers: Record<string, unknown>, adapters: Adapters): Promise<RunResult> {
+  const store = adapters.store;
+  const runId = run.id;
   if (run.status !== "waiting_input") throw new Error(`run ${runId} is ${run.status}, not waiting_input`);
   if (!run.snapshot) throw new Error(`run ${runId} has no resumable snapshot`);
   assertSameRuntimeContext(run, run.snapshot.ctx.account);
@@ -850,7 +875,6 @@ export async function resumeRunWithInput(runId: string, answers: Record<string, 
   const session = new RunSession(spec, ctx, run, adapters);
   await session.receipt("notification", `You answered: ${Object.keys(clean).map((k) => k.replace(/_/g, " ")).join(", ")}. Drafting again with that.`, { answered: Object.keys(clean) });
   await store.updateRun(run.id, { status: "running", summary: "Resumed with your answers.", snapshot: undefined, finishedAt: undefined });
-  void now;
   return session.runFrom(nextNodeIndex);
 }
 

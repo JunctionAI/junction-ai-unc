@@ -17,6 +17,7 @@ import { formatValue, industryLine } from "@/lib/runtime/presets/industry";
 import type { PresetField, PresetValue } from "@/lib/runtime/presets/types";
 import type { SkillFile } from "@/lib/runtime/skills/types";
 import type { AgreementScore } from "@/lib/runtime/agreement";
+import ManualRecovery, { useManualRecovery } from "./ManualRecovery";
 
 export interface ParamsField extends PresetField {
   relevant: boolean;
@@ -60,6 +61,7 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
   const [tick,setTick]=useState(0);
   const inFlight=useRef(false);
   const mounted=useRef(true);
+  const recovery=useManualRecovery(context,routineId,"validate");
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const accountId=context?.accountId, contextGeneration=context?.contextGeneration;
   const matches=useCallback((b:Body)=>!!accountId && b.accountId===accountId && b.contextGeneration===contextGeneration && b.routineId===routineId && Array.isArray(b.fields) && !!b.version,[accountId,contextGeneration,routineId]);
@@ -124,16 +126,17 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
   }
 
   async function act(action: "validate" | "promote" | "discard") {
-    if(!view || busy || inFlight.current || blocked || action!=="discard" && runBlockReason)return;
+    if(!view || busy || inFlight.current || blocked || action!=="discard" && runBlockReason || action==="validate" && recovery.blocked)return;
     inFlight.current=true;
     setBusy(action === "discard" ? "save" : action);
     setError(null);
     setNote(null);
     try {
-      const res = await fetch("/api/routines/params", { method: "POST", headers, body: JSON.stringify({ routineId, action,version:view.version.live,stateUpdatedAt:view.stateUpdatedAt,configurationRevision:view.configurationRevision }) });
-      const body = (await res.json().catch(() => ({}))) as Body;
+      const payload={routineId,action,version:view.version.live,stateUpdatedAt:view.stateUpdatedAt,configurationRevision:view.configurationRevision};
+      const res = action==="validate"?null:await fetch("/api/routines/params", { method: "POST", headers, body: JSON.stringify(payload) });
+      const body = (action==="validate"?await recovery.submit("/api/routines/params",payload):await res!.json().catch(()=>({}))) as Body;
       if(!mounted.current)return;
-      if (!res.ok || !matches(body)) setError("Outcome not confirmed. Refresh to inspect the saved settings; no automatic retry.");
+      if (res && !res.ok || !matches(body)) setError("Outcome not confirmed. Refresh to inspect the saved settings; no automatic retry.");
       else {
         apply(body);
         if (action === "validate") setNote(body.passed ? `Dry run passed (${body.run?.summary ?? "no incident"}). Promote when you’re happy.` : `Dry run did not pass: ${body.run?.summary ?? body.run?.status ?? "no summary"}. Nothing promoted.`);
@@ -151,6 +154,7 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
 
   return (
     <div data-testid="routine-inspector" style={{ marginTop: 12, background: "white", border: "1px solid var(--card-border)", borderRadius: 14, padding: "18px 22px" }}>
+      <ManualRecovery recovery={recovery} busy={!!busy} blocked={!!blocked||!!runBlockReason} onResult={body=>{const r=body.run as {summary:string};setNote(r.summary);setError(null);setTick(t=>t+1);onSaved?.();}}/>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "oklch(0.45 0.1 240)", fontWeight: 700, border: "1px solid var(--card-border)", borderRadius: 5, padding: "3px 8px" }}>SETTINGS</span>
         <span style={{ fontSize: 14, fontWeight: 600 }}>{INSPECTOR_TITLE}</span>
@@ -274,7 +278,7 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
               <div style={{ fontSize: 12.5, color: "oklch(0.4 0.1 70)", lineHeight: 1.5, flex: 1, minWidth: 260 }}>{note ?? `Draft v${view.version.draft} is waiting. Run the dry-run validation, then promote it — the configured version stays unchanged; a schedule is not verified here.`}</div>
               {view.version.draft && (
                 <>
-                  <button onClick={() => void act("validate")} disabled={busy !== null || !!runBlockReason} className="btn-navy" style={{ flex: "none", padding: "8px 17px", fontSize: 12.5, fontWeight: 600 }}>
+                  <button onClick={() => void act("validate")} disabled={busy !== null || !!runBlockReason || recovery.blocked} className="btn-navy" style={{ flex: "none", padding: "8px 17px", fontSize: 12.5, fontWeight: 600 }}>
                     {busy === "validate" ? "Running…" : "Run dry-run validation"}
                   </button>
                   {view.canPromote && (

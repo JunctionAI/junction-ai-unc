@@ -12,7 +12,15 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 34, 6 September NZ / 5 September UTC
+## Latest state — Batch 35, 6 September NZ / 5 September UTC
+
+**Source + PostgreSQL rollback evidence + authorized developer communication progress.** New manual start/validation/input prepare/claim infrastructure and client original-request recovery are staged, not deployed. 208 files / 2,601 tests passed; actual SQL rollback/admission/input checks passed with zero residual canaries/runs. Release still needs negative-admission cancellation tombstones, expanded concurrent/reload acceptance and legacy resume review. Do not substitute this checkpoint for the whole manual journey or B01–B24 completion. [Exact work and next actions](MANUAL-ADMISSION-2026-09-06.md).
+
+Tom has now authorized n8n API-key creation/server storage, messaging Nguyen on Upwork, **and subsequently the needed monthly Starter upgrade**. The update was sent and verified at 12:53 AM NZ. Fresh n8n UI shows trial/no API; approved Starter selected, Paddle checkout €27.60 including GST/month, payment step reached; **purchase not yet completed, key not created**. Nguyen was asked for receiver credential metadata/format and exact proven Email IDs, without secrets, rotation or workflow redesign. Native-agent OAuth approval is unchanged. Full goal remains active; independent work exists, so no blocked-goal claim.
+
+**Next:** complete the already-approved monthly Starter checkout with an authorized available payment method, then create/provision the supported key and prove saved-execution access. In parallel finish the manual recovery gates above, then deploy/verify. Keep production on Batch 34 until acceptance; all external action flags unchanged.
+
+## Batch 34, 6 September NZ / 5 September UTC
 
 **Atomic routine editor deployed and verified.** Previous turn produced native-client evidence and a pushed handoff; this turn makes implementation/database/release progress. Full B01–B24 and all-screen/all-client acceptance remain active. Pending n8n and Hyperagent access approvals were not re-probed or inferred.
 

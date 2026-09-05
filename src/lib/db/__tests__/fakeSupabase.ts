@@ -17,6 +17,7 @@ import type { DbClient, DbFilter, DbResult, DbTable, Row } from "../types";
 import { installNativeOauthFake } from "./nativeOauthFake";
 import { installTokenContextFake } from "./tokenContextFake";
 import { installRoutineEditorFake } from "./routineEditorFake";
+import { installManualRoutineFake } from "./manualRoutineFake";
 
 // ---------- schema from the migrations ----------
 
@@ -178,6 +179,7 @@ export class FakeSupabase implements DbClient {
     installNativeOauthFake(this);
     installTokenContextFake(this);
     installRoutineEditorFake(this);
+    installManualRoutineFake(this);
     this.rpcs.list_context_artifacts = args => this.rows("artifacts").filter(f =>
       f.account_id === args.acct && this.rows("accounts").some(a => a.id === args.acct && a.context_generation === args.generation) &&
       this.rows("routine_runs").some(r => r.id === f.run_id && r.account_id === f.account_id && r.context_generation === args.generation) &&

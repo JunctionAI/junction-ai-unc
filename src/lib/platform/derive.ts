@@ -1198,7 +1198,7 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     /** Real connector state by card name ("off" when no row exists — never the demo defaults). */
     connStateByName: (name: string): ConnStatus => (account ? connOf(name, "off") : (S.connState[name] ?? "off")),
     /** The founder's own answers, for the real Home / guided steps (never demo constants). */
-    accountCtx: { currency: S.currency, budgetMonthly: S.budgetMo },
+    accountCtx: { currency: S.currency, budgetMonthly: S.budgetMo, budgetKnown: !account || !!S.obAnswered.budget },
     /** The persisted rows the real Home view model (src/lib/setup/home.ts) reads. */
     realInputs: { routineOn: S.routineOn, connState: S.connState, posture: S.posture, obStrengths: S.obStrengths, budgetMo: S.budgetMo, scan: S.scan, obPlatforms: S.obPlatforms },
     routineNameById: (id: string) => ALL_SYSTEMS.find((x) => x.id === id)?.name ?? id,

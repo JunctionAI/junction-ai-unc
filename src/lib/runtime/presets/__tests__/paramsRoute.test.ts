@@ -32,7 +32,7 @@ const get=(q:string)=>GET(new Request(url(q),{headers}));
 // Simulate a fresh settings GET before each sequential UI edit. Stale-request cases below retain their old revision explicitly.
 const revision=async(body:unknown)=>{const b=body as {routineId?:string};const v=await (await get(`?routineId=${b.routineId}`)).json();return {version:v.version?.live??1,stateUpdatedAt:v.stateUpdatedAt??null,configurationRevision:v.configurationRevision,...b};};
 const patch=async(body:unknown)=>PATCH(new Request(url(),{method:"PATCH",headers,body:JSON.stringify(await revision(body))}));
-const post=async(body:unknown)=>POST(new Request(url(),{method:"POST",headers,body:JSON.stringify(await revision(body))}));
+const post=async(body:unknown)=>POST(new Request(url(),{method:"POST",headers,body:JSON.stringify(await revision({requestId:crypto.randomUUID(),...body as object}))}));
 
 interface View {
   routineId: string;

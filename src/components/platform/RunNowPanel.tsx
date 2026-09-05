@@ -16,6 +16,7 @@ import { receiptHandle } from "@/lib/platform/approvals";
 import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
 import { artifactHeaders } from "@/lib/artifacts/client";
 import { routineBlock, type AgentsSnapshot } from "@/lib/agents/types";
+import ManualRecovery, { useManualRecovery } from "./ManualRecovery";
 
 const PLATFORM_NAME: Record<string, string> = Object.fromEntries(Object.entries(CONNECTOR_PLATFORMS).map(([n, p]) => [p, n]));
 
@@ -23,7 +24,7 @@ export interface RunNowProps {
   routineId: string;
   accountId: string;
   /** Fallback account context for when the accounts source doesn't know the id yet. */
-  account: { currency: string; budgetMonthly: number };
+  account: { currency: string; budgetMonthly: number; budgetKnown?:boolean };
   /** false = demo/MemoryStore: say so, in one line. */
   persisted: boolean;
   contextGeneration?: number;
@@ -64,22 +65,25 @@ export default function RunNowPanel({ routineId, accountId, account, persisted, 
   const [run, setRun] = useState<RunView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const context=persisted && contextGeneration!==undefined?{accountId,contextGeneration}:undefined;
+  const startRecovery=useManualRecovery(context,routineId,"run");
+  const inputRecovery=useManualRecovery(context,routineId,"input");
   const blocked=persisted ? blockReason || routineBlock(eligibility ?? null,routineId) : null;
   const row=eligibility?.routines.find(r=>r.routineId===routineId);
   const headers={"content-type":"application/json",...(persisted ? artifactHeaders(accountId,contextGeneration) : {})};
   const matches=(data: RunResponse & {accountId?:string;contextGeneration?:number})=>!persisted || data.accountId===accountId && data.contextGeneration===contextGeneration && (data.run as (RunView & {routineId?:string})|undefined)?.routineId===routineId;
 
   async function sendAnswers() {
-    if (!run || inFlight.current || blocked) return;
+    if (!run || inFlight.current || blocked || persisted && inputRecovery.blocked) return;
     inFlight.current=true;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/routines/resume-input", { method: "POST", headers, body: JSON.stringify({ runId: run.runId, answers }) });
-      const data = (await res.json().catch(() => ({}))) as RunResponse;
-      if (!res.ok || !data.run || !matches(data)) setError("Resume not confirmed. Refresh to inspect the saved run before retrying.");
+      const res = persisted?null:await fetch("/api/routines/resume-input", { method: "POST", headers, body: JSON.stringify({ runId: run.runId, answers }) });
+      const data = (persisted?await inputRecovery.submit("/api/routines/resume-input",{runId:run.runId,answers}):await res!.json().catch(()=>({}))) as RunResponse;
+      if (res && !res.ok || !data.run || !matches(data)) setError("Resume not confirmed. Refresh to inspect the saved run before retrying.");
       else {
-        setRun({ ...data.run, receipts: [...run.receipts, ...data.run.receipts] });
+        setRun({ ...data.run, receipts: [...new Map([...run.receipts, ...data.run.receipts].map(r=>[r.id,r])).values()] });
         setAnswers({});
       }
     } catch {
@@ -92,19 +96,19 @@ export default function RunNowPanel({ routineId, accountId, account, persisted, 
   }
 
   async function runNow() {
-    if (inFlight.current || blocked) return;
+    if (inFlight.current || blocked || persisted && startRecovery.blocked) return;
     inFlight.current=true;
     setBusy(true);
     setRun(null);
     setError(null);
     try {
-      const res = await fetch("/api/routines/run", {
+      const res = persisted?null:await fetch("/api/routines/run", {
         method: "POST",
         headers,
-        body: JSON.stringify(persisted ? {accountId,routineId,version:row?.version,stateUpdatedAt:row?.stateUpdatedAt} : { accountId, routineId, account: { currency: account.currency, budgetMonthly: account.budgetMonthly } }),
+        body: JSON.stringify({ accountId, routineId, account: { currency: account.currency, budgetMonthly: account.budgetMonthly } }),
       });
-      const data = (await res.json().catch(() => ({}))) as RunResponse;
-      if (!res.ok || !data.run || !matches(data)) {
+      const data = (persisted?await startRecovery.submit("/api/routines/run",{accountId,routineId,version:row?.version,stateUpdatedAt:row?.stateUpdatedAt}):await res!.json().catch(()=>({}))) as RunResponse;
+      if (res && !res.ok || !data.run || !matches(data)) {
         setError(data.error ?? "Run not confirmed. Inspect the saved run before retrying; no automatic retry was sent.");
         setRun(null);
       } else setRun(data.run);
@@ -123,7 +127,7 @@ export default function RunNowPanel({ routineId, accountId, account, persisted, 
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         <button
           onClick={() => void runNow()}
-          disabled={busy || !!blocked}
+          disabled={busy || !!blocked || persisted && startRecovery.blocked}
           className="hov-border-muted"
           style={{ flex: "none", border: "1px solid oklch(0.88 0.015 260)", background: "transparent", color: "var(--muted-2)", borderRadius: 999, padding: "8px 17px", fontSize: 12.5, fontWeight: 600, cursor: busy ? "wait" : "pointer" }}
         >
@@ -137,6 +141,8 @@ export default function RunNowPanel({ routineId, accountId, account, persisted, 
         )}
       </div>
       {blocked && <p role="status" style={{fontSize:12.5,color:"var(--amber-text)"}}>{blocked}</p>}
+      {persisted && <ManualRecovery recovery={startRecovery} busy={busy} blocked={!!blocked} onResult={body=>{if(matches(body as RunResponse)){setRun(body.run as RunView);setError(null);onDone?.();}}}/>}
+      {persisted && <ManualRecovery recovery={inputRecovery} busy={busy} blocked={!!blocked} onResult={body=>{if(matches(body as RunResponse)){setRun(body.run as RunView);setError(null);onDone?.();}}}/>}
       {error && (
         <div style={{ fontSize: 12.5, color: "var(--amber-text)", marginTop: 10, lineHeight: 1.5 }}>Couldn’t run it: {error}</div>
       )}
@@ -190,7 +196,7 @@ export default function RunNowPanel({ routineId, accountId, account, persisted, 
                 ))}
               </div>
               {run.needs.some((n) => n.input) && (
-                <button onClick={() => void sendAnswers()} disabled={busy || !!blocked || !Object.values(answers).some((v) => v.trim())} className="btn-navy" style={{ marginTop: 10, padding: "8px 17px", fontSize: 12.5, fontWeight: 600 }}>
+                <button onClick={() => void sendAnswers()} disabled={busy || !!blocked || persisted && inputRecovery.blocked || !Object.values(answers).some((v) => v.trim())} className="btn-navy" style={{ marginTop: 10, padding: "8px 17px", fontSize: 12.5, fontWeight: 600 }}>
                   {busy ? "Drafting…" : "Send answers and draft"}
                 </button>
               )}

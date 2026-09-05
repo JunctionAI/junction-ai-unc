@@ -29,6 +29,8 @@ import { withErrorCapture } from "@/lib/observability/errors";
 import { agentSnapshot } from "@/lib/agents/server";
 import { routineBlock } from "@/lib/agents/types";
 import type { AgentContext } from "@/lib/agents/client";
+import { executeManual, ManualRequestError } from "@/lib/runtime/manual";
+import { readEditor } from "@/lib/runtime/presets/editor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +40,7 @@ function deps(): ServiceDeps {
 }
 
 async function handlePOST(req: Request) {
-  let body: { accountId?: unknown; routineId?: unknown; vars?: unknown; account?: unknown; mode?: unknown; version?:unknown;stateUpdatedAt?:unknown };
+  let body: { accountId?: unknown; routineId?: unknown; vars?: unknown; account?: unknown; mode?: unknown; version?:unknown;stateUpdatedAt?:unknown;requestId?:unknown };
   try {
     body = await req.json();
   } catch {
@@ -58,6 +60,18 @@ async function handlePOST(req: Request) {
     if(body.version!==row.version || body.stateUpdatedAt!==row.stateUpdatedAt)return Response.json({error:"Routine changed. Refresh before running."},{status:409});
     if(body.vars!==undefined || body.account!==undefined)return Response.json({error:"Account inputs are loaded by the server."},{status:400});
     captured={accountId:access.data.accountId,contextGeneration:access.data.contextGeneration};
+    if(body.mode!==undefined && body.mode!=="dry_run")return Response.json({error:"Only dry_run is available."},{status:403});
+    try {
+      const identity={...captured,userId:access.session.userId};
+      const snapshot=await readEditor(access.session.service,identity,row.routineId);
+      const manual=await executeManual(access.session.service,identity,String(body.requestId??""),"run",
+        {accountId,routineId:row.routineId,version:body.version,stateUpdatedAt:body.stateUpdatedAt},snapshot,deps());
+      return Response.json({...captured,requestId:manual.requestId,phase:manual.phase,run:summariseRun(manual.result)},
+        {status:manual.result.status==="running"?202:200});
+    } catch(err) {
+      return Response.json({error:err instanceof ManualRequestError?err.message:"Run outcome not confirmed. Check the original request before retrying.",requestId:body.requestId},
+        {status:err instanceof ManualRequestError?err.status:503});
+    }
   }
   const routineId = typeof body.routineId === "string" ? body.routineId.trim() : "";
   if (!accountId) return Response.json({ error: "accountId is required" }, { status: 400 });

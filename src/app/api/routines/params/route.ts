@@ -11,8 +11,8 @@ import { skillFor } from "@/lib/runtime/skills";
 import { assertValidSpec, ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import { dryRunPassed } from "@/lib/runtime/versioning";
 import { stableHash } from "@/lib/runtime/context";
-import { runRoutine } from "@/lib/runtime/engine";
-import { buildAdapters, resolveAccount, WorkerError } from "@/worker/service";
+import { WorkerError } from "@/worker/service";
+import { executeManual, ManualRequestError } from "@/lib/runtime/manual";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { workerErrorStatus } from "../shared";
 import { captureArtifactContext } from "@/lib/artifacts/context";
@@ -55,7 +55,7 @@ async function handle(req:Request,method:"GET"|"PATCH"|"POST") {
   const snapshot=await readEditor(session.service,identity,routineId);
   if(method==="GET")return json(await shape(snapshot,routineId));
   const paused=await automationPauseResponse(session.service,session.accountId);if(paused)return paused;
-  const allowed=method==="PATCH"?["routineId","params","steps","version","stateUpdatedAt","configurationRevision"]:["routineId","action","version","stateUpdatedAt","configurationRevision"];
+  const allowed=method==="PATCH"?["routineId","params","steps","version","stateUpdatedAt","configurationRevision"]:["routineId","action","version","stateUpdatedAt","configurationRevision","requestId"];
   if(Object.keys(body).some(k=>!allowed.includes(k)))return bad("Unexpected settings field.");
   const state=editorState(snapshot,routineId);
   if(body.configurationRevision!==snapshot.configurationRevision || body.version!==state.version || body.stateUpdatedAt!==(snapshot.state?.updated_at??null))
@@ -90,13 +90,12 @@ async function handle(req:Request,method:"GET"|"PATCH"|"POST") {
   }
   if(!state.enabled)return bad("Select this routine in Agents before requesting validation.",409);
   const deps={store:getStore(),accounts:defaultAccountsSource()};
-  const acct=await resolveAccount(deps,session.accountId);
-  if(acct.account.contextGeneration!==ctx.contextGeneration)return bad("Account changed before validation.",409);
-  // Run the captured draft, never reload a different draft after the request's check.
-  const run=await runRoutine(draft,{account:acct.account,triggeredBy:"manual",vars:acct.vars??{}},buildAdapters(deps),{mode:"dry_run"});
+  const manual=await executeManual(session.service,identity,String(body.requestId??""),"validate",
+    {routineId,action,version:body.version,stateUpdatedAt:body.stateUpdatedAt,configurationRevision:body.configurationRevision},snapshot,deps);
+  const run=manual.result;
   const after=await readEditor(session.service,identity,routineId);
   if(after.configurationRevision!==snapshot.configurationRevision)return bad("Configuration changed during validation. Refresh to inspect the recorded run.",409,{runId:run.runId});
-  return json({...await shape(after,routineId),run:{runId:run.runId,status:run.status,summary:run.summary},passed:dryRunPassed(run.status)});
+  return json({...await shape(after,routineId),requestId:manual.requestId,phase:manual.phase,run:{runId:run.runId,status:run.status,summary:run.summary},passed:dryRunPassed(run.status)},run.status==="running"?202:200);
 }
 
 const endpoint=(method:"GET"|"PATCH"|"POST")=>withErrorCapture("api/routines/params",async(req:Request)=>{
@@ -105,6 +104,7 @@ const endpoint=(method:"GET"|"PATCH"|"POST")=>withErrorCapture("api/routines/par
     if(err instanceof PresetValidationError)return bad(err.message,400,{issues:err.issues});
     if(err instanceof EditorError)return bad(err.message,err.status);
     if(err instanceof WorkerError)return bad(err.message,workerErrorStatus(err));
+    if(err instanceof ManualRequestError)return bad(err.message,err.status);
     return bad("Could not confirm the settings operation. Refresh to inspect its saved state; no automatic retry.",503);
   }
 });

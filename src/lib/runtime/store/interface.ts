@@ -208,7 +208,7 @@ export interface RunSnapshot {
   /** A run whose artifact an n8n workflow will deliver later (POST /api/routines/artifacts). */
   awaiting?: "n8n" | "keyword_shadow" | "keyword_start" | "keyword_started";
   /** Only snapshots created by the claim-before-I/O protocol may resume at node 0. */
-  startProtocol?: "keyword_claim_v1";
+  startProtocol?: "keyword_claim_v1" | "manual_claim_v1";
 }
 
 export interface ListArtifactsOptions {
@@ -221,6 +221,8 @@ export interface ListArtifactsOptions {
 
 export interface RunRecord {
   id: string;
+  /** Database-managed waiting-input cursor; never reset by an engine writer. */
+  inputRevision?: number;
   accountId: string;
   /** Immutable captured account generation. Legacy absence means generation zero only. */
   contextGeneration?: number;

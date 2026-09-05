@@ -37,6 +37,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "kpi_snapshots",
       "llm_spend_reservations",
       "llm_usage",
+      "manual_routine_requests",
       "memories",
       "n8n_shadow_candidates",
       "n8n_shadow_completions",
