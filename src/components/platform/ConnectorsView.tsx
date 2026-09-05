@@ -12,6 +12,30 @@ import { connectorHasRealSync } from "@/lib/connectors/sync";
 import { connectorEvidence, connectorRecoveryMessage } from "@/lib/connectors/readiness";
 import { useConnectorsState, type ConnectorsStateListing, type ConnectorStateView } from "./useConnectorsState";
 import connectionStyles from "./connections.module.css";
+import type { ConnectionDataState } from "@/lib/data/connectionState";
+
+const DATA_STATUS = {
+  ready: "Fresh at last check", stale: "Needs fresh data", missing: "Not synced yet",
+  unverified: "Source not verified", identity_mismatch: "Account binding needs review",
+  connection_unverified: "Connection or selected asset needs review", normalization_outdated: "Data format needs updating",
+};
+
+export function ConnectionDataPanel({ state }: { state?: ConnectionDataState }) {
+  return <section className={connectionStyles.readiness} aria-label="Stored Meta data readiness">
+    <h2>Data for your routines</h2>
+    <p>{!state || state.status === "unavailable" ? "Data readiness could not be verified. Refresh status to check again." :
+      state.status === "no_demand" ? "No enabled routines currently require stored Meta data." :
+      state.status === "ready" ? "Required Meta datasets were fresh at the last check." : "Some required Meta datasets need attention before stored-data routines can use them."}</p>
+    {state?.accountPaused === true && <p className={connectionStyles.paused}>Account automation is paused. Fresh data does not resume it.</p>}
+    {!!state?.queries.length && <ul>{state.queries.map(q => <li key={q.key}>
+      <strong>{q.resource} · {q.routineIds.join(", ")}</strong>
+      <span>{DATA_STATUS[q.availability]} · maximum age {q.maxAgeMs / 60_000} min</span>
+      <span>{q.sourceFetchedAt ? `Source read: ${q.sourceFetchedAt}` : "No verified source read available."}</span>
+    </li>)}</ul>}
+    <p className={connectionStyles.readinessNote}>Checks required Meta reads only; other platforms and optional reads are not covered. This does not verify scheduled refreshes or successful routine runs. Refresh status checks stored records—it does not fetch new provider data.</p>
+    {state && <p className={connectionStyles.readinessNote}>Checked: {state.checkedAt}</p>}
+  </section>;
+}
 
 /* Connect / Reconnect: in demo mode (no Supabase configured) the button does exactly what the
    prototype did — flips the card to Connected client-side. With accounts on, it asks
@@ -285,6 +309,7 @@ export default function ConnectorsView({ V, initialLive = null, modern = false }
           Couldn’t verify connector status ({live.error}). <button onClick={live.refresh} className="hov-underline" style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer" }}>try again</button>
         </div>
       )}
+      {accountsMode && <ConnectionDataPanel state={live.data?.dataReadiness} />}
       <div className={modern ? connectionStyles.grid : undefined} style={modern ? undefined : { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 26 }}>
         {googleOn && (
           <div data-testid="connector-google" style={{ gridColumn: "1 / -1", background: "white", border: `1px solid ${googleAllOk ? "var(--card-border)" : "oklch(0.78 0.13 220 / 0.6)"}`, borderRadius: 13, padding: "16px 19px", display: "flex", alignItems: "center", gap: 16 }}>

@@ -11,5 +11,12 @@
 .summary button { border:1px solid var(--card-border); padding:7px 12px; border-radius:99px; background:white; }
 .channels > div { padding:20px 0 !important; }
 .notice { padding:12px; background:var(--amber-wash); color:var(--amber-text); border-radius:9px; font-size:.8rem; line-height:1.6; }
+.readiness { margin-top:20px; padding:18px; border:1px solid var(--card-border); border-radius:12px; background:white; font-size:.8rem; line-height:1.55; }
+.readiness h2 { margin:0 0 6px; font-size:.9rem; font-weight:600; }
+.readiness p { margin:6px 0; }
+.readiness ul { display:grid; gap:10px; padding:0; list-style:none; }
+.readiness li { display:flex; flex-direction:column; overflow-wrap:anywhere; }
+.readinessNote { color:var(--muted); font-size:.73rem; }
+.paused { color:var(--amber-text); }
 @media(max-width:900px) { .grid { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:700px) { .content { padding:28px 18px 60px; } }

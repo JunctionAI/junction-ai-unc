@@ -5,6 +5,7 @@
 
 import type { HandlerDeps } from "./handlers";
 import { unwrap } from "../db/types";
+import { connectionDataState, type ConnectionDataState } from "../data/connectionState";
 import { hasTokenPath } from "./manualFields";
 import { authProviderFor, isPlatformConnectable } from "./providers/index";
 import { CONNECTOR_REGISTRY, GOOGLE_CHILDREN, GOOGLE_UMBRELLA, isPlatformConfigured } from "./registry";
@@ -40,6 +41,8 @@ export interface ConnectorStateView {
 export interface ConnectorsStateListing {
   role: "owner" | "member";
   connectors: ConnectorStateView[];
+  /** Required-read coverage at checkedAt; not proof of ongoing scheduling. */
+  dataReadiness?: ConnectionDataState;
   /** "Connect Google": one consent for the three children when the Google app is configured. */
   google: { configured: boolean; children: string[] };
 }
@@ -80,5 +83,9 @@ export async function handleConnectorsState(deps: HandlerDeps): Promise<Connecto
       ...providerMarker(e.id, deps),
     };
   });
-  return { status: 200, body: { role, connectors, google: { configured: isPlatformConfigured(GOOGLE_UMBRELLA.id, deps.config.env), children: [...GOOGLE_CHILDREN] } } };
+  const dataReadiness = await connectionDataState(deps.db, accountId, deps.now);
+  // Do not return data (or owner controls) after membership changed during inspection.
+  if (await memberRole(deps.db, deps.userId, accountId) !== role)
+    return { status: 403, body: { error: "account membership changed; refresh your session" } };
+  return { status: 200, body: { role, connectors, dataReadiness, google: { configured: isPlatformConfigured(GOOGLE_UMBRELLA.id, deps.config.env), children: [...GOOGLE_CHILDREN] } } };
 }
