@@ -118,6 +118,8 @@ export function Markdown({ body }: { body: string }) {
 }
 
 export interface DraftCardProps {
+  /** Reading/copying stays available without review authority. */
+  readOnly?: boolean;
   artifact: ArtifactView;
   /** Start open (the routine detail's "last artifact"). */
   defaultOpen?: boolean;
@@ -137,7 +139,7 @@ export default function DraftCard(props: DraftCardProps) {
   return <BoundDraftCard key={`${a.accountId}:${a.contextGeneration}:${a.id}:${a.revision}`} {...props} />;
 }
 
-function BoundDraftCard({ artifact: initial, defaultOpen = false, channels = [], onChange, onOpenRoutine, persisted = true }: DraftCardProps) {
+function BoundDraftCard({ artifact: initial, defaultOpen = false, channels = [], onChange, onOpenRoutine, persisted = true, readOnly = false }: DraftCardProps) {
   const alive = useRef(true);
   const posting = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -157,7 +159,7 @@ function BoundDraftCard({ artifact: initial, defaultOpen = false, channels = [],
   const plain = () => `${a.title}\n\n${markdownToPlain(body)}${a.items.length ? `\n\n${a.items.map((it, i) => `${i + 1}. ${it.title}\n${markdownToPlain(it.body)}`).join("\n\n")}` : ""}`;
 
   async function post(payload: Record<string, unknown>): Promise<Reply | null> {
-    if (posting.current || !alive.current) return null;
+    if (readOnly || posting.current || !alive.current) return null;
     posting.current = true;
     setBusy(true);
     setError(null);
@@ -206,7 +208,7 @@ function BoundDraftCard({ artifact: initial, defaultOpen = false, channels = [],
   const openWhy = async () => {
     const next = !why;
     setWhy(next);
-    if (next) void post({ action: "why" });
+    if (next && !readOnly) void post({ action: "why" });
   };
   const copy = async () => {
     try {
@@ -253,7 +255,7 @@ function BoundDraftCard({ artifact: initial, defaultOpen = false, channels = [],
               <div>
                 <textarea aria-label="Edit the draft" value={draftBody} onChange={(e) => setDraftBody(e.target.value)} rows={Math.min(24, Math.max(6, draftBody.split("\n").length + 2))} style={{ width: "100%", fontFamily: "inherit", fontSize: 13.5, lineHeight: 1.55, border: "1px solid var(--card-border-2)", borderRadius: 10, padding: "10px 12px", outline: "none", background: "oklch(0.985 0.003 90)", color: "var(--ink)", resize: "vertical" }} />
                 <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <button onClick={() => void saveEdit()} disabled={busy} className="btn-navy" style={{ padding: "7px 16px", fontSize: 12.5, fontWeight: 600 }}>
+                  <button onClick={() => void saveEdit()} disabled={busy || readOnly} className="btn-navy" style={{ padding: "7px 16px", fontSize: 12.5, fontWeight: 600 }}>
                     Save edit
                   </button>
                   <button onClick={() => { setEditing(false); setDraftBody(body); }} style={ghostBtn}>
@@ -306,12 +308,12 @@ function BoundDraftCard({ artifact: initial, defaultOpen = false, channels = [],
             )}
             {!editing && (
               <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
-                {a.status === "draft" && (
+                {(a.status === "draft" || a.status === "edited") && (
                   <>
-                    <button data-testid="artifact-approve" onClick={() => void approve()} disabled={busy} className="btn-navy" style={{ padding: "8px 18px", fontSize: 12.5, fontWeight: 600 }}>
+                    <button data-testid="artifact-approve" onClick={() => void approve()} disabled={busy || readOnly} className="btn-navy" style={{ padding: "8px 18px", fontSize: 12.5, fontWeight: 600 }}>
                       Approve
                     </button>
-                    <button data-testid="artifact-hold" onClick={() => setHolding((h) => !h)} disabled={busy} className="hov-border-muted" style={ghostBtn}>
+                    <button data-testid="artifact-hold" onClick={() => setHolding((h) => !h)} disabled={busy || readOnly} className="hov-border-muted" style={ghostBtn}>
                       Hold
                     </button>
                   </>
@@ -319,14 +321,14 @@ function BoundDraftCard({ artifact: initial, defaultOpen = false, channels = [],
                 <button onClick={() => void openWhy()} className="hov-underline" style={{ ...linkBtn, padding: "8px 6px" }}>
                   Why?
                 </button>
-                <button onClick={() => setEditing(true)} className="hov-underline" style={{ ...linkBtn, padding: "8px 6px" }}>
+                <button onClick={() => setEditing(true)} disabled={busy || readOnly} className="hov-underline" style={{ ...linkBtn, padding: "8px 6px" }}>
                   Edit
                 </button>
                 <button onClick={() => void copy()} className="hov-underline" style={{ ...linkBtn, padding: "8px 6px" }}>
                   Copy
                 </button>
                 {channels.filter(isChannel).map((c) => (
-                  <button key={c} data-testid={`artifact-send-${c}`} onClick={() => void send(c)} disabled={busy} className="hov-underline" style={{ ...linkBtn, padding: "8px 6px" }}>
+                  <button key={c} data-testid={`artifact-send-${c}`} onClick={() => void send(c)} disabled={busy || readOnly} className="hov-underline" style={{ ...linkBtn, padding: "8px 6px" }}>
                     Send me this on {CHANNEL_LABEL[c]}
                   </button>
                 ))}
@@ -335,10 +337,10 @@ function BoundDraftCard({ artifact: initial, defaultOpen = false, channels = [],
                 </button>
               </div>
             )}
-            {holding && a.status === "draft" && (
+            {holding && (a.status === "draft" || a.status === "edited") && (
               <div data-testid="artifact-hold-reason" style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <input aria-label="Why hold it?" value={holdReason} onChange={(e) => setHoldReason(e.target.value)} placeholder="Why? One line helps me draft the next one closer." style={{ flex: 1, minWidth: 240, padding: "8px 11px", fontSize: 12.5, border: "1px solid var(--input-border)", borderRadius: 8, background: "white", color: "var(--ink)", outline: "none" }} />
-                <button onClick={() => void hold()} disabled={busy} style={{ ...ghostBtn, borderColor: "oklch(0.8 0.09 75)", background: "var(--amber-wash)", color: "var(--amber-text)", fontWeight: 600 }}>
+                <button onClick={() => void hold()} disabled={busy || readOnly} style={{ ...ghostBtn, borderColor: "oklch(0.8 0.09 75)", background: "var(--amber-wash)", color: "var(--amber-text)", fontWeight: 600 }}>
                   Hold it
                 </button>
               </div>

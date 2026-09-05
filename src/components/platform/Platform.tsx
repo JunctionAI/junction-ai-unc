@@ -32,6 +32,7 @@ import BillingBanner from "./BillingBanner";
 import ModelSettings from "./ModelSettings";
 import SkillsSettings from "./SkillsSettings";
 import WhatUncKnows from "./WhatUncKnows";
+import ClientWorkspace from "./ClientWorkspace";
 import { isOpen } from "@/lib/billing/gate";
 import type { BillingProps } from "@/lib/billing/server";
 
@@ -100,16 +101,17 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
   const gated = billing?.configured ? billing.entitlement : null;
   const uncSend = useUncChat(S, set);
   const inAccount = persistence.mode === "account" && !!persistence.accountId;
+  const modernAccount = inAccount && S.onboarded && S.setupFlow === "home";
   /* The account's own rows (receipts, approvals, connector + routine states) — derive reads them in
      accounts mode so nothing a real account never touched can fall back to the catalog's demo defaults. */
   const { facts } = useAccountFacts();
   const V = derive(S, set, undefined, uncSend, { mode: inAccount ? "account" : "demo", facts: inAccount ? facts : null });
   /* Accounts mode: the "needs you" list, receipts and drafts come from the runtime
      (GET /api/approvals). Demo mode: never fetched — the demo cards stay exactly as they are. */
-  const live = useLiveApprovals(inAccount);
+  const live = useLiveApprovals(inAccount && !modernAccount);
   /* Accounts mode: Unc's self-review, "The bar" and hours saved from the improvement loops
      (GET /api/telemetry/home). Demo mode: never fetched — the demo values stay verbatim. */
-  const telemetry = useHomeTelemetry(inAccount);
+  const telemetry = useHomeTelemetry(inAccount && !modernAccount);
   /* Client Brain: "Agree the plan" persists the onboarding answers as memories (accounts mode only). */
   useOnboardingMemories(S, inAccount);
   const runTarget = { accountId: inAccount ? persistence.accountId! : "demo", account: { currency: S.currency, budgetMonthly: S.budgetMo }, persisted: inAccount };
@@ -234,6 +236,21 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
   if (gated && !isOpen(gated)) {
     return <Paywall state={gated.state === "canceled" ? "canceled" : "none"} email={persistence.mode === "account" ? persistence.userEmail : null} pricing={billing?.pricing} />;
   }
+
+  if (modernAccount) return <>
+    {gated?.state === "past_due" && <BillingBanner />}
+    <ClientWorkspace S={S} V={V} account={persistence} send={uncSend} billingEnabled={!!gated}
+      onModels={() => setModelsOpen(true)} onSkills={() => setSkillsOpen(true)} onContext={() => setKnowsOpen(true)}
+      legacy={<>
+        {V.isStrategy && <StrategyView V={V} />}
+        {V.isConnectors && <ConnectorsView V={V} />}
+        {V.isSystems && <RoutinesView V={V} run={runTarget} />}
+        {V.isChannels && <ChannelsSettings />}
+      </>} />
+    {modelsOpen && <ModelSettings onClose={() => setModelsOpen(false)} />}
+    {skillsOpen && <SkillsSettings onClose={() => setSkillsOpen(false)} />}
+    {knowsOpen && <WhatUncKnows onClose={() => setKnowsOpen(false)} />}
+  </>;
 
   return (
     <div

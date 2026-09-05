@@ -2,7 +2,7 @@ import Platform from "@/components/platform/Platform";
 import { getBillingForRequest, pricingForRequest } from "@/lib/billing/server";
 
 export const metadata = {
-  title: "Junction — Growth operating agent",
+  title: "Junction — Your sales and marketing workspace",
 };
 
 /* Billing (Phase 6) is resolved here, server-side: demo unless STRIPE_* + Supabase env are
