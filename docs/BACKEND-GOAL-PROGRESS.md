@@ -13,7 +13,26 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 67, 6 September NZ / 5 September UTC
+## Latest state — Batch 68, 6 September NZ / 5 September UTC
+
+**Calendar receiver logic now has exact-source n8n Cloud compatibility proof.**
+[Scope, defect and independent receipt](integration/CALENDAR-RECEIVER-COMPATIBILITY-2026-09-06.md).
+Separate inactive/manual fixture `NLOGeeBNQMURm0kL`, execution **87**, actual
+revision `2a984e0d-0015-4450-a204-ba988ef0df4a`: 22 synthetic assertions pass;
+saved code and complete output hashes independently match. Execution 86 exposed
+a missing Cloud `URLSearchParams` global; the repaired receiver uses an exact
+approved-target grammar without URL globals. Original failure retained.
+
+Pure receiver source, deterministic compiler/fixture and GET-only verifier are
+implemented. Shared date logic preserves the existing contract. 227 files /
+3,050 tests, 22 Node tests, app/worker types, production build and focused lint
+pass. No provider call, Nguyen change, DB admission, deployment or action flag
+change. This is **progress** after an advice-only/no-backend-progress turn.
+Full B01–B24/all-client/launch goal stays active: real callable receiver, native
+HTTP/authority behavior, AVGAR binding/registration and customer calendar
+acceptance remain the next Codex work, not a Nguyen or owner waiting condition.
+
+## Previous state — Batch 67, 6 September NZ / 5 September UTC
 
 **Existing Klaviyo credential/account identity independently proven.**
 [Real probe and verifier evidence](integration/KLAVIYO-ACCOUNT-BINDING-PROOF-2026-09-06.md).

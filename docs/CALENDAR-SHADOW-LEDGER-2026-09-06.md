@@ -2,6 +2,11 @@
 
 6 September 2026 NZ. **Backend implementation; no live customer calendar claim.**
 
+**Batch 68:** [receiver source and Cloud compatibility proof](integration/CALENDAR-RECEIVER-COMPATIBILITY-2026-09-06.md)
+now pass in separate synthetic execution 87. This does not create a binding,
+callable calendar receiver, allowance, provider read or customer calendar result.
+The next step remains Codex-owned receiver/registration and bounded E2E work.
+
 ## Implemented
 
 - Dedicated server-only binding and run tables, immutable owner allowance and

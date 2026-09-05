@@ -4,6 +4,8 @@ import { z } from "zod";
 import { validateArtifactObject } from "../artifacts/validate";
 import type { ArtifactDraft } from "../runtime/types";
 import type { ShadowRunIdentity } from "./shadowContract";
+import { calendarWeekStarts } from "./calendarDates";
+export { calendarWeekStarts } from "./calendarDates";
 
 export const CALENDAR_SHADOW_CONTRACT = "unc.campaign-calendar-shadow.v1" as const;
 export const CALENDAR_SHADOW_RECEIVER_URL = "https://junctionai8.app.n8n.cloud/webhook/unc/d05-w07/calendar-shadow";
@@ -41,20 +43,6 @@ export function assertCalendarShadowRequest(contract: CalendarShadowContract, ru
 }
 const object = (v: unknown): Record<string, unknown> | null =>
   v !== null && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : null;
-
-/** Calendar dates are dates in the customer's timezone, not UTC or the worker's TZ.
- * Even on a Monday, the first proposal starts NEXT Monday. No DST duration math. */
-export function calendarWeekStarts(startedAt: string, zone: string): string[] {
-  const instant = new Date(startedAt);
-  if (!Number.isFinite(instant.getTime())) throw new Error("invalid calendar run clock");
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" })
-    .formatToParts(instant);
-  const part = (name: string) => Number(parts.find(p => p.type === name)?.value);
-  const date = new Date(Date.UTC(part("year"), part("month") - 1, part("day")));
-  const days = (8 - date.getUTCDay()) % 7 || 7;
-  date.setUTCDate(date.getUTCDate() + days);
-  return Array.from({ length: 6 }, (_, i) => new Date(date.getTime() + i * 7 * 86400000).toISOString().slice(0, 10));
-}
 
 /** Structural validation is not copy quality acceptance. Require explicit uncertainty
  * and provenance so historical campaign metadata cannot become measured performance. */

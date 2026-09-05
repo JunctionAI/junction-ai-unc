@@ -6,6 +6,13 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
+**Batch 68 overlay:** [calendar Cloud compatibility](integration/CALENDAR-RECEIVER-COMPATIBILITY-2026-09-06.md)
+passes execution 87 with 22 synthetic assertions and independent saved code/output
+matching. The actual sandbox failure was fixed; no provider call or customer
+calendar run was made. Receiver HTTP/authority wiring, binding, registration and
+real customer acceptance remain Codex-owned. This does not advance the calendar
+or full launch journey to PASS; no other client's readiness is inferred.
+
 **Batch 67 overlay:** [Klaviyo account identity proof](integration/KLAVIYO-ACCOUNT-BINDING-PROOF-2026-09-06.md)
 passes a separate manual read (#85), with independent saved revision/credential/
 account verification. Existing grant belongs to AVGAR `SuYidF`; provider reporting
