@@ -12,7 +12,18 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 30, 5 September 2026
+## Latest state — Batch 31, 5 September 2026
+
+**Agents/Connections catalog, persisted-switch boundary and verified production release.** Previous goal turn: Batch 30 verified ops release, not blocked. B01–B24 and all-screen/all-client acceptance remain active; no goal reset, narrowed scope or new numeric budget.
+
+- Supplied Agents layout now uses all 35 existing routine IDs, preserving 38 design labels through explicit aliases. Research/scoring share one switch; creative testing remains distinct. Five additional/unimplemented jobs are visible but unavailable, including Google Ads BOFU and backlink gap pending their separate contracts. No combination-specific workflows, prototype metrics or enabled-as-running claims. Connections uses selected assets, dated read/recovery evidence and explicit disabled Messaging controls.
+- New account/generation-bound `/api/agents` plus service-only atomic preference RPC checks current owner, pause, expected timestamp and version. Switch changes do not start runs; unknown/paused/keyword-pilot enabling refuses. Real PostgreSQL rollback canary passes before/after migration `20260905113720`; no broad grants or RLS changes. Advisors remain six WARN / fourteen INFO, not security sign-off.
+- Full unit run 205 files / 2,575 PASS, app/worker types/build, lint zero errors / 41 existing warnings. Final cache-header regression adds one test; focused nine-test Agents suite/type check pass, combined 2,576 coverage without another full-suite invocation. Eight new and fourteen prior browser cases pass; synthetic tests are not actual provider acceptance.
+- Pushed/live source **`63e932a140479f43bebd3670ea7bfb70b7dedacd`**, deployment **`dpl_2hYaXcsufZYwMRgAJH81uvCZEH2d`**, READY/promoted, 45.496-second build-to-ready. First candidate was not promoted because health lacked its source marker; corrected release sets the exact public SHA in runtime/build env as well as metadata. Canonical health/401-private-no-store, actual account/filter/search/Inspect/back/reload, two dated Connections reads, disabled channels, preserved Ask and seven-record ops regression pass. Compatible worker unchanged and fresh, ticks 79→81.
+- **11:45:55 UTC SQL:** seven accounts, two memberships, 19 connector rows, zero runs/enabled routines/canaries; AVGAR generation 1/paused. Bounded error/fatal/5xx scans empty. [Exact release evidence and limitations](AGENTS-CONNECTIONS-2026-09-05.md).
+- Live inspection exposed pre-existing detail-page contradictions: D03-W01 still says requirements are met and offers Run now despite the catalog's keyword gate/pause. No run was clicked. **Next Codex batch:** unify detail/setup/legacy selection and readiness, then verify native current client/tenant/asset identities for canonical bindings. Auth/provider coverage, real lane output, scheduling/history, cost/security/retention and phone/client acceptance remain open. Pending n8n entitlement/key/receiver approval unchanged; no workflow edit, new key, purchase, client activation or provider/model call.
+
+## Batch 30, 5 September 2026
 
 **Operator visibility, scoped access and existing-system reconciliation progress.** Previous turn: Batch 29 verified release, not blocked. The full B01–B24 and all-screen/all-client goal stays active; the pending n8n purchase/API-key question is unchanged.
 
