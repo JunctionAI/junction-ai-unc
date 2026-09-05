@@ -128,6 +128,7 @@ try{
     create table account_members(account_id uuid,user_id uuid,role text,primary key(account_id,user_id));
     create table n8n_workflows(id uuid primary key,account_id uuid,routine_id text,webhook_url text,active boolean);
     create table routine_states(account_id uuid,routine_id text,enabled boolean,version integer,draft_spec jsonb,live_spec jsonb,primary key(account_id,routine_id));
+    create table routine_commands(account_id uuid,context_generation bigint,routine_id text,status text);
     create table routine_runs(id uuid primary key,account_id uuid,context_generation bigint,routine_id text,version integer,mode text,status text,started_at timestamptz,finished_at timestamptz,summary text,spec_hash text,snapshot jsonb,dedup_key text);
     create table artifacts(id uuid primary key,account_id uuid,run_id uuid,routine_id text,kind text,title text,body text,items jsonb,meta jsonb,evidence jsonb,status text,created_at timestamptz);
     create table receipts(id uuid primary key,account_id uuid,context_generation bigint,run_id uuid,kind text,description text,payload jsonb,created_at timestamptz);
@@ -136,15 +137,58 @@ try{
     grant usage on schema public,auth to service_role;grant all on all tables in schema public,auth to service_role;`);
   await admin.query(await readFile(new URL('../supabase/migrations/20260905185010_calendar_shadow_ledger.sql',import.meta.url),'utf8'));
   await admin.query(await readFile(new URL('../supabase/migrations/20260905192350_calendar_context_conflict_sqlstate.sql',import.meta.url),'utf8'));
+  await admin.query(await readFile(new URL('../supabase/migrations/20260905213903_calendar_customer_preferences.sql',import.meta.url),'utf8'));
   checks.push('exact migration and non-retryable context conflicts compile on real PostgreSQL');
   await admin.query('insert into auth.users values($1);',[owner]);
   await admin.query("insert into accounts values($1,1,false,'NZD'),($2,1,false,'NZD')",[a,foreign]);
   await admin.query("insert into account_members values($1,$2,'owner')",[a,owner]);
   await admin.query("insert into n8n_workflows values($1,$2,'D05-W07',$3,true)",[registration,a,url]);
-  await admin.query("insert into routine_states values($1,'D05-W07',true,2,$2,$2)",[a,spec]);
   await client.query('set role service_role');await peer.query('set role service_role');
-  await client.query(`insert into n8n_calendar_bindings(id,account_id,context_generation,registration_id,accepted_by,acceptance_ref,credential_ref,asset_evidence_ref,workflow_definition_digest,spec_template)
-    values($1,$2,1,$3,$4,'synthetic-reviewed-export','native-reference-only','synthetic-asset-proof',$5,$6)`,[binding,a,registration,owner,'e'.repeat(64),spec]);
+  const preferencesInput={accountId:a,actorId:owner,contextGeneration:1,operation:'read'};
+  const preferences=(input=preferencesInput,c=client)=>c.query('select calendar_customer_preferences($1) r',[input]).then(r=>r.rows[0].r);
+  const insertBinding=(chosen=spec,c=client)=>c.query(`insert into n8n_calendar_bindings(id,account_id,context_generation,registration_id,accepted_by,acceptance_ref,credential_ref,asset_evidence_ref,workflow_definition_digest,spec_template)
+    values($1,$2,1,$3,$4,'synthetic-reviewed-export','native-reference-only','synthetic-asset-proof',$5,$6)`,[binding,a,registration,owner,'e'.repeat(64),chosen]);
+  assert.deepEqual(await preferences(),{accountId:a,actorId:owner,contextGeneration:1,routineId:'D05-W07',timezone:null,updatedAt:null,canEdit:true,bound:false,paused:false,executedAction:'none'});
+  await refusal(()=>insertBinding(),{code:'23514'});
+  const prefSave={...preferencesInput,operation:'save',timezone:'Pacific/Auckland',expectedUpdatedAt:null};
+  for(const bad of [{actorId:foreign},{contextGeneration:2},{timezone:'Not/A_Timezone'},{timezone:' Pacific/Auckland'},
+    {credential:'not-accepted'},{accountId:foreign},{expectedUpdatedAt:'2026-01-01T00:00:00Z'}]) await refusal(()=>preferences({...prefSave,...bad}));
+  const noCas={...prefSave};delete noCas.expectedUpdatedAt;await refusal(()=>preferences(noCas));
+  for(const role of ['anon','authenticated']) {await peer.query(`set role ${role}`);await refusal(()=>preferences(preferencesInput,peer),{code:'42501'});await refusal(()=>peer.query('select * from unc_calendar_private.customer_preferences'),{code:'42501'});}
+  await peer.query('set role service_role');
+  await admin.query('update accounts set automation_paused=true where id=$1',[a]);
+  await client.query('begin');const savedPreferences=await preferences(prefSave);
+  const peerPid=(await peer.query('select pg_backend_pid() pid')).rows[0].pid;
+  const clientPid=(await client.query('select pg_backend_pid() pid')).rows[0].pid;
+  const contending=preferences(prefSave,peer).then(value=>({value}),error=>({error}));
+  let preferenceWait=false;for(let n=0;n<80;n++) {
+    if((await admin.query('select $1::int=any(pg_blocking_pids($2)) waiting',[clientPid,peerPid])).rows[0].waiting){preferenceWait=true;break;}
+    await new Promise(resolve=>setTimeout(resolve,25));
+  }
+  assert(preferenceWait);await client.query('commit');assert.equal((await contending).error?.code,'PT409');
+  assert.equal(savedPreferences.timezone,'Pacific/Auckland');assert.equal(savedPreferences.paused,true);
+  assert.deepEqual(await preferences(),savedPreferences);
+  const prefChange={...prefSave,expectedUpdatedAt:savedPreferences.updatedAt,timezone:'UTC'};
+  await client.query('begin');await client.query("insert into routine_commands values($1,1,'D05-W07','uncertain')",[a]);
+  await refusal(()=>preferences(prefChange),{code:'PT409'});await client.query('rollback');
+  await client.query('begin');await client.query("insert into routine_states values($1,'D05-W07',true,2,null,null)",[a]);
+  await refusal(()=>preferences(prefChange),{code:'PT409'});await client.query('rollback');
+  await client.query('begin');await client.query("insert into routine_states values($1,'D05-W07',false,2,'{}',null)",[a]);
+  await refusal(()=>preferences(prefChange),{code:'PT409'});await client.query('rollback');
+  await admin.query('update accounts set context_generation=2 where id=$1',[a]);
+  assert.equal((await preferences({...preferencesInput,contextGeneration:2})).timezone,null);
+  await refusal(()=>preferences(),{code:'PT409'});
+  await admin.query('update accounts set context_generation=1,automation_paused=false where id=$1',[a]);
+  const wrongClock=clone(spec);wrongClock.nodes[1].shadowContract.client.timezone='UTC';await refusal(()=>insertBinding(wrongClock),{code:'23514'});
+  await insertBinding();
+  assert.equal((await preferences()).canEdit,false);assert.equal((await preferences()).bound,true);
+  await refusal(()=>preferences(prefChange),{code:'PT409'});
+  const prefGrant=(await admin.query("select prosecdef,has_function_privilege('anon',oid,'execute') anon,has_function_privilege('authenticated',oid,'execute') member,has_function_privilege('service_role',oid,'execute') server from pg_proc where proname='calendar_customer_preferences'")).rows[0];
+  assert.deepEqual(prefGrant,{prosecdef:false,anon:false,member:false,server:true});
+  assert.equal(Number((await admin.query('select count(*) from routine_runs')).rows[0].count),0);
+  checks.push('real owner timezone save/readback while paused; exact CAS has one concurrent winner; roles/context/invalid timezone/pending work denied; no run created');
+  checks.push('new binding rejects absent or mismatched owner timezone; accepted binding locks preferences; no learned/provider timezone overwrite');
+  await admin.query("insert into routine_states values($1,'D05-W07',true,2,$2,$2)",[a,spec]);
   checks.push('owned reviewed binding accepted without storing credentials');
   for(const role of ['anon','authenticated']){await peer.query(`set role ${role}`);await refusal(()=>issue(fixture(),peer),{code:'42501'});await refusal(()=>peer.query('select * from n8n_calendar_runs'),{code:'42501'});}
   await peer.query('set role service_role');checks.push('browser roles cannot issue allowances or read ledger');
@@ -266,7 +310,7 @@ try{
   await refusal(()=>client.query('update n8n_calendar_bindings set revoked_at=null where id=$1',[binding]),{code:'23514'});
   checks.push('binding revocation blocks unused allowance and cannot be reversed');
   const functions=(await admin.query("select p.proname,p.prosecdef,p.proconfig from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','unc_calendar_private') and (p.proname like '%calendar%')")).rows;
-  assert.equal(functions.length,7);for(const fn of functions){assert.equal(fn.prosecdef,false);assert.deepEqual(fn.proconfig,['search_path=""']);}
-  checks.push('all seven functions security-invoker with empty search_path');
+  assert.equal(functions.length,9);for(const fn of functions){assert.equal(fn.prosecdef,false);assert.deepEqual(fn.proconfig,['search_path=""']);}
+  checks.push('all nine calendar functions security-invoker with empty search_path');
   console.log(JSON.stringify({status:'PASS',checks,providerCalls:0,remoteDatabaseCalls:0},null,2));
 }finally{for(const c of clients)await c.end().catch(()=>{});await cluster.stop().catch(()=>{});}

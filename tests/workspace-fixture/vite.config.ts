@@ -18,6 +18,7 @@ export default defineConfig({
   plugins: [{ name: "isolated-workspace-fixture", configureServer(server) {
     server.middlewares.use(manualFixture());
     server.middlewares.use((req, res, next) => {
+      if (req.url === "/api/routines/calendar-preferences" && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify({accountId:"aa5cfc84-2569-4c99-9b40-67003ae55eda",actorId:"74802c60-149a-4405-b719-dc058d174072",contextGeneration:1,routineId:"D05-W07",timezone:null,updatedAt:null,canEdit:true,bound:false,paused:true,executedAction:"none"})); return; }
       if (req.url === "/api/routines/keyword-configuration" && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(keywordFixture)); return; }
       if (req.url?.startsWith("/api/agents?routineId=") && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(detailFixture())); return; }
       if (req.url?.startsWith("/api/routines/params?") && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(paramsFixture())); return; }

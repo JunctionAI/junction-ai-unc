@@ -13,7 +13,18 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 70, 6 September NZ / 5 September UTC
+## Latest state — Batch 71, 6 September NZ / 5 September UTC
+
+**Owner calendar timezone setup implemented and database migration verified.**
+[Exact scope, tests and release status](CALENDAR-CUSTOMER-PREFERENCES-2026-09-06.md).
+No default was selected. Private owner/generation-bound preferences cannot change
+while calendar bindings or outstanding work exist; new bindings must match the
+chosen timezone. Six browser-fixture tests and the full real-PostgreSQL calendar
+integration harness pass, along with 3,069 app tests, typechecks and build.
+App/worker rollout and production UI readback follow; no customer calendar run
+or full journey completion is claimed. Full B01–B24/all-client goal stays active.
+
+## Previous state — Batch 70, 6 September NZ / 5 September UTC
 
 **Native AVGAR campaign read verified; inactive registration and separate runtime
 settings staged.** [Exact evidence and remaining journey](integration/CALENDAR-CAMPAIGN-READ-2026-09-06.md).
