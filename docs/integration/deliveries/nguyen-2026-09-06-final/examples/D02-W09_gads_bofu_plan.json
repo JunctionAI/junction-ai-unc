@@ -1,0 +1,26 @@
+{
+  "kind": "campaign_plan",
+  "title": "Google Ads BOFU shadow plan — packaged from historical exec #57 (mapped as D02-W09 pending Codex adapter)",
+  "body": "Stage-only PAUSED BOFU Search plan from DataForSEO keyword_overview. Conceptual/not executable mutate. login_customer_id and conversion_action remain TBD.",
+  "items": [
+    {
+      "title": "AVGAR BOFU Search (SHADOW)",
+      "body": "Campaign status: PAUSED. Ad group: Travel Bag. Keyword: travel bag PHRASE (search_volume=49500, cpc=1.2, competition=1 HIGH, intent=transactional — DataForSEO certified). RSA headlines: Premium Travel Bag / AVGAR Sport Travel Gear / Shop Travel Bag. Descriptions are deterministic recommendations, not live Ads copy performance. Landing: https://avgarsport.com. Negatives: free, repair, cheap, diy. Mutate not attempted.",
+      "meta": {
+        "routine_mapping": "D02-W09 (Codex adapter pending — do not force into D03-W01)",
+        "campaign_status": "PAUSED",
+        "customer_id": "1797030595",
+        "api_version": "v25",
+        "login_customer_id": null,
+        "conversion_action": null,
+        "status": "hypothesis",
+        "label": "conceptual_shadow_plan"
+      }
+    }
+  ],
+  "evidence": [
+    {"source": "n8n_saved_execution", "ref": "workflow=TSajBg5SB32NQtLE execution=#57"},
+    {"source": "provider", "ref": "dataforseo_labs/google/keyword_overview/live task 09031713-2436-0607-0000-be42d4a2db5a"}
+  ],
+  "packaging": {"issue": 45, "phase": "A3", "proof_class_after_packaging": "PACKAGED_ARTIFACT_READY", "provider_calls_this_packaging": 0, "mutate_attempted": false}
+}

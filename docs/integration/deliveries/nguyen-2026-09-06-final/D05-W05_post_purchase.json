@@ -1,0 +1,54 @@
+{
+  "kind": "email",
+  "title": "D05-W05 Post-purchase — customer-facing artifact (education incomplete)",
+  "subject": "Thanks for your AVGAR order",
+  "preview": "A short thank-you while product education is prepared.",
+  "body": "Hi {{first_name|there}},\n\nThanks for your AVGAR order.\n\nWe're glad you're with us. If you need anything about your purchase, reply to this email or visit https://avgarsport.com.\n\nMore product guidance will follow once it is approved for your item.\n\n— AVGAR",
+  "items": [
+    {
+      "title": "Post-purchase thank-you (education section incomplete)",
+      "body": "Hi {{first_name|there}},\n\nThanks for your AVGAR order.\n\nWe're glad you're with us. If you need anything about your purchase, reply to this email or visit https://avgarsport.com.\n\nMore product guidance will follow once it is approved for your item.\n\n— AVGAR",
+      "meta": {
+        "routine": "D05-W05",
+        "routine_key": "post_purchase_education",
+        "subject": "Thanks for your AVGAR order",
+        "preview": "A short thank-you while product education is prepared.",
+        "status": "hypothesis",
+        "completeness": "needs_input",
+        "education_section": {
+          "state": "needs_input",
+          "reason": "Approved product education / how-to / care / support-policy copy is not available in saved evidence. Not invented."
+        }
+      }
+    }
+  ],
+  "needs_input": [
+    {
+      "input": "approved_product_education_copy",
+      "why": "Saved Klaviyo evidence identifies products and fulfilment/delivery aggregates, but does not supply approved usage, care, or support-policy customer copy."
+    },
+    {
+      "input": "exact_post_delivery_delay_hours",
+      "why": "Per-order latency was not measured in historical exec #70."
+    }
+  ],
+  "evidence": [
+    {
+      "source": "n8n_saved_execution",
+      "ref": "workflow=DV5Wv6wXlzpz4zeN execution=#70 status=success"
+    }
+  ],
+  "packaging": {
+    "issue": 45,
+    "phase": "A1_correction",
+    "proof_class": "PACKAGED_ARTIFACT_READY",
+    "completeness": "needs_input",
+    "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+    "provider_calls_this_packaging": 0,
+    "send_attempted": false,
+    "operator_notes_file": "D05-W05_post_purchase_operator_notes.json",
+    "explicit_non_claims": [
+      "Does not state any individual order is on the way based on aggregate fulfilled/delivered counts"
+    ]
+  }
+}

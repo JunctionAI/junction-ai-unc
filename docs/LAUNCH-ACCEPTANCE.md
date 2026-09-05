@@ -8,10 +8,15 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 **Batch 62 overlay:** calendar permissions/checkpoints/completion SQL is applied,
 with real isolated PostgreSQL proof for the actual runtime path and recovery.
-Route/worker/operator-selection source is ready for matched release. [Exact
+Route/worker/operator-selection source is now deployed at `2b4bcfb` (worker 37).
+Batch 63 corrects a live Data API retry trap: intentional calendar context refusals
+now return PT409/HTTP 409 promptly, with the same authority checks. [Exact
 status and remaining live gates](CALENDAR-SHADOW-LEDGER-2026-09-06.md). Synthetic
 HTTP does not advance a customer journey to PASS. Handoff acceptance, credential
-binding, receiver packaging and customer/live acceptance remain Codex work. All
+binding, receiver packaging and customer/live acceptance remain Codex work.
+Nguyen's specific output corrections have independent acceptance in
+[the final review](integration/NGUYEN-FINAL-REVIEW-2026-09-06.md); no new live run or
+repin is implied. Audit other intentional serialization-code refusals next. All
 action holds remain unchanged; full launch scope is not narrowed to this adapter.
 
 1. Work by complete customer journey, not endless isolated hardening. Reuse existing contracts, code, sessions and proven infrastructure. No new architecture or provider swap without a concrete failing requirement.

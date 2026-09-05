@@ -1,0 +1,145 @@
+{
+  "label": "OFFLINE_EXACT_FINAL_BUILDER_TEST_SUMMARY",
+  "note": "These are offline exact-final-builder fixtures / edge regressions, NOT historical saved artifacts.",
+  "command": "node scripts/_issue41_exact_final_builder_harness.js",
+  "result": "PASS",
+  "frozen_revision": "ac771cd3-8899-4401-915c-40d4477e48e2",
+  "superseded_revision": "e5ae41ae-d025-4231-9f5c-99589c43e88a",
+  "provider_calls": "NONE",
+  "live_executions": "NONE",
+  "historical_77_80": "untouched",
+  "fixed_clock_replay": {
+    "77": {
+      "note": "DETERMINISTIC_REPLAY_OUTPUT — not the historical saved execution artifact",
+      "historical_execution_id": "77",
+      "market": "US",
+      "locationCode": 2840,
+      "fixedClockFetchedAt": "2026-09-05T15:00:02.897Z",
+      "keyword_difficulty": 3,
+      "paid_competition": 1,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page": null,
+      "target_page_status": "unverified",
+      "currency": null,
+      "evidence_ref": "dataforseo_labs/google/keyword_overview/live taskId=09051500-2436-0607-0000-b0f044df5884 loc=2840 lang=en keyword=golf travel bag observedAt=2026-08-28 16:44:27 +00:00 fetchedAt=2026-09-05T15:00:02.897Z",
+      "evidence_ref_len": 202,
+      "observedAt": "2026-08-28 16:44:27 +00:00",
+      "fetchedAt": "2026-09-05T15:00:02.897Z",
+      "artifact_title": "Keyword opportunity: golf travel bag [en/2840]",
+      "body_snip": "Shadow keyword_list for golf travel bag. 1 provider item(s). Statistics below are DataForSEO-reported; recommendations are hypotheses only. "
+    },
+    "78": {
+      "note": "DETERMINISTIC_REPLAY_OUTPUT — not the historical saved execution artifact",
+      "historical_execution_id": "78",
+      "market": "NZ",
+      "locationCode": 2554,
+      "fixedClockFetchedAt": "2026-09-05T15:02:05.548Z",
+      "keyword_difficulty": 0,
+      "paid_competition": 1,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page": null,
+      "target_page_status": "unverified",
+      "currency": null,
+      "evidence_ref": "dataforseo_labs/google/keyword_overview/live taskId=09051502-2436-0607-0000-dce0a21234a0 loc=2554 lang=en keyword=golf travel bag observedAt=2026-08-27 23:32:17 +00:00 fetchedAt=2026-09-05T15:02:05.548Z",
+      "evidence_ref_len": 202,
+      "observedAt": "2026-08-27 23:32:17 +00:00",
+      "fetchedAt": "2026-09-05T15:02:05.548Z",
+      "artifact_title": "Keyword opportunity: golf travel bag [en/2554]",
+      "body_snip": "Shadow keyword_list for golf travel bag. 1 provider item(s). Statistics below are DataForSEO-reported; recommendations are hypotheses only. "
+    },
+    "79": {
+      "note": "DETERMINISTIC_REPLAY_OUTPUT — not the historical saved execution artifact",
+      "historical_execution_id": "79",
+      "market": "AU",
+      "locationCode": 2036,
+      "fixedClockFetchedAt": "2026-09-05T15:02:34.268Z",
+      "keyword_difficulty": 0,
+      "paid_competition": 1,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page": null,
+      "target_page_status": "unverified",
+      "currency": null,
+      "evidence_ref": "dataforseo_labs/google/keyword_overview/live taskId=09051502-2436-0607-0000-9c9eec88dae1 loc=2036 lang=en keyword=golf travel bag observedAt=2026-08-19 00:44:26 +00:00 fetchedAt=2026-09-05T15:02:34.268Z",
+      "evidence_ref_len": 202,
+      "observedAt": "2026-08-19 00:44:26 +00:00",
+      "fetchedAt": "2026-09-05T15:02:34.268Z",
+      "artifact_title": "Keyword opportunity: golf travel bag [en/2036]",
+      "body_snip": "Shadow keyword_list for golf travel bag. 1 provider item(s). Statistics below are DataForSEO-reported; recommendations are hypotheses only. "
+    }
+  },
+  "edge_cases": [
+    {
+      "name": "se_results_count=0",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": 3
+    },
+    {
+      "name": "generic_check_url",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": 3
+    },
+    {
+      "name": "unrelated_SERP_item",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": 3
+    },
+    {
+      "name": "missing_KD",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "blank_KD",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "malformed_KD_NaN_string",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "malformed_KD_Infinity",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "malformed_KD_out_of_range",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "explicit_verified_client_page_may_score",
+      "pass": true,
+      "prioritization": "scored",
+      "priority": "medium"
+    }
+  ]
+}

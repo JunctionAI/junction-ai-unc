@@ -1,0 +1,57 @@
+{
+  "routine": "D05-W01",
+  "artifact": "D05-W01_welcome.json",
+  "audience": "operator_reviewer_only",
+  "notes": {
+    "flow": {
+      "id": "YaisEd",
+      "name": "JM | Welcome Series (Updated)",
+      "status": "draft",
+      "trigger_type": "Added to List"
+    },
+    "list": {
+      "id": "TAm8Nv",
+      "name": "Welcome Series List"
+    },
+    "message_id": null,
+    "product_focus": null,
+    "step_delay": null,
+    "offer_code": null,
+    "collection_deep_link": null,
+    "historical_catalogue_context_only": [
+      "Links / Dry Bag",
+      "UFORIA",
+      "Head Cover Clip / Headcover Clasp",
+      "Putt Tuit"
+    ],
+    "do_not_claim": [
+      "open-rate / click-rate targets",
+      "discount or free-shipping offer",
+      "measured multi-step delays",
+      "activation of draft Welcome flow"
+    ],
+    "unknown_or_tbd": [
+      "exact Klaviyo flow-action HTML template (not read in #63)",
+      "approved welcome offer / discount",
+      "collection deep-link URL",
+      "measured multi-step delays"
+    ],
+    "shadow_boundary": {
+      "approval_status": "pending_approval",
+      "executed_action": "none",
+      "send_count": 0,
+      "mutation_count": 0,
+      "shadow_mode": true
+    },
+    "evidence": [
+      {
+        "source": "n8n_saved_execution",
+        "ref": "DV5Wv6wXlzpz4zeN #63"
+      },
+      {
+        "source": "branch_receipt",
+        "ref": "origin/issue-26/klaviyo-real-shadow scripts/_issue26_exec63_receipt.json"
+      }
+    ]
+  }
+}

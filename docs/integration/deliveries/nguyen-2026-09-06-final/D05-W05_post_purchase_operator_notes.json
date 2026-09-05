@@ -1,0 +1,58 @@
+{
+  "routine": "D05-W05",
+  "artifact": "D05-W05_post_purchase.json",
+  "audience": "operator_reviewer_only",
+  "notes": {
+    "flow": {
+      "id": "RK56AC",
+      "name": "Post-Purchase Follow",
+      "status": "draft"
+    },
+    "primary_product_from_historical_sample": {
+      "product_name": "Avgar Proline Carbon Alignment Sticks (2 pack)",
+      "sku": "6994c51435f0b",
+      "product_id": "8808593588362",
+      "collections": ["Accessories", "All Products", "Uforia Suites"],
+      "sample_count": 7,
+      "note": "Sample identity only — not proof of a specific recipient's order status"
+    },
+    "other_observed_products_sample": [
+      {"product_name": "Cigar Holder", "product_id": "8904008138890", "sample_count": 4},
+      {"product_name": "Uforia Travel Case", "sku": "6994c5142716c", "sample_count": 4},
+      {"product_name": "Putt Tuit Training Accessory", "sku": "6994c51423fc0", "sample_count": 1},
+      {"product_name": "Headcover Clasp", "sample_count": 1}
+    ],
+    "timing_aggregates_historical_only": {
+      "anchor_metrics": ["Fulfilled Order (WBCFMr)", "Delivered Shipment (W2rqgp)"],
+      "fulfilled_total": 97,
+      "delivered_total": 74,
+      "window": "2026-07-01_to_2026-09-05",
+      "timezone": "US/Eastern",
+      "exact_delay_hours": null,
+      "operator_interpretation": "Aggregates support proposing education after fulfilment/delivery readiness in general — not a statement that any one order is currently in transit."
+    },
+    "education_blocks": {
+      "state": "needs_input",
+      "setup_first_use": null,
+      "care_storage": null,
+      "support_policy": null
+    },
+    "do_not_claim_in_customer_copy": [
+      "individual order is on the way",
+      "invented usage / how-to instructions",
+      "invented support policy",
+      "activation of Post-Purchase Follow draft"
+    ],
+    "shadow_boundary": {
+      "approval_status": "pending_approval",
+      "executed_action": "none",
+      "send_count": 0,
+      "mutation_count": 0,
+      "shadow_mode": true
+    },
+    "evidence": [
+      {"source": "n8n_saved_execution", "ref": "DV5Wv6wXlzpz4zeN #70"},
+      {"source": "branch_receipt", "ref": "origin/issue-36/email-fourth-klaviyo-routine scripts/_issue36_exec70_receipt.json"}
+    ]
+  }
+}

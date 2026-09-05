@@ -53,8 +53,6 @@ async function waiting(f){
   await client.query('update routine_runs set snapshot=$1 where id=$2',[snapshot,f.run.id]); return snapshot;
 }
 const identity=f=>({contract:f.run.snapshot.spec.nodes[1].shadowContract,registrationId:registration,receiverUrl:url,requestDigest:'b'.repeat(64),tokenDigest:'c'.repeat(64),specHash:f.run.specHash});
-async function authorized(f){await issue(f);assert.equal(await transition(f,'start',{run:f.run}),true);await waiting(f);
-  assert.equal(typeof await transition(f,'dispatch',identity(f)),'string');assert.equal(await transition(f,'authorize',identity(f)),true);}
 async function verified(f,{recovery=false}={}){
   await calendarReservation(db,f.approval)(f.run);assert.equal(await calendarStartClaim(db)(f.run),true);await waiting(f);
   const scope={accountId:a,contextGeneration:1,runId:f.run.id},admission=new DbCalendarShadowAdmission(db,scope);
@@ -137,7 +135,8 @@ try{
     create table account_dataset_snapshots(id uuid primary key,account_id uuid,connector_id uuid,external_ref text,platform text,query_hash text,query jsonb,result jsonb,source_fetched_at timestamptz,stored_at timestamptz);
     grant usage on schema public,auth to service_role;grant all on all tables in schema public,auth to service_role;`);
   await admin.query(await readFile(new URL('../supabase/migrations/20260905185010_calendar_shadow_ledger.sql',import.meta.url),'utf8'));
-  checks.push('exact migration compiles on real PostgreSQL');
+  await admin.query(await readFile(new URL('../supabase/migrations/20260905192350_calendar_context_conflict_sqlstate.sql',import.meta.url),'utf8'));
+  checks.push('exact migration and non-retryable context conflicts compile on real PostgreSQL');
   await admin.query('insert into auth.users values($1);',[owner]);
   await admin.query("insert into accounts values($1,1,false,'NZD'),($2,1,false,'NZD')",[a,foreign]);
   await admin.query("insert into account_members values($1,$2,'owner')",[a,owner]);
@@ -237,7 +236,7 @@ try{
     await locker.query(mutations[kind][0],[mutations[kind][1]]);
     const pending=transition(g,phase,phase==='start'?{run:g.run}:identity(g)).then(r=>({r}),e=>({e}));await waitForLock();
     if(kind==='expiry')await locker.query('select pg_sleep(0.5)');
-    await locker.query('commit');const outcome=await pending;assert.equal(outcome.e?.code,'40001',`${phase}/${kind} must refuse after lock`);
+    await locker.query('commit');const outcome=await pending;assert.equal(outcome.e?.code,'PT409',`${phase}/${kind} must refuse after lock`);
     await admin.query("update accounts set automation_paused=false,context_generation=1;update account_members set role='owner';update routine_states set enabled=true;update n8n_workflows set active=true");
     checks.push(`${phase}: observed lock wait rechecks ${kind}`);
   }
@@ -250,9 +249,9 @@ try{
   for(const mutate of [x=>delete x.maxAgeSeconds,x=>x.maxAgeSeconds=0,x=>x.snapshotId=randomUUID(),x=>x.queryHash='f'.repeat(64),x=>x.fetchedAt=new Date(0).toISOString()]){
     const g=stored();mutate(g.run.snapshot.spec.nodes[1].shadowContract.data);g.run.specHash=stableHash(g.run.snapshot.spec);await refusal(()=>issue(g));
   }
-  await admin.query('update account_dataset_snapshots set account_id=$1 where id=$2',[foreign,snapshotId]);await refusal(()=>issue(stored()),{code:'40001'});
+  await admin.query('update account_dataset_snapshots set account_id=$1 where id=$2',[foreign,snapshotId]);await refusal(()=>issue(stored()),{code:'PT409'});
   await admin.query('update account_dataset_snapshots set account_id=$1 where id=$2',[a,snapshotId]);
-  await admin.query("update connectors set status='disconnected' where id=$1",[connector]);await refusal(()=>issue(stored()),{code:'40001'});
+  await admin.query("update connectors set status='disconnected' where id=$1",[connector]);await refusal(()=>issue(stored()),{code:'PT409'});
   checks.push('stored source missing age, invalid age, foreign/missing snapshot, wrong hash/time and disconnected asset refused');
   const aging=stored(),freshTime=new Date().toISOString();aging.run.snapshot.spec.nodes[1].shadowContract.data.fetchedAt=freshTime;
   aging.run.snapshot.spec.nodes[1].shadowContract.data.maxAgeSeconds=1;aging.run.specHash=stableHash(aging.run.snapshot.spec);
@@ -260,10 +259,10 @@ try{
   await admin.query("update connectors set status='connected' where id=$1",[connector]);
   await locker.query('begin');await locker.query('select id from connectors where id=$1 for update',[connector]);
   const agingIssue=issue(aging).then(r=>({r}),e=>({e}));await waitForLock();await locker.query('select pg_sleep(1.1)');await locker.query('commit');
-  assert.equal((await agingIssue).e?.code,'40001','snapshot must still be fresh after connector lock');
+  assert.equal((await agingIssue).e?.code,'PT409','snapshot must still be fresh after connector lock');
   checks.push('stored snapshot freshness rechecked after observed connector lock wait');
   const revoked=fixture();await issue(revoked);await client.query('update n8n_calendar_bindings set revoked_at=now() where id=$1',[binding]);
-  await refusal(()=>transition(revoked,'start',{run:revoked.run}),{code:'40001'});
+  await refusal(()=>transition(revoked,'start',{run:revoked.run}),{code:'PT409'});
   await refusal(()=>client.query('update n8n_calendar_bindings set revoked_at=null where id=$1',[binding]),{code:'23514'});
   checks.push('binding revocation blocks unused allowance and cannot be reversed');
   const functions=(await admin.query("select p.proname,p.prosecdef,p.proconfig from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','unc_calendar_private') and (p.proname like '%calendar%')")).rows;

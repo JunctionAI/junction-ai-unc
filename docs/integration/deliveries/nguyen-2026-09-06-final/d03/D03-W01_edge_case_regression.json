@@ -1,0 +1,78 @@
+{
+  "label": "OFFLINE_EXACT_FINAL_BUILDER_EDGE_CASES",
+  "note": "Offline edge-case regression against exact final builder. Not historical saved artifacts.",
+  "frozen_revision": "ac771cd3-8899-4401-915c-40d4477e48e2",
+  "cases": [
+    {
+      "name": "se_results_count=0",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": 3
+    },
+    {
+      "name": "generic_check_url",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": 3
+    },
+    {
+      "name": "unrelated_SERP_item",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": 3
+    },
+    {
+      "name": "missing_KD",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "blank_KD",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "malformed_KD_NaN_string",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "malformed_KD_Infinity",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "malformed_KD_out_of_range",
+      "pass": true,
+      "prioritization": "pending",
+      "priority": null,
+      "target_page_status": "unverified",
+      "kd": null
+    },
+    {
+      "name": "explicit_verified_client_page_may_score",
+      "pass": true,
+      "prioritization": "scored",
+      "priority": "medium"
+    }
+  ],
+  "expected_common": "For non-verified edges: target_page=null, target_page_status=unverified, prioritization=pending, priority=null; invalid KD -> null. explicit_verified_client_page_may_score is a gate proof only."
+}

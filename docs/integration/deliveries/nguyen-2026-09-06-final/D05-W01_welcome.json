@@ -1,0 +1,38 @@
+{
+  "kind": "email",
+  "title": "D05-W01 Welcome — customer-facing artifact",
+  "subject": "Welcome to AVGAR",
+  "preview": "Thanks for joining AVGAR. Here's where to start.",
+  "body": "Hi {{first_name|there}},\n\nWelcome to AVGAR.\n\nAVGAR makes golf travel and on-course accessories. When you're ready, browse the store and find the gear that fits your game.\n\nShop AVGAR: https://avgarsport.com\n\nThanks for being here,\nAVGAR",
+  "items": [
+    {
+      "title": "Welcome email",
+      "body": "Hi {{first_name|there}},\n\nWelcome to AVGAR.\n\nAVGAR makes golf travel and on-course accessories. When you're ready, browse the store and find the gear that fits your game.\n\nShop AVGAR: https://avgarsport.com\n\nThanks for being here,\nAVGAR",
+      "meta": {
+        "routine": "D05-W01",
+        "routine_key": "welcome_flow_tuning",
+        "subject": "Welcome to AVGAR",
+        "preview": "Thanks for joining AVGAR. Here's where to start.",
+        "cta_label": "Shop AVGAR",
+        "cta_url": "https://avgarsport.com",
+        "status": "hypothesis",
+        "completeness": "customer_copy_ready_no_offer"
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "source": "n8n_saved_execution",
+      "ref": "workflow=DV5Wv6wXlzpz4zeN execution=#63 startedAt=2026-09-04T04:42:14.463Z status=success"
+    }
+  ],
+  "packaging": {
+    "issue": 45,
+    "phase": "A1_correction",
+    "proof_class": "PACKAGED_ARTIFACT_READY",
+    "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+    "provider_calls_this_packaging": 0,
+    "send_attempted": false,
+    "operator_notes_file": "D05-W01_welcome_operator_notes.json"
+  }
+}

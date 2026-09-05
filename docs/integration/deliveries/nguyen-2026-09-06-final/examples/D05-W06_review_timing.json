@@ -1,0 +1,27 @@
+{
+  "kind": "review_timing_plan",
+  "title": "D05-W06 Review request timing — packaged from historical exec #71",
+  "body": "Timing recommendation keyed to Klaviyo Ready-to-review readiness (metric TkePnn), not purchase-alone satisfaction/NPS. Peak week observed; suppression limits unknown.",
+  "items": [
+    {
+      "title": "Ready-to-review keyed timing",
+      "body": "Current delay: null (not measured as hours-after-delivery). Proposed trigger: Ready to review (TkePnn) when review_link present. Peak week: 2026-07-13 count=50 within window total=107. Event sample 10/10 had review_link; package_status mostly delivered (8/10). Suppression rules/limits = TBD. Review Request Flow (clone) SdX5Zb remains draft — not activated.",
+      "meta": {
+        "routine": "D05-W06",
+        "current_delay": null,
+        "proposed_trigger": "Ready to review (TkePnn)",
+        "peak_day": null,
+        "peak_week_date": "2026-07-13",
+        "peak_week_count": 50,
+        "suppression_evidence": null,
+        "suppression_limits": null,
+        "status": "hypothesis"
+      }
+    }
+  ],
+  "evidence": [
+    {"source": "n8n_saved_execution", "ref": "workflow=DV5Wv6wXlzpz4zeN execution=#71"},
+    {"source": "branch_receipt", "ref": "origin/issue-37/email-fifth-klaviyo-routine scripts/_issue37_exec71_receipt.json"}
+  ],
+  "packaging": {"issue": 45, "phase": "A3", "proof_class_after_packaging": "PACKAGED_ARTIFACT_READY", "provider_calls_this_packaging": 0}
+}

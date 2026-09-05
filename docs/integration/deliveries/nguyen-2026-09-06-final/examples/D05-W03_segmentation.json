@@ -1,0 +1,25 @@
+{
+  "kind": "segmentation_proposal",
+  "title": "D05-W03 Segmentation refresh — packaged from historical exec #69",
+  "body": "Proposed behavioural segment classification from Klaviyo Checkout Started vs Placed Order aggregates. Segment size is the observed event gap (43), not a measured live segment membership count. Klaviyo evidence is not Shopify customer-source evidence.",
+  "items": [
+    {
+      "title": "checkout_started_not_purchased",
+      "body": "Definition: profiles/events showing Checkout Started without corresponding Placed Order in the observed aggregate window. Basis metrics: Checkout Started (SpKS9Q) total=136, Placed Order (Rem3fY) total=93, gap=43 over 2026-07-01..2026-09-05 US/Eastern. Existing segment inventory observed: Bounced emails (RknMBR, profile-metric), Newsletter True (UdNC8Z, profile-marketing-consent). Do not mutate segments.",
+      "meta": {
+        "routine": "D05-W03",
+        "name": "checkout_started_not_purchased",
+        "definition": "Checkout Started without Placed Order (aggregate gap basis)",
+        "size": 43,
+        "size_basis": "aggregate_event_gap_not_live_membership",
+        "status": "hypothesis",
+        "shopify_customer_source_claimed": false
+      }
+    }
+  ],
+  "evidence": [
+    {"source": "n8n_saved_execution", "ref": "workflow=DV5Wv6wXlzpz4zeN execution=#69"},
+    {"source": "branch_receipt", "ref": "origin/issue-35/email-third-klaviyo-routine scripts/_issue35_exec69_receipt.json"}
+  ],
+  "packaging": {"issue": 45, "phase": "A3", "proof_class_after_packaging": "PACKAGED_ARTIFACT_READY", "provider_calls_this_packaging": 0}
+}

@@ -1,0 +1,101 @@
+{
+  "label": "OFFLINE_EXACT_FINAL_BUILDER_FIXED_CLOCK_REPLAY",
+  "note": "Deterministic replay through exact Cloud jsCode for frozen revision ac771cd3-8899-4401-915c-40d4477e48e2. NOT a historical saved execution artifact. Historical #77-80 untouched. No provider call.",
+  "current_frozen_published_revision": "ac771cd3-8899-4401-915c-40d4477e48e2",
+  "superseded_revision": "e5ae41ae-d025-4231-9f5c-99589c43e88a",
+  "historical_execution_id_for_provider_body_only": "77",
+  "market": "US",
+  "locationCode": 2840,
+  "fixedClockFetchedAt": "2026-09-05T15:00:02.897Z",
+  "artifact": {
+    "kind": "keyword_list",
+    "title": "Keyword opportunity: golf travel bag [en/2840]",
+    "body": "Shadow keyword_list for golf travel bag. 1 provider item(s). Statistics below are DataForSEO-reported; recommendations are hypotheses only. Organic prioritization pending where verified client-page evidence is absent. No spend/publish/mutate.",
+    "items": [
+      {
+        "title": "golf travel bag",
+        "body": "SHADOW keyword_opportunity hypothesis for \"golf travel bag\" at locationCode 2840 / en. prioritization=pending. Provider stats (DataForSEO-reported): search_volume=22200, cpc=1.96 (currency unavailable), paid_competition=1, paid_competition_level=HIGH, keyword_difficulty=3, intent=transactional. target_page=unverified. No AVGAR rank/click/CTR claimed. GSC not connected.",
+        "meta": {
+          "intent": "transactional",
+          "target_page": null,
+          "target_page_status": "unverified",
+          "move": "await_verified_client_page_evidence",
+          "status": "hypothesis",
+          "prioritization": "pending",
+          "priority": null,
+          "prioritization_reason": "keyword_overview-only evidence cannot confirm AVGAR page match; se_results_count/check_url/SERP items are not page-match proof. Organic priority left pending.",
+          "provider_stats": {
+            "search_volume": 22200,
+            "cpc": 1.96,
+            "currency": null,
+            "paid_competition": 1,
+            "paid_competition_level": "HIGH",
+            "keyword_difficulty": 3,
+            "search_intent": "transactional",
+            "competition_is_paid_search": true
+          },
+          "provider_timestamps": {
+            "keyword_info_last_updated": "2026-08-28 16:44:27 +00:00",
+            "intent_last_updated": "2026-04-27 21:34:51 +00:00",
+            "backlinks_last_updated": "2026-07-30 06:54:33 +00:00",
+            "fetchedAt": "2026-09-05T15:00:02.897Z"
+          },
+          "location_code": 2840,
+          "language_code": "en",
+          "invented_facts": false,
+          "serp_info_present": false
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "source": "dataforseo",
+        "ref": "dataforseo_labs/google/keyword_overview/live taskId=09051500-2436-0607-0000-b0f044df5884 loc=2840 lang=en keyword=golf travel bag observedAt=2026-08-28 16:44:27 +00:00 fetchedAt=2026-09-05T15:00:02.897Z",
+        "endpoint": "dataforseo_labs/google/keyword_overview/live",
+        "taskId": "09051500-2436-0607-0000-b0f044df5884",
+        "topStatusCode": 20000,
+        "taskStatusCode": 20000,
+        "itemsCount": 1,
+        "fetchedAt": "2026-09-05T15:00:02.897Z",
+        "observedAt": "2026-08-28 16:44:27 +00:00",
+        "locationCode": 2840,
+        "languageCode": "en",
+        "wording": "DataForSEO-reported"
+      }
+    ]
+  },
+  "executionReceipt": {
+    "contract": "unc.keyword-shadow.v1",
+    "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+    "runId": "39ed122b-5b29-4e7d-9fae-0d974a8962e9",
+    "routineId": "D03-W01",
+    "routineKey": "keyword_opportunity",
+    "workflowId": "XiXJKuph1fAeH9pe",
+    "workflowVersion": null,
+    "revisionEvidence": "pending_unc_verification",
+    "executionId": "77",
+    "mode": "dry_run",
+    "status": "succeeded",
+    "executedAction": "none",
+    "startedAt": "2026-09-05T15:00:00.262Z",
+    "finishedAt": "2026-09-05T15:00:02.897Z",
+    "client": {
+      "id": "avgar",
+      "primaryDomain": "avgarsport.com",
+      "seedKeyword": "golf travel bag",
+      "locationCode": 2840,
+      "languageCode": "en"
+    },
+    "provider": {
+      "name": "dataforseo",
+      "statusCode": 20000,
+      "taskStatusCode": 20000,
+      "taskId": "09051500-2436-0607-0000-b0f044df5884",
+      "itemsCount": 1,
+      "fetchedAt": "2026-09-05T15:00:02.897Z",
+      "observedAt": "2026-08-28 16:44:27 +00:00",
+      "httpStatus": 200
+    },
+    "dataBaseUrl_ignored_for_destination": true
+  }
+}

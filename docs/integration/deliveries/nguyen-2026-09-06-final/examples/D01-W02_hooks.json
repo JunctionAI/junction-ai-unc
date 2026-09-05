@@ -1,0 +1,56 @@
+{
+  "kind": "content_hooks",
+  "title": "D01-W02 Viral hook mining — packaged from historical exec #68 (hooks also present on #58 lineage)",
+  "body": "Hooks are hypothesis reframes of DataForSEO SERP organic titles for seed \"travel bag\". Not measured creative performance. SERP snapshots are not GSC clicks/impressions. Historical SERP seed was \"travel bag\"; not approved current AVGAR golf-market positioning.",
+  "items": [
+    {
+      "title": "Hook line: Travel Bags & Backpacks",
+      "body": "Hook line: Travel Bags & Backpacks\nSkeleton: scroll-stopper contrast problem vs product for \"travel bag\"\nMechanic: short-form cut from SERP #1 title only\nWhy: ranking #1 organic title (topodesigns.com)\nHow to shoot: TBD founder/creator brief — not evidenced\nStatus: hypothesis",
+      "meta": {
+        "routine": "D01-W02",
+        "rank": 1,
+        "domain": "topodesigns.com",
+        "status": "hypothesis",
+        "measured": false
+      }
+    },
+    {
+      "title": "Hook line: travel bags | tote, crossbody, and duffel bags & luggage",
+      "body": "Hook line: travel bags | tote, crossbody, and duffel bags & luggage\nSkeleton/mechanic/why: SERP #2 title reframe only (baggallini.com)\nHow to shoot: TBD\nStatus: hypothesis",
+      "meta": {
+        "routine": "D01-W02",
+        "rank": 2,
+        "status": "hypothesis",
+        "measured": false
+      }
+    },
+    {
+      "title": "Hook line: 10 Best Travel Bags of 2026 | Tested & Ranked",
+      "body": "Hook line: 10 Best Travel Bags of 2026 | Tested & Ranked\nSkeleton/mechanic/why: SERP #4 listicle-title reframe (outdoorgearlab.com)\nHow to shoot: TBD\nStatus: hypothesis",
+      "meta": {
+        "routine": "D01-W02",
+        "rank": 4,
+        "status": "hypothesis",
+        "measured": false
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "source": "n8n_saved_execution",
+      "ref": "workflow=lMXjTgd3Qh4vZaMp execution=#68 (viral_hook_count=5)"
+    },
+    {
+      "source": "provider",
+      "ref": "dataforseo_serp_organic seed=travel bag location=2840 — not GSC"
+    }
+  ],
+  "packaging": {
+    "issue": 45,
+    "phase": "A3",
+    "proof_class_after_packaging": "PACKAGED_ARTIFACT_READY",
+    "provider_calls_this_packaging": 0
+  },
+  "context_class": "HISTORICAL_PROVIDER_PROOF_ONLY",
+  "not_current_avgar_golf_market_context": true
+}

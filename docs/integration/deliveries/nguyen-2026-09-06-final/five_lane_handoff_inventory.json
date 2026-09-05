@@ -1,0 +1,306 @@
+{
+  "issue": 45,
+  "phase": "A2_correction_final_merge",
+  "generated_at": "2026-09-06",
+  "replaces_delivery": "delivery/tom-2026-09-06-correction (stale D03) + prior tom-2026-09-05",
+  "proof_class_legend": [
+    "HISTORICAL_PROVIDER_PROOF",
+    "PACKAGED_ARTIFACT_READY",
+    "FINAL_REVISION_TESTED",
+    "BLOCKED_INPUT",
+    "CODEX_ADAPTER_PENDING",
+    "NOT_VERIFIED",
+    "NOT_DELIVERED"
+  ],
+  "historical_vs_final_rule": "Historical successful executions prove the TEST graph state at that time. They do NOT prove a later packaged artifact revision or Unc adapter E2E unless that revision was actually tested. Old travel-bag / baggallini evidence is HISTORICAL only — not approved current AVGAR golf-market context.",
+  "revision_id_rule": "Only full revision UUIDs that were independently read from n8n workflow metadata are listed. Unknown values are NOT_VERIFIED — never reconstructed from prefixes.",
+  "current_d03_frozen_revision": "ac771cd3-8899-4401-915c-40d4477e48e2",
+  "rows": [
+    {
+      "routine": "D02-W01 daily_decisioning",
+      "workflow_id": "WljLEMABNjfUkbB1",
+      "frozen_or_evidence_revision": "053e1e02-c816-4d7c-aa32-08e9eb06e6f3",
+      "credential_ref": "Facebook Graph account 2 / j6w7zi8lhRivXI0q (facebookGraphApiOAuth2Api)",
+      "sample_output": "examples/D02_meta_decisions_sample.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#53",
+      "remaining_blocker": "Codex Unc adapter; packaged example not FINAL_REVISION_TESTED"
+    },
+    {
+      "routine": "D02-W02 creative_testing",
+      "workflow_id": "WljLEMABNjfUkbB1",
+      "frozen_or_evidence_revision": "053e1e02-c816-4d7c-aa32-08e9eb06e6f3",
+      "credential_ref": "Facebook Graph account 2 / j6w7zi8lhRivXI0q",
+      "sample_output": "examples/D02_meta_decisions_sample.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#53",
+      "remaining_blocker": "test_budget_per_variant TBD; Codex adapter"
+    },
+    {
+      "routine": "D02-W03 hook_rotation",
+      "workflow_id": "WljLEMABNjfUkbB1",
+      "frozen_or_evidence_revision": "053e1e02-c816-4d7c-aa32-08e9eb06e6f3",
+      "credential_ref": "Facebook Graph account 2 / j6w7zi8lhRivXI0q",
+      "sample_output": "examples/D02_meta_decisions_sample.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#53",
+      "remaining_blocker": "Codex adapter"
+    },
+    {
+      "routine": "D02-W04 ad_fatigue",
+      "workflow_id": "WljLEMABNjfUkbB1",
+      "frozen_or_evidence_revision": "053e1e02-c816-4d7c-aa32-08e9eb06e6f3",
+      "credential_ref": "Facebook Graph account 2 / j6w7zi8lhRivXI0q",
+      "sample_output": "examples/D02_meta_decisions_sample.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#53",
+      "remaining_blocker": "Codex adapter"
+    },
+    {
+      "routine": "D02-W05 creator_whitelisting",
+      "workflow_id": "WljLEMABNjfUkbB1",
+      "frozen_or_evidence_revision": "NOT_VERIFIED",
+      "credential_ref": "Facebook Graph account 2 / j6w7zi8lhRivXI0q",
+      "sample_output": "none",
+      "proof_class": "BLOCKED_INPUT",
+      "remaining_blocker": "Tom: approved creator handles/rights/consent"
+    },
+    {
+      "routine": "D02-W06 creative_test_planner",
+      "workflow_id": "WljLEMABNjfUkbB1",
+      "frozen_or_evidence_revision": "053e1e02-c816-4d7c-aa32-08e9eb06e6f3",
+      "credential_ref": "Facebook Graph account 2 / j6w7zi8lhRivXI0q",
+      "sample_output": "examples/D02_meta_decisions_sample.json (blocked ledger item included)",
+      "proof_class": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#53",
+      "remaining_blocker": "experiment_ledger_connected; Codex adapter"
+    },
+    {
+      "routine": "D02-W07 budget_pacing",
+      "workflow_id": "WljLEMABNjfUkbB1",
+      "frozen_or_evidence_revision": "053e1e02-c816-4d7c-aa32-08e9eb06e6f3",
+      "credential_ref": "Facebook Graph account 2 / j6w7zi8lhRivXI0q",
+      "sample_output": "examples/D02_meta_decisions_sample.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#53",
+      "remaining_blocker": "Codex adapter"
+    },
+    {
+      "routine": "D02-W08 organic_to_paid",
+      "workflow_id": "WljLEMABNjfUkbB1",
+      "frozen_or_evidence_revision": "NOT_VERIFIED",
+      "credential_ref": "Facebook Graph account 2 / j6w7zi8lhRivXI0q",
+      "sample_output": "none",
+      "proof_class": "BLOCKED_INPUT",
+      "remaining_blocker": "Tom: approved organic-performance source"
+    },
+    {
+      "routine": "D02-W09 Google Ads BOFU (mapping)",
+      "workflow_id": "TSajBg5SB32NQtLE",
+      "frozen_or_evidence_revision": "960c91bc-7216-4999-aa0b-045a4beb1d4d",
+      "credential_ref": "DataForSEO Unnamed credential / SK8RwgcCrYPQdWRB",
+      "sample_output": "examples/D02-W09_gads_bofu_plan.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "adapter_status": "CODEX_ADAPTER_PENDING",
+      "saved_execution": "#57",
+      "remaining_blocker": "Codex distinct Unc mapping (not D03-W01); login_customer_id + conversion_action TBD for mutate"
+    },
+    {
+      "routine": "D03-W01 keyword_opportunity",
+      "workflow_id": "XiXJKuph1fAeH9pe (wrapper); OUerIfgAkMnhkuen (historical TEST logic)",
+      "frozen_or_evidence_revision": "ac771cd3-8899-4401-915c-40d4477e48e2",
+      "prior_e2e_revision": "92135add-3c35-43e4-9649-5bb3d4557814",
+      "credential_ref": "DataForSEO SK8RwgcCrYPQdWRB; wrapper Header Auth Y9Xu3zApLSrcWu1e",
+      "sample_output": "d03/D03-W01_build_artifact_final_jscode.js; d03/D03-W01_exact_replay_US_77.json; d03/D03-W01_exact_replay_NZ_78.json; d03/D03-W01_exact_replay_AU_79.json; d03/D03-W01_exact_final_builder_test_summary.json; d03/D03-W01_edge_case_regression.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF (#77-#80 on 92135add-3c35-43e4-9649-5bb3d4557814)",
+      "fixture_test_status": "PASS offline exact-final-builder fixed-clock replay + edge cases (NOT historical saved artifacts)",
+      "live_e2e_on_current_frozen": "CODEX_ADAPTER_PENDING",
+      "remaining_blocker": "Codex independent diff review + Unc repin to ac771cd3-8899-4401-915c-40d4477e48e2 before further live execution",
+      "superseded_revision": "e5ae41ae-d025-4231-9f5c-99589c43e88a"
+    },
+    {
+      "routine": "D03-W02 content_gap",
+      "workflow_id": "OUerIfgAkMnhkuen",
+      "frozen_or_evidence_revision": "cda63062-b8c5-4f3a-a718-a71bd6e1040f",
+      "credential_ref": "DataForSEO SK8RwgcCrYPQdWRB",
+      "sample_output": "examples/D03_seo_historical_pack.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "context_note": "Historical travel-bag seed only — not approved current AVGAR golf-market context",
+      "saved_execution": "#59",
+      "remaining_blocker": "Codex adapter"
+    },
+    {
+      "routine": "D03-W03 AI-search probe",
+      "workflow_id": "OUerIfgAkMnhkuen",
+      "frozen_or_evidence_revision": "NOT_VERIFIED",
+      "credential_ref": "n/a",
+      "sample_output": "none",
+      "proof_class": "BLOCKED_INPUT",
+      "remaining_blocker": "Tom/Codex: intended AI-search source"
+    },
+    {
+      "routine": "D03-W04 CMS/Admin",
+      "workflow_id": "n/a",
+      "frozen_or_evidence_revision": "NOT_VERIFIED",
+      "credential_ref": "Shopify OAuth parked",
+      "sample_output": "none",
+      "proof_class": "BLOCKED_INPUT",
+      "remaining_blocker": "CMS/Admin access; Shopify deferred by Tom"
+    },
+    {
+      "routine": "D03-W05 serp_position_watch",
+      "workflow_id": "OUerIfgAkMnhkuen",
+      "frozen_or_evidence_revision": "cda63062-b8c5-4f3a-a718-a71bd6e1040f",
+      "credential_ref": "DataForSEO SK8RwgcCrYPQdWRB",
+      "sample_output": "examples/D03_seo_historical_pack.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "context_note": "Historical travel-bag seed only — not approved current AVGAR golf-market context",
+      "saved_execution": "#59",
+      "remaining_blocker": "Codex adapter"
+    },
+    {
+      "routine": "D03-W06 page/content analysis (distinct from backlink gap)",
+      "workflow_id": "OUerIfgAkMnhkuen",
+      "frozen_or_evidence_revision": "cda63062-b8c5-4f3a-a718-a71bd6e1040f",
+      "credential_ref": "DataForSEO SK8RwgcCrYPQdWRB",
+      "sample_output": "examples/D03_seo_historical_pack.json (content_gap item; keep distinct from D03-W07)",
+      "proof_class": "HISTORICAL_PROVIDER_PROOF",
+      "context_note": "Historical travel-bag seed only — not approved current AVGAR golf-market context",
+      "saved_execution": "#59",
+      "remaining_blocker": "Keep distinct from D03-W07 backlink-gap mapping"
+    },
+    {
+      "routine": "D03-W07 backlink_gap (reserved mapping already assigned)",
+      "workflow_id": "OUerIfgAkMnhkuen",
+      "frozen_or_evidence_revision": "cda63062-b8c5-4f3a-a718-a71bd6e1040f",
+      "credential_ref": "DataForSEO SK8RwgcCrYPQdWRB",
+      "sample_output": "examples/D03_seo_historical_pack.json (competitor/backlink gap item)",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "adapter_status": "CODEX_ADAPTER_PENDING",
+      "mapping_note": "D03-W07 is the reserved backlink-gap mapping already assigned. Not waiting for a new routine ID. Historical competitor sample (baggallini.com) is not current AVGAR golf-market context.",
+      "saved_execution": "#59",
+      "remaining_blocker": "Codex adapter/registration for reserved D03-W07 mapping"
+    },
+    {
+      "routine": "D01-W02 viral_hook_mining",
+      "workflow_id": "lMXjTgd3Qh4vZaMp",
+      "frozen_or_evidence_revision": "c8d6955d-0033-47ce-9672-399f7f10118c",
+      "credential_ref": "DataForSEO SK8RwgcCrYPQdWRB",
+      "sample_output": "examples/D01-W02_hooks.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "context_note": "Historical SERP seed travel bag — not approved current AVGAR golf-market context",
+      "saved_execution": "#58+#68",
+      "remaining_blocker": "Codex adapter; how-to-shoot TBD"
+    },
+    {
+      "routine": "D01-W03 customer_question_mining",
+      "workflow_id": "lMXjTgd3Qh4vZaMp",
+      "frozen_or_evidence_revision": "c8d6955d-0033-47ce-9672-399f7f10118c",
+      "credential_ref": "DataForSEO SK8RwgcCrYPQdWRB",
+      "sample_output": "examples/D01-W03_questions.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "context_note": "Historical SERP seed travel bag — not approved current AVGAR golf-market context",
+      "saved_execution": "#68",
+      "remaining_blocker": "support/DM/review source not connected; Codex adapter"
+    },
+    {
+      "routine": "D05-W01 welcome",
+      "workflow_id": "DV5Wv6wXlzpz4zeN",
+      "frozen_or_evidence_revision": "f96c1b82-348a-4711-823f-a9f68498793e",
+      "credential_ref": "Header Auth account / 4mkTKL1q0njNafh9",
+      "sample_output": "D05-W01_welcome.json (+ D05-W01_welcome_operator_notes.json)",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#63",
+      "remaining_blocker": "Codex adapter; FINAL_REVISION_TESTED of packaged draft = not done"
+    },
+    {
+      "routine": "D05-W02 abandoned_cart",
+      "workflow_id": "DV5Wv6wXlzpz4zeN",
+      "frozen_or_evidence_revision": "NOT_VERIFIED",
+      "credential_ref": "Header Auth account / 4mkTKL1q0njNafh9",
+      "sample_output": "none",
+      "proof_class": "BLOCKED_INPUT",
+      "remaining_blocker": "Tom: contact_frequency_cap"
+    },
+    {
+      "routine": "D05-W03 segmentation",
+      "workflow_id": "DV5Wv6wXlzpz4zeN",
+      "frozen_or_evidence_revision": "f96c1b82-348a-4711-823f-a9f68498793e",
+      "credential_ref": "Header Auth account / 4mkTKL1q0njNafh9",
+      "sample_output": "examples/D05-W03_segmentation.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#69",
+      "remaining_blocker": "Codex adapter; size is aggregate gap not live membership"
+    },
+    {
+      "routine": "D05-W04 winback",
+      "workflow_id": "DV5Wv6wXlzpz4zeN",
+      "frozen_or_evidence_revision": "NOT_VERIFIED",
+      "credential_ref": "Header Auth account / 4mkTKL1q0njNafh9",
+      "sample_output": "none",
+      "proof_class": "BLOCKED_INPUT",
+      "remaining_blocker": "Tom: margin_floor"
+    },
+    {
+      "routine": "D05-W05 post_purchase",
+      "workflow_id": "DV5Wv6wXlzpz4zeN",
+      "frozen_or_evidence_revision": "f96c1b82-348a-4711-823f-a9f68498793e",
+      "credential_ref": "Header Auth account / 4mkTKL1q0njNafh9",
+      "sample_output": "D05-W05_post_purchase.json (+ D05-W05_post_purchase_operator_notes.json)",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "completeness": "needs_input",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#70",
+      "remaining_blocker": "approved education copy needs_input; Codex adapter"
+    },
+    {
+      "routine": "D05-W06 review_timing",
+      "workflow_id": "DV5Wv6wXlzpz4zeN",
+      "frozen_or_evidence_revision": "f96c1b82-348a-4711-823f-a9f68498793e",
+      "credential_ref": "Header Auth account / 4mkTKL1q0njNafh9",
+      "sample_output": "examples/D05-W06_review_timing.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#71",
+      "remaining_blocker": "suppression limits TBD; Codex adapter"
+    },
+    {
+      "routine": "D05-W07 campaign_calendar",
+      "workflow_id": "DV5Wv6wXlzpz4zeN",
+      "frozen_or_evidence_revision": "f96c1b82-348a-4711-823f-a9f68498793e",
+      "credential_ref": "Header Auth account / 4mkTKL1q0njNafh9",
+      "sample_output": "D05-W07_six_week_calendar.json",
+      "proof_class": "PACKAGED_ARTIFACT_READY",
+      "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+      "saved_execution": "#62",
+      "remaining_blocker": "Codex adapter; FINAL_REVISION_TESTED of packaged calendar = not done"
+    }
+  ],
+  "needs_input_rows": [
+    "D05-W05 education section"
+  ],
+  "not_delivered_or_blocked_rows": [
+    "D02-W05",
+    "D02-W08",
+    "D03-W03",
+    "D03-W04",
+    "D05-W02",
+    "D05-W04"
+  ],
+  "superseded_d03_revision": "e5ae41ae-d025-4231-9f5c-99589c43e88a",
+  "packaging_note": "Final client merge: #45 corrected business artifacts + #41 exact final-builder D03 overlays. No provider/live calls. No n8n edits in this packaging step."
+}

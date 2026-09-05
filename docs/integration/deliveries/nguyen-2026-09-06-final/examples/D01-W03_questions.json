@@ -1,0 +1,63 @@
+{
+  "kind": "content_questions",
+  "title": "D01-W03 Customer question mining — packaged from historical exec #68",
+  "body": "Questions from DataForSEO People Also Ask for seed \"travel bag\". Frequency unmeasured. Support/DM/review ticket source not connected. Historical SERP seed was \"travel bag\"; not approved current AVGAR golf-market positioning.",
+  "items": [
+    {
+      "title": "What is the best travel bag for travel?",
+      "body": "Question: What is the best travel bag for travel?\nContent idea: AVGAR-relevant answer/comparison piece staged from this PAA only\nFormat: TBD (article/short/FAQ)\nStage: awareness/consideration hypothesis\nFrequency: null (unmeasured)",
+      "meta": {
+        "routine": "D01-W03",
+        "rank": 1,
+        "format": null,
+        "stage": "hypothesis",
+        "frequency": null
+      }
+    },
+    {
+      "title": "What is the Viral travel bag?",
+      "body": "Question: What is the Viral travel bag?\nContent idea: clarify naming/product without inventing virality metrics\nFormat: null\nStage: hypothesis\nFrequency: null",
+      "meta": {
+        "routine": "D01-W03",
+        "rank": 2,
+        "frequency": null
+      }
+    },
+    {
+      "title": "Which bag is best for flight travel?",
+      "body": "Question: Which bag is best for flight travel?\nContent idea: flight/carry context piece from PAA only\nFormat: null\nStage: hypothesis\nFrequency: null",
+      "meta": {
+        "routine": "D01-W03",
+        "rank": 3,
+        "frequency": null
+      }
+    },
+    {
+      "title": "Which travel bag brand is best?",
+      "body": "Question: Which travel bag brand is best?\nContent idea: brand-consideration piece; no invented awards\nFormat: null\nStage: hypothesis\nFrequency: null",
+      "meta": {
+        "routine": "D01-W03",
+        "rank": 4,
+        "frequency": null
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "source": "n8n_saved_execution",
+      "ref": "workflow=lMXjTgd3Qh4vZaMp execution=#68 customer_question_count=4"
+    },
+    {
+      "source": "provider",
+      "ref": "dataforseo_serp_people_also_ask — not support/DM/review tickets"
+    }
+  ],
+  "packaging": {
+    "issue": 45,
+    "phase": "A3",
+    "proof_class_after_packaging": "PACKAGED_ARTIFACT_READY",
+    "provider_calls_this_packaging": 0
+  },
+  "context_class": "HISTORICAL_PROVIDER_PROOF_ONLY",
+  "not_current_avgar_golf_market_context": true
+}

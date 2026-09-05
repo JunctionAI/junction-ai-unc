@@ -1,0 +1,59 @@
+{
+  "kind": "meta_decisions",
+  "title": "Meta D02-W01/W02/W03/W04/W06/W07 — packaged sample from historical exec #53",
+  "body": "Shadow Meta decisions with actual ad identity + observed metrics + recommendation + rollback proposal. No spend/pause/publish. Unknown absolute CTR kill threshold left TBD_NOT_INVENTED.",
+  "items": [
+    {
+      "title": "HOLD: AD_ORG01_PROLINE_ALIGNSTICKS_REEL",
+      "body": "Ad 120252863530370580 — spend 162.39 / purchases 1 / CPA 162.39 vs CPA cap 60 (50% of certified price 120). Recommendation: SHADOW HOLD — soft OFF blocked by unclean measurement. Rollback proposal: leave ad unchanged; repair measurement before any OFF. Window last_7d.",
+      "meta": {
+        "routines": ["D02-W01"],
+        "routine_keys": ["daily_decisioning"],
+        "ad_id": "120252863530370580",
+        "ad_name": "AD_ORG01_PROLINE_ALIGNSTICKS_REEL",
+        "decision_state": "HOLD",
+        "observed": {"spend": 162.39, "purchases": 1, "cpa": 162.39, "cpa_cap": 60, "ctr": 2.556818181818182, "frequency": 1.201018},
+        "recommendation": "SHADOW HOLD — soft OFF criteria met on CPA but measurement is not clean/reconciled.",
+        "rollback_proposal": "Do not pause/scale; keep current state until measurement repaired.",
+        "status": "hypothesis"
+      }
+    },
+    {
+      "title": "Creative test vs winner: Uforia Travel Case reel",
+      "body": "Winner ad 120252972086750580 AD_TRV01_AVGARGolfTravelCase_Capacity_REEL CPA 104.26; underperformer 120253612616460580 Cornelious creator test purchases=0. Recommendation: stage new creative variant only; test_budget_per_variant=TBD. Rollback: no Meta write; winner stays as-is until approval.",
+      "meta": {
+        "routines": ["D02-W02"],
+        "routine_keys": ["creative_testing"],
+        "winner_ad_id": "120252972086750580",
+        "underperformer_ad_id": "120253612616460580",
+        "test_budget_per_variant": null,
+        "status": "hypothesis"
+      }
+    },
+    {
+      "title": "Hook refresh: AD_ORG01_PROLINE_ALIGNSTICKS_REEL",
+      "body": "Target CTR 2.557 below peer median 3.541 (best peer Uforia reel CTR 3.880). Propose new hook/creative angle only — do not publish. Rollback: no ad create/edit.",
+      "meta": {"routines": ["D02-W03"], "routine_keys": ["hook_rotation"], "ad_id": "120252863530370580", "status": "hypothesis"}
+    },
+    {
+      "title": "Fatigue watch — no threshold breach",
+      "body": "Max frequency 1.4 < kill threshold 2.5; no pause proposal. Rollback: N/A (monitor only).",
+      "meta": {"routines": ["D02-W04"], "routine_keys": ["ad_fatigue"], "fatigue_kill_frequency": 2.5, "max_frequency": 1.4, "status": "hypothesis"}
+    },
+    {
+      "title": "Test plan blocked — experiment ledger TBD",
+      "body": "creative_test_planner blocked: experiment_ledger_connected=false. Do not fabricate experiment history.",
+      "meta": {"routines": ["D02-W06"], "routine_keys": ["creative_test_planner"], "blocked_field": "experiment_ledger_connected", "status": "hypothesis"}
+    },
+    {
+      "title": "Account daily budget ceiling check",
+      "body": "Ceiling NZD 3000/day; observed last_7d spend 305.88. No Meta budget mutation. Rollback: N/A.",
+      "meta": {"routines": ["D02-W07"], "routine_keys": ["budget_pacing"], "daily_budget_cap_nzd": 3000, "window_spend": 305.88, "status": "hypothesis"}
+    }
+  ],
+  "evidence": [
+    {"source": "n8n_saved_execution", "ref": "workflow=WljLEMABNjfUkbB1 execution=#53 status=success"},
+    {"source": "credential_metadata", "ref": "facebookGraphApiOAuth2Api name=Facebook Graph account 2 id=j6w7zi8lhRivXI0q"}
+  ],
+  "packaging": {"issue": 45, "phase": "A3", "proof_class_after_packaging": "PACKAGED_ARTIFACT_READY", "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF", "provider_calls_this_packaging": 0, "meta_mutation_attempted": false}
+}

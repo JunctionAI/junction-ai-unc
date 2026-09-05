@@ -1,0 +1,87 @@
+{
+  "kind": "seo_pack",
+  "title": "SEO packaged examples from historical exec #59 (travel bag seed) — HISTORICAL CONTEXT ONLY",
+  "body": "Historical DataForSEO observations from seed \"travel bag\" / competitor baggallini.com on exec #59. This is NOT approved current AVGAR golf-market context. Current authorized golf-market fixtures are D03-W01_fixture_US_77 / NZ_78 / AU_79 (golf travel bag). GSC unavailable. D03-W07 = reserved backlink-gap mapping (already assigned).",
+  "items": [
+    {
+      "title": "travel bag",
+      "body": "SHADOW keyword_opportunity — travel bag: search_volume=49500, cpc=1.2, competition=HIGH, intent=transactional. Low opportunity from certified metrics. No GSC. Hypothesis only.",
+      "meta": {
+        "routine": "D03-W01",
+        "routine_key": "keyword_opportunity",
+        "intent": "transactional",
+        "move": "monitor",
+        "status": "hypothesis",
+        "provider_stats": {
+          "search_volume": 49500,
+          "cpc": 1.2,
+          "competition": 1,
+          "competition_level": "HIGH"
+        },
+        "context_class": "historical_travel_bag_seed_only",
+        "not_current_avgar_golf_market_context": true
+      }
+    },
+    {
+      "title": "Content gap H1 working title: Travel bag buying guide for golf/travel gear",
+      "body": "Working H1: Travel bag buying guide for golf/travel gear (conceptual).\nRationale: primary_domain avgar-sport.myshopify.com absent from top 15 organic for \"travel bag\" (gap_class=primary_absent).\nCoverage: compete vs #1 baggallini.com / #2 topodesigns.com titles observed.\nLink suggestion: TBD internal link map.\nStage/page_type: consideration / guide — hypothesis.\nProof: DataForSEO SERP organic only — not GSC.",
+      "meta": {
+        "routine": "D03-W02",
+        "routine_key": "content_gap",
+        "gap_class": "primary_absent",
+        "primary_domain": "avgar-sport.myshopify.com",
+        "status": "hypothesis",
+        "label": "conceptual",
+        "context_class": "historical_travel_bag_seed_only",
+        "not_current_avgar_golf_market_context": true
+      }
+    },
+    {
+      "title": "SERP position: travel bag — not_present",
+      "body": "Primary domain not_present in top 15. position_delta=history_unavailable. Top competitor #1 baggallini.com. Monitor only.",
+      "meta": {
+        "routine": "D03-W05",
+        "routine_key": "serp_position_watch",
+        "position_status": "not_present",
+        "current_rank": null,
+        "status": "hypothesis",
+        "context_class": "historical_travel_bag_seed_only",
+        "not_current_avgar_golf_market_context": true
+      }
+    },
+    {
+      "title": "Competitor backlink gap: baggallini.com",
+      "body": "Backlink gap (NOT D03-W06 page/content analysis). Competitor baggallini.com has provider total_count=10758; 20 rows returned. Sample referring domain observed: thewondernuts.com. Outreach not sent. Authority/traffic/threat=null.",
+      "meta": {
+        "routine": "D03-W07",
+        "routine_key": "backlink_gap",
+        "note": "Distinct from D03-W06; Codex owns final Unc mapping",
+        "status": "hypothesis",
+        "authority": null,
+        "traffic": null,
+        "context_class": "historical_travel_bag_seed_only",
+        "not_current_avgar_golf_market_context": true,
+        "mapping_note": "D03-W07 is the reserved backlink-gap mapping already assigned. Not waiting for a new routine ID."
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "source": "n8n_saved_execution",
+      "ref": "workflow=OUerIfgAkMnhkuen execution=#59"
+    },
+    {
+      "source": "credential_metadata",
+      "ref": "httpBasicAuth Unnamed credential / SK8RwgcCrYPQdWRB (DataForSEO)"
+    }
+  ],
+  "packaging": {
+    "issue": 45,
+    "phase": "A3",
+    "proof_class_after_packaging": "PACKAGED_ARTIFACT_READY",
+    "provider_calls_this_packaging": 0,
+    "delivery_file": "examples/D03_seo_historical_pack.json"
+  },
+  "context_class": "HISTORICAL_PROVIDER_PROOF_ONLY",
+  "not_current_avgar_golf_market_context": true
+}

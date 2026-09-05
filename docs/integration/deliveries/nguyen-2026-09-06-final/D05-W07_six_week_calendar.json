@@ -1,0 +1,128 @@
+{
+  "kind": "calendar",
+  "title": "D05-W07 Six-week future email calendar",
+  "body": "Forward-looking six-week AVGAR email calendar. Themes reuse product lines evidenced in historical Sent campaign titles from Klaviyo exec #62. Performance metrics unavailable (null). Draft/shadow only — no schedule/queue/send.",
+  "items": [
+    {
+      "title": "Week 1 — Links / Dry Bag continuity",
+      "body": "Continue the Links line after the 2026-09-04 Dry Bag send. One email spotlighting Links / Dry Bag catalogue context already present in Sent history; CTA to avgarsport.com. No invented discount.",
+      "meta": {
+        "week_start": "2026-09-08",
+        "channel": "email",
+        "theme": "Links / Dry Bag",
+        "phase": "continuity",
+        "weekly_brief": "Propose one AVGAR email continuing the Links/Dry Bag thread that was the most recent Sent campaign. Stay inside evidenced product naming. Do not schedule.",
+        "source_campaign_titles": ["AVGAR | 2026-09-03| Links - Dry Bag", "AVGAR | 2026-08-27| Links - Any golfer's dream"],
+        "open_rate": null,
+        "click_rate": null,
+        "revenue": null
+      }
+    },
+    {
+      "title": "Week 2 — UFORIA line",
+      "body": "UFORIA product-line week from evidenced Sent titles (UFORIA 2 / UFORIA 3) and Ordered Product sample (Uforia Travel Case).",
+      "meta": {
+        "week_start": "2026-09-15",
+        "channel": "email",
+        "theme": "UFORIA",
+        "phase": "product_spotlight",
+        "weekly_brief": "Draft one UFORIA-focused campaign concept from evidenced titles only. Exact hero SKU/copy = TBD if not pre-approved.",
+        "source_campaign_titles": ["AVGAR | 2026-08-18| UFORIA 3", "AVGAR | 2026-08-18| UFORIA 2"],
+        "open_rate": null,
+        "click_rate": null,
+        "revenue": null
+      }
+    },
+    {
+      "title": "Week 3 — Head Cover / Headcover accessories",
+      "body": "Accessories week for Head Cover Clip / Headcover Clasp from evidenced Sent + Ordered Product samples.",
+      "meta": {
+        "week_start": "2026-09-22",
+        "channel": "email",
+        "theme": "Head Cover / Headcover Clasp",
+        "phase": "accessories",
+        "weekly_brief": "Propose one accessories email around Head Cover Clip / Headcover Clasp naming already observed. No invented performance claim.",
+        "source_campaign_titles": ["AVGAR | 2026-08-08| Head Cover Clip"],
+        "open_rate": null,
+        "click_rate": null,
+        "revenue": null
+      }
+    },
+    {
+      "title": "Week 4 — Putt Tuit / training accessory",
+      "body": "Training-accessory week for Putt Tuit from evidenced Sent history and Ordered Product sample.",
+      "meta": {
+        "week_start": "2026-09-29",
+        "channel": "email",
+        "theme": "Putt Tuit",
+        "phase": "training_accessory",
+        "weekly_brief": "Draft one Putt Tuit Training Accessory concept from evidenced product/campaign naming. Education claims remain TBD.",
+        "source_campaign_titles": ["AVGAR | 2026-07-16 | Putt Tuit"],
+        "open_rate": null,
+        "click_rate": null,
+        "revenue": null
+      }
+    },
+    {
+      "title": "Week 5 — Black LINKS / Links series return",
+      "body": "Return to Links series depth using evidenced Black LINKS / Links Sent titles without inventing a new collection.",
+      "meta": {
+        "week_start": "2026-10-06",
+        "channel": "email",
+        "theme": "Black LINKS / Links series",
+        "phase": "series_depth",
+        "weekly_brief": "Propose a Links-series depth email using evidenced Black LINKS / Links titles. Cadence policy = TBD.",
+        "source_campaign_titles": ["AVGAR | 2026-07-16 | Black LINKS 3", "AVGAR | 2026-08-27| Links - Any golfer's dream"],
+        "open_rate": null,
+        "click_rate": null,
+        "revenue": null
+      }
+    },
+    {
+      "title": "Week 6 — Lifestyle accessory (Cigar Holder) or hold",
+      "body": "Optional accessory email using Cigar Holder product identity from Ordered Product sample (#70), or hold week — owner preference TBD.",
+      "meta": {
+        "week_start": "2026-10-13",
+        "channel": "email",
+        "theme": "Cigar Holder / lifestyle accessory",
+        "phase": "optional_accessory_or_hold",
+        "weekly_brief": "Conceptual option: Cigar Holder accessory email from Ordered Product evidence, or hold if business cadence prefers fewer accessory pushes. Owner choice TBD. Do not schedule either option.",
+        "source_campaign_titles": [],
+        "source_product_evidence": "Ordered Product sample product_id 8904008138890 (exec #70)",
+        "open_rate": null,
+        "click_rate": null,
+        "revenue": null,
+        "label": "conceptual_option"
+      }
+    }
+  ],
+  "operator_notes": {
+    "source_execution": "#62",
+    "most_recent_sent_context": "AVGAR | 2026-09-03| Links - Dry Bag (2026-09-04)",
+    "not_recent_sent_titles_dump": true,
+    "shadow_boundary": {
+      "approval_status": "pending_approval",
+      "executed_action": "none",
+      "schedule_attempted": false,
+      "send_attempted": false,
+      "shadow_mode": true
+    }
+  },
+  "evidence": [
+    {
+      "source": "n8n_saved_execution",
+      "ref": "workflow=DV5Wv6wXlzpz4zeN execution=#62 status=success"
+    },
+    {
+      "source": "branch_receipt",
+      "ref": "origin/issue-26/klaviyo-real-shadow scripts/_issue26_exec62_receipt.json"
+    }
+  ],
+  "packaging": {
+    "issue": 45,
+    "phase": "A1_correction",
+    "proof_class": "PACKAGED_ARTIFACT_READY",
+    "underlying_provider_proof": "HISTORICAL_PROVIDER_PROOF",
+    "provider_calls_this_packaging": 0
+  }
+}

@@ -13,7 +13,15 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 62, 6 September NZ / 5 September UTC
+## Latest state — Batch 63, 6 September NZ / 5 September UTC
+
+**Calendar runtime release verified, live RPC retry trap corrected, Nguyen's specific output corrections independently accepted.** [Release/transport evidence](CALENDAR-SHADOW-LEDGER-2026-09-06.md), [final handoff review](integration/NGUYEN-FINAL-REVIEW-2026-09-06.md). App/worker run `2b4bcfb`, Fly release 37. Actual Data API refusal initially hung on intentional SQLSTATE 40001; the additive exact-body migration changes only calendar business refusals to PT409. Full local PostgreSQL path/concurrency/recovery passes; actual compiled worker now returns paused completion HTTP 409 in 22 ms. Seven DB calls, no provider/writes. SQL confirms invoker/grants unchanged, zero calendar bindings/runs, AVGAR paused/generation 1/four historical runs; advisors unchanged at 19 INFO/six WARN.
+
+Authenticated current n8n definition proves the new frozen revision changes only the builder. Actual published code exactly reproduces all three fixed-clock success fixtures, preserves evidence and passes requested boundary cases. ZIP has one minor task-error field-name discrepancy; independently observed published source is retained/replayed. Technical acceptance sent/read back at 07:27 NZ; no complaint/payment/new runs. Not yet repinned, no customer calendar acceptance. Broader SQL business-refusal audit, native binding/receiver, later adapters and all-client journeys remain open.
+
+The previous contractor-advice turn was **no backend progress**. This continuation produced independent acceptance evidence and changed production SQL to fix a reproduced transport failure; it is **progress**, not a blocked wait. Full goal unchanged.
+
+## Previous state — Batch 62, 6 September NZ / 5 September UTC
 
 **Calendar durable integration implemented and exact SQL migration applied; app/worker release pending.** [Implementation and acceptance evidence](CALENDAR-SHADOW-LEDGER-2026-09-06.md). Real PostgreSQL now exercises the production engine/admission/authority/bridge/completion path with synthetic HTTP, plus concurrent one-use claims, atomic rollback, recovery, tenant/source checks and expiry after observed lock waits. Dedicated server-only schema preserves existing private-schema privileges. 226 files / 3,014 tests, typechecks, production build and focused lint pass. Independent production function-body/grant readback matches; no bindings/registrations/runs or provider calls created. This is not live calendar/customer acceptance.
 
