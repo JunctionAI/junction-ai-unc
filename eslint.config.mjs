@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "dist/**", // standalone worker compiler output
     // Frozen prototype exports are visual source material, not production code.
     "design-reference/**",
+    "launch-video/**", // independent Remotion project, checked by its own npm run lint
     "next-env.d.ts",
   ]),
 ]);

@@ -1,5 +1,7 @@
 # Independent n8n execution evidence — 5 September 2026
 
+**6 September update:** the historical trial/key blocker below is resolved. Tom purchased the approved plan; a three-read-scope key is securely provisioned and actual worker reads of executions 75/59 pass. Reader remains disabled pending remaining pilot gates. [Current receipt](N8N-API-ACCESS-2026-09-06.md). Historical statements below saying no API key exists are superseded.
+
 Status: implemented, covered by synthetic tests and deployed to matching app/worker source `d95aaa403217422dc53d655a4ff9b305516577c6`; **not activated or live-proven**. See [release evidence](../RUNTIME-CONTEXT-RELEASE-2026-09-05.md). Nguyen can continue the keyword-only wrapper under `unc.keyword-shadow.v1`. No response-contract change or runtime version lookup is required on his side.
 
 ## Evidence path

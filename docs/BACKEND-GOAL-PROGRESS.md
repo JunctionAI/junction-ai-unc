@@ -9,10 +9,21 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 
 - Nguyen owns n8n delivery. Do not edit, activate or execute his workflows while he is working. Integrate after his acceptance packet arrives.
 - Keep publishing, customer messaging, ad mutation and spend activation disabled. Phone verification/provider approval and outward-action approval remain separate gates.
+  Exception: Tom explicitly authorized the new public website; its getjunction.ai release and Calendly acceptance are now proven. Agent publishing/customer campaigns/ad changes remain off.
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 35, 6 September NZ / 5 September UTC
+## Latest state — Batch 36, 6 September NZ / 5 September UTC
+
+**Supported n8n API access provisioned and independently verified on the actual worker.** Tom purchased the approved plan. A dedicated three-read-scope key is securely stored in Vercel Production and deployed on the unchanged Fly worker image (release 20). Saved executions 75 and 59 read successfully; execution 75's actual revision and saved webhook node match the frozen wrapper. An ungranted users read returns 403. No workflow/provider run or action activation. [Exact receipt and remaining gates](integration/N8N-API-ACCESS-2026-09-06.md).
+
+Nguyen received the verified update on Upwork at 1:25 AM NZ. Receiver format/equality, coherent app config release, registration and valid shadow run context remain Codex work; receiver format and exact Email IDs await his response. Reader/dispatch stay disabled. The manual Batch 35 source still requires its remaining acceptance and is not deployed.
+
+Tom additionally authorized publishing the new page on **getjunction.ai**, a working Calendly booking journey, a **30-second Remotion video** and launch-marketing materials. These are now explicit [launch acceptance](LAUNCH-ACCEPTANCE.md) requirements, with [delivery details](LAUNCH-MARKETING-2026-09-06.md). Domain publication does not authorize customer campaign sends or ad mutation. The full goal remains active, not reset or narrowed.
+
+**Website/booking delivered:** new page live on getjunction.ai / www, exact candidate/canonical hash readback; old APIs, pages and unrelated DNS preserved. Real owner-only booking → organiser notification → calendar/Meet creation → exact cancellation/readback passes. [Release/rollback](WEBSITE-CALENDLY-RELEASE-2026-09-06.md). **Marketing delivered locally:** landscape/vertical Remotion exports (900 frames at 30fps), covers, original score, founder/email/social drafts and checklist. Not a claim that the full Unc backend is ready.
+
+## Batch 35, 6 September NZ / 5 September UTC
 
 **Source + PostgreSQL rollback evidence + authorized developer communication progress.** Manual start/validation/input prepare/claim infrastructure, client original-request recovery and cancellation tombstones are staged, not deployed. Full suite 208 files / 2,610 tests passed, followed by five new API tests independently. Real SQL rollback/admission/distinct-input/cancellation checks passed with zero residual canaries/runs. Release still needs genuine concurrent/reload acceptance, journal minimization/actor binding, prepared-start pause recovery and legacy resume review. Do not substitute this checkpoint for the whole manual journey or B01–B24 completion. [Exact work and next actions](MANUAL-ADMISSION-2026-09-06.md).
 

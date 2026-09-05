@@ -4,6 +4,8 @@
 
 ## Immediate delivery
 
+**6 September handoff update:** supported API key/readback is now proven; see [receipt](N8N-API-ACCESS-2026-09-06.md). Nguyen replied at 1:26 AM NZ with exact Email evidence: **D05-W01 welcome #63, W03 segmentation #69, W05 post-purchase #70, W06 review timing #71, W07 calendar #62**. **W02 abandoned cart** needs contact_frequency_cap; **W04 winback** needs margin_floor. These are n8n-only reported proofs, not completed Unc adapters. His 54-character receiver-format report needs clarification: n8n's credential redaction sentinel is itself exactly 54 characters; do not treat a reopened masked field as the original secret. Codex sent that clarification on Upwork. No credential was rotated or workflow changed.
+
 Finish one real AVGAR keyword round trip first, then expand the ready capabilities across the five areas: Meta, SEO, Content, Email and Google Ads. Five areas does not mean five routines, nor that all capabilities within each area are ready.
 
 The first release is a supervised read/draft private beta. Publishing, customer messaging, ad mutations and spend activation remain disabled. General self-service/phone/second-client claims require their own acceptance. **Update through Batch 33:** Tom's supplied landing, client and operator screens are now deployed against the existing authenticated interfaces; real provider-result and all-client acceptance remain incomplete. The 38 prototype job labels map explicitly to 35 existing backend IDs, with five other unavailable jobs shown separately. [Current launch acceptance](../LAUNCH-ACCEPTANCE.md), [frontend wiring map](FRONTEND-HANDOFF-MAP-2026-09-05.md).

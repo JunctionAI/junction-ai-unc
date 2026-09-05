@@ -51,3 +51,6 @@ next-env.d.ts
 
 # waitlist fallback (POST /api/waitlist appends here when neither Supabase nor Resend is configured)
 /.data/
+
+# Generated distribution bundle; editable source and copy are tracked separately.
+/launch-materials/*.zip

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to Make Your Business More Efficient With AI Agents — Junction AI</title>
+<meta name="description" content="A practical guide to finding your business bottleneck, choosing the first function to upgrade, building one useful AI agent, and expanding into a connected operating system.">
+<link rel="canonical" href="https://getjunction.ai/agent">
+<meta name="theme-color" content="#F7FBFD">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Junction AI">
+<meta property="og:url" content="https://getjunction.ai/agent">
+<meta property="og:title" content="How to make your business more efficient with AI agents">
+<meta property="og:description" content="Find the bottleneck, upgrade one function, keep humans in control, and expand only when the first agent is working.">
+<meta property="og:image" content="https://getjunction.ai/assets/brand/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="How to make your business more efficient with AI agents">
+<meta name="twitter:description" content="A practical path from one business bottleneck to a connected AI operating system.">
+<meta name="twitter:image" content="https://getjunction.ai/assets/brand/og-card.png">
+
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/assets/brand/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="/assets/brand/favicon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
+
+<link rel="preload" href="/assets/fonts/sora-800.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/manrope-400.woff2" as="font" type="font/woff2" crossorigin>
+
+<style>
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 400; font-display: swap; src: url('/assets/fonts/manrope-400.woff2') format('woff2'); }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 500; font-display: swap; src: url('/assets/fonts/manrope-500.woff2') format('woff2'); }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 600; font-display: swap; src: url('/assets/fonts/manrope-600.woff2') format('woff2'); }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 700; font-display: swap; src: url('/assets/fonts/manrope-700.woff2') format('woff2'); }
+@font-face { font-family: 'Sora'; font-style: normal; font-weight: 600; font-display: swap; src: url('/assets/fonts/sora-600.woff2') format('woff2'); }
+@font-face { font-family: 'Sora'; font-style: normal; font-weight: 700; font-display: swap; src: url('/assets/fonts/sora-700.woff2') format('woff2'); }
+@font-face { font-family: 'Sora'; font-style: normal; font-weight: 800; font-display: swap; src: url('/assets/fonts/sora-800.woff2') format('woff2'); }
+
+html { scroll-behavior: smooth; }
+body { margin: 0; background: #F7FBFD; color: #14385C; font-family: Manrope, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: #2E86D0; }
+a:hover { color: #14385C; }
+::selection { background: #B8D4EA; }
+@keyframes sunPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(242,193,78,.55); } 50% { box-shadow: 0 0 0 7px rgba(242,193,78,0); } }
+
+.btn-primary { transition: background .2s ease; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; box-sizing: border-box; }
+.btn-primary:hover { background: #2470B4; color: #fff; }
+.btn-secondary { transition: border-color .2s ease, color .2s ease; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; box-sizing: border-box; }
+.btn-secondary:hover { border-color: #2E86D0; color: #2E86D0; }
+a:focus-visible { outline: 3px solid #2E86D0; outline-offset: 3px; border-radius: 4px; }
+
+.post { max-width: 720px; margin: 0 auto; }
+.post h2 { font-family: Sora, sans-serif; font-weight: 700; font-size: clamp(24px,3vw,30px); line-height: 1.25; letter-spacing: -0.02em; margin: 56px 0 0; }
+.post p { font-size: 18px; line-height: 1.72; color: #24486F; margin: 18px 0 0; }
+.post ul, .post ol { font-size: 18px; line-height: 1.72; color: #24486F; margin: 18px 0 0; padding-left: 22px; }
+.post li { margin: 10px 0 0; }
+.post strong { color: #14385C; font-weight: 700; }
+.post hr { border: 0; border-top: 1px solid #DCE8F2; margin: 56px 0 0; }
+.lede { font-size: 21px; line-height: 1.62; color: #24486F; }
+.answer { background: #E5F0FA; border-radius: 16px; padding: 26px 28px; margin: 30px 0 0; }
+.answer p { margin: 0; font-size: 19px; line-height: 1.66; }
+.answer p + p { margin-top: 14px; }
+.component { display: flex; gap: 14px; align-items: baseline; background: #E5F0FA; border-radius: 14px; padding: 16px 20px; margin: 12px 0 0; }
+.component .num { flex-shrink: 0; width: 30px; height: 30px; border-radius: 15px; background: #F2C14E; color: #14385C; font-family: Sora, sans-serif; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; align-self: center; }
+.component p { margin: 0; font-size: 17px; line-height: 1.6; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "How to make your business more efficient with AI agents",
+  "description": "A practical guide to finding your business bottleneck, choosing the first function to upgrade, building one useful AI agent, and expanding into a connected operating system.",
+  "datePublished": "2026-08-15",
+  "dateModified": "2026-08-25",
+  "inLanguage": "en",
+  "author": { "@type": "Person", "name": "Tom Hall-Taylor" },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Junction AI",
+    "url": "https://getjunction.ai/",
+    "logo": { "@type": "ImageObject", "url": "https://getjunction.ai/assets/brand/logomark-blue.png" }
+  },
+  "mainEntityOfPage": { "@type": "WebPage", "@id": "https://getjunction.ai/agent" },
+  "image": "https://getjunction.ai/assets/brand/og-card.png"
+}
+</script>
+<!-- Consent-gated analytics: GA4 + Junction Meta dataset -->
+<script defer src="/assets/js/analytics-consent.js"></script>
+</head>
+<body>
+<div style="font-family:Manrope,sans-serif;background:#F7FBFD;color:#14385C">
+
+<nav style="position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;gap:12px;padding:14px 28px;background:rgba(247,251,253,.88);backdrop-filter:blur(12px);border-bottom:1px solid rgba(20,56,92,.08)">
+  <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
+    <img src="/assets/brand/logomark-blue.png" alt="Junction AI logomark" width="24" height="24" style="width:24px;height:24px">
+    <span style="font-family:Sora,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.02em">Junction<span style="color:#2E86D0"> AI</span></span>
+  </a>
+  <div style="flex:1"></div>
+  <a class="btn-primary" href="/#cta" style="font-family:Sora,sans-serif;font-weight:700;font-size:14px;color:#fff;background:#2E86D0;text-decoration:none;padding:9px 18px;border-radius:10px">Book a call</a>
+</nav>
+
+<main>
+<article style="padding:132px 24px 24px">
+  <div class="post">
+    <div style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#2E86D0">
+      <span style="display:block;width:8px;height:8px;border-radius:50%;background:#F2C14E;animation:sunPulse 2.4s ease-in-out infinite"></span>
+      The doc from the video
+    </div>
+    <h1 style="font-family:Sora,sans-serif;font-weight:800;font-size:clamp(34px,4.6vw,54px);line-height:1.1;letter-spacing:-0.03em;margin:22px 0 0;text-wrap:balance">How to make your business more efficient with AI agents</h1>
+    <p style="font-size:14px;color:#6E8BA8;margin:20px 0 0">Tom Hall-Taylor &middot; Updated August 2026 &middot; 7 min read</p>
+
+    <div class="answer">
+      <p>The goal is not to automate your whole company overnight. It is to find the recurring work slowing the business down, upgrade one function with a properly built agent, measure what changes, and expand from there.</p>
+      <p><strong>Broad vision. Narrow first implementation. Modular expansion.</strong></p>
+    </div>
+
+    <h2>1. Start with the business constraint, not the technology</h2>
+    <p>The easiest way to waste money on AI is to start with a tool and go looking for somewhere to put it. Start with the business instead.</p>
+    <p>Map how work actually moves: where a customer waits, where the founder gets dragged back into the same task, where information is copied between systems, where follow-up depends on somebody remembering, and where good work gets delayed by a slow handoff.</p>
+    <p>The first agent should sit on the constraint that is currently limiting the business. That might be slow lead follow-up, inconsistent content, manual reporting, overloaded customer support, missed retention opportunities, or operational work that lives in one person&rsquo;s head.</p>
+    <p>A useful first question is:</p>
+    <div class="answer" style="border-left:4px solid #F2C14E">
+      <p><strong>If we made one recurring function faster, more consistent and less dependent on me, which one would release the most capacity?</strong></p>
+    </div>
+
+    <h2>2. An agent is not a cleverer chat window</h2>
+    <p>If you type into ChatGPT, copy the answer and move it somewhere else, you are using an assistant. That can save time, but the work still starts and stops with you.</p>
+    <p>An agent is the same intelligence with seven operating parts added:</p>
+
+    <div class="component"><div class="num">1</div><p><strong>A defined role.</strong> One business function it owns &mdash; such as sales follow-up, reporting, customer support, content or finance &mdash; not &ldquo;help me run the company.&rdquo;</p></div>
+    <div class="component"><div class="num">2</div><p><strong>A measurable goal.</strong> The outcome it is trying to improve, today&rsquo;s baseline, and the gap. Without this it produces activity without knowing whether the business got better.</p></div>
+    <div class="component"><div class="num">3</div><p><strong>Specialist skills.</strong> Your methods, standards, examples and domain knowledge, so the agent follows the way good work is actually done in your business.</p></div>
+    <div class="component"><div class="num">4</div><p><strong>Memory.</strong> Decisions, corrections and useful context that carry into the next run instead of disappearing when the chat closes.</p></div>
+    <div class="component"><div class="num">5</div><p><strong>Access.</strong> The right tools and accounts so it can do the work where the work lives. Read-only wherever it should only inspect.</p></div>
+    <div class="component"><div class="num">6</div><p><strong>A routine.</strong> A trigger or schedule that starts the work without waiting for you to remember.</p></div>
+    <div class="component"><div class="num">7</div><p><strong>A stopping point.</strong> A clear handoff to a human before anything sensitive, expensive or outward-facing happens.</p></div>
+
+    <p>Take those parts away and you have a useful assistant. Put them together around a real business constraint and you have operating leverage.</p>
+
+    <h2>3. Choose the first function to upgrade</h2>
+    <p>You do not need an AI version of every employee. You need one bounded piece of work that happens often enough to matter and can be improved without creating new risk.</p>
+    <p>Good first functions usually have five qualities:</p>
+    <ul>
+      <li><strong>Recurring:</strong> the same category of work happens every day or every week.</li>
+      <li><strong>Constrained:</strong> the delay or inconsistency is visibly holding something else back.</li>
+      <li><strong>Observable:</strong> the agent can access the information needed to do the work properly.</li>
+      <li><strong>Reviewable:</strong> a person can quickly check the output before it matters.</li>
+      <li><strong>Measurable:</strong> you can compare time, speed, volume, quality or commercial movement before and after.</li>
+    </ul>
+    <p>That could mean preparing sales follow-ups, turning founder ideas into content briefs, monitoring customer questions, reconciling weekly numbers, drafting lifecycle emails, finding operational exceptions, or assembling the evidence for a decision.</p>
+    <p><strong>Pick one. Get it working. Then earn the right to add the next one.</strong></p>
+
+    <h2>4. Give it company truth, not a pile of disconnected information</h2>
+    <p>The quality of an agent is limited by the quality of the context underneath it. If it reads stale spreadsheets, conflicting dashboards or incomplete conversations, it will produce a faster version of the same confusion.</p>
+    <p>You do not always need a large data project on day one. You do need:</p>
+    <ul>
+      <li><strong>Named sources of truth</strong> for the function it owns.</li>
+      <li><strong>Clear account ownership and permissions</strong> so access can be controlled and removed.</li>
+      <li><strong>A baseline</strong> showing how the function performs before the agent is introduced.</li>
+      <li><strong>A run ledger</strong> showing what the agent saw, did, produced and handed back.</li>
+      <li><strong>A learning record</strong> for approved corrections and decisions.</li>
+    </ul>
+    <p>As more functions connect, that foundation can grow into scheduled pipelines, a shared warehouse and one certified set of business numbers. The principle is the same at every stage: the agent should work from evidence the company trusts, not from whatever happened to be pasted into the last prompt.</p>
+
+    <h2>5. One agent creates capacity. Connected agents change how the company operates</h2>
+    <p>The broader opportunity is not a collection of bots. It is a business where specialised agents and people share context, hand work to each other and improve the same operating system.</p>
+    <p>That requires three flows:</p>
+    <ul>
+      <li><strong>Up:</strong> every run leaves a receipt, so the company can see what actually happened.</li>
+      <li><strong>Sideways:</strong> when one function finds something another function needs, it passes the evidence and context with the work.</li>
+      <li><strong>Down:</strong> goals, priorities and approval rules stay visible to every agent involved.</li>
+    </ul>
+    <p>The human verdicts matter too. What was approved, changed or rejected should become usable context. Repeated feedback becomes a standing rule. That is how month three becomes better than month one.</p>
+
+    <h2>6. Keep humans at the points where judgement matters</h2>
+    <p>Agents can monitor, research, organise, reconcile, draft and prepare around the clock. Sending a message, publishing work, changing spend, committing money or making a consequential customer decision should stop at a named person.</p>
+    <p>The aim is not to remove people from the business. It is to remove the repetitive coordination and preparation that prevents them from using their judgement well.</p>
+
+    <h2>7. Build it in the order that reduces risk</h2>
+    <ol>
+      <li><strong>Map the business flow.</strong> Find the current constraint and the work accumulating around it.</li>
+      <li><strong>Choose one function.</strong> Give it a clear owner, outcome and boundary.</li>
+      <li><strong>Connect the minimum reliable context.</strong> Use owned accounts and named sources of truth.</li>
+      <li><strong>Install one useful routine.</strong> Start supervised and record every run.</li>
+      <li><strong>Measure the change.</strong> Compare speed, time, consistency, volume or commercial movement with the baseline.</li>
+      <li><strong>Turn corrections into memory.</strong> Make what the agent learns reusable.</li>
+      <li><strong>Connect the next function.</strong> Expand only when the first one is useful and controlled.</li>
+    </ol>
+
+    <div class="answer" style="border-left:4px solid #F2C14E">
+      <p><strong>This is the model we install.</strong> We diagnose the function creating the most drag, build the first bounded agent on the company&rsquo;s own systems, give it reliable context and routines, keep outward actions supervised, and expand into connected agents only when the first function is working.</p>
+      <p>The public vision can be an AI-native company. The practical first step should still be specific.</p>
+    </div>
+
+    <h2>What it looks like when it is working</h2>
+    <p>Fewer tasks wait for somebody to notice them. Follow-up happens while the opportunity is still warm. Reports arrive with the exception already highlighted. Useful company context survives between people and systems. The founder spends less time moving information and more time making the decisions only they can make.</p>
+    <p>Eventually, you should be able to ask one question &mdash; <em>what is the bottleneck right now, and what should we fix next?</em> &mdash; and receive an answer grounded in the work and numbers of your own company.</p>
+
+    <hr>
+
+    <h2>Find the first function worth upgrading</h2>
+    <p>You do not need to know which agent to build before the conversation. We start by mapping the business, identifying the constraint and deciding whether an agent is the right intervention. Sometimes it is not, and we will say so.</p>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:36px">
+      <a class="btn-primary" href="/#cta" style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;color:#fff;background:#2E86D0;text-decoration:none;padding:15px 30px;border-radius:12px">Map my first agent</a>
+      <a class="btn-secondary" href="/#how" style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;color:#14385C;background:transparent;border:1.5px solid #B8D4EA;text-decoration:none;padding:14px 28px;border-radius:12px">See how Junction works</a>
+    </div>
+    <p style="font-size:15px;color:#6E8BA8;margin-top:18px">Got this from the video? Reply to the DM with the part of your business that currently takes too much of your time &mdash; it&rsquo;s me reading them.</p>
+  </div>
+</article>
+</main>
+
+<footer style="border-top:1px solid #DCE8F2;padding:40px 28px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:64px">
+  <div style="display:flex;align-items:center;gap:10px">
+    <img src="/assets/brand/logomark-blue.png" alt="Junction AI logomark" width="22" height="22" style="width:22px;height:22px">
+    <span style="font-family:Sora,sans-serif;font-weight:700;font-size:15px">Junction AI</span>
+  </div>
+  <div style="flex:1"></div>
+  <span style="font-size:13px;color:#6E8BA8">&copy; 2026 Junction AI &middot; <a href="/privacy.html" style="color:#6E8BA8">Privacy</a></span>
+</footer>
+
+</div>
+</body>
+</html>

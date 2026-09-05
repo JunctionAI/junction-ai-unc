@@ -1,0 +1,7 @@
+@font-face{font-family:Manrope;src:url('/assets/fonts/manrope-400.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:Manrope;src:url('/assets/fonts/manrope-600.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:Manrope;src:url('/assets/fonts/manrope-700.woff2') format('woff2');font-weight:700;font-display:swap}
+:root{--navy:oklch(.27 .055 262);--navy-raised:oklch(.31 .055 262);--navy-active:oklch(.34 .055 262);--cyan:oklch(.78 .13 220);--cyan-link:oklch(.55 .11 235);--cyan-wash:oklch(.94 .03 225);--amber:oklch(.75 .14 75);--ink:oklch(.27 .05 262);--ink-soft:oklch(.42 .04 262);--muted:oklch(.52 .03 260);--on-navy:oklch(.96 .01 90);--on-navy-dim:oklch(.72 .06 235);--card-border:oklch(.91 .01 260);--card-border-2:oklch(.89 .012 260);--hairline:oklch(.93 .008 260);--cream-dim:oklch(.955 .006 90)}
+*{box-sizing:border-box}body{margin:0;font-family:Manrope,system-ui,sans-serif}a{color:inherit;text-decoration:none}button,input{font:inherit}.note a{text-decoration:underline;text-underline-offset:3px}.ctaRow>.blueButton{padding:1rem 2rem;font-size:1rem}.agentHeader{list-style:none}.agentHeader::-webkit-details-marker{display:none}.agent[open]{background:oklch(.978 .008 85)}.agent[open] .plus{rotate:45deg}.workflowTasks{padding-left:1.2rem;line-height:1.8;font-size:.94rem;margin:0 0 1.2rem}.copyright{font-size:.75rem;color:var(--muted);padding-block:1.5rem 2rem}
+@media(max-width:600px){.ctaRow>.blueButton{padding:.9rem 1.5rem}.nav .primary{max-width:none}.footerNav{gap:1rem}}
+
