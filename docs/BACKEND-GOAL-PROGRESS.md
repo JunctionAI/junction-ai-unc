@@ -107,16 +107,34 @@ Updated `KEYWORD-SHADOW-INTEGRATION.md` and `integration/NGUYEN-NEXT-HANDOFF.md`
 
 Validation: 68 focused tests, **179 files / 2,104 full tests**, app/worker TypeScript, production build and focused lint pass. No additional app or worker deployment was performed for this contract change. Live app remains Batch 4 (`2bcbed838f7f`); the pilot remains unregistered/inactive.
 
+## Batch 6 — matched app/worker and backed-up AVGAR context repair
+
+Released matching application/worker source `da799c992b75587055240a033134917ee228f6b3`, applied account-pause and nullable-resource schema changes, and completed the restricted, recoverable AVGAR context repair. Full receipts, migration IDs, private archive identity, deployment/image references and live owner-chat readback are in `AVGAR-CONTEXT-REPAIR-2026-09-05.md`.
+
+AVGAR is now context generation 1 and **automation remains paused**. Active mixed Junction context/history was removed only after archive, not relabeled as AVGAR output. Existing connections and credentials were preserved. US/NZ/AU and the 50%-of-product-price CPA ceiling are recorded; budget, hours, margin, keyword seed and commercial goal remain unknown. A real post-repair Shopify/Meta read and ordinary owner chat/reload passed. No n8n workflow was called.
+
+This closes the backed-up pilot identity correction and proves the matched release, not the entire B01/B02/B03 or launch gate. Memory generation fencing is live; delayed runtime artifacts/briefs/commands and other admission paths still need captured-generation enforcement before removing the account pause.
+
+## Batch 7 — evidence-based Home/setup and persisted-plan display
+
+Previous goal turn classification: **progress** (Batch 6). This turn made further verified progress and is not blocked.
+
+Home and Strategy now use saved phases only, with no fallback to a default three-phase play or elapsed-time inference of completion. Setup counts only asset-bound connections with a successful dated read; it explicitly distinguishes that past read from an ongoing live feed. NULL resource values remain unknown, not zero. Paused accounts no longer receive nightly/within-hour/next-morning delivery promises or actionable brief/plan-agreement/routine prompts. A failed routine-enable request no longer turns the local switch on optimistically.
+
+The first release at `2bb2c579926e23cfc93a46794f176fc67c10a8c8` passed production owner-UI and matched-worker checks. That live check exposed a remaining Strategy label calling the default option the current play without an agreed plan. Follow-up source `b7c347bfd9ff862f00b01e6fb71740e26d783b0c` fixes that label, removes ownership claims on unagreed options and explains the empty phase list. It is now deployed as `dpl_Ccr4mnbwiaoT5Ma7391f94eLyXxj`; canonical app health and the exact worker image report the matching source. Complete release/readback evidence: `ACCOUNT-READINESS-RELEASE-2026-09-05.md`.
+
+Validation: **181 files / 2,116 tests**, application/worker typechecks, final production build and lint pass (39 existing warnings, zero errors). No schema, business settings, credentials, Nguyen workflows or action permissions were changed by this batch. Final post-release SQL at 04:06:03 UTC retained generation 1, pause true, revision 14, two chats, zero enabled routines/runs/commands/briefs, empty unagreed plan and NULL budget/hours/margin. Bounded error/fatal scans returned no entries; zero drains and unverified alert delivery remain observability gaps.
+
 ## Next independent work
 
 1. Atomic app/save and memory-generation boundaries are live; redundant initial saves are removed. Complete actual two-tab competing-edit/recovery checks. Do not roll back to a browser-direct memory/state writer under the new grants.
-2. Extend the context boundary to old worker jobs, generated briefs/artifacts, founder notes, intake and command admission (or safely quiesce and reconcile them). Then preserve the original Junction context in a restricted audit/restore record and correct the pilot profile/resources without inventing AVGAR commercial settings. Close wrong-business memories/history/plan/cache in the guarded repair transaction. Align setup/goal UI claims with verified data.
-3. Release the compatible app/worker pair, reconcile staged receiver configuration safely, and verify no action controls changed. Complete the independent n8n execution reader against actual saved-execution evidence; never substitute the expected revision or a current-workflow lookup. Do not dispatch the pilot without that capability.
+2. Keep the repaired AVGAR account paused while extending captured-generation fencing to runtime jobs, generated briefs/artifacts, founder notes, intake and command admission. The context repair is already complete and must not be replayed. Retain the private recovery archive; do not decrease generation or relabel old output. Finish two-tab and delayed-work acceptance checks.
+3. Complete the independent n8n execution reader against actual saved-execution evidence; never substitute the expected revision or a current-workflow lookup. Do not dispatch the pilot without that capability. The compatible app/worker and staged receiver-secret release are already proven; neither is proof of a callable n8n lane.
 4. Continue connection/refresh-owner, stored-data, scheduler, metric and security work from the register while Nguyen delivers the first keyword wrapper.
 5. Bind D03-W01 only after actual webhook/revision/credential/receipt delivery. Then perform the real shadow round trip and expand verified lanes.
 
 ## Register status
 
-No complete pilot has been claimed. B01 is actively being repaired; B02–B03 need coordinated release/dispatch; B04 awaits Nguyen. B05–B18 retain the split implementation/provider acceptance work documented in the register. B19 includes third-party channel approval/verification. B20–B21 require targeted security/retention evidence. B22 remains deliberately action-disabled. B23–B24 require independent tenant/customer acceptance.
+No complete pilot has been claimed. B01's archived identity correction is live, but complete delayed-work fencing still gates unpausing. B02's matched release is proven; B03's authenticated dispatch/revision-reader gate remains. B04 awaits Nguyen. B05–B18 retain the split implementation/provider acceptance work documented in the register. B19 includes third-party channel approval/verification. B20–B21 require targeted security/retention evidence. B22 remains deliberately action-disabled. B23–B24 require independent tenant/customer acceptance.
 
 Mark an item complete only after its stated acceptance evidence exists. A code test, running worker, database row, workflow screenshot or contractor report alone is not end-to-end proof.
