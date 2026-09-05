@@ -23,7 +23,9 @@ function decode(r: Row): RoutineCommand {
     actor: { accountId: String(r.account_id), userId: String(r.user_id), channel: r.channel as CommandActor["channel"], requestId: String(r.request_id),
       contextGeneration: runtimeGeneration(r.context_generation),
       ...(b ? { linkId: String(b.linkId), channelBinding: { bindingVersion: runtimeGeneration(b.bindingVersion), externalId: String(b.externalId),
-        ...(typeof b.scopeId === "string" ? { scopeId: b.scopeId } : {}) } } : r.link_id ? { linkId: String(r.link_id) } : {}) },
+        ...(typeof b.scopeId === "string" ? { scopeId: b.scopeId } : {}),
+        ...(typeof b.conversationId === "string" ? { conversationId: b.conversationId } : {}),
+        ...(typeof b.threadId === "string" ? { threadId: b.threadId } : {}) } } : r.link_id ? { linkId: String(r.link_id) } : {}) },
     requestHash: String(r.request_hash), routineId: String(r.routine_id), specHash: String(r.spec_hash), workflowHash: String(r.workflow_hash), version: Number(r.version), request: String(r.request), status: r.status as CommandStatus, reply: String(r.reply), runId: r.run_id ? String(r.run_id) : null, createdAt: String(r.created_at), updatedAt: String(r.updated_at) };
 }
 

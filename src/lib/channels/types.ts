@@ -36,6 +36,8 @@ export interface ChannelLink {
   accountId: string;
   /** Database-managed identity revision, independent of the account's context generation. */
   bindingVersion: number;
+  /** Present only for a client-room destination; never an OAuth identity. */
+  slackRouteId?: string;
   /** Pending codes cannot be reused after a business-context reset. */
   linkCodeGeneration: number | null;
   /** The founder who linked it — decided_by for decisions taken on this channel. */
@@ -75,6 +77,7 @@ export interface SendOptions {
   link: ChannelLink;
   /** WhatsApp: send as the approved template (outside the 24-hour window). */
   template?: boolean;
+  slackOrigin?: { conversationId: string; threadId: string };
 }
 
 /** One inbound thing from a channel, normalised. Exactly one of `text` / `action` is set. */

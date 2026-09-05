@@ -6,7 +6,7 @@ export interface CommandActor {
   requestId: string;
   linkId?: string;
   /** Captured from the authenticated ingress, never resolved after queueing. */
-  channelBinding?: Readonly<{ bindingVersion: number; externalId: string; scopeId?: string }>;
+  channelBinding?: Readonly<{ bindingVersion: number; externalId: string; scopeId?: string; conversationId?: string; threadId?: string }>;
   /** Captured before accepting the message; omitted legacy ingress is generation zero only. */
   contextGeneration?: number;
 }

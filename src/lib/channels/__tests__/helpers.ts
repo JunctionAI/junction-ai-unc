@@ -99,7 +99,7 @@ export function fakeAdapters(over: Partial<Record<Channel, FakeAdapter>> = {}): 
 export const PREFS_ON: ChannelPrefs = { brief: true, approvals: true, drafts: true, quiet_hours: null };
 
 /** Seed a verified link row straight into the fake. */
-export function seedLink(db: FakeSupabase, over: Partial<{ id: string; account_id: string; user_id: string | null; channel: Channel; external_id: string; handle: string | null; display_name: string | null; verified_at: string | null; prefs: ChannelPrefs; meta: Record<string, unknown>; last_inbound_at: string | null; created_at: string }> = {}): ChannelLink {
+export function seedLink(db: FakeSupabase, over: Partial<{ id: string; account_id: string; user_id: string | null; channel: Channel; slack_route_id: string | null; external_id: string; handle: string | null; display_name: string | null; verified_at: string | null; prefs: ChannelPrefs; meta: Record<string, unknown>; last_inbound_at: string | null; created_at: string }> = {}): ChannelLink {
   const row = {
     account_id: ACCT,
     user_id: USER,

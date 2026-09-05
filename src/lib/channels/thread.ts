@@ -188,10 +188,16 @@ export interface HistoryTurn {
 
 /** The last `turns` turns across every channel, as the model sees them. Staff (human-lane)
     rows never sit on this thread; typing placeholders are never persisted. */
-export async function historyFor(db: DbClient, accountId: string, turns = HISTORY_TURNS, contextGeneration = 0): Promise<HistoryTurn[]> {
+export async function historyFor(db: DbClient, accountId: string, turns = HISTORY_TURNS, contextGeneration = 0,
+  slackOrigin?: { workspaceId?: string; conversationId: string; threadId: string }): Promise<HistoryTurn[]> {
   const all = await listThread(db, accountId, { contextGeneration });
   const out: HistoryTurn[] = [];
   for (const m of all) {
+    if (slackOrigin) {
+      const origin = (m.meta.slack_origin ?? m.delivery.slack_origin) as Record<string, unknown> | undefined;
+      if (m.channel !== "slack" || !slackOrigin.workspaceId || !origin || origin.workspaceId !== slackOrigin.workspaceId
+        || origin.conversationId !== slackOrigin.conversationId || origin.threadId !== slackOrigin.threadId) continue;
+    }
     if (m.sender === "staff") continue;
     const content = m.body.trim().slice(0, MAX_TURN_CHARS);
     if (!content) continue;

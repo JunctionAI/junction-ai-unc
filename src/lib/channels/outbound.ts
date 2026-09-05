@@ -27,6 +27,8 @@ export interface OutboundDeps {
   log?: (event: string, fields: Record<string, unknown>) => void;
   /** Original message identity; never resolve a replacement after a model/provider wait. */
   guard?: () => Promise<void>;
+  /** Authenticated inbound origin, inherited by every immediate reply path. */
+  replyContext?: ReplyContext;
 }
 
 export const WHATSAPP_WINDOW_MS = 24 * 3_600_000;
@@ -153,7 +155,13 @@ export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: Ou
   const adapter = deps.adapters[link.channel];
   if (!adapter) return { status: "skipped", reason: "no_adapter" };
   if (!adapter.configured) return { status: "skipped", reason: "not_configured" };
-  const queued = await enqueueOutbound(deps.db, link, kind, payload, opts);
+  for (const key of ["conversationId", "threadId"] as const) {
+    if (deps.replyContext?.[key] !== undefined && opts.replyContext?.[key] !== undefined
+      && deps.replyContext[key] !== opts.replyContext[key]) throw new Error("Cannot redirect the captured Slack reply origin");
+  }
+  const replyContext = opts.replyContext || deps.replyContext
+    ? { ...deps.replyContext, ...opts.replyContext } as ReplyContext : undefined;
+  const queued = await enqueueOutbound(deps.db, link, kind, payload, { ...opts, replyContext });
   return deliverOutbound(deps, String(queued.id));
 }
 
@@ -174,7 +182,10 @@ export async function deliverOutbound(deps: OutboundDeps, outboundId: string): P
       if (messagingDisabled(process.env)) throw new Error("Messaging disabled before provider call");
       if (!claim.link?.externalId) throw new Error("Missing claimed destination");
       const pinned = claim.link;
-      const result = await boundedSend(() => adapter.send(pinned.externalId!, row.payload as unknown as OutboundPayload, { link: pinned, template: claim.template }));
+      const b = row.binding as Row;
+      const slackOrigin = typeof b.conversationId === "string" && typeof b.threadId === "string"
+        ? { conversationId: b.conversationId, threadId: b.threadId } : undefined;
+      const result = await boundedSend(() => adapter.send(pinned.externalId!, row.payload as unknown as OutboundPayload, { link: pinned, template: claim.template, ...(slackOrigin ? { slackOrigin } : {}) }));
       row = await finishOutbound(deps.db, String(row.id), claim.attempt, result);
     } catch {
       // Even persistence failure after provider acceptance must not lead to a resend.
@@ -223,6 +234,8 @@ export async function pushToAccount(deps: OutboundDeps, input: PushInput): Promi
   const now = deps.now();
   for (const link of input.links) {
     if (link.accountId !== input.accountId) continue;
+    // Per-sender room destinations are replies only, never one proactive post per member.
+    if (link.slackRouteId) { report.skipped++; continue; }
     if (!prefAllows(link, input.kind)) {
       report.skipped++;
       continue;

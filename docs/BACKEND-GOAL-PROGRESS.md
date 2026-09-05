@@ -13,7 +13,31 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 74, 6 September NZ
+## Latest state — Batch 75, 6 September NZ
+
+**Registry connected to durable Slack intake, commands and same-thread outbox
+in local code/SQL.** [Implementation and exact acceptance limits](integration/JUNCTION-OWNED-SLACK-RUNTIME.md).
+Per-client room destinations reuse the existing queue without replacing the
+sender's OAuth identity. Unknown rooms cannot fall back to a DM account; routed
+destinations are excluded from proactive per-user broadcasts. Immediate and
+asynchronous replies carry the original thread, and model conversation history
+is audience-filtered. The actual local SQL harness proves two-client capture,
+concurrent dedupe, command-notification/outbox preparation, projection and
+revocation/replay refusal. Seven new application tests cover the threaded
+pipeline and provider request shape, not real provider execution.
+
+Verification: 3,123 tests / 230 files, application and worker TypeScript, focused
+ESLint, `git diff --check` and production Next build pass. An initial generated
+SQL syntax error and an overbroad replay test assertion were corrected locally;
+the final exact-migration PostgreSQL harness passes. No remote migration, live
+Slack call, customer message, listener activation or deployment occurred.
+
+Next: owner setup/readback and controlled route activation/rebinding, matched
+schema/app/worker release, then an authorized live channel pilot. Neither new
+Slack migration is applied remotely. Production remains `4067b08`; full
+B01–B24/all-client/launch acceptance remains active and unproven.
+
+## Previous state — Batch 74, 6 September NZ
 
 **Client-channel registry and provider-verified staging implemented locally.**
 [Exact scope, evidence and remaining cutover gates](integration/JUNCTION-OWNED-SLACK-RUNTIME.md).

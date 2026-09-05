@@ -24,7 +24,7 @@ export const LINK_CODE_PREFIX = "UNC-";
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 32 symbols, no 0/O/1/I
 const CODE_LEN = 6;
 
-const LINK_COLS = "id, account_id, binding_version, link_code_generation, user_id, channel, external_id, handle, display_name, verified_at, link_code, link_code_expires_at, prefs, meta, last_inbound_at, created_at";
+const LINK_COLS = "id, account_id, binding_version, slack_route_id, link_code_generation, user_id, channel, external_id, handle, display_name, verified_at, link_code, link_code_expires_at, prefs, meta, last_inbound_at, created_at";
 
 export function newLinkCode(): string {
   const bytes = randomBytes(CODE_LEN);
@@ -69,6 +69,7 @@ export function rowToLink(r: Row): ChannelLink {
     id: String(r.id),
     accountId: String(r.account_id),
     bindingVersion: runtimeGeneration(r.binding_version),
+    ...(typeof r.slack_route_id === "string" ? { slackRouteId: r.slack_route_id } : {}),
     linkCodeGeneration: r.link_code_generation == null ? null : runtimeGeneration(r.link_code_generation),
     userId: r.user_id ? String(r.user_id) : null,
     channel: r.channel as Channel,
@@ -88,7 +89,7 @@ export function rowToLink(r: Row): ChannelLink {
 // ---------- read ----------
 
 export async function listLinks(db: DbClient, accountId: string): Promise<ChannelLink[]> {
-  const rows = await unwrap<Row[]>("channel_links.select", db.from("channel_links").select(LINK_COLS).eq("account_id", accountId).order("created_at", { ascending: true }));
+  const rows = await unwrap<Row[]>("channel_links.select", db.from("channel_links").select(LINK_COLS).eq("account_id", accountId).is("slack_route_id", null).order("created_at", { ascending: true }));
   return rows.map(rowToLink);
 }
 
@@ -104,14 +105,14 @@ export async function getLink(db: DbClient, linkId: string): Promise<ChannelLink
 
 /** Who is this sender? null = not linked (or not yet verified). */
 export async function findVerifiedLink(db: DbClient, channel: Channel, externalId: string): Promise<ChannelLink | null> {
-  const row = await unwrap<Row | null>("channel_links.select", db.from("channel_links").select(LINK_COLS).eq("channel", channel).eq("external_id", externalId).maybeSingle());
+  const row = await unwrap<Row | null>("channel_links.select", db.from("channel_links").select(LINK_COLS).eq("channel", channel).eq("external_id", externalId).is("slack_route_id", null).maybeSingle());
   const link = row ? rowToLink(row) : null;
   return link && link.verifiedAt ? link : null;
 }
 
 /** Every account with at least one verified link — the worker's push set. */
 export async function accountsWithLinks(db: DbClient): Promise<string[]> {
-  const rows = await unwrap<{ account_id: string; verified_at: string | null }[]>("channel_links.select", db.from("channel_links").select("account_id, verified_at"));
+  const rows = await unwrap<{ account_id: string; verified_at: string | null }[]>("channel_links.select", db.from("channel_links").select("account_id, verified_at").is("slack_route_id", null));
   return [...new Set(rows.filter((r) => !!r.verified_at).map((r) => r.account_id))];
 }
 
@@ -161,7 +162,7 @@ export async function upsertVerifiedLink(
   input: { accountId: string; userId: string | null; channel: Channel; externalId: string; handle?: string | null; displayName?: string | null; meta?: Record<string, unknown>; now: Date },
 ): Promise<ChannelLink> {
   const nowIso = input.now.toISOString();
-  const existing = await unwrap<Row | null>("channel_links.select", db.from("channel_links").select(LINK_COLS).eq("channel", input.channel).eq("external_id", input.externalId).maybeSingle());
+  const existing = await unwrap<Row | null>("channel_links.select", db.from("channel_links").select(LINK_COLS).eq("channel", input.channel).eq("external_id", input.externalId).is("slack_route_id", null).maybeSingle());
   if (existing) {
     const patch: Row = { account_id: input.accountId, user_id: input.userId, handle: input.handle ?? null, display_name: input.displayName ?? null, verified_at: nowIso, link_code: null, link_code_expires_at: null, meta: { ...((existing.meta as Record<string, unknown>) ?? {}), ...(input.meta ?? {}) } };
     const written = await unwrap<Row>("channel_links.update", db.from("channel_links").update(patch).eq("id", existing.id).select(LINK_COLS).single());

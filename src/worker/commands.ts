@@ -9,7 +9,7 @@ import type { N8nWorkflow, RoutineSpec } from "../lib/runtime/types";
 import type { Store } from "../lib/runtime/store/interface";
 import { rowToLink } from "../lib/channels/links";
 import { buildAdapters as channelAdapters } from "../lib/channels/adapters";
-import { sendOnLink, type AdapterRegistry } from "../lib/channels/outbound";
+import { deliverOutbound, type AdapterRegistry } from "../lib/channels/outbound";
 import { keyringFromEnv } from "../lib/connectors/crypto";
 import { resolveAccount, type ServiceDeps } from "./service";
 import { drainInboundEvents } from "../lib/channels/inbox";
@@ -83,9 +83,7 @@ export async function notifyCommand(db: DbClient, c: RoutineCommand, injected?: 
   const adapters = injected?.adapters ?? channelAdapters({ db, env: process.env, fetch: (url, init) => fetch(url, init), keyring: keyringFromEnv(process.env) });
   // The immutable prepared result, not this polling caller's stale reply, owns the send.
   // Its source revision is checked again atomically by the outbox claim.
-  await sendOnLink({ db, adapters, now: injected?.now ?? (() => new Date()), guard }, link, "reply",
-    operation.payload as unknown as import("../lib/channels/types").OutboundPayload,
-    { contextGeneration: identity.contextGeneration, ref: String(operation.ref), appendToThread: true });
+  await deliverOutbound({ db, adapters, now: injected?.now ?? (() => new Date()), guard }, String(operation.id));
   // Delivery truth stays in the outbox, including queued/uncertain. Never write a
   // stale command row after provider I/O or call a queued message sent.
 }

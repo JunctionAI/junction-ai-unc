@@ -7,7 +7,7 @@ import { rowToLink } from "./links";
 import type { ChannelLink, OutboundKind, OutboundPayload, SendResult } from "./types";
 
 export type DeliveryStatus = "queued" | "sending" | "sent" | "failed" | "uncertain" | "cancelled";
-export interface ReplyContext { live: boolean; inReplyTo: string }
+export interface ReplyContext { live: boolean; inReplyTo: string; conversationId?: string; threadId?: string }
 export interface OutboxOperation {
   contextGeneration?: number;
   ref?: string | null;
@@ -20,10 +20,12 @@ export interface ClaimedSend { row: Row; claimed: boolean; link?: ChannelLink; t
 
 export async function enqueueOutbound(db: DbClient, link: ChannelLink, kind: OutboundKind, payload: OutboundPayload, opts: OutboxOperation): Promise<Row> {
   if (!opts.ref || !link.userId || !link.externalId) throw new Error("A captured delivery identity and stable operation reference are required");
+  if (link.slackRouteId && (!opts.replyContext?.conversationId || !opts.replyContext.threadId)) throw new Error("Original Slack conversation/thread required");
   const binding = { version: 1, kind: "linked", accountId: link.accountId,
     contextGeneration: runtimeGeneration(opts.contextGeneration), linkId: link.id, bindingVersion: runtimeGeneration(link.bindingVersion),
     userId: link.userId, channel: link.channel, externalId: link.externalId,
     ...(link.channel === "slack" ? { scopeId: link.meta.team_id } : {}),
+    ...(link.channel === "slack" && opts.replyContext?.conversationId ? { conversationId: opts.replyContext.conversationId, threadId: opts.replyContext.threadId } : {}),
   };
   return unwrap<Row>("channel.enqueue", db.rpc("enqueue_channel_outbound", { operation: {
     binding, kind, ref: opts.ref, payload, appendThread: opts.appendToThread ?? true,

@@ -27,7 +27,7 @@ export interface TableSchema {
   primaryKey: string[];
   /** Unique column sets (PK + unique constraints + unique indexes). `partialNotNull` marks
       partial indexes of the form `where col is not null`. */
-  uniques: { columns: string[]; partialNotNull?: string; name?: string }[];
+  uniques: { columns: string[]; partialNotNull?: string; partialNull?: string; name?: string }[];
   enums: Record<string, Set<string>>;
 }
 export type Schema = Record<string, TableSchema>;
@@ -119,9 +119,9 @@ export function loadSchema(dir = MIGRATIONS_DIR): Schema {
     for (const m of sql.matchAll(/drop index (?:if exists )?(?:public\.)?(\w+)/gi))
       for (const t of Object.values(schema)) t.uniques = t.uniques.filter(u => u.name !== m[1]);
     // unique indexes (incl. partial "where col is not null")
-    const idxRe = /create unique index (?:if not exists )?(\w+) on (?:public\.)?(\w+) \(([^)]*)\)(?: where (\w+) is not null)?/gi;
+    const idxRe = /create unique index (?:if not exists )?(\w+) on (?:public\.)?(\w+) \(([^)]*)\)(?: where (\w+) is (not )?null)?/gi;
     for (const m of sql.matchAll(idxRe)) {
-      table(m[2]).uniques.push({ name: m[1], columns: cols(m[3]), partialNotNull: m[4] });
+      table(m[2]).uniques.push({ name: m[1], columns: cols(m[3]), ...(m[4] ? m[5] ? { partialNotNull: m[4] } : { partialNull: m[4] } : {}) });
     }
   }
   return schema;
@@ -372,8 +372,10 @@ export class FakeSupabase implements DbClient {
     const t = this.assertTable(table);
     for (const u of t.uniques) {
       if (u.partialNotNull && (row[u.partialNotNull] === null || row[u.partialNotNull] === undefined)) continue;
+      if (u.partialNull && row[u.partialNull] != null) continue;
       if (u.columns.some((c) => row[c] === null || row[c] === undefined)) continue;
-      const clash = (this.tables.get(table) ?? []).find((r) => r !== ignore && u.columns.every((c) => r[c] === row[c]));
+      const clash = (this.tables.get(table) ?? []).find((r) => r !== ignore && (!u.partialNull || r[u.partialNull] == null)
+        && (!u.partialNotNull || r[u.partialNotNull] != null) && u.columns.every((c) => r[c] === row[c]));
       if (clash) return `duplicate key value violates unique constraint (${table}: ${u.columns.join(",")})`;
     }
     return null;

@@ -99,12 +99,68 @@ Do not enable a route before that complete path and controlled cutover pass.
 Rebinding a reserved/revoked channel is deliberately unavailable until the
 explicit cutover/retention path is built; deleting audit evidence is not a shortcut.
 
+## Durable routed pipeline batch
+
+`20260905221238_slack_routed_inbox.sql` and the matching application/worker code
+now connect the registry to intake, control handling, command bindings, outbox
+claims and thread-history projection. The migration is **local only** and must
+follow the registry migration in a coordinated release.
+
+A routed destination is a distinct `channel_links.slack_route_id` key space,
+not a replacement OAuth identity. Atomic ingress resolves the registered room
+and current sender membership, creates/reuses its account-bound destination and
+captures that destination's immutable binding revision. Unknown, inactive or
+missing room routes never fall back to the sender's DM account. Link codes
+pasted in rooms cannot transfer an identity. The direct-link lookup, install
+lookup, channel list and proactive recipient set exclude routed destinations.
+
+The normal verifier rechecks route revision, source OAuth link/revision and
+membership alongside the existing account generation/destination checks. A
+changed route cancels queued delivery; a new inbound event can capture the new
+revision, while a replay retains its old envelope and fails verification.
+Control receipts, queued commands and asynchronous notification preparation use
+the same account-bound destination. Notification delivery resumes the existing
+outbox operation by ID instead of rebuilding it from a polling worker's reply.
+
+The Slack adapter posts to the bound conversation with the original `thread_ts`
+and `reply_broadcast: false`. Room destinations cannot fall back to a DM. A
+provider response naming a different destination is uncertain, not a successful
+delivery or permission to resend. Room approval acknowledgements do not use the
+separate `response_url` mutation path. Immediate reply helpers reject attempts
+to override the captured thread. Inbound and projected outbound messages retain
+an explicit Slack audience; model conversation history is filtered to that
+workspace/channel/thread. Account context/data permissions remain independently
+enforced; this is not a claim that every provider/routine is ready.
+
+Verification: 3,123 tests across 230 files, app/worker TypeScript, focused ESLint
+and a Next production build pass. Seven new application/provider-shape tests
+cover origin propagation, history isolation, direct-versus-routed identity,
+proactive exclusion, command serialization and no-DM-fallback behavior.
+`scripts/verify-slack-routed-pipeline.mjs` executes the exact migrations and
+existing inbox/control/outbox/command functions on real isolated PostgreSQL,
+against minimal dependency tables. It proves two-client capture, concurrent
+dedupe, control validation, command notification preparation, projection,
+revocation and old-binding refusal. Synthetic outbox acceptance records are
+test fixtures: no Slack or other provider was called and no routine/provider
+execution or real customer delivery is claimed.
+
+The SQL harness caught an initial migration-generation string substitution error;
+that was corrected before the passing run. A replay assertion was also corrected
+to test immutable event/binding identity rather than expecting mutable status and
+control-result fields to stay unchanged. No failing migration reached production.
+
+Reproduce: `node scripts/verify-slack-routed-pipeline.mjs /tmp/unc-manual-pg.x8Y6jR`.
+The fixture cluster is stopped after the test, with its synthetic data retained at
+the printed temp path. The production app/worker still run the preceding release;
+neither Slack migration has been applied remotely or any native listener changed.
+
 ## Remaining implementation and cutover gates
 
-- Codex: route registry and independent sender authorization; replacement of the
-  sender-only account lookup; owner-verified provisioning without inferred roles.
-- Codex: preserve origin through commands, asynchronous completion, approval
-  handling and immutable outbox; isolate conversational context by audience.
+- Codex: expose owner-verified route setup/readback, selecting an existing Slack
+  OAuth identity rather than reinstalling/moving it for every client. Add explicit
+  revision-bound activation/deactivation and retained-history cutover/rebinding.
+- Codex: release both migrations and the matching app/worker with messaging still
+  disabled, then verify the deployed route/command/outbox path before pilot use.
 - Codex: verify provider grants and per-client routine mappings; expose stale,
   expired and missing connections as actionable failures, not successful work.
 - Codex: test two clients sharing a Slack sender, wrong-room refusal, removed

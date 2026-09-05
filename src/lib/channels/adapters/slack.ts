@@ -171,9 +171,14 @@ export class SlackAdapter implements ChannelAdapter {
     if (!this.config) return { ok: false, error: "not configured" };
     const teamId = typeof opts.link.meta.team_id === "string" ? opts.link.meta.team_id : null;
     if (!teamId) return { ok: false, error: "slack link has no workspace" };
+    if (opts.link.slackRouteId && (!opts.slackOrigin || opts.slackOrigin.conversationId !== opts.link.meta.slack_conversation_id
+      || !/^[CG][A-Z0-9]{1,63}$/.test(opts.slackOrigin.conversationId) || !isSlackTimestamp(opts.slackOrigin.threadId)))
+      return { ok: false, error: "Original Slack room/thread required; DM fallback forbidden" };
+    if (opts.slackOrigin && !opts.link.slackRouteId && (!/^D[A-Z0-9]{1,63}$/.test(opts.slackOrigin.conversationId) || !isSlackTimestamp(opts.slackOrigin.threadId)))
+      return { ok: false, error: "A direct Slack identity cannot send to a client room" };
     const token = await this.tokenFor(teamId);
     if (!token) return { ok: false, error: "slack workspace token missing — reinstall" };
-    let dm = typeof opts.link.meta.dm_channel === "string" ? opts.link.meta.dm_channel : null;
+    let dm = opts.link.slackRouteId ? opts.slackOrigin!.conversationId : typeof opts.link.meta.dm_channel === "string" ? opts.link.meta.dm_channel : null;
     if (!dm) {
       const opened = await this.api(token, "conversations.open", { users: to });
       if (!opened.ok) return { ok: false, error: opened.error ?? "conversations.open failed" };
@@ -181,14 +186,20 @@ export class SlackAdapter implements ChannelAdapter {
       if (!dm) return { ok: false, error: "conversations.open returned no channel" };
       await this.rememberDm?.(opts.link.id, dm);
     }
-    const posted = await this.api(token, "chat.postMessage", { channel: dm, text: payload.text.slice(0, 4000), blocks: slackBlocks(payload) });
+    if (opts.slackOrigin && opts.slackOrigin.conversationId !== dm) return { ok: false, error: "Slack reply conversation mismatch" };
+    const posted = await this.api(token, "chat.postMessage", { channel: dm, text: payload.text.slice(0, 4000), blocks: slackBlocks(payload),
+      ...(opts.slackOrigin ? { thread_ts: opts.slackOrigin.threadId, reply_broadcast: false } : {}) });
     if (!posted.ok) return { ok: false, error: posted.error ?? "chat.postMessage failed" };
     const ts = typeof posted.data.ts === "string" ? posted.data.ts : null;
+    if (opts.slackOrigin && (posted.data.channel !== dm || !isSlackTimestamp(ts))) return { ok: false, error: "Slack provider destination evidence mismatch" };
     return { ok: true, externalMsgId: ts ? `${dm}:${ts}` : null };
   }
 
   /** Replace the buttons on the pressed message with the receipt line. */
   async ack(event: InboundEvent, text?: string): Promise<void> {
+    // A room approval gets its normal durable threaded reply. Do not mutate an
+    // independently supplied response_url destination outside that outbox.
+    if (event.conversationId && /^[CG]/.test(event.conversationId)) return;
     if (!event.ackRef || !/^https:\/\/hooks\.slack\.com\//.test(event.ackRef)) return;
     try {
       await this.fetchFn(event.ackRef, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ replace_original: true, text: text ?? "Got it." }) });

@@ -130,7 +130,10 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
     if (messagingDisabled(process.env)) throw new RuntimeContextError("automation_paused", "External messaging is disabled.");
     await assertInboundBinding(deps.db, processing, { allowPaused });
   };
-  const outbound: OutboundDeps = { db: deps.db, adapters: deps.adapters, now: deps.now, log, guard: () => guard(control.kind === "linked" || control.kind === "handoff") };
+  const slackOrigin = event.channel === "slack" && event.conversationId && event.threadId
+    ? { workspaceId: event.scopeId, conversationId: event.conversationId, threadId: event.threadId } : undefined;
+  const outbound: OutboundDeps = { db: deps.db, adapters: deps.adapters, now: deps.now, log, guard: () => guard(control.kind === "linked" || control.kind === "handoff"),
+    ...(slackOrigin ? { replyContext: { live: false, inReplyTo: event.externalMsgId, conversationId: slackOrigin.conversationId, threadId: slackOrigin.threadId } } : {}) };
   if (control.kind === "linked") {
     await guard(true);
     await sendOnLink(outbound, link, "link", { text: welcomeLine(event.channel) }, { contextGeneration, ref: `inbound:${captured.id}`, allowPaused: true, appendToThread: false });
@@ -211,16 +214,18 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
   // 4. a message → the same conversation, the same Unc
   if (!event.text) return { kind: "ignored", reason: "no text" };
   await guard();
-  const turn = await appendInbound(deps.db, { accountId, contextGeneration, externalScope: link.id, channel: event.channel, text: event.text, externalMsgId: event.externalMsgId, meta: { ...(event.displayName ? { from: event.displayName } : {}) }, now });
+  const turn = await appendInbound(deps.db, { accountId, contextGeneration, externalScope: link.id, channel: event.channel, text: event.text, externalMsgId: event.externalMsgId, meta: { ...(event.displayName ? { from: event.displayName } : {}), ...(slackOrigin ? { slack_origin: slackOrigin } : {}) }, now });
   if (!turn.created) return { kind: "duplicate" };
-  const history = await historyFor(deps.db, accountId, undefined, contextGeneration);
+  if (link.slackRouteId && !slackOrigin) throw new Error("Routed Slack conversation origin missing");
+  const history = await historyFor(deps.db, accountId, undefined, contextGeneration, link.slackRouteId ? slackOrigin : undefined);
   await guard();
   const respond = deps.respond ?? defaultRespond;
   let reply = event.channel === "sms" ? SMS_NO_MODEL_LINE : NO_MODEL_LINE;
   let live = false;
   try {
     const command = await routeCommand(deps.db, deps.store, { accountId, contextGeneration, userId: binding.userId, channel: event.channel, requestId: event.externalMsgId, linkId: link.id,
-      channelBinding: { bindingVersion: link.bindingVersion, externalId: event.externalId, ...(event.scopeId ? { scopeId: event.scopeId } : {}) } }, event.text);
+      channelBinding: { bindingVersion: link.bindingVersion, externalId: event.externalId, ...(event.scopeId ? { scopeId: event.scopeId } : {}),
+        ...(slackOrigin ? { conversationId: slackOrigin.conversationId, threadId: slackOrigin.threadId } : {}) } }, event.text);
     await guard();
     const r = command ? { ok: true as const, reply: command.reply } : await respond({ accountId, contextGeneration, db: deps.db, history, channel: event.channel, guard });
     await guard();
