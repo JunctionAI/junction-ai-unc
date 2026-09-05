@@ -87,15 +87,45 @@ describe("POST /api/unc/chat — Client Brain", () => {
     expect(await (await post({ messages: [{ role: "user", content: LONG }], context: {} })).json()).toEqual({ reply: "fine" });
   });
 
-  it("a broken database never breaks the reply: recall failure ⇒ no brain sections", async () => {
+  it("a broken canonical context fails closed before model work, not back to browser context", async () => {
     const db = brainDb();
     db.from = () => {
       throw new Error("connection refused");
     };
     accountMock.current = { accountId: ACCT, db };
     routerMock.complete.mockResolvedValue(ok("still here"));
-    expect(await (await post({ messages: [{ role: "user", content: LONG }], context: {} })).json()).toEqual({ reply: "still here" });
-    expect(routerMock.complete.mock.calls[0][1].system).not.toContain("WHAT I KNOW ABOUT THIS FOUNDER");
+    const response = await post({ messages: [{ role: "user", content: LONG }], context: { business: { name: "Browser business" } } });
+    expect(response.status).toBe(503);
+    expect(routerMock.complete).not.toHaveBeenCalled();
+    expect(hooksMock.afterChatReply).not.toHaveBeenCalled();
+  });
+
+  it("uses the session account's business and switches instead of browser-supplied facts", async () => {
+    const db = brainDb();
+    db.insertRow("resource_profiles", { account_id: ACCT, website: "avgarsport.com", budget_monthly: 0, hours_weekly: 0, gross_margin_pct: null });
+    db.insertRow("business_profiles", { account_id: ACCT, scan_status: "done", profile: { name: "AVGAR Sport", products: ["Golf travel case"] } });
+    db.insertRow("business_profiles", { account_id: "other-account", scan_status: "done", profile: { name: "Other tenant private business" } });
+    db.insertRow("routine_states", { account_id: ACCT, routine_id: "D02-W01", enabled: false });
+    db.insertRow("connectors", { account_id: ACCT, platform: "shopify", status: "connected", last_sync_result: "ok", last_sync_at: "2026-09-05T01:00:00Z" });
+    db.insertRow("receipts", { account_id: ACCT, kind: "read", description: "Verified AVGAR read receipt", created_at: "2026-09-05T01:00:00Z" });
+    db.insertRow("receipts", { account_id: "other-account", kind: "read", description: "Private other tenant receipt", created_at: "2026-09-05T01:00:00Z" });
+    accountMock.current = { accountId: ACCT, db };
+    routerMock.complete.mockResolvedValue(ok("I have your golf business here."));
+    const response = await post({ messages: [{ role: "user", content: "Which business is this?" }], context: { business: { name: "Junction browser spoof" }, routines: { active: ["Daily paid decisioning"] }, goal: { title: "Invented 999999 revenue" } } });
+    expect(response.status).toBe(200);
+    const system = routerMock.complete.mock.calls[0][1].system as string;
+    expect(system).toContain("AVGAR Sport");
+    expect(system).toContain("avgarsport.com");
+    expect(system).not.toContain("Junction browser spoof");
+    expect(system).not.toContain("Other tenant private business");
+    expect(system).not.toContain("Invented 999999 revenue");
+    expect(system).not.toContain("NZ$40,000 MRR");
+    expect(system).toContain('"activeCount":0');
+    expect(system).not.toContain('"target":40000');
+    expect(system).not.toContain("Weeks 1–NaN");
+    expect(system).toContain('"name":"Shopify","status":"connected"');
+    expect(system).toContain("Verified AVGAR read receipt");
+    expect(system).not.toContain("Private other tenant receipt");
   });
 
   it("the whole thread reaches the hook even past the 24-turn model window", async () => {

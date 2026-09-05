@@ -12,7 +12,7 @@ import type { LlmResult } from "../types";
 const routerMock = vi.hoisted(() => ({ complete: vi.fn(), resolveModel: vi.fn() }));
 const scanTransportMock = vi.hoisted(() => ({ requestPinnedPage: vi.fn() }));
 vi.mock("@/lib/llm/router", async (importOriginal) => ({ ...(await importOriginal<typeof import("../router")>()), complete: routerMock.complete, resolveModel: routerMock.resolveModel }));
-vi.mock("@/lib/llm/accountContext", () => ({ requireModelAccountContext: async () => ({ accountId: "acct-1", db: null }) }));
+vi.mock("@/lib/llm/accountContext", () => ({ requireModelAccountContext: async () => ({ accountId: "acct-1", db: new FakeSupabase() }) }));
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
 // Production keeps the DNS-pinned Node transport. These call-site fixtures inject only its
 // bounded response shape so they remain network-free and continue testing the model seam.

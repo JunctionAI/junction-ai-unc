@@ -15,7 +15,7 @@
 import { connectorHasRealSync } from "../connectors/sync";
 import { ALL_SYSTEMS, CATEGORIES, CONNECTOR_DEFS } from "../platform/catalog";
 import { AP_DATA, AP_WHY_TEXTS, COMPLETED_DEFS, LEVER_DEFS, SIGNAL_DEFS, postureDefs } from "../platform/derive";
-import { DEMO_TODAY, goalMath } from "../platform/goal";
+import { DEMO_TODAY, goalMath, parseGoalTarget } from "../platform/goal";
 import { scoreChannels, span, weekSplit } from "../platform/plan";
 import type { PlatformState } from "../platform/state";
 import type { AccountFacts, ApprovalFact } from "./accountFacts";
@@ -65,6 +65,10 @@ export function buildUncContext(S: PlatformState, opts: ContextOptions = {}) {
   const now = opts.now ?? new Date();
   const gm = goalMath({ goalTitle: S.goalTitle, baselineNum: S.baselineNum, deadline: S.deadline, currency: S.currency });
   const baselineSet = S.baselineNum !== null;
+  const goalTarget = account ? (S.obAnswered.target ? parseGoalTarget(S.goalTitle) : null) : gm.target;
+  const deadlineMs = /^\d{4}-\d{2}-\d{2}$/.test(S.deadline) ? Date.parse(`${S.deadline}T00:00:00Z`) : NaN;
+  const validDeadline = Number.isFinite(deadlineMs) && new Date(deadlineMs).toISOString().slice(0, 10) === S.deadline;
+  const accountDaysLeft = validDeadline ? Math.max(0, Math.ceil((deadlineMs - now.getTime()) / 86_400_000)) : null;
 
   const demoApprovals = AP_DATA.slice(0, LIST_CAP).map((a, i) => ({
     routine: a.sys,
@@ -83,7 +87,7 @@ export function buildUncContext(S: PlatformState, opts: ContextOptions = {}) {
   const agreedAt = account ? (facts?.plan?.agreedAt ?? null) : null;
   const factEnabled = facts ? new Set(facts.routineStates.filter((r) => r.enabled).map((r) => r.name)) : null;
   // demo: the catalog's default "Active" flags stand in; account: only what is actually enabled
-  const isOn = (n: string) => (account ? (factEnabled ? factEnabled.has(n) || S.routineOn[n] === true : S.routineOn[n] === true) : (S.routineOn[n] ?? ALL_SYSTEMS.find((x) => x.name === n)?.state === "Active"));
+  const isOn = (n: string) => (account ? (factEnabled ? factEnabled.has(n) : S.routineOn[n] === true) : (S.routineOn[n] ?? ALL_SYSTEMS.find((x) => x.name === n)?.state === "Active"));
   const phaseDefs = account && facts?.plan?.phases?.length ? facts.plan.phases.map((p, i) => ({ n: p.n ?? String(i + 1), name: p.name, routines: p.routines ?? [], you: p.from_you ?? "" })) : pd.phases.map((ph, pi) => ({ n: ph.n, name: ph.name, routines: S.routineEdits[`${S.posture}.${pi}`] ?? ph.routines, you: ph.you, st: ph.st }));
   const phases = phaseDefs.map((ph, i) => {
     const onHere = ph.routines.filter(isOn).length;
@@ -111,30 +115,36 @@ export function buildUncContext(S: PlatformState, opts: ContextOptions = {}) {
 
   return {
     today: account ? now.toISOString().slice(0, 10) : DEMO_TODAY.slice(0, 10),
+    business: {
+      website: S.website || null,
+      profile: S.scan.status === "done" ? S.scan.profile : null,
+    },
     goal: {
       title: S.goalTitle,
       currency: S.currency,
-      target: gm.target,
+      target: goalTarget,
       // baseline NULL in the account → these are unknown, not the demo 28,400 (Unc must ask, not invent)
-      baseline: baselineSet ? gm.baseline : null,
-      current: baselineSet ? gm.cur : null,
+      baseline: account ? S.baselineNum : baselineSet ? gm.baseline : null,
+      // A baseline is historical, not a current read. Account progress lives in
+      // certified metrics until dated baseline/current observations can be joined.
+      current: !account && baselineSet ? gm.cur : null,
       deadline: S.deadline,
-      daysLeft: gm.daysLeftN,
-      pacePerDay: baselineSet ? Math.round(gm.pace) : null,
-      neededPerDay: baselineSet ? Math.round(gm.needed) : null,
-      projectedAtDeadline: baselineSet ? gm.proj : null,
-      gapAtDeadline: baselineSet ? Math.round(gm.gap) : null,
-      onTrack: baselineSet ? gm.onTrack : null,
-      progress: baselineSet ? gm.goalPct : null,
+      daysLeft: account ? accountDaysLeft : gm.daysLeftN,
+      pacePerDay: !account && baselineSet ? Math.round(gm.pace) : null,
+      neededPerDay: !account && baselineSet ? Math.round(gm.needed) : null,
+      projectedAtDeadline: !account && baselineSet ? gm.proj : null,
+      gapAtDeadline: !account && baselineSet ? Math.round(gm.gap) : null,
+      onTrack: !account && baselineSet ? gm.onTrack : null,
+      progress: !account && baselineSet ? gm.goalPct : null,
       otherGoals: S.obCats.slice(1).map((k) => S.goalTexts[k]).filter(Boolean),
     },
     founder: {
       profile: { budget: S.profile.budget, time: S.profile.time, strength: S.profile.strength, belief: S.profile.belief },
       strengths: S.obStrengths,
       platforms: S.obPlatforms,
-      hoursPerWeek: S.hoursWk,
-      adBudgetPerMonth: S.budgetMo,
-      adBudgetPerDay: Math.round(S.budgetMo / 30),
+      hoursPerWeek: account && !S.obAnswered.hours ? null : S.hoursWk,
+      adBudgetPerMonth: account && !S.obAnswered.budget ? null : S.budgetMo,
+      adBudgetPerDay: account && !S.obAnswered.budget ? null : Math.round(S.budgetMo / 30),
       marginPct: S.marginPct,
       reinvest: S.reinvest,
       breadth: S.obBreadth,
@@ -145,11 +155,12 @@ export function buildUncContext(S: PlatformState, opts: ContextOptions = {}) {
       posture: S.posture,
       postureLabel: pd.label,
       thesis: pd.thesis,
-      why: account ? accountStrategyWhy({ posture: S.posture, budgetMonthly: S.budgetMo, hoursWk: S.hoursWk, obStrengths: S.obStrengths, currency: S.currency }, agreedAt) : pd.why,
+      why: account ? (!S.obAnswered.budget || !S.obAnswered.hours ? "Budget or available hours are not confirmed. The suggested play is not a verified account plan." : accountStrategyWhy({ posture: S.posture, budgetMonthly: S.budgetMo, hoursWk: S.hoursWk, obStrengths: S.obStrengths, currency: S.currency }, agreedAt)) : pd.why,
       agreedAt,
       phases,
-      channelRanking: chans.map((c) => ({ channel: c.k, why: c.why })),
-      rolloutWeeks: { total: weeksLeft, phase1: span(1, w1), phase2: span(w1 + 1, w2end), phase3: `${span(w2end + 1, weeksLeft)}+` },
+      channelRanking: account && !S.obAnswered.budget ? [] : chans.map((c) => ({ channel: c.k, why: c.why })),
+      // weekSplit is explicitly demo-clock math. Never present it as a live schedule.
+      rolloutWeeks: account ? { total: null, phase1: null, phase2: null, phase3: null } : { total: weeksLeft, phase1: span(1, w1), phase2: span(w1 + 1, w2end), phase3: `${span(w2end + 1, weeksLeft)}+` },
     },
     approvalsPending,
     approvalsRecent,

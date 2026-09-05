@@ -22,7 +22,7 @@
 import { requireModelAccountContext } from "@/lib/llm/accountContext";
 import type { LlmMessage } from "@/lib/llm/types";
 import type { UncSurface } from "@/lib/unc/prompt";
-import { MAX_TURN_CHARS, respondAsUnc } from "@/lib/unc/respond";
+import { buildServerContext, MAX_TURN_CHARS, respondAsUnc } from "@/lib/unc/respond";
 import { withErrorCapture } from "@/lib/observability/errors";
 import { routeCommand } from "@/lib/commands/message";
 import { getStore } from "@/lib/runtime/store";
@@ -72,7 +72,18 @@ async function handlePOST(req: Request) {
     if (command) return Response.json(command);
   }
 
-  const result = await respondAsUnc({ history, context: body.context, surface, account });
+  // Once signed in, ordinary chat uses persisted account facts, not a stale or
+  // fabricated browser context. Onboarding may still discuss unsaved draft inputs;
+  // it cannot dispatch commands and never grants runtime permissions.
+  let context = body.context;
+  if (account && surface === "corner") {
+    try {
+      context = await buildServerContext(account.db, account.accountId);
+    } catch {
+      return Response.json({ error: "Couldn't load your business context. Please try again." }, { status: 503 });
+    }
+  }
+  const result = await respondAsUnc({ history, context, surface, account });
   if (!result.ok) return result.reason === "invalid_history" ? Response.json({ error: "invalid messages" }, { status: 400 }) : fallback();
   return Response.json({ reply: result.reply });
 }

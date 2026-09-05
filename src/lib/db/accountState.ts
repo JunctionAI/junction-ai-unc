@@ -13,7 +13,7 @@
    projection changed, so the write volume is one batch per 800 ms of edits at most.
    Upgrade path: per-section dirty tracking so a chat message doesn't rewrite the goals. */
 
-import type { PlatformState } from "@/lib/platform/state";
+import { accountInitialState, type PlatformState } from "@/lib/platform/state";
 import { rowsToState, stateToRows, type AccountRows, type LoadedRows } from "./mapping";
 import { unwrap, type DbClient } from "./types";
 
@@ -70,7 +70,9 @@ export async function loadAccountRows(db: DbClient, accountId: string): Promise<
 /** { state, found, name }: found=false means nothing was ever saved for this account (seed it). */
 export async function loadAccountState(db: DbClient, accountId: string, base?: PlatformState): Promise<{ state: PlatformState; found: boolean; name: string }> {
   const rows = await loadAccountRows(db, accountId);
-  return { state: rowsToState(rows, base), found: rows.stateMeta !== null, name: rows.account?.name ?? "" };
+  // Server callers do not supply a browser seed. A partial real account must never
+  // inherit initialState's demo revenue, margin, team or invented chat receipts.
+  return { state: rowsToState(rows, base ?? accountInitialState(rows.account?.currency ?? "USD")), found: rows.stateMeta !== null, name: rows.account?.name ?? "" };
 }
 
 // ---------- the account's name ----------

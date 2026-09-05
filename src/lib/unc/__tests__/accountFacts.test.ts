@@ -136,12 +136,13 @@ describe("buildUncContext in account mode — no demo furniture", () => {
     expect(Object.fromEntries(buildUncContext(initialState).connectors.map((c) => [c.name, c.status]))).toMatchObject({ Instagram: "ok", Klaviyo: "expired" });
   });
 
-  it("routines: only what is really enabled (facts ∪ state), not the catalog's demo 'Active' flags", () => {
+  it("routines: authoritative facts win over stale state, not the catalog's demo 'Active' flags", () => {
     const acct = buildUncContext(S, { mode: "account", facts: facts(), now: NOW });
     expect(acct.routines.active.sort()).toEqual(["Founder content engine", "Social repurposing", "Welcome flow tuning"]);
     expect(acct.routines.activeCount).toBe(3);
     const noFacts = buildUncContext(S, { mode: "account", now: NOW });
     expect(noFacts.routines.active).toEqual(["Founder content engine"]);
+    expect(buildUncContext(S, { mode: "account", facts: facts({ routineStates: [] }), now: NOW }).routines.active).toEqual([]);
     expect(buildUncContext(initialState).routines.activeCount).toBeGreaterThan(3); // demo: catalog defaults
   });
 

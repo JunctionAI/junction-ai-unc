@@ -2,6 +2,8 @@
 
 Status at 5 September 2026, approximately 14:20 NZST. This is the current known blocker inventory, not a claim that untested paths are defect-free. Backend first; platform redesign follows the pilot acceptance gate.
 
+**Execution goal is active.** Subsequent work and remaining handoff gates are tracked in `docs/BACKEND-GOAL-PROGRESS.md`; the snapshot below remains the original evidence baseline.
+
 ## Outcome and boundaries
 
 Tom confirmed during this work: **US, NZ and AU; maximum CPA = 50% of the relevant product price**. See `docs/integration/AVGAR-PILOT-POLICY.md` for the currency/product-binding requirements. A keyword seed, a separate scaling target and product-to-ad mapping are not implied by this confirmation.

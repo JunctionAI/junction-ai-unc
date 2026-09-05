@@ -11,6 +11,27 @@ beforeEach(() => {
 });
 
 describe("first sign-in bootstrap", () => {
+  it("server hydration of a partial account never inherits demo business facts or history", async () => {
+    const accountId = await createAccount(db, { currency: "AUD" });
+    const { state } = await loadAccountState(db, accountId);
+    expect(state).toMatchObject({ currency: "AUD", goalTitle: "", deadline: "", baselineNum: null, marginPct: null, budgetMo: 0, hoursWk: 0 });
+    expect(state.messages).toEqual([]);
+    expect(state.humanThread).toEqual([]);
+    expect(state.team).toEqual([]);
+    expect(state.goalTexts).toEqual({});
+    expect(state.obAnswered).toEqual({ target: false, budget: false, hours: false });
+  });
+
+  it("cleared margin, deadline, team and chats do not reappear from a stale caller seed", async () => {
+    const accountId = await createAccount(db);
+    await saveAccountState(db, accountId, { ...richState(), deadline: "", marginPct: null, team: [], messages: [], obThread: [], humanThread: [] });
+    const { state } = await loadAccountState(db, accountId, initialState);
+    expect(state.deadline).toBe("");
+    expect(state.marginPct).toBeNull();
+    expect(state.team).toEqual([]);
+    expect(state.messages).toEqual([]);
+    expect(state.humanThread).toEqual([]);
+  });
   it("creates the account + owner membership through the 0003 RPC and seeds it from the client state", async () => {
     const seed = richState();
     const res = await ensureAccount(db, seed, { userId: "user-1", allowCreate: true });
@@ -236,7 +257,7 @@ describe("save → load through the (schema-checked) fake", () => {
     ]);
     await saveAccountState(db, accountId, initialState);
     expect(db.rows("approvals")).toHaveLength(2);
-    expect((await loadAccountState(db, accountId)).state.apStatus).toEqual(initialState.apStatus);
+    expect((await loadAccountState(db, accountId)).state.apStatus).toEqual([]);
     expect(db.callsFor("approvals")).toHaveLength(0);
   });
 

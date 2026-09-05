@@ -118,7 +118,8 @@ export interface PlatformState {
   /** Where the goal metric is now. null = not set (an account whose goals.baseline is NULL) — never substitute the demo 28,400. */
   baselineNum: number | null;
   reinvest: Reinvest;
-  marginPct: number;
+  /** null means the founder has not supplied a margin; it is not a zero margin. */
+  marginPct: number | null;
   obMoneyOpen: boolean;
   obTeamOpen: boolean;
   website: string;
@@ -254,6 +255,8 @@ export function accountInitialState(currency: string = "USD"): PlatformState {
     currency,
     obStrengths: [],
     obPlatforms: [],
+    marginPct: null,
+    team: [],
     profile: { ...ACCOUNT_EMPTY_PROFILE },
     messages: [],
     humanThread: [],

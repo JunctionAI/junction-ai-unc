@@ -8,7 +8,7 @@
        prompt-size and a "what does Unc know" decision, so it must be made explicitly. */
 
 import { describe, expect, it } from "vitest";
-import { initialState, type PlatformState } from "@/lib/platform/state";
+import { accountInitialState, initialState, type PlatformState } from "@/lib/platform/state";
 import { buildUncContext } from "../context";
 
 /** Every key path in the context, sorted; array elements contribute their first item's keys under "[]". */
@@ -46,6 +46,9 @@ const GOLDEN_KEYS = [
   "approvalsRecent[].routine",
   "approvalsRecent[].status",
   "approvalsRecent[].title",
+  "business",
+  "business.profile",
+  "business.website",
   "connectors",
   "connectors[].name",
   "connectors[].reads",
@@ -156,6 +159,19 @@ describe("stable key set", () => {
 });
 
 describe("pure data", () => {
+  it("an empty account has unknown targets, margins and time horizons, not demo math", () => {
+    const ctx = buildUncContext(accountInitialState("NZD"), { mode: "account" });
+    expect(ctx.goal).toMatchObject({ title: "", target: null, baseline: null, current: null, daysLeft: null, progress: null });
+    expect(ctx.founder).toMatchObject({ adBudgetPerMonth: null, hoursPerWeek: null, marginPct: null, team: [] });
+    expect(ctx.strategy.rolloutWeeks).toEqual({ total: null, phase1: null, phase2: null, phase3: null });
+    expect(JSON.stringify(ctx)).not.toMatch(/NaN|31650|28400|40000/);
+  });
+
+  it("preserves an explicitly stated zero baseline without inventing current progress", () => {
+    const ctx = buildUncContext({ ...accountInitialState("AUD"), obAnswered: { target: true, budget: true, hours: true }, goalTitle: "A$10,000 revenue", baselineNum: 0, deadline: "2026-09-30" }, { mode: "account", now: new Date("2026-09-05T00:00:00Z") });
+    expect(ctx.goal).toMatchObject({ target: 10000, baseline: 0, current: null, daysLeft: 25, pacePerDay: null, projectedAtDeadline: null });
+    expect(ctx.founder.adBudgetPerMonth).toBe(0);
+  });
   it("contains no functions, undefineds, Dates or class instances — a JSON round-trip is lossless", () => {
     const ctx = buildUncContext(bigState());
     const bad: string[] = [];

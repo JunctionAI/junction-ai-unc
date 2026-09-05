@@ -877,8 +877,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     obTeamOpen: S.obTeamOpen,
     obTeamChevron: S.obTeamOpen ? "▾" : "▸",
     obToggleTeam: () => set((s) => ({ obTeamOpen: !s.obTeamOpen })),
-    obMargin: S.marginPct,
-    obMarginLabel: `${S.marginPct}%`,
+    obMargin: S.marginPct ?? 0,
+    obMarginLabel: S.marginPct === null ? "Not set" : `${S.marginPct}%`,
     onObMargin: (e: Ev) => set({ marginPct: Math.max(0, Math.min(90, +e.target.value || 0)) }),
     obReinvest: ([
       ["steady", "Steady", "20–30%"],

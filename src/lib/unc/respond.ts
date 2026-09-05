@@ -28,6 +28,7 @@ import { recallForContext } from "../brain/retrieve";
 import { loadAccountState } from "../db/accountState";
 import type { DbClient } from "../db/types";
 import { BUDGET_EXHAUSTED_LINE, BUDGET_UNAVAILABLE_LINE, isBudgetExceeded, isBudgetUnavailable } from "../llm/budget";
+import { loadAccountFacts } from "./loadAccountFacts";
 import { complete, resolveModel } from "../llm/router";
 import type { LlmMessage } from "../llm/types";
 import { getMetrics, renderCertifiedMetrics } from "../metrics/catalog";
@@ -143,7 +144,7 @@ export async function respondAsUnc(input: RespondInput): Promise<RespondResult> 
 
 /** The account's persisted state as the compact context — the same shape the browser sends. */
 export async function buildServerContext(db: DbClient, accountId: string): Promise<Record<string, unknown>> {
-  const { state } = await loadAccountState(db, accountId);
+  const [{ state }, facts] = await Promise.all([loadAccountState(db, accountId), loadAccountFacts(db, accountId)]);
   // A real account: the hydrated state only — never the demo approvals / signals / levers.
-  return buildUncContext(state, { mode: "account" }) as unknown as Record<string, unknown>;
+  return buildUncContext(state, { mode: "account", facts }) as unknown as Record<string, unknown>;
 }

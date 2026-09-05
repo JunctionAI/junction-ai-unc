@@ -360,12 +360,12 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
   const S: PlatformState = { ...base };
   const cs = rows.stateMeta?.client_state;
 
-  if (rows.account) S.currency = rows.account.currency;
+  if (rows.account?.currency) S.currency = rows.account.currency;
 
   if (cs) {
     S.onboarded = cs.onboarded;
     S.obStep = cs.obStep;
-    if (cs.obCats?.length) S.obCats = [...cs.obCats];
+    if (Array.isArray(cs.obCats)) S.obCats = [...cs.obCats];
     S.posture = cs.posture;
     S.goalTexts = { ...base.goalTexts, ...cs.goalTexts };
     S.baselineText = cs.baselineText;
@@ -390,7 +390,7 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
     // client_state keeps the founder's category order; goals rows are the relational view
     if (!cs?.obCats?.length) S.obCats = [governing.category, ...checkpoints.map((g) => g.category)];
     S.goalTitle = governing.title;
-    if (governing.deadline) S.deadline = governing.deadline;
+    S.deadline = governing.deadline ?? "";
     // NULL is "not set" — surfaced as such, never replaced by the base state's (demo) number
     S.baselineNum = governing.baseline === null || governing.baseline === undefined ? null : Number(governing.baseline);
     S.goalTexts = { ...S.goalTexts, ...Object.fromEntries(rows.goals.map((g) => [g.category, g.title])) };
@@ -401,7 +401,7 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
     S.budgetMo = Number(rp.budget_monthly);
     S.hoursWk = Number(rp.hours_weekly);
     S.reinvest = REINVEST_FROM_DB[rp.reinvestment] ?? base.reinvest;
-    if (rp.gross_margin_pct !== null) S.marginPct = Number(rp.gross_margin_pct);
+    S.marginPct = rp.gross_margin_pct === null || rp.gross_margin_pct === undefined ? null : Number(rp.gross_margin_pct);
     S.website = rp.website ?? "";
     S.socials = (rp.socials ?? []).join(SOCIALS_SEP);
     S.obStrengths = [...(rp.skills ?? [])];
@@ -414,7 +414,7 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
     S.obBreadth = rp.breadth;
   }
 
-  if (rows.teamMembers.length) {
+  if (rows.teamMembers.length || cs) {
     S.team = [...rows.teamMembers]
       .sort((a, b) => a.position - b.position)
       .map<TeamMember>((m) => ({ name: m.name, role: m.role, areas: m.approves ? m.approves.split(AREAS_SEP) : [] }));
@@ -447,7 +447,7 @@ export function rowsToState(rows: LoadedRows, base: PlatformState = initialState
     }
   }
 
-  if (rows.chatMessages.length) {
+  if (rows.chatMessages.length || cs) {
     for (const { thread, key } of THREADS) {
       const msgs = rows.chatMessages
         .filter((m) => m.thread === thread)
