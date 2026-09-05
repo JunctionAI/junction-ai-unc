@@ -42,11 +42,12 @@ async function handlePOST(req: Request) {
   if (isDbConfigured()) {
     const access=await agentSnapshot(req);if(access instanceof Response)return access;
     if(access.data.role!=="owner")return Response.json({error:"Only the account owner can run routines.",code:"owner_only"},{status:403});
+    if(req.headers.get("x-unc-actor-id")!==access.session.userId)return Response.json({error:"Signed-in owner changed. Refresh before sending answers."},{status:409});
     const run = await getStore().getRun(runId);
     if (!run || run.accountId !== access.data.accountId || run.contextGeneration!==access.data.contextGeneration) return Response.json({ error: "Run not found in this business context." }, { status: 404 });
     const block=routineBlock(access.data,run.routineId);
     if(block)return Response.json({error:block},{status:access.data.role!=="owner"?403:409});
-    captured={accountId:access.data.accountId,contextGeneration:access.data.contextGeneration};
+    captured={accountId:access.data.accountId,contextGeneration:access.data.contextGeneration,actorId:access.session.userId};
     try {
       const identity={...captured,userId:access.session.userId};
       const snapshot=await readEditor(access.session.service,identity,run.routineId);

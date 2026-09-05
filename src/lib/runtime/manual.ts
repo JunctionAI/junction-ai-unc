@@ -61,6 +61,20 @@ export async function manualResult(store: Store, record: ManualRecord): Promise<
     summary: record.operation.phase === "prepared" ? "Prepared; not started. Continue this original request to claim it." : r.summary ?? "Outcome not confirmed; inspect this original run without restarting it.",
     receipts, ...(artifacts[0] ? { artifact: artifacts[0] } : {}), ...(r.snapshot?.needs ? { needs: r.snapshot.needs } : {}) };
 }
+/** Recovery supplies only identity. The original body never returns to browser storage.
+ * Missing/cancelled requests cannot be reconstructed, and claimed work is read only. */
+export async function continueManual(db: DbClient, i: EditorIdentity, requestId: string,
+  routineId: string, purpose: ManualPurpose, deps: ServiceDeps) {
+  const saved = await readManual(db, i, requestId);
+  if (!saved || saved.run === null || saved.operation.routine_id !== routineId || saved.operation.purpose !== purpose)
+    throw new ManualRequestError("Original request is unavailable for continuation. Inspect or cancel it before starting another.");
+  if (saved.operation.phase === "claimed")
+    return { result: await manualResult(deps.store, saved), requestId, phase: "claimed" as const };
+  const snapshot = await readEditor(db, i, routineId);
+  if (snapshot.configurationRevision !== saved.operation.configuration_revision)
+    throw new ManualRequestError("Settings changed. The original request cannot continue; cancel it before starting another.");
+  return executeManual(db, i, requestId, purpose, saved.operation.request_body, snapshot, deps);
+}
 function guardAdapters(db: DbClient, i: EditorIdentity, snapshot: EditorSnapshot, routineId: string, adapters: Adapters): Adapters {
   return { ...adapters, assertContext: async context => {
     await adapters.assertContext?.(context);

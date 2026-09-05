@@ -4,6 +4,7 @@ import { fixture } from "./data";
 import { opsFixture } from "../ops-fixture/data";
 import { agentsFixture } from "../agents-fixture/data";
 import { detailFixture,paramsFixture } from "../routine-detail-fixture/data";
+import { manualFixture } from "../manual-recovery-fixture/server";
 const root = path.resolve(__dirname, "../..");
 export default defineConfig({
   root, envDir: false,
@@ -14,6 +15,7 @@ export default defineConfig({
   ] },
   define: { "process.env.NODE_ENV": JSON.stringify("development") },
   plugins: [{ name: "isolated-workspace-fixture", configureServer(server) {
+    server.middlewares.use(manualFixture());
     server.middlewares.use((req, res, next) => {
       if (req.url?.startsWith("/api/agents?routineId=") && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(detailFixture())); return; }
       if (req.url?.startsWith("/api/routines/params?") && req.method === "GET") { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(paramsFixture())); return; }

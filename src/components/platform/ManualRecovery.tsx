@@ -1,16 +1,16 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { AgentContext } from "@/lib/agents/client";
-import { clearManualJournal, loadManualJournal, MANUAL_JOURNAL_EVENT, manualJournalKey, saveManualJournal, sendManualJournal } from "@/lib/runtime/manualClient";
+import { assertNoLegacyJournal, clearManualJournal, loadManualJournal, MANUAL_JOURNAL_EVENT, manualJournalKey, saveManualJournal, sendManualJournal } from "@/lib/runtime/manualClient";
 
 const subscribe=(changed:()=>void)=>{window.addEventListener("storage",changed);window.addEventListener(MANUAL_JOURNAL_EVENT,changed);
   return()=>{window.removeEventListener("storage",changed);window.removeEventListener(MANUAL_JOURNAL_EVENT,changed);};};
 const serverSnapshot=()=>null;
 
 export function useManualRecovery(context:AgentContext|undefined,routineId:string,purpose:string) {
-  const key=context?manualJournalKey(context,routineId,purpose):null;
+  const key=context?.actorId?manualJournalKey(context,routineId,purpose):null;
   const stored=useSyncExternalStore(subscribe,useCallback(()=>{try{return key?sessionStorage.getItem(key):null;}catch{return "storage_unavailable";}},[key]),serverSnapshot);
-  const {journal,error}=useMemo(()=>{try{return{journal:key&&stored?loadManualJournal(key):null,error:null};}catch(e){return{journal:null,error:String(e)};}},[key,stored]);
+  const {journal,error}=useMemo(()=>{try{if(context && typeof window!=="undefined")assertNoLegacyJournal(context,routineId,purpose);return{journal:key&&stored?loadManualJournal(key):null,error:context&&!context.actorId?"Refresh to verify the signed-in account owner.":null};}catch(e){return{journal:null,error:String(e)};}},[key,stored,context,routineId,purpose]);
   const [outcome,setOutcome]=useState<{key:string|null;requestId:string;phase:string|null;status:string|null}|null>(null);
   const current=outcome?.key===key && outcome?.requestId===journal?.requestId;
   const phase=current?outcome?.phase??null:null,status=current?outcome?.status??null:null;
@@ -19,7 +19,7 @@ export function useManualRecovery(context:AgentContext|undefined,routineId:strin
   async function submit(path:string,body:Record<string,unknown>) {
     if(!key || !context)throw new Error("Saved account required.");
     const j=saveManualJournal(key,context,routineId,path,body);
-    const data=await sendManualJournal(j);if(active.current!==key)throw new Error("Account view changed; inspect the saved request.");
+    const data=await sendManualJournal(j,false,false,body);if(active.current!==key)throw new Error("Account view changed; inspect the saved request.");
     setOutcome({key,requestId:j.requestId,phase:String(data.phase),status:(data.run as {status:string}|null)?.status??null});return data;
   }
   async function recover(continueOriginal:boolean) {

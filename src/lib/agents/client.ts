@@ -1,9 +1,10 @@
 import { artifactHeaders } from "../artifacts/client";
 import type { AgentRoutine, AgentsSnapshot } from "./types";
-export type AgentContext = { accountId: string; contextGeneration: number };
+export type AgentContext = { accountId: string; contextGeneration: number; actorId?: string };
 export function isAgentSnapshot(value: unknown, ctx: AgentContext): value is AgentsSnapshot {
   const b = value as Partial<AgentsSnapshot> | null;
-  return !!b && b.accountId===ctx.accountId && b.contextGeneration===ctx.contextGeneration &&
+  return !!b && b.accountId===ctx.accountId && b.contextGeneration===ctx.contextGeneration && typeof b.actorId==="string" && !!b.actorId &&
+    (!ctx.actorId || b.actorId===ctx.actorId) &&
     (b.role==="owner"||b.role==="member") && typeof b.paused==="boolean" && Array.isArray(b.routines);
 }
 export async function readAgents(ctx: AgentContext, fetcher: typeof fetch = fetch, signal?: AbortSignal): Promise<AgentsSnapshot> {

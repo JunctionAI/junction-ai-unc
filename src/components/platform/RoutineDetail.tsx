@@ -177,7 +177,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
   const nodes = accounts && spec ? specNodes(routineId,spec) : [];
   const detailRow=detail?.routines.find(r=>r.routineId===routineId);
   const currentRow=live?.eligibility?.routines.find(r=>r.routineId===routineId);
-  const eligibility = detail && live?.eligibility && !live.loading && detailRow?.version===currentRow?.version && detailRow?.stateUpdatedAt===currentRow?.stateUpdatedAt ? {...detail,role:live.eligibility.role,paused:live.eligibility.paused,routines:live.eligibility.routines} : null;
+  const eligibility = detail && live?.eligibility && detail.actorId===live.eligibility.actorId && !live.loading && detailRow?.version===currentRow?.version && detailRow?.stateUpdatedAt===currentRow?.stateUpdatedAt ? {...detail,role:live.eligibility.role,paused:live.eligibility.paused,routines:live.eligibility.routines} : null;
   const block = accounts ? (live?.error || trailErr || routineBlock(eligibility,routineId)) : null;
   const sources = spec ? readPlatforms(spec) : [];
   const have = new Set(connected ?? []);
@@ -283,7 +283,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
           </div>
         </div>
         {/* Accounts mode: the one-screen "Adjust this routine" panel (industry presets + optional steps → routine_params + a draft version). */}
-        {accounts && routineId && <RoutineInspector key={`${V.accountId}:${V.contextGeneration}:${routineId}`} routineId={routineId} currency={run.account.currency} initial={inspectorInitial} onSaved={refresh} context={{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration}} blockReason={eligibility?.role==="owner" && !eligibility.paused && !trailErr ? null : block ?? "Account eligibility unavailable."} runBlockReason={block} />}
+        {accounts && routineId && <RoutineInspector key={`${V.accountId}:${V.contextGeneration}:${routineId}:${detail?.actorId}`} routineId={routineId} currency={run.account.currency} initial={inspectorInitial} onSaved={refresh} context={{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration,actorId:detail?.actorId}} blockReason={eligibility?.role==="owner" && !eligibility.paused && !trailErr ? null : block ?? "Account eligibility unavailable."} runBlockReason={block} />}
         {!accounts && (
           <div style={{ marginTop: 12, background: "white", border: "1px solid var(--card-border)", borderRadius: 14, padding: "18px 22px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -375,7 +375,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
         <div style={{ fontSize: 13, lineHeight: 1.5, color: "oklch(0.3 0.06 262)", flex: 1, minWidth: 260 }}>
           Review saved run receipts for what was actually read or prepared. Publishing, customer messaging and ad changes remain disabled.
         </div>
-        {V.selId && <RunNowPanel key={`${V.accountId}:${V.contextGeneration}:${routineId}`} routineId={V.selId} accountId={run.accountId} account={run.account} persisted={run.persisted} contextGeneration={V.contextGeneration} eligibility={eligibility} blockReason={block} onDone={accounts ? refresh : undefined} />}
+        {V.selId && <RunNowPanel key={`${V.accountId}:${V.contextGeneration}:${routineId}:${detail?.actorId}`} routineId={V.selId} accountId={run.accountId} account={run.account} persisted={run.persisted} contextGeneration={V.contextGeneration} actorId={detail?.actorId} eligibility={eligibility} blockReason={block} onDone={accounts ? refresh : undefined} />}
         {!accounts && V.setupIdle && (
           <button onClick={V.openSetup} className="btn-navy" style={{ flex: "none", marginLeft: "auto", padding: "9px 18px", fontSize: 12.5, fontWeight: 600 }}>
             Set this up

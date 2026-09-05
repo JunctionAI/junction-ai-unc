@@ -28,6 +28,7 @@ export interface RunNowProps {
   /** false = demo/MemoryStore: say so, in one line. */
   persisted: boolean;
   contextGeneration?: number;
+  actorId?: string;
   eligibility?: AgentsSnapshot | null;
   blockReason?: string | null;
   /** Accounts mode: called after a run finishes (any status) so the caller can re-read state. */
@@ -59,13 +60,13 @@ export function runStatusHeading(status: string): string {
   }
 }
 
-export default function RunNowPanel({ routineId, accountId, account, persisted, contextGeneration, eligibility, blockReason, onDone, onOpenConnectors }: RunNowProps) {
+export default function RunNowPanel({ routineId, accountId, account, persisted, contextGeneration, actorId, eligibility, blockReason, onDone, onOpenConnectors }: RunNowProps) {
   const [busy, setBusy] = useState(false);
   const inFlight=useRef(false);
   const [run, setRun] = useState<RunView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const context=persisted && contextGeneration!==undefined?{accountId,contextGeneration}:undefined;
+  const context=persisted && contextGeneration!==undefined?{accountId,contextGeneration,actorId:actorId ?? eligibility?.actorId}:undefined;
   const startRecovery=useManualRecovery(context,routineId,"run");
   const inputRecovery=useManualRecovery(context,routineId,"input");
   const blocked=persisted ? blockReason || routineBlock(eligibility ?? null,routineId) : null;

@@ -27,7 +27,7 @@ import { GET, PATCH, POST } from "@/app/api/routines/params/route";
 const ACCT = "00000000-0000-4000-8000-00000000acc1";
 const USER = "00000000-0000-4000-8000-00000000u5e1";
 const url = (q = "") => `http://unc.test/api/routines/params${q}`;
-const headers={"content-type":"application/json","x-unc-account-id":ACCT,"x-unc-context-generation":"0"};
+const headers={"content-type":"application/json","x-unc-account-id":ACCT,"x-unc-context-generation":"0","x-unc-actor-id":USER};
 const get=(q:string)=>GET(new Request(url(q),{headers}));
 // Simulate a fresh settings GET before each sequential UI edit. Stale-request cases below retain their old revision explicitly.
 const revision=async(body:unknown)=>{const b=body as {routineId?:string};const v=await (await get(`?routineId=${b.routineId}`)).json();return {version:v.version?.live??1,stateUpdatedAt:v.stateUpdatedAt??null,configurationRevision:v.configurationRevision,...b};};

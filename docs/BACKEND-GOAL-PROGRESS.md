@@ -13,7 +13,15 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 36, 6 September NZ / 5 September UTC
+## Latest state — Batch 37, 6 September NZ / 5 September UTC
+
+**Manual recovery acceptance advanced; source not yet deployed.** Browser journals now store identity only (no answer body) and are bound to the signed-in owner. Initial manual requests check that owner against the session; explicit recovery uses the original server-held body. Claimed requests are read back, never restarted; missing/cancelled requests cannot be reconstructed. The legacy run-keyed approval route now requires captured current account context and refuses paused/stale requests. [Full evidence and remaining release gates](MANUAL-RECOVERY-ACCEPTANCE-2026-09-06.md).
+
+PASS: 209 files / **2,626 tests**, app and worker TypeScript, production webpack build, ESLint (0 errors / 44 existing warnings). Actual browser controls passed lost-reply/reload/404/cancellation/settings/owner-switch checks against an isolated fake API. **Real PostgreSQL 17.10 independent-connection concurrency passed nine checks**, with observed lock waits, not simulated interleavings. Exact manual/editor-read/runtime-guard SQL ran on minimal local dependency tables; this does not replace the production Supabase migration/advisor/readback and authenticated full-client release gates.
+
+No production database, app, worker or provider mutation in this batch. The existing public website/Calendly/video delivery below remains unchanged; full-platform launch is still not claimed. Nguyen's latest visible Upwork message remains 1:26 AM; Codex's 1:43 AM masking clarification remains unanswered at this batch's browser check. Exact Email IDs are now known; the shared receiver secret remains unresolved. Rotation has not been approved or performed.
+
+## Previous state — Batch 36, 6 September NZ / 5 September UTC
 
 **Supported n8n API access provisioned and independently verified on the actual worker.** Tom purchased the approved plan. A dedicated three-read-scope key is securely stored in Vercel Production and deployed on the unchanged Fly worker image (release 20). Saved executions 75 and 59 read successfully; execution 75's actual revision and saved webhook node match the frozen wrapper. An ungranted users read returns 403. No workflow/provider run or action activation. [Exact receipt and remaining gates](integration/N8N-API-ACCESS-2026-09-06.md).
 

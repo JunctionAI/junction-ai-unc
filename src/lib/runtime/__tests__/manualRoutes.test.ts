@@ -9,7 +9,7 @@ vi.mock("@/lib/db/session",()=>({requireAccountOwnerSession:async()=>session}));
 vi.mock("@/lib/runtime/store",()=>({getStore:()=>new SupabaseStore(db)}));
 import { GET,POST } from "@/app/api/routines/request/route";
 const request=(id:string,body?:unknown,account=A,generation="1")=>new Request(`https://unc.test/api/routines/request?requestId=${id}`,{
-  method:body===undefined?"GET":"POST",headers:{"content-type":"application/json","x-unc-account-id":account,"x-unc-context-generation":generation},
+  method:body===undefined?"GET":"POST",headers:{"content-type":"application/json","x-unc-account-id":account,"x-unc-context-generation":generation,"x-unc-actor-id":U},
   ...(body===undefined?{}:{body:JSON.stringify(body)}),
 });
 const cancelBody=(id:string)=>({action:"cancel",requestId:id,routineId:"D01-W01",purpose:"run"});
@@ -24,7 +24,7 @@ it("GET on an unknown request returns private 404 without claiming or cancelling
 });
 it("cancels a missing request while paused and reads back the same confirmed tombstone",async()=>{
   const id=crypto.randomUUID(),r=await POST(request(id,cancelBody(id)));expect(r.status).toBe(200);
-  const body=await r.json();expect(body).toEqual({accountId:A,contextGeneration:1,requestId:id,routineId:"D01-W01",purpose:"run",phase:"cancelled",run:null});
+  const body=await r.json();expect(body).toEqual({accountId:A,contextGeneration:1,actorId:U,requestId:id,routineId:"D01-W01",purpose:"run",phase:"cancelled",run:null});
   expect(await(await GET(request(id))).json()).toEqual(body);expect(db.rows("routine_runs")).toHaveLength(0);
 });
 it("rejects wrong account/stale generation and a revoked owner before any cancellation",async()=>{
@@ -45,4 +45,20 @@ it("a lost successful cancellation reply is 503, then GET safely recovers the co
   db.rpcs.cancel_manual_routine_request=async p=>{await cancel(p);throw new Error("sensitive transport detail");};
   const r=await POST(request(id,cancelBody(id)));expect(r.status).toBe(503);expect(await r.text()).not.toContain("sensitive");
   expect(await(await GET(request(id))).json()).toMatchObject({requestId:id,phase:"cancelled",run:null});expect(db.rows("routine_runs")).toHaveLength(0);
+});
+it("refuses stale signed-in actor before reading, creating or cancelling a reservation",async()=>{
+  const id=crypto.randomUUID();
+  for(const handler of [GET,POST]) {
+    const req=request(id,handler===POST?cancelBody(id):undefined);req.headers.set("x-unc-actor-id",crypto.randomUUID());
+    expect((await handler(req)).status).toBe(409);
+  }
+  expect(db.rows("manual_routine_cancellations")).toHaveLength(0);expect(db.rows("routine_runs")).toHaveLength(0);
+});
+it("continuation accepts identity only and cannot reconstruct a missing or cancelled request",async()=>{
+  const id=crypto.randomUUID(),body={...cancelBody(id),action:"continue"};
+  expect((await POST(request(id,{...body,answers:{topic:"injected"}}))).status).toBe(400);
+  expect((await POST(request(id,body))).status).toBe(409);
+  await POST(request(id,cancelBody(id)));
+  expect((await POST(request(id,body))).status).toBe(409);
+  expect(db.rows("routine_runs")).toHaveLength(0);
 });

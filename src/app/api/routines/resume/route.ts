@@ -24,6 +24,8 @@ import { resumeApproval, type ServiceDeps } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun } from "../shared";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { captureArtifactContext } from "@/lib/artifacts/context";
+import { assertRuntimeContext } from "@/lib/db/runtimeContext";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +41,7 @@ async function handlePOST(req: Request) {
   } catch {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
+  if (!body || typeof body!=="object" || Array.isArray(body)) return Response.json({error:"invalid body"},{status:400});
   const runId = typeof body.runId === "string" ? body.runId.trim().slice(0, 128) : "";
   if (!runId) return Response.json({ error: "runId is required" }, { status: 400 });
   if (body.decision !== "approved" && body.decision !== "held") return Response.json({ error: 'decision must be "approved" or "held"' }, { status: 400 });
@@ -46,9 +49,13 @@ async function handlePOST(req: Request) {
   if (isDbConfigured()) {
     const session = await requireAccountOwnerSession();
     if (session instanceof Response) return session;
+    const ctx=await captureArtifactContext(session.service,session.accountId,req);
+    if(ctx instanceof Response)return ctx;
+    try { await assertRuntimeContext(session.service,ctx); }
+    catch { return Response.json({error:"Account context changed or automation is paused."},{status:409}); }
     decidedBy = session.userId;
     const run = await getStore().getRun(runId);
-    if (!run || run.accountId !== session.accountId) return Response.json({ error: `run ${runId} not found` }, { status: 404 });
+    if (!run || run.accountId !== session.accountId || run.contextGeneration!==ctx.contextGeneration) return Response.json({ error: "Run not found in this business context." }, { status: 404 });
   }
 
   try {
@@ -62,4 +69,6 @@ async function handlePOST(req: Request) {
   }
 }
 
-export const POST = withErrorCapture("api/routines/resume", handlePOST);
+export const POST = withErrorCapture("api/routines/resume", async(req:Request)=>{
+  const response=await handlePOST(req);response.headers.set("cache-control","private, no-store");return response;
+});

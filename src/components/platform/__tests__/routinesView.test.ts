@@ -96,7 +96,7 @@ describe("RoutineDetail — accounts mode shows the real routine", () => {
   const selState: PlatformState = { ...initialState, onboarded: true, view: "systems", sel: ALL_SYSTEMS.find((s) => s.id === "D05-W07")! };
   it("real state pill, real version, the spec's own chain, the real setup (sources vs connected), no demo wizard", async () => {
     const live = await listing();
-    const eligible={...live,accountId:ACCT,contextGeneration:0,fetchedAt:new Date().toISOString(),role:"owner" as const,paused:false,routines:live.routines.map(r=>({...r,stateUpdatedAt:null,selectionBlock:null}))};
+    const eligible={...live,actorId:"owner-a",accountId:ACCT,contextGeneration:0,fetchedAt:new Date().toISOString(),role:"owner" as const,paused:false,routines:live.routines.map(r=>({...r,stateUpdatedAt:null,selectionBlock:null}))};
     const liveHook = { active: true, loading: false, data: live,eligibility:eligible, error: null, refresh: noop, patch: noop };
     const html = renderToStaticMarkup(createElement(RoutineDetail, { V: derive(selState, noop), run: acctRun, live: liveHook }));
     expect(html).toContain('data-testid="detail-state"');

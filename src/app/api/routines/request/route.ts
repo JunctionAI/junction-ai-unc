@@ -2,7 +2,8 @@ import { requireAccountOwnerSession } from "@/lib/db/session";
 import { captureArtifactContext } from "@/lib/artifacts/context";
 import { assertRuntimeContext } from "@/lib/db/runtimeContext";
 import { getStore } from "@/lib/runtime/store";
-import { ManualRequestError, manualResult, readManual, cancelManual, type ManualPurpose } from "@/lib/runtime/manual";
+import { ManualRequestError, manualResult, readManual, cancelManual, continueManual, type ManualPurpose } from "@/lib/runtime/manual";
+import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun } from "../shared";
 
 export const runtime = "nodejs";
@@ -13,6 +14,7 @@ export async function GET(req:Request) {
   try {
     const session=await requireAccountOwnerSession();
     if(session instanceof Response){session.headers.set("cache-control","private, no-store");return session;}
+    if(req.headers.get("x-unc-actor-id")!==session.userId)return json({error:"Signed-in owner changed. Refresh before recovery."},409);
     const ctx=await captureArtifactContext(session.service,session.accountId,req);
     if(ctx instanceof Response){ctx.headers.set("cache-control","private, no-store");return ctx;}
     const id=new URL(req.url).searchParams.get("requestId")??"";
@@ -20,29 +22,37 @@ export async function GET(req:Request) {
     if(!record)return json({error:"Request not found in this business context."},404);
     const run=record.run===null?null:summariseRun(await manualResult(getStore(),record));
     await assertRuntimeContext(session.service,ctx,{allowPaused:true});
-    return json({...ctx,requestId:id,routineId:record.operation.routine_id,purpose:record.operation.purpose,phase:record.operation.phase,run});
+    return json({...ctx,actorId:session.userId,requestId:id,routineId:record.operation.routine_id,purpose:record.operation.purpose,phase:record.operation.phase,run});
   } catch(err) {
     return json({error:err instanceof ManualRequestError?err.message:"Could not verify the original run. No new execution was sent."},err instanceof ManualRequestError?err.status:503);
   }
 }
 
-/** A confirmed tombstone fences late original POSTs. This never executes work. */
+/** Cancellation never executes. Explicit continuation uses only the server's original body. */
 export async function POST(req:Request) {
   try {
     const session=await requireAccountOwnerSession();
     if(session instanceof Response){session.headers.set("cache-control","private, no-store");return session;}
+    if(req.headers.get("x-unc-actor-id")!==session.userId)return json({error:"Signed-in owner changed. Refresh before recovery."},409);
     const ctx=await captureArtifactContext(session.service,session.accountId,req);
     if(ctx instanceof Response){ctx.headers.set("cache-control","private, no-store");return ctx;}
     const raw=await req.text();
     if(raw.length>2048)return json({error:"Request too large."},413);
     let body:Record<string,unknown>;
     try{body=JSON.parse(raw);}catch{return json({error:"Invalid JSON."},400);}
-    if(!body || typeof body!=="object" || Array.isArray(body) || body.action!=="cancel" || typeof body.requestId!=="string" ||
-      typeof body.routineId!=="string" || !["run","validate","input"].includes(String(body.purpose)))return json({error:"Invalid cancellation identity."},400);
+    if(!body || typeof body!=="object" || Array.isArray(body) || !["cancel","continue"].includes(String(body.action)) || typeof body.requestId!=="string" ||
+      Object.keys(body).some(k=>!["action","requestId","routineId","purpose"].includes(k)) ||
+      typeof body.routineId!=="string" || !["run","validate","input"].includes(String(body.purpose)))return json({error:"Invalid recovery identity."},400);
+    if(body.action==="continue") {
+      const record=await continueManual(session.service,{...ctx,userId:session.userId},body.requestId,body.routineId,body.purpose as ManualPurpose,
+        {store:getStore(),accounts:defaultAccountsSource()});
+      await assertRuntimeContext(session.service,ctx,{allowPaused:true});
+      return json({...ctx,actorId:session.userId,requestId:record.requestId,routineId:body.routineId,purpose:body.purpose,phase:record.phase,run:summariseRun(record.result)},record.result.status==="running"?202:200);
+    }
     const record=await cancelManual(session.service,{...ctx,userId:session.userId},body.requestId,body.routineId,body.purpose as ManualPurpose);
     await assertRuntimeContext(session.service,ctx,{allowPaused:true});
-    return json({...ctx,requestId:body.requestId,routineId:record.operation.routine_id,purpose:record.operation.purpose,phase:"cancelled",run:null});
+    return json({...ctx,actorId:session.userId,requestId:body.requestId,routineId:record.operation.routine_id,purpose:record.operation.purpose,phase:"cancelled",run:null});
   } catch(err) {
-    return json({error:err instanceof ManualRequestError?err.message:"Cancellation not confirmed. Check the original request; do not start another."},err instanceof ManualRequestError?err.status:503);
+    return json({error:err instanceof ManualRequestError?err.message:"Recovery not confirmed. Check the original request; do not start another."},err instanceof ManualRequestError?err.status:503);
   }
 }

@@ -1,5 +1,7 @@
 # Manual execution admission — Batch 35 source checkpoint
 
+**Current overlay: Batch 37** closes the raw-browser-body/actor-binding gap and adds server-original-body continuation plus real independent-connection PostgreSQL concurrency and browser recovery evidence. See [current acceptance](MANUAL-RECOVERY-ACCEPTANCE-2026-09-06.md). Source remains **not deployed**. The historical remaining-work list below is superseded by that overlay; it is retained as the original checkpoint.
+
 6 September NZ / 5 September UTC. **PARTIAL, NOT DEPLOYED.** Previous batch deployed the editor; this batch implements manual start/validation/input admission and sends the newly authorized Nguyen message. The full B01–B24/all-client goal remains active.
 
 ## Implemented and checked

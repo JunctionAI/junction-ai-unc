@@ -77,6 +77,7 @@ async function handle(req:Request,method:"GET"|"PATCH"|"POST") {
   }
   const action=body.action;
   if(action!=="discard" && action!=="promote" && action!=="validate")return bad("action must be validate, promote or discard");
+  if(action==="validate" && req.headers.get("x-unc-actor-id")!==session.userId)return bad("Signed-in owner changed. Refresh before validation.",409);
   if(routineId==="D03-W01" && action!=="discard")return bad("Keyword pilot requires operator-authorized registration and independent execution verification.",409);
   if(action==="discard")return json(await shape(await commitEditor(session.service,identity,routineId,snapshot.configurationRevision,{action}),routineId));
   const draft=state.draftSpec;
@@ -95,7 +96,7 @@ async function handle(req:Request,method:"GET"|"PATCH"|"POST") {
   const run=manual.result;
   const after=await readEditor(session.service,identity,routineId);
   if(after.configurationRevision!==snapshot.configurationRevision)return bad("Configuration changed during validation. Refresh to inspect the recorded run.",409,{runId:run.runId});
-  return json({...await shape(after,routineId),requestId:manual.requestId,phase:manual.phase,run:{runId:run.runId,status:run.status,summary:run.summary},passed:dryRunPassed(run.status)},run.status==="running"?202:200);
+  return json({...await shape(after,routineId),actorId:session.userId,requestId:manual.requestId,phase:manual.phase,run:{runId:run.runId,status:run.status,summary:run.summary},passed:dryRunPassed(run.status)},run.status==="running"?202:200);
 }
 
 const endpoint=(method:"GET"|"PATCH"|"POST")=>withErrorCapture("api/routines/params",async(req:Request)=>{

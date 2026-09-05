@@ -53,13 +53,14 @@ async function handlePOST(req: Request) {
   if (isDbConfigured()) {
     const access=await agentSnapshot(req);if(access instanceof Response)return access;
     if(access.data.role!=="owner")return Response.json({error:"Only the account owner can run routines.",code:"owner_only"},{status:403});
+    if(req.headers.get("x-unc-actor-id")!==access.session.userId)return Response.json({error:"Signed-in owner changed. Refresh before running."},{status:409});
     if(accountId!==access.data.accountId)return Response.json({error:"Account changed. Reload before running."},{status:409});
     const block=routineBlock(access.data,String(body.routineId));
     if(block)return Response.json({error:block},{status:access.data.role!=="owner"?403:409});
     const row=access.data.routines.find(r=>r.routineId===body.routineId)!;
     if(body.version!==row.version || body.stateUpdatedAt!==row.stateUpdatedAt)return Response.json({error:"Routine changed. Refresh before running."},{status:409});
     if(body.vars!==undefined || body.account!==undefined)return Response.json({error:"Account inputs are loaded by the server."},{status:400});
-    captured={accountId:access.data.accountId,contextGeneration:access.data.contextGeneration};
+    captured={accountId:access.data.accountId,contextGeneration:access.data.contextGeneration,actorId:access.session.userId};
     if(body.mode!==undefined && body.mode!=="dry_run")return Response.json({error:"Only dry_run is available."},{status:403});
     try {
       const identity={...captured,userId:access.session.userId};

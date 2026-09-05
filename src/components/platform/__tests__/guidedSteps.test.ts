@@ -250,7 +250,7 @@ describe("client helpers against a stubbed fetch", () => {
     expect(await startConnect("klaviyo", { fetch: json(500, { error: "nope" }) as unknown as typeof fetch })).toEqual({ kind: "error", message: "nope" });
   });
 
-  const snapshot={accountId:"acct",contextGeneration:1,role:"owner",paused:false,routines:[{routineId:"D01-W01",enabled:false,version:1,stateUpdatedAt:null,selectionBlock:null}]};
+  const snapshot={accountId:"acct",contextGeneration:1,actorId:"owner-a",role:"owner",paused:false,routines:[{routineId:"D01-W01",enabled:false,version:1,stateUpdatedAt:null,selectionBlock:null}]};
   const turnInput={routineId:"D01-W01",accountId:"acct",contextGeneration:1,account:{currency:"NZD",budgetMonthly:0}};
   it("selects the exact saved revision without starting a run",async()=>{
     const calls:RequestInit[]=[];

@@ -28,7 +28,7 @@ export async function agentSnapshot(req: Request) {
   await assertRuntimeContext(session.service,ctx,{allowPaused:true});
   const byId = new Map(states.map(s=>[s.routine_id,s]));
   if (listing.spec && listing.spec.version !== (byId.get(listing.spec.id)?.version ?? 1)) return json({error:"Routine configuration changed. Refresh to inspect it."},409);
-  const data: AgentsSnapshot = {...listing,...ctx,fetchedAt:new Date().toISOString(),role:member.role,paused:account.automation_paused,
+  const data: AgentsSnapshot = {...listing,...ctx,actorId:session.userId,fetchedAt:new Date().toISOString(),role:member.role,paused:account.automation_paused,
     routines:listing.routines.map(r=>{const s=byId.get(r.routineId);return {...r,enabled:s?.enabled??false,version:s?.version??1,stateUpdatedAt:s?.updated_at??null,
       selectionBlock:r.routineId==="D03-W01" ? "Keyword pilot requires operator-authorized registration and independent execution verification." : r.skillSource==="none" ? "No drafting implementation is registered." : !r.canEnable ? r.availabilityCopy : null};})};
   return {session,data};

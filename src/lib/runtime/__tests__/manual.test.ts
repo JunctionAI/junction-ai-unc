@@ -2,7 +2,7 @@ import { beforeEach, expect, it } from "vitest";
 import { FakeSupabase } from "../../db/__tests__/fakeSupabase";
 import { SupabaseStore } from "../store/supabase";
 import { readEditor } from "../presets/editor";
-import { executeManual, readManual, manualResult, cancelManual } from "../manual";
+import { executeManual, readManual, manualResult, cancelManual, continueManual } from "../manual";
 import { FakeProducer, SAMPLE_ARTIFACT } from "./helpers";
 import type { RoutineSpec } from "../types";
 import type { ServiceDeps } from "../../../worker/service";
@@ -146,4 +146,49 @@ it("different prepared input IDs cannot both resume an identical waiting snapsho
   expect(db.rows("routine_runs")[0].input_revision).toBe(1);
   await expect(Promise.resolve().then(()=>db.rpcs.claim_manual_routine_request({...p,p_request:secondId}))).rejects.toThrow();
   expect(producer.calls).toHaveLength(1);
+});
+
+it("continues a prepared start using only server-held body and original run identity",async()=>{
+  const claim=db.rpcs.claim_manual_routine_request,id=crypto.randomUUID();
+  db.rpcs.claim_manual_routine_request=()=>{throw new Error("lost before claim");};
+  await expect(start(id)).rejects.toThrow();const prepared=await readManual(db,identity,id);
+  db.rpcs.claim_manual_routine_request=claim;
+  const result=await continueManual(db,identity,id,spec.id,"run",deps);
+  expect(result.result.runId).toBe(prepared?.run?.id);expect(result.result.status).toBe("done");
+  const replay=await continueManual(db,identity,id,spec.id,"run",deps);
+  expect(replay.result.runId).toBe(result.result.runId);expect(producer.calls).toHaveLength(1);
+  expect(db.rows("routine_runs")).toHaveLength(1);
+});
+it("continues original answers after reload without resubmitting their content",async()=>{
+  producer=new FakeProducer((_n,ctx)=>ctx.inputs?.topic?{artifact:SAMPLE_ARTIFACT}:{needs:[{input:"topic",why:"Choose a topic"}]});deps.producer=producer;
+  const first=await start(),claim=db.rpcs.claim_manual_routine_request,id=crypto.randomUUID();
+  const original={routineId:spec.id,runId:first.result.runId,answers:{topic:"Private original answer"}};
+  db.rpcs.claim_manual_routine_request=()=>{throw new Error("lost before claim");};
+  await expect(executeManual(db,identity,id,"input",original,await snapshot(),deps)).rejects.toThrow();
+  db.rpcs.claim_manual_routine_request=claim;
+  expect((await continueManual(db,identity,id,spec.id,"input",deps)).result.status).toBe("done");
+  expect(producer.calls[1].ctx.inputs?.topic).toBe("Private original answer");
+  expect(db.rows("routine_runs")).toHaveLength(1);
+});
+it("never creates a request through continuation and refuses changed identity/configuration",async()=>{
+  const id=crypto.randomUUID();
+  await expect(continueManual(db,identity,id,spec.id,"run",deps)).rejects.toThrow("unavailable");
+  expect(db.rows("routine_runs")).toHaveLength(0);
+  db.rpcs.claim_manual_routine_request=()=>{throw new Error("lost before claim");};
+  await expect(start(id)).rejects.toThrow();
+  await expect(continueManual(db,{...identity,userId:crypto.randomUUID()},id,spec.id,"run",deps)).rejects.toThrow();
+  await expect(continueManual(db,identity,id,spec.id,"input",deps)).rejects.toThrow();
+  await expect(continueManual(db,identity,id,"D02-W01","run",deps)).rejects.toThrow();
+  db.rows("routine_states")[0].version=2;
+  await expect(continueManual(db,identity,id,spec.id,"run",deps)).rejects.toThrow("Settings changed");
+  expect(producer.calls).toHaveLength(0);
+});
+it("continuation cannot restart cancelled or uncertain claimed work",async()=>{
+  const cancelled=crypto.randomUUID();await cancelManual(db,identity,cancelled,spec.id,"run");
+  await expect(continueManual(db,identity,cancelled,spec.id,"run",deps)).rejects.toThrow("unavailable");
+  const claim=db.rpcs.claim_manual_routine_request,id=crypto.randomUUID();
+  db.rpcs.claim_manual_routine_request=async p=>{await claim(p);throw new Error("lost successful claim reply");};
+  await expect(start(id)).rejects.toThrow();
+  expect((await continueManual(db,identity,id,spec.id,"run",deps)).result.status).toBe("running");
+  expect(producer.calls).toHaveLength(0);
 });
