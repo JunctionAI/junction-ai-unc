@@ -18,11 +18,18 @@ begin
   perform public.write_decision_style_context(a,0,'{"decided":0}',now());
   assert (select decision_style='{"founder_set":"retain","decided":0}' and tone='{"formality":"casual"}' and cadence='{"timezone":"UTC"}' and founder_notes='keep notes' from public.account_profiles where account_id=a),'style merge lost unrelated fields';
   insert into public.routine_runs(id,account_id,routine_id,version) values(old_run,a,'D03-W01',1);
+  -- Exercise every shared trigger row type, not only the new child columns.
+  update public.routine_runs set summary='current run update works' where id=old_run;
+  assert found,'current run update failed';
   denied:=false;
   begin insert into public.approvals(account_id,context_generation,routine_id,title,expires_at) values(a,1,'D03-W01','unbound',now()+interval '1 day');
   exception when serialization_failure then denied:=true; end;
   assert denied,'run-less approval forged a future generation';
   update public.accounts set context_generation=1 where id=a;
+  denied:=false;
+  begin update public.routine_runs set summary='late run update' where id=old_run;
+  exception when serialization_failure then denied:=true; end;
+  assert denied,'old run updated after reset';
   denied:=false;
   begin insert into public.daily_briefs(account_id,day,body) values(a,current_date,'legacy');
   exception when serialization_failure then denied:=true; end;
@@ -62,6 +69,8 @@ begin
 
   -- Parent-bound children inherit the immutable executing run, not current account metadata.
   insert into public.routine_runs(id,account_id,context_generation,routine_id,version) values(fresh_run,a,1,'D03-W01',1);
+  update public.routine_runs set summary='fresh run update works' where id=fresh_run;
+  assert found,'fresh generation run update failed';
   insert into public.receipts(account_id,run_id,kind,description) values(a,fresh_run,'draft','fresh') returning id into rec;
   insert into public.approvals(account_id,run_id,routine_id,title,expires_at) values(a,fresh_run,'D03-W01','fresh',now()+interval '1 day') returning id into ap;
   assert (select context_generation=1 from public.receipts where id=rec),'receipt did not inherit parent generation';
