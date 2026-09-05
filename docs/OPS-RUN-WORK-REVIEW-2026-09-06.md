@@ -48,9 +48,43 @@ The audit never copies output, tokens or raw execution payloads.
 
 ## Release and remaining scope
 
-App release and signed-in production output review are pending at this source
-checkpoint. Worker-only code was not changed; existing release 36 at `dc41bc4`
-remains compatible with this additive ops schema/API. No new worker rollout needed.
+- Source `1e1fd836e54bd7dfa4be3cfc46346a51e26fa79e` pushed; independent remote ref
+  matches. Clean release worktree `/private/tmp/unc-ops-work-release.JG7GAH` excludes
+  the user's untracked `src/lib/runtime/context 2.ts`; no secret env files copied.
+- Vercel `dpl_76TiVoWiU386VtBTGk5YnVsvjs8z`, Next **16.3.4**, build **43 seconds**,
+  READY. Candidate https://junction-3pif4oanu-tom-junctionmedis-projects.vercel.app .
+  Initial deployment returned `Not authorized`; actual whoami/team/project checks
+  succeeded, and one explicit-team retry completed. No credential changes.
+- Candidate health matched source, DB healthy/worker fresh; anonymous work GET
+  returned **401 / private, no-store**. Then promoted to
+  https://junction-unc.vercel.app/ops . Canonical health at `18:25:39.973Z` reported
+  SHA `1e1fd836e54b`, healthy DB, worker fresh at 34 seconds, 19 ticks/no last error.
+  Canonical anonymous work read also returns 401/private/no-store.
+- Signed-in owner clicked the actual run-monitor link for customer run
+  `aeb10060-f0c5-508e-a99a-d70e919eea27`. It displays artifact
+  `c022a1e4-8e0a-4ae4-924d-b0d7d43c6590`, real historical keyword item, missing-GSC
+  warning and five receipts. Expanding artifact and draft-receipt evidence shows
+  execution **80**, workflow `XiXJKuph1fAeH9pe`, historical revision
+  `92135add-3c35-43e4-9649-5bb3d4557814`, stored verified evidence and action `none`.
+  This does not accept old keyword prioritization or Nguyen's pending corrections.
+- Independent SQL confirms audit `5041133a-36a0-4a56-8951-4ac13e42b130` at
+  `18:26:02.410386Z`, exact verified owner/account/run/generation, one artifact ID
+  and all five receipt IDs. Selecting the other AVGAR account with that run is
+  refused by the production UI; previous work disappears (metadata access only).
+- Fresh direct-link document load at `18:27:07.294483Z` reproduces the same work
+  and five receipts; audit `17b97204-22d8-41b3-9e04-d2322ceb2564` independently read
+  back. Final error/fatal scan through approximately `18:27:13Z` has no entries.
+- SQL at `18:26:35.654789Z`: AVGAR generation 1/paused, zero enabled routines,
+  four runs, four artifacts, four datasets and exactly one work-read grant.
+- Worker code unchanged: release **36**, source `dc41bc4`, sole Sydney machine
+  `1857466fd76998`, image `dbecd419f0e04d2daf67224856ba1dde63901f6296b26508594ff27ead807cc3`
+  remains started/compatible with the additive ops schema/API. Fly config retains
+  all five action/channel flags false. No worker deployment or admission change.
+- Bounded candidate error/fatal scan returned no entries; drains remain zero.
+  This short window does not establish ongoing monitoring or alert delivery.
+- App rollback target: `dpl_4ig4xyZC5xHufxALRZ6zLQk2qB2P` at `dc41bc4`.
+  Existing schema/worker can remain; remove the single work grant atomically if
+  work review must be disabled, retaining access history.
 
 The audit table intentionally has no client read/update/delete grants. Retention,
 approved account/user deletion and audit export procedures remain part of B21;
