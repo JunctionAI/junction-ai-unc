@@ -2,6 +2,8 @@
 
 6 September 2026 NZ. This is the exact mapping and deliverable handoff, **not a claim that later wrappers are registered/callable**. First priority remains the narrowly scoped keyword Ignore Bots correction already sent on Upwork. Preserve Header Auth, pinned origin, authority checks and provider credentials; return the validated new revision. Codex owns compatible database/app repinning and the authorized run. Do not run providers while awaiting that context.
 
+**Delivery verified:** the essential requirements were pasted directly into Nguyen's existing Upwork conversation (5,676 characters), with links to this brief and the generated manifest. Fresh conversation readback confirms the complete message is visible and the composer is empty/Send disabled. This avoids relying on private-repository access; no credentials, raw customer rows or new run context were sent. This records sending, not Nguyen's acknowledgement or completed work.
+
 ## 1. IDs and deliverables
 
 There are **18 reported-ready capabilities across five areas**, not five single workflows. Six additional routines remain blocked on inputs/access. No workflow for every switch combination.
