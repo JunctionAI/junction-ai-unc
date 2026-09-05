@@ -13,7 +13,33 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 76, 6 September NZ
+## Latest state — Batch 77, 6 September NZ
+
+**Slack registry/intake/outbox and owner setup now released together.**
+[Exact migration, app/worker, readback and rollback evidence](integration/JUNCTION-OWNED-SLACK-RUNTIME.md#matched-release--batch-77-6-september-nz).
+Production source `8711a48b94e1d3e9e337ea6e9e5e35853a183603`;
+app `dpl_HJhyQAPpUibCEsumu7k5Bca5ZRHU`, worker release 40 on the existing Sydney
+machine. All three migrations applied; all 12 function bodies match local source
+with service-only invoker grants/empty search paths. Partial direct/routed indexes
+and private RLS verified. Security WARN count unchanged at six.
+
+Candidate anonymous refusal, actual worker RPC, canonical health and signed-in
+Connections → Messaging UI pass. New setup accurately says no verified Junction
+Slack identity; production still has zero channel links/routes. AVGAR remains
+paused generation 1 with eight saved runs/inbox results. All five worker action
+flags remain false, command-release scope absent. No provider execution, customer
+message, route activation or Hyperagent listener change.
+
+This removes the undeployed-code gap, not the client-channel acceptance gap.
+Next is the coherent Slack installation/lifecycle slice: metadata scopes,
+preparatory consent/handshake versus messaging controls, shared credential-safe
+OAuth/unlink, revision-bound cutover, then an authorized pilot. The exact issues
+found during release are listed in the linked document; do not repeat unchanged
+native audits or ask the owner to reconnect before fixing this setup path.
+Full B01–B24/all-client/all-screen/launch goal stays active. Previous turn was
+progress; this turn is also verified progress, not blocked or complete.
+
+## Previous state — Batch 76, 6 September NZ
 
 **Owner Slack channel setup implemented and locally verified.** Connections /
 Messaging and the existing Channels screen now expose a context-bound setup

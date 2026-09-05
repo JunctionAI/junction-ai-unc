@@ -160,7 +160,8 @@ neither Slack migration has been applied remotely or any native listener changed
   needs explicit revision-bound activation/deactivation and retained-history
   cutover/rebinding; staging never silently overwrites active or revoked routes.
 - Codex: release the three migrations and matching app/worker with messaging still
-  disabled, then verify the deployed route/command/outbox path before pilot use.
+  disabled — deployed in Batch 77 below. Live route/command/outbox acceptance still
+  requires a scoped pilot; release health alone is not that proof.
 - Codex: verify provider grants and per-client routine mappings; expose stale,
   expired and missing connections as actionable failures, not successful work.
 - Codex: test two clients sharing a Slack sender, wrong-room refusal, removed
@@ -219,3 +220,91 @@ metadata; a missing-scope failure asks for an installation review rather than
 silently reinstalling. The application's first-membership session selection also
 remains an explicit multi-client management limitation. Do not count this UI as
 acceptance of all client channels or all routines.
+
+## Matched release — Batch 77, 6 September NZ
+
+Released source `8711a48b94e1d3e9e337ea6e9e5e35853a183603` from the clean detached
+worktree `/private/tmp/unc-slack-setup-release.C1pfXf`. The unrelated untracked
+`src/lib/runtime/context 2.ts` was excluded and remains untouched. No source or
+credential export from Hyperagent, new route, OAuth consent, provider call,
+Nguyen workflow edit or customer message was made.
+
+### Database
+
+At 22:33:04 UTC, live preflight confirmed zero channel links, no previous Slack
+registry schema, eight AVGAR runs and paused generation 1. Applied the tested
+migrations in order; remote history timestamps differ from local CLI-created
+filenames, but names and definitions match:
+
+| Local migration prefix | Remote history version | Name |
+| --- | --- | --- |
+| 20260905220557 | 20260905223350 | slack_conversation_registry |
+| 20260905221238 | 20260905223355 | slack_routed_inbox |
+| 20260905222650 | 20260905223359 | slack_route_owner_setup |
+
+Independent readback at 22:34:21 UTC matched all 12 affected function-body MD5s
+to local source. Every affected function is security-invoker with an empty
+search path and no anonymous/authenticated execute grant. Private registry RLS
+is enabled. Both partial identity indexes exist with the intended direct/routed
+predicates. Real owner readback returns generation 1, paused, empty identities
+and routes, activation unavailable and executedAction none. No setup data seeded.
+Security advisors retain the six pre-existing WARNs; INFO increases 20→21 for
+the intentionally server-only registry table with no browser RLS policy.
+
+### Deploy Result
+
+- Production: https://junction-unc.vercel.app/app
+- Immutable app: https://junction-ka16qj618-tom-junctionmedis-projects.vercel.app
+- Deployment: `dpl_HJhyQAPpUibCEsumu7k5Bca5ZRHU`, READY/promoted, Next 16.3.4.
+- Cloud build output: 46 seconds.
+- Worker: release 40, existing Sydney machine `1857466fd76998`, started/healthy.
+- Image: `sha256:650d32fb4d7cc349ce1e94e6ebe92feea4daa302463fabc77c20195e5f0e84b4`.
+
+Candidate health reported expected `8711a48b94e1` and a healthy database;
+unauthenticated setup GET returned 401 and `private, no-store`. Before promotion,
+the actual new worker was read at 22:35:55 UTC: full source SHA matches, compiled
+Slack adapter/outbox present, all five command/message/live/phone flags false,
+data sync unset, no command-release scope. Its real owner setup RPC passes with
+the same empty paused state. Canonical health at 22:36:28 UTC reports the new
+app SHA, healthy DB and a fresh worker heartbeat with no lastError.
+
+The signed-in canonical owner UI independently loads Connections → Messaging,
+the new client channel panel, the paused-account notice and the exact absence of
+a verified Junction Slack identity. Existing eight inbox items remain visible;
+all outward-channel controls remain disabled. No setup POST was made. The initial
+loading state settled into the expected empty setup, not a fabricated connection.
+
+Bounded deployment-specific error/fatal log scan returned no entries. This is
+not monitoring-alert delivery or an observation-period acceptance test. Drains
+were not freshly checked; previous evidence reported none.
+
+Rollback: previous app `dpl_3FkwzcnQeRzJFgKFH7aodZYD7PRj`, source `4067b08`,
+worker release 39 image
+`sha256:e12780b89affe9cc8fa71759f7a60f6e96db2b4dacd84b3d3ce4a1daf5705f5b`.
+Keep messaging/commands disabled and reconcile current route/link state before
+rollback. Do not drop the registry or delete historical routes to roll back code.
+No previous channel rows existed when this schema was introduced.
+
+### Concrete next integration work
+
+The released UI accurately exposes a real setup gap: no Junction Slack identity
+is connected. Existing Hyperagent access does not fill it. Before asking the owner
+to reconnect anything, finish the installation/lifecycle slice:
+
+- Separate preparatory OAuth/channel verification from message delivery. The
+  current channel chooser disables Slack setup with the messaging flag even
+  though the owner start endpoint can initiate OAuth. The webhook also gates
+  provider handshake traffic; review signed verification separately from events.
+- Review metadata scopes and the existing app configuration; current requested
+  scopes omit channels:read/groups:read required by the staging verifier.
+- Make OAuth finish/link/secret updates and unlink safe for shared workspace
+  credentials. Current unlink checks other links only in the selected account
+  before deleting the workspace-wide secret; other legitimate identities must
+  not lose their shared bot credential accidentally.
+- Add revision-bound route disable/reverification/cutover without deleting history
+  or reassigning another client's channel. Activation remains a separate scoped
+  pilot decision, never a consequence of connecting OAuth.
+
+These are Codex-owned implementation tasks, not reasons to tell Tom or Nguyen to
+debug the integration. New app consent and the exact listener cutover remain
+explicit authority gates after the setup path is sound.
