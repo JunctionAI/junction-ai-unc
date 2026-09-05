@@ -14,6 +14,8 @@ import DraftCard, { type ArtifactView } from "./DraftCard";
 import { artifactHeaders } from "@/lib/artifacts/client";
 import RoutineInspector, { type ParamsView } from "./RoutineInspector";
 import KeywordConfigurationPanel from "./KeywordConfigurationPanel";
+import KeywordRunPanel from "./KeywordRunPanel";
+import type { KeywordRequestSelection } from "@/lib/n8n/keywordRequestClient";
 import { agoLabel, runStatusLabel, type RoutinesLive } from "./useRoutinesState";
 
 const contractCard: React.CSSProperties = { background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "17px 19px" };
@@ -180,6 +182,10 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
   const currentRow=live?.eligibility?.routines.find(r=>r.routineId===routineId);
   const eligibility = detail && live?.eligibility && detail.actorId===live.eligibility.actorId && !live.loading && detailRow?.version===currentRow?.version && detailRow?.stateUpdatedAt===currentRow?.stateUpdatedAt ? {...detail,role:live.eligibility.role,paused:live.eligibility.paused,routines:live.eligibility.routines} : null;
   const block = accounts ? (live?.error || trailErr || routineBlock(eligibility,routineId)) : null;
+  const keywordNode=spec?.nodes.find(n=>n.kind==="n8n");
+  const keywordMarket=keywordNode?.kind==="n8n"?({2840:"US",2554:"NZ",2036:"AU"} as const)[keywordNode.shadowContract?.client.locationCode as 2840|2554|2036]:undefined;
+  const keywordSelection:KeywordRequestSelection|null=keywordMarket && detailRow?.version===2 && detailRow.stateUpdatedAt
+    ? {market:keywordMarket,version:2,stateUpdatedAt:detailRow.stateUpdatedAt}:null;
   const sources = spec ? readPlatforms(spec) : [];
   const have = new Set(connected ?? []);
   const minimum = spec?.minimum ?? null;
@@ -377,7 +383,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
         <div style={{ fontSize: 13, lineHeight: 1.5, color: "oklch(0.3 0.06 262)", flex: 1, minWidth: 260 }}>
           Review saved run receipts for what was actually read or prepared. Publishing, customer messaging and ad changes remain disabled.
         </div>
-        {V.selId && <RunNowPanel key={`${V.accountId}:${V.contextGeneration}:${routineId}:${detail?.actorId}`} routineId={V.selId} accountId={run.accountId} account={run.account} persisted={run.persisted} contextGeneration={V.contextGeneration} actorId={detail?.actorId} eligibility={eligibility} blockReason={block} onDone={accounts ? refresh : undefined} />}
+        {accounts && routineId==="D03-W01" ? <KeywordRunPanel context={{accountId:V.accountId??"",contextGeneration:V.contextGeneration,actorId:detail?.actorId}} selection={keywordSelection} blockReason={block} onDone={refresh}/> : V.selId && <RunNowPanel key={`${V.accountId}:${V.contextGeneration}:${routineId}:${detail?.actorId}`} routineId={V.selId} accountId={run.accountId} account={run.account} persisted={run.persisted} contextGeneration={V.contextGeneration} actorId={detail?.actorId} eligibility={eligibility} blockReason={block} onDone={accounts ? refresh : undefined} />}
         {!accounts && V.setupIdle && (
           <button onClick={V.openSetup} className="btn-navy" style={{ flex: "none", marginLeft: "auto", padding: "9px 18px", fontSize: 12.5, fontWeight: 600 }}>
             Set this up
