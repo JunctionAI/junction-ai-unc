@@ -148,6 +148,22 @@ try {
     checks.push('expiry after observed ' + relation + ' lock wait refuses late completion');
   }
 
+  for (const [name, mutation] of [
+    ['pause committed during lock wait', 'update accounts set automation_paused=true'],
+    ['context reset committed during lock wait', 'update accounts set context_generation=2'],
+    ['asset rebind committed during lock wait', "update connectors set external_ref='act_OTHER'"],
+  ]) {
+    f = await fixture();
+    await admin.query('begin');
+    await admin.query(mutation);
+    const pending = commit(a, f.snapshot, f.holder);
+    await waiting(a);
+    await admin.query('commit');
+    assert.equal(await pending, null);
+    assert.equal(await count(), 0);
+    checks.push(name + ' refuses waiting completion');
+  }
+
   f = await fixture();
   const successor = randomUUID();
   await admin.query('begin');
