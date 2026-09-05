@@ -10,7 +10,19 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 10, 5 September 2026, approximately 05:08 UTC
+## Latest state — Batch 11, 5 September 2026, approximately 05:31 UTC
+
+**Further verified progress; full goal remains active.** Daily briefs, KPI snapshots and the worker's derived-style write now carry their captured business generation through evidence gathering, provider/model waits, persistence and readback. Brief evidence filters current-context inputs before limits; same-day output preserves separate generations. The browser brief lifecycle and worker local-day candidates/markers are generation-bound.
+
+- App/worker runtime `00fc57cfd07b175bc0d0c452c94f32ecd2d1e735` is pushed and live. Vercel `dpl_CJ3wGqojJj3eaWmktmQTCs6rsYy2` is READY, 48.689-second remote build; Fly release 13 on the existing machine uses image `694e435341a950bb3173004d07fa214f5fc9851107c6228290f56cddc8860e5c`. Independent health readback: matching source, four ticks, zero routine starts, all five action flags false.
+- Additive database stage `20260905052625_brief_kpi_context_fence` preserved legacy keys during the rolling replacement; `20260905052845_retire_brief_kpi_legacy_keys` then retired them. The original runtime regression canary caught a shared-trigger field-access bug. Correction `20260905053022_fix_context_trigger_parent_access` is applied and pushed in SQL-only follow-up `527d51707bd86d3e06863033be327756eed77d95`. All three real SQL canaries now pass, including the expanded run-update case. No real run existed during correction; failed synthetic work rolled back.
+- **185 files / 2,216 tests**, app/worker typechecks and production build pass. Lint remains zero errors/39 existing warnings. Security advisors remain six WARN/eight INFO with no new-function finding. Bounded post-release app error/fatal scan returned zero entries; no log drains or confirmed alert delivery.
+- Signed-in AVGAR identity, preserved connections, pause and approved seed survived reload/readback. Database: generation 1, revision 15, pause true, runs/commands/briefs zero, two chats. All 18 existing KPI snapshots are retained, six other accounts remain generation zero/unpaused, and no canary accounts remain.
+- Full behavior, migration mapping, correction disclosure, proofs and **new rollback compatibility boundary**: [brief/KPI release](BRIEF-KPI-CONTEXT-RELEASE-2026-09-05.md). Do not roll back blindly to pre-generation upsert code after legacy keys are removed.
+
+**Next:** channel inbox/link identity capture, thread/outbound fencing and uncertainty; intake/founder-note/other profile hooks and remaining telemetry writers/readers; bounded paid pilot admission/reconciliation, worker signing/reader access/configuration and Nguyen's final validated origin/revision. These are still Codex-owned dependencies alongside Nguyen's delivery. No n8n execution or outward action was performed. AVGAR stays paused; the full B01–B24 goal is not complete.
+
+## Prior state — Batch 10, 5 September 2026, approximately 05:08 UTC
 
 **Further verified progress; full goal remains active.** Durable commands now carry the generation captured by the accepting app request. New source checks it before/after interpretation and eligibility, claim/execution, result reconciliation and notification claims. The worker cannot resolve an old queued request into a newer account context. Stale work is left as history, never relabelled. Unavailable controls surface to worker health rather than appearing as an empty healthy queue.
 
