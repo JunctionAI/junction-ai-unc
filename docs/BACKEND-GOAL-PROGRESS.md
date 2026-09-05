@@ -12,7 +12,17 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 31, 5 September 2026
+## Latest state — Batch 32, 6 September NZ / 5 September UTC
+
+**Shared routine controls and truthful inspector released with live readback.** Previous turn made Batch 31 release progress; this turn also makes verified progress, not a blocked repetition. Full B01–B24 plus all-screen/all-client acceptance remains active, with no reset or invented token budget.
+
+- Agents, old switch URL and setup now share the same account/generation/revision-bound preference writer. No implicit setup run. Inspector displays actual configured specification/cadence separately from execution proof; run/resume/settings enforce current owner/context/pause/selection checks. Reading settings no longer initializes a database row. General atomic params changes and durable manual execution acceptance still require work; do not call these races closed.
+- **206 files / 2,583 tests PASS**, app/worker types and production build pass; changed-file lint zero errors/three existing warnings. **28 browser cases PASS** across Agents/detail and workspace/ops; mobile overflow repaired. Synthetic cases are not provider/client acceptance.
+- Pushed/live source **`332dd3092b8de65cc145647478412385b52a0e8a`**; production **`dpl_CbNPVM6MZaSxUCvhvEi8Rw1QhmoL` READY/promoted**, 43.007-second build-to-ready. Candidate/canonical health matches, DB healthy, unchanged compatible worker ticks 102→104. Actual D03-W01 paused detail now disables Run/Save and disclaims schedule proof. D02-W03 settings read creates no state row; all eight rows' timestamp fingerprint stays unchanged across pre/post readback. Full app reload returns Today; reopening Agents works.
+- **12:08:52 UTC:** seven accounts, two members, nineteen connector rows, zero runs/enabled routines, AVGAR generation 1/paused. Bounded error/fatal/5xx scans empty; no workflow/provider/model call, credential change, client mutation, migration or worker restart. Anonymous params denies access but its old cache header remains a settings-boundary cleanup, not a universal no-store pass.
+- [Exact evidence and open coverage](ROUTINE-CONTROLS-2026-09-06.md). **Next independent Codex work:** verify current native client/system/tenant/provider identities and build explicit safe bindings; retain missing-member and conflicting-identity blockers rather than copying grants by name. Fresh reads/auth recovery, useful provider results, atomic config/manual execution acceptance, schedules/history/monitoring/cost/security/retention and channel/client acceptance remain open. Pending n8n entitlement/key/receiver approval unchanged; do not re-probe or redesign Nguyen's frozen wrapper.
+
+## Batch 31, 5 September 2026
 
 **Agents/Connections catalog, persisted-switch boundary and verified production release.** Previous goal turn: Batch 30 verified ops release, not blocked. B01–B24 and all-screen/all-client acceptance remain active; no goal reset, narrowed scope or new numeric budget.
 
