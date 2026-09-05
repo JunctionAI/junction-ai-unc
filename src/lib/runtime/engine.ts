@@ -143,6 +143,9 @@ export interface RunOptions {
   /** Operator-only atomic registration/run/permit issuance. Not wired to chat, routes
    * or schedules. Must throw on a previous/uncertain issuance, never restart it. */
   reserveKeywordShadowRun?: (run: RunRecord) => Promise<RunRecord>;
+  /** One durable winner across initial starts and operator recovery. No I/O on false
+   * or a lost reply; a possibly committed start must never be automatically retried. */
+  claimKeywordShadowStart?: (run: RunRecord) => Promise<boolean>;
 }
 
 export interface ResumeOptions {
@@ -711,20 +714,61 @@ export async function runRoutine(spec: RoutineSpec, input: RunInput, adapters: A
   };
   let run: RunRecord;
   if (opts.reserveKeywordShadowRun) {
+    if (!opts.claimKeywordShadowStart) throw new Error("Keyword pilot requires an atomic start claim before issuance");
     const producers = spec.nodes.filter(node => node.kind === "produce" || node.kind === "n8n");
     const node = producers[0];
     if (producers.length !== 1 || node?.kind !== "n8n" || !node.shadowContract || ctx.triggeredBy !== "manual")
       throw new Error("Pilot issuance requires an explicit manual keyword shadow specification");
     assertShadowRequest(node.shadowContract, { ...initial, runId: initial.id });
     assertKeywordShadowTail(spec, spec.nodes.indexOf(node));
-    initial.snapshot = { spec: structuredClone(spec), ctx: structuredClone(ctx), nextNodeIndex: 0, awaiting: "keyword_start" };
+    initial.snapshot = { spec: structuredClone(spec), ctx: structuredClone(ctx), nextNodeIndex: 0,
+      awaiting: "keyword_start", startProtocol: "keyword_claim_v1" };
     run = await opts.reserveKeywordShadowRun(structuredClone(initial));
     if (run.id !== initial.id || run.accountId !== initial.accountId || run.contextGeneration !== initial.contextGeneration ||
         run.status !== "running" || run.mode !== initial.mode || run.version !== initial.version || run.routineId !== initial.routineId ||
         run.startedAt !== initial.startedAt || run.specHash !== initial.specHash || JSON.stringify(run.snapshot) !== JSON.stringify(initial.snapshot))
       throw new Error("Issued keyword run differs from its captured original identity");
+    return startPreparedKeywordShadow(run, adapters, opts.claimKeywordShadowStart);
   } else run = await adapters.store.createRun(initial);
   return new RunSession(spec, ctx, run, adapters).runFrom(0);
+}
+
+/** A reserved run can be resumed only BEFORE any engine work began. This is not a
+ * lease: a lost claim response remains uncertain and is never reclaimed by timeout. */
+async function startPreparedKeywordShadow(original: RunRecord, adapters: Adapters,
+  claim: NonNullable<RunOptions["claimKeywordShadowStart"]>): Promise<RunResult> {
+  const run = structuredClone(original), snapshot = run.snapshot;
+  if (!snapshot || snapshot.awaiting !== "keyword_start" || snapshot.startProtocol !== "keyword_claim_v1" ||
+      snapshot.nextNodeIndex !== 0 || run.status !== "running" || run.mode !== "dry_run" || run.finishedAt || run.approvalId)
+    throw new Error("Original unstarted keyword snapshot unavailable; reconcile without redispatch");
+  const { spec, ctx } = snapshot;
+  assertValidSpec(spec);
+  const index = spec.nodes.findIndex(node => node.kind === "n8n");
+  assertKeywordShadowTail(spec, index);
+  assertSameRuntimeContext(run, ctx.account);
+  assertShadowRequest((spec.nodes[index] as N8nNode).shadowContract!, {
+    accountId: run.accountId, runId: run.id, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt,
+  });
+  if (run.routineId !== spec.id || run.version !== spec.version || run.specHash !== stableHash(spec) ||
+      ctx.runId !== run.id || ctx.routineId !== run.routineId || ctx.version !== run.version ||
+      ctx.mode !== "dry_run" || ctx.startedAt !== run.startedAt || ctx.triggeredBy !== "manual" ||
+      Object.keys(ctx.reads ?? {}).length || Object.keys(ctx.checks ?? {}).length || Object.keys(ctx.inputs ?? {}).length ||
+      ctx.artifact || ctx.execution || ctx.approval || ctx.decision)
+    throw new Error("Original keyword start identity mismatch");
+  await adapters.assertContext?.(run);
+  if (await claim(structuredClone(run)) !== true)
+    throw new Error("Keyword start is unavailable or already claimed; reconcile the original run without redispatch");
+  snapshot.awaiting = "keyword_started";
+  return new RunSession(spec, ctx, run, adapters).runFrom(0);
+}
+
+/** Operator-only recovery using the original persisted run and its existing allowance.
+ * Never calls runRoutine, creates another run, or replenishes provider-call quota. */
+export async function resumePreparedKeywordShadowRun(runId: string, adapters: Adapters,
+  claim: NonNullable<RunOptions["claimKeywordShadowStart"]>): Promise<RunResult> {
+  const run = await adapters.store.getRun(runId);
+  if (!run) throw new Error("Original keyword run unavailable");
+  return startPreparedKeywordShadow(run, adapters, claim);
 }
 
 export async function resumeRun(runId: string, decision: "approved" | "held", adapters: Adapters, opts: ResumeOptions = {}): Promise<RunResult> {

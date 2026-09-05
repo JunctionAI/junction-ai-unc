@@ -3,7 +3,8 @@
 import { unwrap, type DbClient } from "../lib/db/types";
 import { assertRuntimeContext } from "../lib/db/runtimeContext";
 import { SupabaseStore } from "../lib/runtime/store/supabase";
-import { runRoutine, type RunOptions } from "../lib/runtime/engine";
+import { resumePreparedKeywordShadowRun, runRoutine, type RunOptions } from "../lib/runtime/engine";
+import { isDeepStrictEqual } from "node:util";
 import { keywordShadowSpec } from "../lib/n8n/keywordShadowSpec";
 import { AVGAR_PILOT_ACCOUNT, KEYWORD_SHADOW_RECEIVER_URL, type KeywordShadowContract } from "../lib/n8n/shadowContract";
 import { DbAccountsSource } from "./accounts";
@@ -76,26 +77,56 @@ export function keywordPilotReservation(db: DbClient, approval: KeywordPilotAppr
   };
 }
 
-/** For an explicitly approved operator run AFTER release and saved-execution API proof.
- * Configuration validation below is necessary, not proof that the API key works. */
-export async function runKeywordShadowPilot(deps: ServiceDeps & { db: DbClient }, approval: KeywordPilotApproval) {
+/** The RPC compares and claims the exact original snapshot, not merely its run ID. */
+export function keywordPilotStartClaim(db: DbClient): NonNullable<RunOptions["claimKeywordShadowStart"]> {
+  return async run => {
+    const node = run.snapshot?.spec.nodes.find(n => n.kind === "n8n");
+    if (!node || node.kind !== "n8n" || !node.shadowContract || run.accountId !== AVGAR_PILOT_ACCOUNT ||
+        !isDeepStrictEqual(run.snapshot!.spec, keywordShadowSpec(node.shadowContract, 2)))
+      throw new Error("Original reviewed keyword start specification required");
+    return await unwrap<boolean>("shadow.start", db.rpc("claim_keyword_shadow_start", { input: { run } })) === true;
+  };
+}
+
+async function readyPilotAccount(deps: ServiceDeps & { db: DbClient }, generation: number) {
   const env = process.env;
-  const now = deps.now ?? (() => new Date()), captured = captureApproval(approval);
-  const contract = keywordPilotContract(captured, now());
   const receiver = env.N8N_SHADOW_RECEIVER_TOKEN ?? "", signing = env.N8N_SIGNING_SECRET ?? "";
   if (env.N8N_SHADOW_RECEIVER_URL !== KEYWORD_PILOT_PIN.receiverUrl || env.N8N_DATA_BASE_URL !== "https://junction-unc.vercel.app" ||
       !signing.trim() || receiver.trim() !== receiver || receiver.length < 24 || /\s/.test(receiver) || receiver === signing ||
-      !createShadowExecutionReader(env, contract.workflowId)) throw new Error("Pilot server access configuration is not ready");
+      !createShadowExecutionReader(env, KEYWORD_PILOT_PIN.workflowId)) throw new Error("Pilot server access configuration is not ready");
   const account = await new DbAccountsSource(deps.db).getAccount(AVGAR_PILOT_ACCOUNT);
-  if (!account || account.automationPaused || account.account.contextGeneration !== captured.contextGeneration ||
+  if (!account || account.automationPaused || account.account.contextGeneration !== generation ||
       !["avgarsport.com", "https://avgarsport.com", "https://avgarsport.com/"].includes(String(account.vars?.website)))
     throw new Error("Current unpaused AVGAR context is required");
   await assertRuntimeContext(deps.db, account.account);
+  return account;
+}
+
+/** For an explicitly approved operator run AFTER release and saved-execution API proof.
+ * Configuration validation below is necessary, not proof that the API key works. */
+export async function runKeywordShadowPilot(deps: ServiceDeps & { db: DbClient }, approval: KeywordPilotApproval) {
+  const now = deps.now ?? (() => new Date()), captured = captureApproval(approval);
+  const contract = keywordPilotContract(captured, now());
+  const account = await readyPilotAccount(deps, captured.contextGeneration);
   // Explicit snapshot, not a promoted spec: no routine switch, scheduler, live spec,
   // ordinary account settings or credentials are changed by this entry point.
   const spec = keywordShadowSpec(contract, 2);
   const adapters = buildAdapters({ ...deps, store: new SupabaseStore(deps.db) });
   return runRoutine(spec, { account: account.account, vars: account.vars, triggeredBy: "manual" }, adapters, {
     mode: "dry_run", reserveKeywordShadowRun: keywordPilotReservation(deps.db, captured, now),
+    claimKeywordShadowStart: keywordPilotStartClaim(deps.db),
   });
+}
+
+/** Explicit operator recovery only. The original owner approval, expiry, country,
+ * registration and unused permit are rechecked atomically by the start RPC. */
+export async function recoverPreparedKeywordShadowPilot(deps: ServiceDeps & { db: DbClient },
+  runId: string, originalGeneration: number) {
+  if (!uuid.test(runId) || !Number.isSafeInteger(originalGeneration) || originalGeneration < 0)
+    throw new Error("Original keyword run and generation required");
+  await readyPilotAccount(deps, originalGeneration);
+  const store = new SupabaseStore(deps.db), run = await store.getRun(runId);
+  if (!run || run.accountId !== AVGAR_PILOT_ACCOUNT || run.contextGeneration !== originalGeneration)
+    throw new Error("Original AVGAR keyword run unavailable");
+  return resumePreparedKeywordShadowRun(runId, buildAdapters({ ...deps, store }), keywordPilotStartClaim(deps.db));
 }

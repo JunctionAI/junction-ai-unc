@@ -1,0 +1,30 @@
+# Keyword pilot: recovery before the first start
+
+Status at 09:29 UTC, 5 September 2026: source verified; private database helper applied. App/worker release remains Batch 24 until the matched release below is recorded. No real pilot has been issued or run.
+
+## What changed
+
+Issuance already reserved the registration, original run and one-call allowance atomically. If its response was lost, a second issuance correctly returned the original IDs but there was no supported way to start that untouched run.
+
+Initial starts and `recoverPreparedKeywordShadowPilot(deps, originalRunId, originalGeneration)` now share one database claim before the engine performs any read. Recovery uses the saved run/spec/context and existing allowance, never a second `runRoutine` invocation. The application compares the full reviewed specification, not just a hash. The database locks and verifies the exact saved snapshot, current owner/account/generation/pause, registration, original country/seed/revision, expiry and unused permit.
+
+The `keyword_claim_v1` marker excludes legacy snapshots, which cannot prove that the old runtime had not started. A successful claim changes `keyword_start` to `keyword_started`. A competing claim returns false; an ambiguous/lost claim response is not a lease and is never reclaimed by timeout. Before the provider step, the existing `keyword_shadow` checkpoint takes over. Previously implemented saved-execution verification and atomic original-run completion are unchanged.
+
+The helper is SECURITY INVOKER, with execution granted only to `service_role`. No browser, chat, scheduler or public callback imports the recovery entry. It cannot enable switches, unpause AVGAR, renew approval, change credentials or modify Nguyen's wrapper. Recovering an untouched, still-approved run can perform its original provider work: it is not an archive-only diagnostic command.
+
+## Evidence
+
+- Full suite: **198 files / 2,476 tests pass**, including 18 added start-claim/recovery cases. App and worker TypeScript, production webpack build, and diff checks pass. Lint: zero errors, 39 existing warnings.
+- Tests cover a lost issuance, original identity preservation, competing recovery callers, initial claim-before-I/O, lost claim reply, non-boolean/false claims, missing claim wiring, legacy/already-started/partial/changed snapshots and context refusal. Concurrency tests use an application/database seam, not two live SQL sessions.
+- `scripts/verify-keyword-shadow-prepared-start.sql` passes against real PostgreSQL under `service_role` in a rolled-back transaction. Its 13 refusal scenarios cover pause, removed owner, disabled/repointed registration, wrong account/run/generation, changed/legacy/partial/started snapshots, a dispatched permit and expired approval. Original start wins once; it creates no new run, receipt, artifact or paid allowance.
+- Migration source `20260905092340_keyword_shadow_prepared_start.sql` was applied as live migration **20260905092758**, name `keyword_shadow_prepared_start`. Timestamp differs because the deployment tool assigns it; do not blindly reapply by source timestamp.
+- Independent **09:29:04 UTC** readback: AVGAR generation 1, paused, zero permits/runs/registrations/enabled routines. RPC execution: anon false, authenticated false, service role true. All canary fixture changes rolled back.
+- Security advisors report six warnings and twelve informational entries. The new helper is not flagged. The informational no-policy entries are intentional server-only tables, not a reason to grant browser access. Existing [public-extension](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public), [anonymous security-definer](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable), [authenticated security-definer](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) and [password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) warnings remain separate security work; no broad role/RLS changes were made.
+
+## Still required
+
+This is **not** B16 or the full B01–B24 completion. An interruption after the start claim but before provider dispatch is deliberately not auto-resumed. A missing webhook response/checkpoint still needs supported execution discovery; no provider replay is allowed. Operator tooling, monetary policy and customer-command acceptance remain separate from this bounded module.
+
+Live provider acceptance still requires supported authenticated n8n execution access, receiver-secret reconciliation, explicit run approval and current unpaused context. No plan purchase, API key creation, real provider/model call, message, n8n mutation or client activation occurred. Nguyen's frozen wrapper/revision and requested contract are unchanged.
+
+Logs: `/tmp/unc-keyword-start-tests.log`, `/tmp/unc-keyword-start-build.log`, `/tmp/unc-keyword-start-lint.log`.

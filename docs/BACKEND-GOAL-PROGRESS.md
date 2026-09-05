@@ -10,7 +10,16 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 24, 5 September 2026, approximately 09:17 UTC
+## Latest state — Batch 25, 5 September 2026, approximately 09:29 UTC
+
+**Source and private database progress.** Batch 24 remains the current app/worker release until a new matched deployment is recorded. Added one-use start claiming shared by the first keyword start and explicit recovery of its untouched original run. A lost issuance can be recovered without another allowance; possibly started/legacy/expired/changed runs cannot replay. Nguyen's wrapper is untouched.
+
+- **198 files / 2,476 tests PASS**, app/worker TypeScript, production build, lint zero errors / 39 existing warnings, and diff checks. Real PostgreSQL rollback canary passes its 13 refusal scenarios and one-winner check; application concurrency fixtures do not claim live multi-session SQL proof.
+- Private start RPC applied as migration `20260905092758_keyword_shadow_prepared_start`. Independent 09:29:04 UTC readback: AVGAR generation 1 / paused, zero registrations/permits/runs/enabled routines; public/signed-in execution denied, service-role execution allowed. No business/credential/channel data or live workflow was changed.
+- [Exact recovery behavior, evidence and limitations](KEYWORD-PREPARED-START-2026-09-05.md). Recovery after an ambiguous start claim or missing provider-response checkpoint remains open. n8n API entitlement/key approval, receiver reconciliation and real US/NZ/AU pilot acceptance remain the immediate launch gates; full B01–B24 goal is active, not complete or globally blocked.
+- New frontend ZIP remains mapped, not deployed: [frontend wiring map](integration/FRONTEND-HANDOFF-MAP-2026-09-05.md). Landing capture, catalog reconciliation and ops authorization still need implementation against the existing backend.
+
+## Batch 24, 5 September 2026, approximately 09:17 UTC
 
 **Implementation and matched live-release progress.** The preceding status answer was no implementation progress. Revalidated the current checkout and repaired native reconnect interruption, unconditional callback-failure updates, non-atomic shared OAuth-state consumption and expiry boundaries. Native reconnect preserves a usable grant; shared callback consumption is a single DELETE RETURNING. Hosted callback failures and Slack duplicate/expiry handling share the correction; hosted reconnect-start pointer isolation is not yet fixed.
 

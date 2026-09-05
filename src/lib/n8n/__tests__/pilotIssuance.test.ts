@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { keywordPilotContract, keywordPilotReservation, KeywordPilotAlreadyIssued, KEYWORD_PILOT_PIN, runKeywordShadowPilot, type KeywordPilotApproval } from "../../../worker/issueKeywordShadowPilot";
-import { runRoutine } from "../../runtime/engine";
+import { keywordPilotContract, keywordPilotReservation, keywordPilotStartClaim, KeywordPilotAlreadyIssued, KEYWORD_PILOT_PIN, runKeywordShadowPilot, type KeywordPilotApproval } from "../../../worker/issueKeywordShadowPilot";
+import { resumePreparedKeywordShadowRun, runRoutine } from "../../runtime/engine";
+import { stableHash } from "../../runtime/context";
 import { keywordShadowSpec } from "../keywordShadowSpec";
 import { adapters as testAdapters } from "../../runtime/__tests__/helpers";
 import { FakeSupabase } from "../../db/__tests__/fakeSupabase";
@@ -41,6 +42,7 @@ async function fixture() {
   const { adapters, store } = testAdapters();
   const account = { accountId: contract.accountId, contextGeneration: 1, currency: "NZD", budgetMonthly: 0 };
   let previous: { created: boolean; runId: string; permitId: string; registrationId: string } | undefined;
+  let claimed = false;
   // Application wiring seam, not a SQL transaction/concurrency proof.
   db.rpcs.issue_keyword_shadow_pilot = ({ input }) => {
     const packet = input as { run: RunRecord; approval: KeywordPilotApproval };
@@ -49,14 +51,103 @@ async function fixture() {
     void store.createRun(structuredClone(packet.run));
     return previous;
   };
+  db.rpcs.claim_keyword_shadow_start = ({ input }) => {
+    if (claimed) return false;
+    const run = (input as { run: RunRecord }).run;
+    claimed = true;
+    void store.updateRun(run.id, { snapshot: { ...run.snapshot!, awaiting: "keyword_started" } });
+    return true;
+  };
   const call = vi.fn(async () => ({ kind: "needs" as const, needs: [{ input: "synthetic", why: "Synthetic test only" }] }));
   const read = vi.spyOn(adapters.reader, "read"), create = vi.spyOn(store, "createRun");
   const reserve = keywordPilotReservation(db, a, now);
+  const claim = keywordPilotStartClaim(db);
+  const wired = { ...adapters, now, n8n: { call }, completeKeywordShadow: vi.fn() };
   const start = (otherSpec: RoutineSpec = spec, options = {}) => runRoutine(otherSpec, { account, vars: { website: "avgarsport.com" }, triggeredBy: "manual" },
-    { ...adapters, now, n8n: { call }, completeKeywordShadow: vi.fn() },
-    { mode: "dry_run", reserveKeywordShadowRun: reserve, ...options });
-  return { db, a, spec, start, store, read, create, call, reserve, account };
+    wired, { mode: "dry_run", reserveKeywordShadowRun: reserve, claimKeywordShadowStart: claim, ...options });
+  const recover = (runId: string) => resumePreparedKeywordShadowRun(runId, wired, claim);
+  return { db, a, spec, start, store, read, create, call, reserve, account, recover, wired, claim };
 }
+
+async function prepared() {
+  const f = await fixture(), original = f.db.rpcs.issue_keyword_shadow_pilot;
+  f.db.rpcs.issue_keyword_shadow_pilot = args => { original(args); throw new Error("lost issuance response"); };
+  await expect(f.start()).rejects.toThrow("lost issuance response");
+  f.db.rpcs.issue_keyword_shadow_pilot = original;
+  const run = (await f.store.listRuns(f.account.accountId))[0];
+  return { ...f, run };
+}
+
+describe("claim-before-I/O keyword start recovery", () => {
+  it("claims before reads on initial start", async () => {
+    const f = await fixture(), original = f.db.rpcs.claim_keyword_shadow_start;
+    f.db.rpcs.claim_keyword_shadow_start = args => {
+      expect(f.read).not.toHaveBeenCalled(); expect(f.call).not.toHaveBeenCalled();
+      expect((args.input as { run: RunRecord }).run.snapshot?.startProtocol).toBe("keyword_claim_v1");
+      return original(args);
+    };
+    await f.start(); expect(f.read).toHaveBeenCalledTimes(2);
+  });
+  it("recovers a lost issuance using the original run, without issuing another allowance", async () => {
+    const f = await prepared(), issue = vi.fn(f.db.rpcs.issue_keyword_shadow_pilot);
+    f.db.rpcs.issue_keyword_shadow_pilot = issue;
+    const result = await f.recover(f.run.id);
+    expect(result.runId).toBe(f.run.id); expect(result.status).toBe("waiting_input");
+    expect(issue).not.toHaveBeenCalled(); expect(f.create).toHaveBeenCalledOnce();
+    expect(f.read).toHaveBeenCalledTimes(2); expect(f.call).toHaveBeenCalledOnce();
+  });
+  it("two recovery callers have one claim winner and one provider call", async () => {
+    const f = await prepared();
+    const results = await Promise.allSettled([f.recover(f.run.id), f.recover(f.run.id)]);
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter(r => r.status === "rejected")).toHaveLength(1);
+    expect(f.read).toHaveBeenCalledTimes(2); expect(f.call).toHaveBeenCalledOnce(); expect(f.create).toHaveBeenCalledOnce();
+  });
+  it("the initial caller losing a claim reply cannot be restarted by recovery", async () => {
+    const f = await fixture(), original = f.db.rpcs.claim_keyword_shadow_start;
+    f.db.rpcs.claim_keyword_shadow_start = args => { original(args); throw new Error("lost claim reply"); };
+    await expect(f.start()).rejects.toThrow("lost claim reply");
+    const run = (await f.store.listRuns(f.account.accountId))[0];
+    expect(run.snapshot?.awaiting).toBe("keyword_started");
+    await expect(f.recover(run.id)).rejects.toThrow("unstarted keyword snapshot");
+    expect(f.read).not.toHaveBeenCalled(); expect(f.call).not.toHaveBeenCalled();
+  });
+  it.each([false, null, "true", {}])("requires literal true from durable claim, got %j", async answer => {
+    const f = await prepared(); f.db.rpcs.claim_keyword_shadow_start = () => answer;
+    await expect(f.recover(f.run.id)).rejects.toThrow("unavailable or already claimed");
+    expect(f.read).not.toHaveBeenCalled(); expect(f.call).not.toHaveBeenCalled();
+  });
+  it("refuses missing start-claim wiring before issuing anything", async () => {
+    const f = await fixture();
+    await expect(f.start(f.spec, { claimKeywordShadowStart: undefined })).rejects.toThrow("atomic start claim");
+    expect(f.create).not.toHaveBeenCalled(); expect(f.read).not.toHaveBeenCalled();
+  });
+  it.each(["legacy", "already_started", "awaiting_provider", "partial_reads", "changed_run", "live", "finished", "changed_spec"])("refuses %s snapshot before claim or I/O", async fault => {
+    const f = await prepared(), run = structuredClone(f.run);
+    if (fault === "legacy") delete run.snapshot!.startProtocol;
+    if (fault === "already_started") run.snapshot!.awaiting = "keyword_started";
+    if (fault === "awaiting_provider") run.snapshot!.awaiting = "keyword_shadow";
+    if (fault === "partial_reads") run.snapshot!.ctx.reads = { unapproved: { rows: [], metrics: {}, fetchedAt: now().toISOString() } };
+    if (fault === "changed_run") run.snapshot!.ctx.runId = randomUUID();
+    if (fault === "live") run.mode = "live";
+    if (fault === "finished") run.status = "done";
+    if (fault === "changed_spec") {
+      run.snapshot!.spec.name = "Changed reviewed specification";
+      run.specHash = stableHash(run.snapshot!.spec);
+    }
+    await f.store.updateRun(run.id, { snapshot: run.snapshot, mode: run.mode, status: run.status, specHash: run.specHash });
+    const claim = vi.fn(f.db.rpcs.claim_keyword_shadow_start); f.db.rpcs.claim_keyword_shadow_start = claim;
+    await expect(f.recover(run.id)).rejects.toThrow();
+    expect(claim).not.toHaveBeenCalled(); expect(f.read).not.toHaveBeenCalled(); expect(f.call).not.toHaveBeenCalled();
+  });
+  it("refuses changed context before claiming the reserved start", async () => {
+    const f = await prepared();
+    f.wired.assertContext = vi.fn(async () => { throw new Error("account was paused/reset"); });
+    const claim = vi.fn(f.db.rpcs.claim_keyword_shadow_start); f.db.rpcs.claim_keyword_shadow_start = claim;
+    await expect(f.recover(f.run.id)).rejects.toThrow("paused/reset");
+    expect(claim).not.toHaveBeenCalled(); expect(f.read).not.toHaveBeenCalled(); expect(f.call).not.toHaveBeenCalled();
+  });
+});
 
 describe("atomic pilot issuance wiring", () => {
   it("creates the original run once before reads and dispatch, without promoting or enabling a routine", async () => {
