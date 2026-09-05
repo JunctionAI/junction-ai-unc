@@ -13,7 +13,7 @@
    projection changed, so the write volume is one batch per 800 ms of edits at most.
    Upgrade path: per-section dirty tracking so a chat message doesn't rewrite the goals. */
 
-import { accountInitialState, type PlatformState } from "@/lib/platform/state";
+import { accountInitialState, type PlatformState } from "../platform/state";
 import { rowsToState, stateToRows, type AccountRows, type LoadedRows } from "./mapping";
 import { unwrap, type DbClient } from "./types";
 
