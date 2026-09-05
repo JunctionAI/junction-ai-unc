@@ -13,7 +13,30 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 73, 6 September NZ
+## Latest state — Batch 74, 6 September NZ
+
+**Client-channel registry and provider-verified staging implemented locally.**
+[Exact scope, evidence and remaining cutover gates](integration/JUNCTION-OWNED-SLACK-RUNTIME.md).
+Separate route identity from OAuth sender identity: the real local PostgreSQL
+harness proves one sender can resolve two distinct client channels without moving
+its connection. It also proves concurrent staging, wrong room/workspace/member
+refusal, owner/member revocation, changed link revision, pause/reset, immutable
+route identity and service-only invoker/RLS permissions. Provider adapters check
+account-owner preflight before token use, exact workspace bot and actual channel
+membership before staging. Unit tests cover missing scopes, shared/archived rooms,
+changed authority during reads and mismatched persisted results.
+Verification: 3,116 tests / 229 files pass; app and worker TypeScript pass;
+focused ESLint and `git diff --check` pass. The real SQL checks are separate from
+the provider/RPC unit fixtures and do not claim live client acceptance.
+
+All staging remains inactive. No production migration, new OAuth consent,
+provider calls, customer messages or deployment in this batch. Source adapters
+are not yet connected to an owner setup endpoint or durable inbox/outbox. The
+next step is atomic route/sender capture and revalidation through command and
+delivery processing, then controlled cutover. Production still runs `4067b08`;
+all B01–B24/all-client gates remain active, not reduced to this registry.
+
+## Previous state — Batch 73, 6 September NZ
 
 **Junction-owned Slack migration: origin capture implemented, routing still
 incomplete.** [Decision, exact batch scope and remaining gates](integration/JUNCTION-OWNED-SLACK-RUNTIME.md).

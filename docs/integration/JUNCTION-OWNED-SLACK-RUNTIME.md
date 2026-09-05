@@ -33,7 +33,7 @@ The agent is therefore a conversational entry point to tested routines, not a
 second unconstrained automation system. Enabling 1/7 or 3/7 routines changes the
 allowlist; it does not require seven combinations of duplicate workflows.
 
-## Current code batch
+## Origin capture batch
 
 The Slack event and message-button parsers now preserve `conversationId` and the
 exact string `threadId`, independently of sender `externalId` and workspace
@@ -51,6 +51,53 @@ Do not deploy this as a claim that shared-channel routing is finished.
 Local verification: 3,083 tests across 228 files pass, application TypeScript
 passes, and focused ESLint passes. No provider calls, route migration or customer
 messages were used to obtain these results. Production is unchanged.
+
+## Conversation registry batch
+
+`20260905220557_slack_conversation_registry.sql` adds a private, RLS-enabled
+workspace/channel registry with service-only invoker RPCs. It does not alter the
+existing OAuth link uniqueness or move a connection between client accounts.
+The owner must hold a verified Slack identity and current ownership of the
+target account. One such identity can provision separate channels for two owned
+accounts without duplicating OAuth. Other senders must independently have a
+verified Slack identity plus current membership of the routed client account.
+
+`slackRoutes.ts` verifies preflight identity before touching the token resolver,
+checks `auth.test` against the registered workspace bot, then checks the exact
+channel with `conversations.info`. The channel must contain the bot, be
+unarchived and have explicit non-shared status. Slack Connect/org-shared channels
+are not accepted in this initial implementation; they need explicit audience
+and external-user policy, not a silent fallback. Missing channel metadata scopes
+produce a reconnect requirement; this batch does not request new OAuth consent.
+Public/private channel metadata needs `channels:read`/`groups:read`; these are
+recorded requirements, not newly granted permissions.
+
+All registrations start **staged**. A second binding cannot steal an existing
+channel. Concurrent identical staging converges on one row. The resolver refuses
+inactive routes, paused/reset accounts, removed owners/members and changed or
+unverified OAuth identities. It returns an origin-checked candidate with route
+and identity revisions, **not a durable execution or delivery grant**.
+
+Real local PostgreSQL verification executes the exact migration against minimal
+dependency tables from the existing migrations. It proves two-client resolution,
+wrong-room/workspace/member refusal, identity revision invalidation, pause/reset,
+revocation, immutable route identity, concurrent staging, RPC grants and private
+RLS. Tests activate synthetic fixtures directly; **no production activation
+endpoint or cutover approval was implemented or exercised**.
+
+Reproduce: `node scripts/verify-slack-conversation-registry.mjs /tmp/unc-manual-pg.x8Y6jR`
+(the existing isolated pinned PostgreSQL dependency directory). No production
+credentials are read, and no provider/customer messages are sent. The isolated
+cluster is stopped in `finally`; test data is retained in its reported temp path.
+
+This migration is **not applied to production**. The server staging/resolution
+adapters are tested but not exposed by a UI/API or connected to live ingress.
+Next is atomic inbox capture/reverification of the route alongside the sender,
+without treating an OAuth link's original account as the conversation's account.
+Commands, outbox and approval receipts must preserve that same bound origin.
+Do not enable a route before that complete path and controlled cutover pass.
+Rebinding a reserved/revoked channel is deliberately unavailable until the
+explicit cutover/retention path is built; deleting audit evidence is not a shortcut.
 
 ## Remaining implementation and cutover gates
 
