@@ -12,6 +12,6 @@
   ],
   "scope": "Preserve only this exact already-verified post-repair app-message set. No restored pre-repair messages, content edits, account unpause or other-account relabelling.",
   "checksum": "md5(jsonb_agg(to_jsonb(chat_messages) order by id)::text) before the new columns, or with only context_generation/external_scope removed afterward; integrity checksum, not authentication",
-  "status": "rehearsed; not applied",
+  "status": "applied as live migration 20260905085533_chat_context_fence; original rows preserved and browser verified",
   "verification": "Missing and mismatched attestations refused with DDL rolled back. Exact approved rows survived unchanged; other accounts remained generation zero. All 18 database canaries passed against the complete ten-migration release in one rollback-only rehearsal."
 }
