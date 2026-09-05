@@ -1,0 +1,9 @@
+{
+  "authorizedBy": "74802c60-149a-4405-b719-dc058d174072",
+  "approvalReference": "docs/integration/KEYWORD-REVIEWED-PILOT-AUTHORITY-2026-09-06.md",
+  "idempotencyKey": "avgar-keyword-NZ-reviewed-20260905-1946-v1",
+  "market": "NZ",
+  "contextGeneration": 1,
+  "maxProviderCalls": 1,
+  "expiresAt": "2026-09-05T19:54:00.000Z"
+}

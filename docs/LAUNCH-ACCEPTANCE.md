@@ -6,6 +6,13 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
+**Batch 65 overlay:** [corrected-revision live acceptance](integration/KEYWORD-REVIEWED-LIVE-PILOT-2026-09-06.md)
+passes actual US/NZ/AU operator round trips (#81–83), independent saved-execution
+versus artifact/receipt comparison, and customer UI US market save. Seven total
+results reload; historic proof preserved. New-revision customer request scope
+and its live acceptance remain next, not automatically satisfied by operator runs.
+Account paused, no routines or external-action flags enabled; full goal unchanged.
+
 **Batch 64 overlay:** [reviewed keyword pin release](KEYWORD-REVIEWED-REVISION-2026-09-06.md)
 is live on matching `aa3fba4` app/worker 38. Prior verified work and saved settings
 remain unchanged; old proof does not become proof of the new revision. Deployed

@@ -13,7 +13,26 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 64, 6 September NZ / 5 September UTC
+## Latest state — Batch 65, 6 September NZ / 5 September UTC
+
+**Corrected keyword revision has real US/NZ/AU round trips and a saved customer
+market.** [Exact execution/result/authority evidence](integration/KEYWORD-REVIEWED-LIVE-PILOT-2026-09-06.md).
+Executions 81–83 at `ac771cd3-8899-4401-915c-40d4477e48e2` independently match
+their original requests, published builder, three artifacts and 15 receipts.
+Updated drafts separate paid competition/SEO difficulty and preserve unknown
+currency/page priority. No invented page match or historical relabelling.
+Signed-in market selector offers all three verified recipes; US saved at
+19:48:04 UTC, still disabled. Reload shows seven total completed runs/artifacts,
+35 receipts, zero enabled routines or unresolved permits. AVGAR paused after each
+window. App/worker remain `aa3fba4`/release 38; no workflow/credential/flag changes.
+
+Previous goal turn and this turn are **progress**: coherent repin release followed
+by actual provider executions, independent readback and UI persistence. Next is
+the bounded new-revision customer request/switch/duplicate journey. Operator
+round trips are not substituted for that gate; full B01–B24/all-client launch
+scope and calendar/other-lane work remain active.
+
+## Previous state — Batch 64, 6 September NZ / 5 September UTC
 
 **Reviewed keyword revision now pinned in matching production SQL/app/worker.**
 [Exact release and readback](KEYWORD-REVIEWED-REVISION-2026-09-06.md). Source
