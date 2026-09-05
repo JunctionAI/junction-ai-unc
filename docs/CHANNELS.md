@@ -1,5 +1,14 @@
 # Channels — Unc on Telegram, WhatsApp, Slack and text (2026-09-02)
 
+> Historical design document. For current Slack setup, authority, routing and
+> release truth use [Junction-owned Slack runtime](integration/JUNCTION-OWNED-SLACK-RUNTIME.md)
+> and [the setup-only manifest](../deploy/slack/setup-manifest.json). Do not apply
+> the old manifest below: its metadata scopes are incomplete and it activates
+> listeners. Installation no longer sends a welcome, moves an identity between
+> client accounts, or permits customer messaging. Conversation history is now
+> audience-scoped; the historical whole-cross-channel-history claim below is not
+> the current security contract.
+
 **Founder direction:** *"Unc guides you every step of the way; the UI supports it. Connect Unc on the platform you want — Slack, Telegram, text message — and the in-app corner chat is the same conversation: anything said there is pulled across. Approvals and feedback flow through both."*
 
 Unc's line for it, used everywhere in the UI: *"Wherever you talk to me, it's the same conversation — and every decision still lands in the app."*

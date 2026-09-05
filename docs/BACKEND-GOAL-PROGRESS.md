@@ -13,7 +13,35 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 79, 6 September NZ
+## Latest state — Batch 80, 6 September NZ
+
+**Dedicated Junction Slack app created and configured, not installed.**
+App `A0BV96C6BFC` (Junction Unc), owner workspace Junction AI
+`T0BMD3LMWUQ`. Existing native agent apps/listeners were not changed.
+Live Vercel production metadata confirmed no SLACK app keys; this was not merely
+a missing client link. The Slack dashboard had no dedicated Unc runtime app.
+
+Created an uninstalled application shell rather than using the wizard's combined
+Create and Install action. Saved the checked-in setup manifest afterward. Fresh
+OAuth settings readback confirms the exact canonical callback, eight bot scopes
+matching the runtime, no user-token scopes and no generated OAuth tokens. Events
+remain Off. Creation/readback is configuration evidence, not owner consent,
+verified provider access, client readiness or message delivery.
+
+[Setup manifest and remaining secure provisioning steps](../deploy/slack/README.md).
+The old CHANNELS document now explicitly points to the current contract and
+warns against its old listener-enabled manifest/history claims. A focused new
+test verifies manifest/runtime scope agreement and disabled listener settings;
+it passes with typecheck, focused lint and diff check. No app runtime code changed
+and no additional deployment was needed; production remains Batch 79's 781dfe7.
+
+Next Codex work: secure production app/worker settings, setup-only readback,
+explicit route lifecycle/cutover and client routine mapping. Actual installation
+consent must originate from Junction's owner-bound flow, not the dashboard's
+generic install link. All action holds remain in place. Previous turn and this
+turn both made progress; the full goal stays active and incomplete.
+
+## Previous state — Batch 79, 6 September NZ
 
 **Batch 78's Slack install authority is now released and independently read back.**
 Production app/worker source is `781dfe740026b9148396a2bf55c64b537d347c48`.
