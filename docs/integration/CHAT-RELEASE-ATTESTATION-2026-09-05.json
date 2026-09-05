@@ -1,0 +1,17 @@
+{
+  "verifiedAt": "2026-09-05T08:52:33.007660Z",
+  "source": "Independent database readback compared with AVGAR-CONTEXT-REPAIR-2026-09-05.md owner-chat acceptance",
+  "attestations": [
+    {
+      "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+      "generation": 1,
+      "repairId": "e56cac77-1940-41b4-99db-677aa30e4222",
+      "rowCount": 2,
+      "rowsHash": "19b8119ae13345625e52e87c91bea4d8"
+    }
+  ],
+  "scope": "Preserve only this exact already-verified post-repair app-message set. No restored pre-repair messages, content edits, account unpause or other-account relabelling.",
+  "checksum": "md5(jsonb_agg(to_jsonb(chat_messages) order by id)::text) before the new columns, or with only context_generation/external_scope removed afterward; integrity checksum, not authentication",
+  "status": "rehearsed; not applied",
+  "verification": "Missing and mismatched attestations refused with DDL rolled back. Exact approved rows survived unchanged; other accounts remained generation zero. All 18 database canaries passed against the complete ten-migration release in one rollback-only rehearsal."
+}

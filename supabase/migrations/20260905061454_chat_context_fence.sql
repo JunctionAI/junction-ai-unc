@@ -1,8 +1,42 @@
--- Staged coordinated release only. Legacy history remains generation zero, never inferred
--- from today's account. Verified post-repair rows require a separate exact-row migration.
+-- Coordinated release only. Legacy history remains generation zero unless an operator
+-- supplies an exact independently checked post-repair row-set attestation. No blanket
+-- relabelling from today's account generation. Lock before chat DDL to avoid racing a
+-- context repair or an autosave which takes account locks before writing its chat rows.
+lock table public.accounts in exclusive mode;
 alter table public.chat_messages
   add column context_generation bigint not null default 0 check (context_generation >= 0),
   add column external_scope text not null default '';
+
+-- Transaction-local operator input, never a customer route or permanent bypass. It
+-- contains identifiers/checksums only, not message bodies. Fresh empty databases and
+-- generation-zero accounts need no attestation. Repaired histories must not disappear.
+do $$
+declare proofs jsonb:=coalesce(nullif(current_setting('unc.chat_release_attestations',true),''),'[]')::jsonb;
+  a public.accounts%rowtype; p jsonb; archive record;
+  count_rows bigint; rows_hash text; first_created timestamptz; proof_count bigint;
+begin
+  if jsonb_typeof(proofs) is distinct from 'array' then
+    raise exception 'Chat release attestations must be an array' using errcode='23514'; end if;
+  for a in select * from public.accounts where context_generation>0 and
+    exists(select 1 from public.chat_messages c where c.account_id=accounts.id) order by id loop
+    select count(*),min(value::text)::jsonb into proof_count,p from jsonb_array_elements(proofs)
+      where value->>'accountId'=a.id::text;
+    if proof_count<>1 or not a.automation_paused or p->>'generation' is distinct from a.context_generation::text then
+      raise exception 'Paused repaired chat needs one verified row-set attestation' using errcode='23514'; end if;
+    if to_regclass('unc_private.context_repairs') is null then
+      raise exception 'A verified context-repair archive is required' using errcode='23514'; end if;
+    select id,created_at into archive from unc_private.context_repairs where id=(p->>'repairId')::uuid
+      and account_id=a.id and after_generation=a.context_generation;
+    select count(*),md5(jsonb_agg(to_jsonb(c)-array['context_generation','external_scope'] order by c.id)::text),min(c.created_at)
+      into count_rows,rows_hash,first_created from public.chat_messages c where c.account_id=a.id;
+    if archive.id is null or count_rows::text is distinct from p->>'rowCount' or rows_hash is distinct from p->>'rowsHash' or
+      first_created<=archive.created_at or exists(select 1 from public.chat_messages c
+        where c.account_id=a.id and (c.channel<>'app' or c.context_generation<>0 or c.external_scope<>'')) then
+      raise exception 'Post-repair chat attestation changed or provenance is unavailable' using errcode='40001'; end if;
+    -- No content, timestamp, ID, sender, position or other-account row is modified.
+    update public.chat_messages set context_generation=a.context_generation where account_id=a.id;
+  end loop;
+end $$;
 
 drop index public.chat_messages_thread_position_idx;
 drop index public.chat_messages_external_msg_idx;

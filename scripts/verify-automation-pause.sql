@@ -1,12 +1,15 @@
 -- Real database-role checks. Disposable rows are rolled back; no provider calls.
 begin;
 insert into public.accounts(id,name,automation_paused) values
- ('00000000-0000-4000-8000-00000000a601','UNC_PAUSE_CANARY',true),
+ ('00000000-0000-4000-8000-00000000a601','UNC_PAUSE_CANARY',false),
  ('00000000-0000-4000-8000-00000000a602','UNC_PAUSE_CANARY_OTHER',false);
 insert into public.routine_states(account_id,routine_id,enabled) values
  ('00000000-0000-4000-8000-00000000a601','D01-W01',true);
 insert into public.plans(account_id,title,phases) values ('00000000-0000-4000-8000-00000000a601','','[]');
 insert into public.daily_briefs(account_id,day,body) values ('00000000-0000-4000-8000-00000000a601',current_date,'original');
+-- Seed before the hold: generation-aware brief guards also apply to the operator.
+-- This synthetic account and its pause are visible only inside the rollback test.
+update public.accounts set automation_paused=true where id='00000000-0000-4000-8000-00000000a601';
 set local role service_role;
 do $$
 declare a uuid := '00000000-0000-4000-8000-00000000a601'; denied boolean;
