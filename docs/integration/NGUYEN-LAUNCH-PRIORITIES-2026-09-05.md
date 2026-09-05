@@ -6,7 +6,7 @@
 
 Finish one real AVGAR keyword round trip first, then expand the ready capabilities across the five areas: Meta, SEO, Content, Email and Google Ads. Five areas does not mean five routines, nor that all capabilities within each area are ready.
 
-The first release is a supervised read/draft private beta. Publishing, customer messaging, ad mutations and spend activation remain disabled. General self-service/phone/second-client claims require their own acceptance. Tom's new landing, operator and client pages should consume the same authenticated account/run/artifact/receipt interfaces; a visual redesign must not replace those controls or hard-code readiness. Source locations have been requested; no new frontend files have been inspected or overwritten.
+The first release is a supervised read/draft private beta. Publishing, customer messaging, ad mutations and spend activation remain disabled. General self-service/phone/second-client claims require their own acceptance. Tom's new landing, operator and client pages should consume the same authenticated account/run/artifact/receipt interfaces; a visual redesign must not replace those controls or hard-code readiness. His ZIP has now been inspected read-only: [actual frontend wiring map and gaps](FRONTEND-HANDOFF-MAP-2026-09-05.md). No live frontend was replaced. The 38 prototype job labels are not interchangeable with the 35 executable backend IDs.
 
 ## D03-W01: no more wrapper redesign
 
