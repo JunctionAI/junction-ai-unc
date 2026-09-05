@@ -13,7 +13,13 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 40, 6 September NZ / 5 September UTC
+## Latest state — Batch 41, 6 September NZ / 5 September UTC
+
+**Explicit pilot operator entry and lost-reply lookup implemented.** [Command and exact acceptance limits](integration/KEYWORD-OPERATOR-COMMAND.md). This invokes the existing reviewed pilot module on the actual worker with server-held credentials; it does not generalize keyword authority to later lanes. Exact release/revision and live preflight gate one owner-approved market/call. Original-key inspection works after expiry and never resumes or retries a provider request. SQL remains the atomic issuance guard.
+
+19 new command tests plus 17 preflight tests and focused ESLint/diff checks pass. Actual release-22 worker read-only smoke returns NOT_FOUND for an explicitly expired no-authority fixture key, with unchanged one-machine image/release. No issue operation, provider run, permit, pause/flag/schedule/workflow change, build or deployment. Nguyen's requested bot-filter correction remains unanswered at this turn's one fresh read; no duplicate message. Full B01–B24/all-client goal remains active; this is bounded operator-path progress, not live customer/provider acceptance.
+
+## Previous state — Batch 40, 6 September NZ / 5 September UTC
 
 **Broader five-lane packaging progressed from names to exact output/pipeline contracts.** [Developer brief and independent saved-execution shape evidence](integration/FIVE-LANE-PACKAGING-2026-09-06.md). The regenerated, regression-tested manifest supplies all 35 output guides/limits and complete pre/post-producer definitions, plus the 18 reported-ready capability mappings and six blocked-input lanes. D03-W07 backlink gap and D02-W09 Google Ads BOFU are explicitly reserved, not executable or enabled. No runtime catalog, provider configuration or endpoint changed.
 

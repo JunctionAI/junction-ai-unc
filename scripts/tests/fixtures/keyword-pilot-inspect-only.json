@@ -1,0 +1,9 @@
+{
+  "authorizedBy": "74802c60-149a-4405-b719-dc058d174072",
+  "approvalReference": "verification:read-only-command-no-run-authority",
+  "idempotencyKey": "verification:read-only-command-never-issue",
+  "market": "US",
+  "contextGeneration": 1,
+  "maxProviderCalls": 1,
+  "expiresAt": "2000-01-01T00:00:00.000Z"
+}
