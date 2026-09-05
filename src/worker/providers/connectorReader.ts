@@ -39,8 +39,12 @@ export interface WorkerConnectorReaderDeps {
   now?: () => Date;
   fetch?: typeof fetch;
   timeoutMs?: number;
+  /** Across credential resolution, all pages, bodies and final grant validation. */
+  totalTimeoutMs?: number;
   log?: Logger;
 }
+
+export const DEFAULT_TOTAL_READ_TIMEOUT_MS = 30_000;
 
 export class WorkerConnectorReader implements ConnectorReader {
   private readonly readers: Partial<Record<Platform, Reader>>;
@@ -52,8 +56,36 @@ export class WorkerConnectorReader implements ConnectorReader {
   }
 
   async read(source: Platform, query: ReadQuery, ctx: RunContext): Promise<ReadResult> {
+    const totalTimeoutMs = this.deps.totalTimeoutMs ?? DEFAULT_TOTAL_READ_TIMEOUT_MS;
+    if (!Number.isFinite(totalTimeoutMs) || totalTimeoutMs < 1 || totalTimeoutMs > 2_147_483_647)
+      throw new Error("invalid total read timeout");
+    const controller = new AbortController();
+    const timeoutError = new Error(`couldn't ask ${source} ${query.resource}: total read timeout after ${totalTimeoutMs}ms`);
+    const deadlineAt = Date.now() + totalTimeoutMs;
+    const assertActive = () => {
+      // JSON parsing or other synchronous work can delay the timer callback.
+      // Do not certify a late result merely because its microtask won that race.
+      if (Date.now() >= deadlineAt && !controller.signal.aborted) controller.abort(timeoutError);
+      controller.signal.throwIfAborted();
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { controller.abort(timeoutError); reject(timeoutError); }, totalTimeoutMs);
+    });
+    try {
+      // Racing bounds even a custom credential/reader promise that ignores abort.
+      // The guards below prevent its later completion from starting another fetch
+      // or becoming an accepted read. This does not cancel arbitrary DB promises.
+      return await Promise.race([this.readWithinDeadline(source, query, ctx, controller.signal, assertActive), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async readWithinDeadline(source: Platform, query: ReadQuery, ctx: RunContext, signal: AbortSignal, assertActive: () => void): Promise<ReadResult> {
     const accountId = ctx.account.accountId;
     const creds = await this.deps.credentials.get(accountId, source, ctx.account);
+    assertActive();
     if (!creds) throw new Error(`couldn't ask ${source} ${query.resource}: nothing connected for this account`);
 
     const reader = this.readers[source];
@@ -66,15 +98,21 @@ export class WorkerConnectorReader implements ConnectorReader {
       throw new Error(`couldn't ask ${source} ${query.resource}: no reader for this platform yet (Wave 2)`);
     }
 
-    const validate = () => this.deps.credentials.validate?.(creds);
+    const validate = async () => {
+      assertActive();
+      await this.deps.credentials.validate?.(creds);
+      assertActive();
+    };
     await validate();
-    const guardedFetch: typeof fetch | undefined = this.deps.credentials.validate ? async (input, init) => {
+    const guardedFetch: typeof fetch = async (input, init) => {
       await validate();
-      const response = await (this.deps.fetch ?? fetch)(input, init);
+      const requestSignal = AbortSignal.any([signal, ...(init?.signal ? [init.signal] : []), ...(input instanceof Request ? [input.signal] : [])]);
+      requestSignal.throwIfAborted();
+      const response = await (this.deps.fetch ?? fetch)(input, { ...init, signal: requestSignal });
       await validate();
       return response;
-    } : this.deps.fetch;
-    const opts: ReaderOptions = { now: this.now, fetch: guardedFetch, timeoutMs: this.deps.timeoutMs };
+    };
+    const opts: ReaderOptions = { now: this.now, fetch: guardedFetch, timeoutMs: this.deps.timeoutMs, signal };
     const res = await reader(query, creds, opts);
     await validate();
     if (!res.ok) {

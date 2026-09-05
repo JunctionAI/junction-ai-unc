@@ -29,6 +29,8 @@ export interface ReaderOptions {
   now?: () => Date;
   /** Per-request timeout. Default 10 000 ms. */
   timeoutMs?: number;
+  /** Whole-query cancellation shared across pages; does not replace each request timeout. */
+  signal?: AbortSignal;
 }
 
 export type Reader = (query: ReadQuery, creds: PlatformCredential, opts?: ReaderOptions) => Promise<ReaderResult>;

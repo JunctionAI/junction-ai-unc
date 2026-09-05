@@ -14,19 +14,26 @@ export async function fetchJson(url: string, init: RequestInit, opts: ReaderOpti
   if (typeof doFetch !== "function") return { ok: false, reason: "fetch is not available in this runtime" };
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
+  const signal = AbortSignal.any([controller.signal, ...(opts.signal ? [opts.signal] : []), ...(init.signal ? [init.signal] : [])]);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const where = safeUrl(url);
+  const aborted = (): JsonResult => ({ ok: false, reason: controller.signal.aborted ? `timeout after ${timeoutMs}ms calling ${where}` : `read cancelled calling ${where}` });
   try {
-    const res = await doFetch(url, { ...init, signal: controller.signal });
+    if (signal.aborted) return aborted();
+    const res = await doFetch(url, { ...init, signal });
+    if (signal.aborted) return aborted();
     if (!res.ok) return { ok: false, reason: `HTTP ${res.status} from ${where}`, status: res.status };
     try {
       const link = typeof res.headers?.get === "function" ? res.headers.get("link") : null;
-      return { ok: true, json: await res.json(), status: res.status, link };
+      const json = await res.json();
+      if (signal.aborted) return aborted();
+      return { ok: true, json, status: res.status, link };
     } catch {
+      if (signal.aborted) return aborted();
       return { ok: false, reason: `non-JSON body from ${where}`, status: res.status };
     }
   } catch (err) {
-    if (controller.signal.aborted) return { ok: false, reason: `timeout after ${timeoutMs}ms calling ${where}` };
+    if (signal.aborted) return aborted();
     return { ok: false, reason: `network error calling ${where}: ${err instanceof Error ? err.name : "unknown"}` };
   } finally {
     clearTimeout(timer);

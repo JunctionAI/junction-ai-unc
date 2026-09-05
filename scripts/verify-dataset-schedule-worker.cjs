@@ -8,6 +8,7 @@ const { DbAccountsSource, StaticAccountsSource } = require('/app/dist/worker/wor
 const { MemoryStore } = require('/app/dist/worker/lib/runtime/store/memory.js');
 const { SupabaseStore } = require('/app/dist/worker/lib/runtime/store/supabase.js');
 const { runDatasetSyncTick, scheduledDatasetsReady, inspectAccountDatasets } = require('/app/dist/worker/worker/datasets.js');
+const { WorkerConnectorReader, DEFAULT_TOTAL_READ_TIMEOUT_MS } = require('/app/dist/worker/worker/providers/connectorReader.js');
 
 (async () => {
   const expected = process.env.EXPECTED_UNC_BUILD_SHA;
@@ -39,6 +40,21 @@ const { runDatasetSyncTick, scheduledDatasetsReady, inspectAccountDatasets } = r
     accounts: new StaticAccountsSource(syntheticIds.map(id => ({ account: { accountId: id, currency: 'NZD', budgetMonthly: 0 } }))) },
     { UNC_DATA_SYNC_ENABLED: 'true', UNC_DATA_SYNC_ACCOUNTS: syntheticIds.join(',') }), { synced: 0, failed: 2 });
   assert.deepEqual(inspectedIds, syntheticIds);
+  assert.equal(DEFAULT_TOTAL_READ_TIMEOUT_MS, 30000);
+  let syntheticFetches = 0, deadlineSignal;
+  let bodyCompleted = false;
+  const deadlineReader = new WorkerConnectorReader({ totalTimeoutMs: 100,
+    credentials: { get: async () => ({ kind: 'meta_ads', adAccountId: 'act_synthetic', accessToken: 'synthetic-only' }) },
+    fetch: async (_input, init) => { syntheticFetches++; deadlineSignal = init.signal;
+      return { ok: true, status: 200, headers: new Headers(), json: async () => {
+        await new Promise(resolve => setTimeout(resolve, 200)); bodyCompleted = true; return { data: [] };
+      } };
+    } });
+  await assert.rejects(deadlineReader.read('meta_ads', { resource: 'insights' }, { account: { accountId: 'synthetic-deadline', currency: 'NZD' } }), /total read timeout/);
+  assert.equal(deadlineSignal?.aborted, true);
+  await new Promise(resolve => setTimeout(resolve, 250));
+  assert.equal(bodyCompleted, true);
+  assert.equal(syntheticFetches, 1);
   const db = createClient(origin, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     global: { fetch: async (input, init) => {
@@ -65,6 +81,7 @@ const { runDatasetSyncTick, scheduledDatasetsReady, inspectAccountDatasets } = r
   console.log(JSON.stringify({ status: 'PASS', checkedAt: new Date().toISOString(), build: expected, databaseGets,
     actualPausedAccountExcluded: true, actualRuntimeSyncOff: true, scopedReadinessRefuses: true,
     syntheticMissingConnectionIsolation: true,
+    syntheticWholeReadDeadline: true,
     queryReadiness: report.queries.map(q => ({ availability: q.availability, maxAgeMs: q.maxAgeMs })),
     providerCalls: 0, credentialResolutions: 0, writes: 0, liveScheduleAcceptance: false }));
 })().catch(() => { console.error('Read-only worker schedule check failed; details suppressed'); process.exitCode = 1; });
