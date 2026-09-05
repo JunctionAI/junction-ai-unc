@@ -27,4 +27,4 @@ Rollback app: `dpl_CBWkHhrgFEq4DPYmjGMwAMeGfwSH`; previous worker source `340867
 
 ## Remaining acceptance
 
-App/worker release and authenticated empty-state UI readback pass. No real provider-produced history exists yet; the first authorized n8n run and customer useful-output acceptance remain separate gates. Nguyen retains workflow ownership pending handoff acknowledgement; Codex did not edit his workflow. No credential, account pause, routine switch or external-action flag was changed by the history release.
+App/worker release and authenticated empty-state UI readback pass. **Batch 44 follow-up:** [three real provider-produced keyword drafts/runs/receipts](integration/KEYWORD-LIVE-PILOT-2026-09-06.md) now appear in history after reload; the initial nonempty provider-history gate passes. Customer useful-output and governed review acceptance remain separate gates. Nguyen retains workflow ownership pending handoff acknowledgement; Codex did not edit his workflow. No credential, account pause, routine switch or external-action flag was changed by the history release itself; the later pilot's bounded pause windows are separately recorded.

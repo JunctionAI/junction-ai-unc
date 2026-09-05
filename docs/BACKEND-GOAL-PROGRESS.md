@@ -13,7 +13,13 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 43, 6 September NZ / 5 September UTC
+## Latest state — Batch 44, 6 September NZ / 5 September UTC
+
+**First real three-market keyword round trip completed and independently verified.** [Full live receipt and precise remaining limits](integration/KEYWORD-LIVE-PILOT-2026-09-06.md). Matching source `12b93528b26f9acdf3e3b99a9a2d47babf9c3335`, Vercel `dpl_8Ybx7cqot5wX3WfUF1Z8LArVpBSs`, Fly release 25 (same revision-24 image; read-only execution reader enabled). Actual receiver-auth refusal #76 runs no provider. Separate US/NZ/AU allowances produce n8n #77/#78/#79, three done Unc runs, three real artifacts and 15 correlated receipts. Actual saved executing revisions and DataForSEO task/input/output were independently read. Today/inbox/history restore all three after reload. No external-action flags or routine switches enabled; AVGAR setup pause restored.
+
+Technical operator integration passes; customer-ready routine acceptance remains partial. The live builder labels reported data “certified”, derives SEO priority from paid competition, and defaults target_page to the homepage. Nguyen received exact receipts and output corrections with instructions to use saved provider data, not refetch, and keep the published revision frozen until repinning is coordinated. No contract/payment changes. Codex still owns customer-triggered dispatch, later adapters, data/cost storage, all-client/channel and security/retention acceptance. Full goal remains active; previous work and this turn are concrete progress, not a blocked wait.
+
+## Previous state — Batch 43, 6 September NZ / 5 September UTC
 
 **Nguyen's corrected handoff independently verified; database revision repinned.** At 14:51:36 UTC the actual worker's authenticated GET saw published/draft revision `92135add-3c35-43e4-9649-5bb3d4557814`, Ignore Bots false, same credential reference. Its exact definition hash equals the prior review's ignoreBots-only normalized hash `85c5010892e9d6c8d467a69e480ef57307192b23ddf6250f9c0f4561867f58b5`. No other node/connection/settings/pinData change was accepted.
 
