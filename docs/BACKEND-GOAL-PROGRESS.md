@@ -13,7 +13,49 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 81, 6 September NZ
+## Latest state — Batch 82, 6 September NZ
+
+**Slack channel lifecycle is implemented, tested and released; no client channel
+is activated.** Source `1b757334b95dd87976eaa5d01a7e5caf0e3a2fba`, production
+app `dpl_AJoYyAigYvmqhSeeCYnh7KstSgbj`, worker release 43 on the existing Sydney
+machine. [Contract, schema, tests and complete release/rollback evidence](integration/SLACK-ROUTE-LIFECYCLE-2026-09-06.md).
+
+Owners can pause or explicitly retire a mapped channel, with revision checks,
+saved-state readback and retained history. Operator activation requires a
+separate off-by-default gate, an exact unexpired owner/route/revision cutover
+scope, fresh Slack bot/channel verification and unchanged stored credential.
+It does not require opening the messaging gate. Retired mappings remain immutable;
+a replacement uses a new ID only after revocation and fresh verification.
+
+Full suite **3,171 tests / 233 files**, app/worker typechecks, production build,
+focused lint and eight isolated browser checks pass. Real local PostgreSQL
+proves concurrent activation has one winner, invalid scope/identity/grant refusal,
+pause cancellation of queued delivery, retirement after unlink/context repair,
+replacement client resolution and unchanged old history. No provider calls or
+customer messages were used by these tests.
+
+Applied remote migration `20260905231500_slack_route_lifecycle`; all three changed
+function bodies match the tested source, with invoker/service-only access, private
+audit RLS and the unique non-retired channel reservation. Candidate health and
+unauthenticated PATCH refusal passed before promotion. Canonical health, actual
+worker RPC/refusal and signed-in Connections/Messaging readback pass. Existing
+Slack link is still verified at revision 0; AVGAR retains eight runs and paused
+generation 1. **Zero routes, zero transitions, all five worker action flags false,
+activation gate/scope absent** in app/worker settings. No Hyperagent listener or
+Nguyen workflow changed.
+
+Six pre-existing security WARN remain; INFO is now 23 due to the private audit
+table without browser policies. Error/fatal scan returned no entries; zero drains
+and unverified alert delivery remain monitoring gaps. Not a full security sign-off.
+
+Next: resolve the actual existing-client channel/workspace and owner mappings,
+verify bot membership and routine/data bindings, and obtain the exact pilot and
+old-listener cutover authority. Then prove one useful Slack request through a
+registered routine and back to its original thread. Do not spend another batch
+rechecking unchanged local route tests in place of that client acceptance work.
+Previous turn and this turn are verified progress; full goal stays active.
+
+## Previous state — Batch 81, 6 September NZ
 
 **The dedicated Junction Slack connection now passes real owner OAuth and an
 independent stored-token provider read.** App `A0BV96C6BFC` is installed in

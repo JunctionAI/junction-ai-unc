@@ -2,6 +2,13 @@
 
 6 September 2026. Status: implementation in progress, not connected-client acceptance.
 
+**Current release:** [Batch 82 route lifecycle](SLACK-ROUTE-LIFECYCLE-2026-09-06.md)
+is deployed on matching app/worker source `1b757334b95d`, worker release 43.
+Owner pause/retirement and exact scoped operator activation are implemented;
+retired route history is retained for explicit replacement. Activation is off,
+zero routes exist, and no client delivery/cutover is claimed. Earlier sections
+below record the preceding implementation/release stages, not the latest gaps.
+
 ## Owner direction
 
 Keep the clients' existing communication channels, but replace the execution
