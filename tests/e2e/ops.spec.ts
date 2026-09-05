@@ -1,0 +1,60 @@
+import { test, expect } from "@playwright/test";
+import { A, B, opsFixture } from "../ops-fixture/data";
+const base = process.env.WORKSPACE_FIXTURE_BASE;
+test.skip(!base, "Isolated component fixture only, not a live account.");
+const url = () => `${base}/tests/ops-fixture/index.html`;
+test("clients, exact-identity details, setup pipeline and monitor use records without writes", async ({ page }) => {
+  const writes: string[] = []; const errors: string[] = [];
+  page.on("request", r => { if (r.method() === "POST") writes.push(r.url()); }); page.on("pageerror", e => errors.push(e.message));
+  await page.goto(url()); await expect(page.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+  await expect(page.getByText("Same display name · distinct account")).toHaveCount(2);
+  await page.getByRole("textbox", { name: "Find a client" }).fill(A);
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.locator(`a[href="#client/${A}"]`).click();
+  await expect(page.getByText("fixture.myshopify.com", { exact: true })).toBeVisible();
+  await expect(page.getByText("Synthetic keyword draft", { exact: true })).toBeVisible();
+  await page.getByText("Synthetic draft prepared", { exact: true }).click();
+  await expect(page.getByText("Receipt receipt-fixture", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Approve|Retry|Enable|Connect|Open their workspace/ })).toHaveCount(0);
+  await page.reload(); await expect(page.getByText("fixture.myshopify.com", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Setup pipeline", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Setup pipeline", exact: true })).toBeVisible();
+  await expect(page.getByText("Codex: reconcile the existing client system", { exact: false })).toBeVisible();
+  await page.getByRole("link", { name: "Run monitor", exact: true }).click();
+  await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("failed");
+  await expect(page.getByText("No saved runs match this view.", { exact: false })).toBeVisible();
+  await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("all");
+  await expect(page.getByText("run-fixture", { exact: true })).toBeVisible();
+  await page.goBack(); await expect(page.getByRole("heading", { name: "Setup pipeline", exact: true })).toBeVisible();
+  expect(writes).toEqual([]); expect(errors).toEqual([]);
+});
+test("revoked operator access on refresh clears previously visible records", async ({ page }) => {
+  await page.goto(url()); await expect(page.getByText(A, { exact: true })).toBeVisible();
+  await page.route("**/api/ops*", r => r.fulfill({ status: 403, json: { error: "denied" } }));
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("no operator read access");
+  await expect(page.getByText(A, { exact: true })).toHaveCount(0);
+  await expect(page.getByText("No authorized records match", { exact: false })).toHaveCount(0);
+});
+test("wrong-client response cannot appear as the selected customer's records", async ({ page }) => {
+  await page.route("**/api/ops*", r => r.fulfill({ json: opsFixture(B) }));
+  await page.goto(url() + `#client/${A}`);
+  await expect(page.getByRole("alert")).toContainText("Couldn't verify saved records");
+  await expect(page.getByText("fixture.myshopify.com", { exact: true })).toHaveCount(0);
+});
+test("unsigned and failed reads do not become demo records", async ({ page }) => {
+  await page.route("**/api/ops*", r => r.fulfill({ status: 401, json: {} })); await page.goto(url());
+  await expect(page.getByRole("link", { name: "Sign in →", exact: true })).toBeVisible();
+  await expect(page.getByText(A, { exact: true })).toHaveCount(0);
+  await page.unroute("**/api/ops*"); await page.route("**/api/ops*", r => r.fulfill({ status: 503, json: {} }));
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("No empty or healthy state is inferred");
+});
+for (const width of [390, 1280]) test(`ops layout fits ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 900 }); await page.goto(url());
+  await expect(page.getByText(A, { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("link", { name: "Setup pipeline", exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath(`ops-${width}.png`), fullPage: true });
+});

@@ -43,6 +43,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "n8n_shadow_permits",
       "n8n_workflows",
       "oauth_states",
+      "ops_account_access",
       "outbound_messages",
       "plans",
       "playbooks",
@@ -61,6 +62,8 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "worker_heartbeats",
     ]);
     // 0014 launch hardening
+    expect(s.ops_account_access.primaryKey).toEqual(["user_id", "account_id"]);
+    expect([...s.ops_account_access.columns]).toEqual(expect.arrayContaining(["granted_at", "granted_by", "reason", "revoked_at", "expires_at"]));
     expect(s.n8n_shadow_candidates.primaryKey).toEqual(["permit_id"]);
     expect(s.n8n_shadow_completions.primaryKey).toEqual(["permit_id"]);
     expect([...s.n8n_shadow_candidates.columns]).toEqual(expect.arrayContaining([
