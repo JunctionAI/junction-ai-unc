@@ -13,7 +13,17 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 47, 6 September NZ / 5 September UTC
+## Latest state — Batch 48, 6 September NZ / 5 September UTC
+
+**Customer keyword configuration/request controls deployed as a matched app/worker release.** [Source behavior and release receipt](KEYWORD-CUSTOMER-REQUEST-2026-09-06.md). Canonical app and actual worker report source `5be9cfe81df31ac8624e55fc56d0a4b7e25b98dc`. Vercel `dpl_EbKoF9dtfj4TBNVzGdZENAqvygmG` promoted after candidate health/auth checks; existing Fly machine updated to release 26 and the exact prebuilt image. The initial null-SHA candidate was not promoted. Commands and all external-action flags remain off.
+
+The signed-in owner saved approved US / `golf travel bag` through the actual market selector. Full reload and independent SQL agree on version 2, location 2840, frozen revision `92135add-3c35-43e4-9649-5bb3d4557814`, timestamp `2026-09-05 15:56:44.058433+00`. Routine remains off, account paused/generation 1. New request control is visibly disabled. Explicit `/run D03-W01` in account chat returns “Routine requests aren’t enabled here yet. Nothing was queued or started.” Independent post-request SQL retains zero commands, three original runs/artifacts and zero enabled routines. No paid provider call or n8n change occurred.
+
+Source verification: 214 unit files / 2,747 tests, app/worker TypeScript, 13 isolated browser cases, 20 command and 18 configuration PostgreSQL checks, 36 operator/preflight checks passed in the preceding implementation batch. Both clean cloud builds pass; new anonymous endpoints return 401/private-no-store. Post-release error/fatal scans returned no entries; zero Vercel drains and unverified alert delivery remain monitoring gaps.
+
+The preceding conversational advice turn made no implementation progress. This turn revalidated current state and made concrete release/configuration/acceptance progress. **Next:** bounded signed-in customer success with exact expiring US scope, duplicate/result/reload acceptance and restored hold; then broader adapters, shared-data/auth, other-client/channel and security/retention gates. Nguyen's saved-output quality corrections remain separate. The full B01–B24/all-client goal remains active and is not narrowed to this release.
+
+## Previous state — Batch 47, 6 September NZ / 5 September UTC
 
 **Customer keyword market configuration implemented; database function installed.** [Behavior, evidence and remaining acceptance](KEYWORD-CUSTOMER-CONFIGURATION-2026-09-06.md). Owner-only setup selects a canonical US/NZ/AU recipe from the current account's completed pilot evidence. Saved recipe, routine enablement and command admission remain separate. The UI replaces generic keyword recipe editing with explicit market selection, refuses stale/foreign responses and never retries a lost save automatically.
 
