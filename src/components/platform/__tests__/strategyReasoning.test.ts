@@ -65,6 +65,16 @@ describe("reasoningInputs", () => {
 });
 
 describe("StrategyView — the judgement under the phases", () => {
+  it("an empty account plan presents options, not a current or agreed play", () => {
+    __setAccountFactsForTests(account({ facts: facts({ resources: { budgetMonthly: null, hoursWeekly: null, skills: [], postures: [] } }) }));
+    const html = renderToStaticMarkup(createElement(StrategyView, { V: V(state({ view: "strategy" })) }));
+    expect(html).toContain("no saved plan yet");
+    expect(html).toContain("Strategy option");
+    expect(html).toContain("Before agreeing a strategy");
+    expect(html).toContain("Choosing an option does not start a routine");
+    expect(html).not.toMatch(/CURRENT PLAY|Why this is yours|>YOURS<|data-testid="strategy-phase"/);
+  });
+
   it("demo mode: every phase carries a collapsed why block; the brand-led demo founder gets no pushback", () => {
     __setAccountFactsForTests(null);
     const html = renderToStaticMarkup(createElement(StrategyView, { V: V(state({ view: "strategy" })) }));

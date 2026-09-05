@@ -143,7 +143,7 @@ describe("StrategyView", () => {
   it("accounts mode with no plan row does not manufacture phases or readiness", () => {
     __setAccountFactsForTests(account({ facts: facts({ plan: null, routineStates: [] }) }));
     const html = renderToStaticMarkup(createElement(StrategyView, { V: V(state({ view: "strategy" })) }));
-    expect(html).toContain("draft — not agreed yet");
+    expect(html).toContain("no saved plan yet");
     expect(html).not.toContain(">START HERE<");
     expect(html).toContain("No saved plan yet.");
     expect(html).not.toContain(">ACTIVE<");

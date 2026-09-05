@@ -117,19 +117,20 @@ export default function StrategyView({ V }: { V: PlatformVals }) {
   const phasesAcct = acct ? accountPhases(V, facts) : null;
   const strengths = acct ? (facts?.resources?.skills ?? []) : [];
   const onTotal = phasesAcct ? phasesAcct.reduce((n, p) => n + p.on, 0) : 0;
+  const hasPlan = !!facts?.plan?.phases.length;
+  const hasAgreedPlan = hasPlan && !!agreedAt;
   const headerLine = !acct
     ? "agreed 12 Aug · reviewed monthly · persists until superseded"
     : loading && !facts
       ? "reading your plan…"
       : agreedDay
         ? `agreed ${agreedDay} · persists until superseded`
-        : "draft — not agreed yet";
+        : hasPlan ? "draft — not agreed yet" : "no saved plan yet";
   const buddy = !acct
     ? "We agree the strategy once — then the routines carry it. Your job becomes clearing agreed work, not remembering it."
     : onTotal
       ? `${onTotal} routine${onTotal === 1 ? "" : "s"} on under this play. Change the play here and the routines follow — nothing sends without you.`
       : "Nothing is on yet. Agree the play, turn on the first routine, and I carry it from there.";
-  const hasPlan = !!facts?.plan?.phases.length;
   const why = acct && !hasPlan ? "No saved plan yet. Confirm your budget, available hours and business priorities before choosing a strategy." : acct ? accountWhy(V, agreedAt, strengths.length ? strengths : V.obStrengthSummary.split(" · ").filter(Boolean)) : V.postureWhy;
   const inputs = acct && !hasPlan ? null : reasoningInputs(V, acct ? facts : null);
   const reasoning = inputs ? planReasoning(inputs) : null;
@@ -151,8 +152,8 @@ export default function StrategyView({ V }: { V: PlatformVals }) {
             style={{ textAlign: "left", background: "white", border: `1.5px solid ${po.border}`, borderRadius: 14, padding: "18px 19px", cursor: "pointer", boxShadow: po.shadow }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--cyan-link)", fontWeight: 700 }}>{po.tag}</span>
-              {po.selected && (!acct || !!agreedAt) && (
+              <span style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--cyan-link)", fontWeight: 700 }}>{acct && !hasAgreedPlan ? "Strategy option" : po.tag}</span>
+              {po.selected && (!acct || hasAgreedPlan) && (
                 <span style={{ fontSize: 10, fontWeight: 700, color: "var(--cyan-text)", background: "var(--cyan-wash)", borderRadius: 5, padding: "2px 7px" }}>YOURS</span>
               )}
             </div>
@@ -165,9 +166,9 @@ export default function StrategyView({ V }: { V: PlatformVals }) {
       <div style={{ marginTop: 14, background: "var(--navy)", color: "var(--on-navy)", borderRadius: 16, padding: "22px 26px", display: "flex", gap: 20, alignItems: "flex-start" }}>
         <img src="/brand/mascot-small.png" alt="" style={{ width: 56, height: 60, objectFit: "contain", flex: "none" }} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--on-navy-dim)", fontWeight: 600 }}>Why this is yours</div>
+          <div style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--on-navy-dim)", fontWeight: 600 }}>{acct && !hasAgreedPlan ? "Before agreeing a strategy" : "Why this is yours"}</div>
           <div data-testid="strategy-why" style={{ fontSize: 14.5, lineHeight: 1.6, marginTop: 9, color: "oklch(0.93 0.012 250)" }}>{why}</div>
-          <div style={{ fontSize: 12, color: "var(--faint-on-navy)", marginTop: 12 }}>Shaped by your budget, hours and strengths from onboarding — tell me when they change.</div>
+          <div style={{ fontSize: 12, color: "var(--faint-on-navy)", marginTop: 12 }}>{acct && !hasPlan ? "The options above are not an agreed plan. Choosing an option does not start a routine." : "Shaped by your budget, hours and strengths from onboarding — tell me when they change."}</div>
         </div>
       </div>
       {reasoning?.pushback && (
@@ -181,6 +182,7 @@ export default function StrategyView({ V }: { V: PlatformVals }) {
           <span style={{ fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>The build-out</span>
           <span style={{ fontSize: 12, color: "var(--muted)" }}>{acct ? "— one phase at a time, on your say-so" : "— unlocks on evidence, not optimism"}</span>
         </div>
+        {acct && !hasPlan && <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>Your saved phases will appear here after you review a proposed plan.</div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
           {phasesAcct
             ? phasesAcct.map((ph) => (
