@@ -13,7 +13,17 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 48, 6 September NZ / 5 September UTC
+## Latest state — Batch 49, 6 September NZ / 5 September UTC
+
+**First signed-in customer request completed end to end.** [Exact live receipt and remaining limits](integration/KEYWORD-CUSTOMER-LIVE-2026-09-06.md). Actual owner selected D03-W01 and clicked its US keyword research control. One customer UUID created command/run `aeb10060-f0c5-508e-a99a-d70e919eea27`; n8n #80 completed on the frozen reviewed revision and saved artifact `c022a1e4-8e0a-4ae4-924d-b0d7d43c6590` plus five receipts. Independent authenticated execution and saved-provider reads match the account/run, US seed/input, actual revision, request digest and successful DataForSEO task. No operator CLI issued this run.
+
+Live switch-off refusal and shared-dispatch duplicate lookup pass. Full reload and original-request recovery retain the result even after restoration of the setup hold. Actual state: one done customer command, four total runs/artifacts, zero enabled routines/unresolved permits, AVGAR paused/generation 1. Canonical app is again commands-off `dpl_EbKoF9dtfj4TBNVzGdZENAqvygmG`; worker release 28, same source/image, commands false and scopes empty. All external-action flags stayed off throughout. One provider call; no workflow edits, new credential setup, customer messages, ad changes or contract changes.
+
+The previous turn made verified release/configuration progress; this turn made live customer-execution/acceptance progress. B03/B24 remain partial for natural-language success and usefulness. Nguyen's output corrections and broader workflows remain his work; Codex continues stored-data/auth, adapters, metrics/costs, ongoing UX/schedules, all-client/channel and security/retention acceptance. Full B01–B24 scope remains active; the temporary pilot is not a claim of unrestricted launch readiness.
+
+Fresh Upwork read: Nguyen's 3:02 AM reply accepts the remaining five-lane delivery under the existing agreement; his 3:32 AM reply reports keyword corrections prepared and fixture-tested from saved data, not published. At 4:09 AM NZ Codex sent and read back the #80 customer receipt plus coordinated clearance for his output-only corrected revision after validation/fixture checks. He must return the frozen revision, diff/export and fixture outputs; Codex reviews and repins before any further live invocation. No additional provider calls, charges, credential changes or outward actions were authorized. Email/calendar/inventory remain his parallel delivery work, not silently replaced by the keyword correction.
+
+## Previous state — Batch 48, 6 September NZ / 5 September UTC
 
 **Customer keyword configuration/request controls deployed as a matched app/worker release.** [Source behavior and release receipt](KEYWORD-CUSTOMER-REQUEST-2026-09-06.md). Canonical app and actual worker report source `5be9cfe81df31ac8624e55fc56d0a4b7e25b98dc`. Vercel `dpl_EbKoF9dtfj4TBNVzGdZENAqvygmG` promoted after candidate health/auth checks; existing Fly machine updated to release 26 and the exact prebuilt image. The initial null-SHA candidate was not promoted. Commands and all external-action flags remain off.
 
