@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import type { DbClient } from "@/lib/db/types";
 import { seal } from "../crypto";
@@ -30,8 +31,8 @@ async function healthy() {
 describe("native reconnect availability and callback failure isolation", () => {
   it("keeps the current grant readable throughout a new consent attempt", async () => {
     const before = await healthy();
-    const { d } = await start();
-    expect(fixture.db.rows("connectors")[0]).toEqual(before.connector);
+    const { d, state } = await start();
+    expect(fixture.db.rows("connectors")[0]).toEqual({ ...before.connector, pending_oauth_digest: createHash("sha256").update(state).digest("hex") });
     expect(fixture.db.rows("connector_secrets")[0]).toEqual(before.secret);
     const token = await getAccessTokenFor(fixture.accountId, "klaviyo", { db: fixture.db, keyring: KEYRING, env: d.config.env, fetch: d.fetch, now: d.now });
     expect(token?.accessToken).toBe("synthetic-current-token");

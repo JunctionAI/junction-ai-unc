@@ -23,10 +23,10 @@ import { open, seal, type Keyring } from "./crypto";
 import { bundleFromResponse, callbackUri, codeChallenge, exchangeCode, exchangeMetaLongLived, newCodeVerifier, newState, STATE_TTL_MS, verifyShopifyHmac, type FetchLike, type TokenBundle } from "./oauth";
 import { hasPicker, listAccountOptions, normaliseExternalRef, OptionsError, type AccountOption } from "./options";
 import type { PurgeResult, SyncProvisioner } from "./provisioning";
-import { connectorEntry, GOOGLE_CHILDREN, isGoogleUmbrella, META_GRAPH_VERSION, normaliseShopDomain, platformCredentials, type ConnectorEntry } from "./registry";
+import { connectorEntry, isGoogleUmbrella, META_GRAPH_VERSION, normaliseShopDomain, platformCredentials, type ConnectorEntry } from "./registry";
 import { revokeToken, type RevokeResult } from "./revoke";
 import { insertSystemReceipt } from "@/lib/db/receipts";
-import { accountForUser, beginOauthConnection, consumeOauthState, deleteSecret, getConnector, getSecret, insertOauthState, markOauthFailure, memberRole, putSecret, updateConnector, upsertConnector, type ConnectorRow } from "./store";
+import { accountForUser, beginNativeOauth, checkNativeOauth, consumeOauthState, deleteSecret, failNativeOauth, finishNativeOauth, getConnector, getSecret, memberRole, updateConnector, type ConnectorRow } from "./store";
 import { getAccessTokenFor } from "./tokens";
 import { authProviderMode } from "./registry";
 import { clearProviderRef, providerLabel, revokeViaProvider, startViaProvider } from "./providers/connect";
@@ -57,7 +57,7 @@ export interface HandlerDeps {
   /** Fires once a connection becomes readable (callback with a usable token, a picker choice,
       a pasted key) — the routes schedule the first certified read from it (firstRead.ts).
       Must not throw; must not block. */
-  onConnected?: (info: { accountId: string; platform: Platform; connectorId: string }) => void;
+  onConnected?: (info: { accountId: string; platform: Platform; connectorId: string; contextGeneration?: number; externalRef?: string | null }) => void;
 }
 
 /** True when the connector row can be read right away (a picker platform still needs its
@@ -66,7 +66,7 @@ export function readableOnConnect(platform: string, externalRef: string | null):
   return !hasPicker(platform) || !!externalRef;
 }
 
-function fireConnected(deps: HandlerDeps, info: { accountId: string; platform: Platform; connectorId: string }) {
+function fireConnected(deps: HandlerDeps, info: { accountId: string; platform: Platform; connectorId: string; contextGeneration?: number; externalRef?: string | null }) {
   try {
     deps.onConnected?.(info);
   } catch {
@@ -108,9 +108,10 @@ export async function handleStart(deps: HandlerDeps, platform: string, body: unk
   const now = deps.now();
   const state = newState();
   const verifier = entry.pkce ? newCodeVerifier() : null;
-  await insertOauthState(deps.db, {
+  await beginNativeOauth(deps.db, {
     state,
     account_id: accountId,
+    initiated_by: deps.userId,
     platform: entry.id,
     code_verifier: verifier,
     shop: shop ?? null,
@@ -118,9 +119,8 @@ export async function handleStart(deps: HandlerDeps, platform: string, body: unk
     created_at: now.toISOString(),
     expires_at: new Date(now.getTime() + STATE_TTL_MS).toISOString(),
   });
-  // A reconnect attempt must leave the current connection available until replaced.
-  // The Google umbrella has no row of its own: its children keep whatever state they have.
-  if (!isGoogleUmbrella(entry.id)) await beginOauthConnection(deps.db, accountId, entry.id);
+  // Registration of the state, initiating owner/context, target identities and the
+  // latest-attempt marker is atomic. Healthy connections remain readable meanwhile.
 
   const url = entry.authorizeUrl({
     clientId: creds.clientId,
@@ -161,10 +161,17 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
   }
   const now = deps.now();
   const accountId = row.account_id;
+  const context = row.auth_context;
+  if (!context || context.protocol !== "native_oauth_v1" || context.accountId !== accountId ||
+      context.platform !== entry.id || context.initiatedBy !== deps.userId ||
+      !Number.isSafeInteger(context.contextGeneration) || !Array.isArray(context.targets)) {
+    deps.log?.(`connectors.callback platform=${entry.id} reason=uncaptured_or_wrong_owner`);
+    return errRedirect(entry.id);
+  }
   const fail = async (reason: string) => {
     deps.log?.(`connectors.callback platform=${entry.id} account=${accountId} reason=${reason}`);
     try {
-      if (!isGoogleUmbrella(entry.id)) await markOauthFailure(db, accountId, entry.id);
+      if (deps.userId) await failNativeOauth(db, state, context, deps.userId);
     } catch {
       /* the redirect is still the right answer */
     }
@@ -179,6 +186,7 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
   }
   const expiresAt = new Date(row.expires_at).getTime();
   if (!Number.isFinite(expiresAt) || expiresAt <= now.getTime()) return fail("state_expired");
+  if (!await checkNativeOauth(db, state, context, deps.userId).catch(() => false)) return fail("context_changed");
   if (params.get("error")) return fail("provider_denied");
   const code = params.get("code") || "";
   if (!code) return fail("no_code");
@@ -207,24 +215,18 @@ export async function handleCallback(deps: HandlerDeps, platform: string, reques
       }
     }
     const bundle = bundleFromResponse(tokens, now);
-    if (isGoogleUmbrella(entry.id)) {
-      // One consent, three rows: each child gets the same bundle sealed under its own id; a
-      // property / customer chosen earlier (external_ref) is kept, so a re-connect is quiet.
-      for (const child of GOOGLE_CHILDREN) {
-        const childId = await upsertConnector(db, accountId, child, { status: "connected", last_sync_at: null, last_sync_result: null });
-        await putSecret(db, childId, seal(JSON.stringify(bundle), keyring, childId), now.toISOString());
-        const row = await getConnector(db, accountId, child);
-        if (readableOnConnect(child, row?.external_ref ?? null)) fireConnected(deps, { accountId, platform: child, connectorId: childId });
-      }
-      deps.log?.(`connectors.callback platform=google account=${accountId} result=connected children=${GOOGLE_CHILDREN.join(",")}`);
-      return okRedirect(entry.id);
-    }
-    const externalRef = shop ?? (await identifyExternalRef(deps.fetch, entry, bundle));
-
-    const connectorId = await upsertConnector(db, accountId, entry.id, { status: "connected", external_ref: externalRef, last_sync_at: null, last_sync_result: null });
-    await putSecret(db, connectorId, seal(JSON.stringify(bundle), keyring, connectorId), now.toISOString());
+    if (!await checkNativeOauth(db, state, context, deps.userId)) return fail("context_changed");
+    const externalRef = isGoogleUmbrella(entry.id) ? null : shop ?? (await identifyExternalRef(deps.fetch, entry, bundle));
+    const replacements = context.targets.map(target => ({ connectorId: target.id,
+      externalRef: isGoogleUmbrella(entry.id) ? target.externalRef : externalRef,
+      sealed: seal(JSON.stringify(bundle), keyring, target.id) }));
+    if (!await finishNativeOauth(db, state, context, deps.userId, replacements)) return fail("context_changed");
     deps.log?.(`connectors.callback platform=${entry.id} account=${accountId} result=connected`);
-    if (readableOnConnect(entry.id, externalRef)) fireConnected(deps, { accountId, platform: entry.id as Platform, connectorId });
+    for (const target of context.targets) {
+      const ref = replacements.find(r => r.connectorId === target.id)!.externalRef;
+      if (readableOnConnect(target.platform, ref)) fireConnected(deps, { accountId, platform: target.platform as Platform,
+        connectorId: target.id, contextGeneration: context.contextGeneration, externalRef: ref });
+    }
     return okRedirect(entry.id);
   } catch (e) {
     const code = e instanceof Error && "code" in e ? String((e as { code: unknown }).code) : "unexpected";

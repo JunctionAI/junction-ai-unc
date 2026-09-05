@@ -56,12 +56,13 @@ describe("start + callback", () => {
     return { d, url, state };
   }
 
-  it("start: a PKCE state for platform google, the umbrella redirect URI, and NO connector row", async () => {
+  it("start: one PKCE state binds three child identities, never an umbrella connector", async () => {
     const { url, state } = await startGoogle();
     expect(url.searchParams.get("redirect_uri")).toBe(`${APP_URL}/api/connectors/google/callback`);
     expect(url.searchParams.get("scope")!.split(" ")).toHaveLength(3);
     expect(db.rows("oauth_states")[0]).toMatchObject({ state, platform: "google", account_id: accountId });
-    expect(db.rows("connectors")).toHaveLength(0);
+    expect(db.rows("connectors").map(r => r.platform)).toEqual(GOOGLE_CHILDREN);
+    expect(db.rows("connectors").every(r => r.status === "connecting" && /^[a-f0-9]{64}$/.test(String(r.pending_oauth_digest)) && r.pending_oauth_digest !== state)).toBe(true);
   });
 
   it("callback: one token exchange, three child rows connected, each with its own sealed copy; a chosen property is kept; the readable children fire read-now", async () => {
@@ -96,12 +97,13 @@ describe("start + callback", () => {
     expect(db.rows("oauth_states")).toHaveLength(0);
   });
 
-  it("callback failure writes no umbrella row and leaves the children as they were", async () => {
+  it("callback failure preserves healthy children and marks only the new unavailable children failed", async () => {
     db.insertRow("connectors", { account_id: accountId, platform: "ga4", status: "connected", external_ref: "1", sync_ref: {} });
     const { d, state } = await startGoogle();
     d.routes.push(() => json({ error: "invalid_grant" }, 400));
     expect(await handleCallback(d, "google", `${APP_URL}/api/connectors/google/callback?code=x&state=${state}`)).toEqual({ redirect: "/app?connect_error=google" });
-    expect(db.rows("connectors").map((r) => [r.platform, r.status])).toEqual([["ga4", "connected"]]);
+    expect(db.rows("connectors").map((r) => [r.platform, r.status])).toEqual([["ga4", "connected"], ["google_ads", "error"], ["search_console", "error"]]);
+    expect(db.rows("connectors").every(r => r.pending_oauth_digest === null)).toBe(true);
   });
 
   it("the per-platform Google entries still work on their own (GA4 start unchanged)", async () => {

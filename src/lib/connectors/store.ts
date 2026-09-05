@@ -34,6 +34,37 @@ export interface OauthStateRow {
   shop: string | null;
   redirect_to: string;
   expires_at: string;
+  auth_context?: NativeOauthContext | null;
+}
+
+export interface NativeOauthBinding {
+  id: string; accountId: string; platform: string; status: ConnectorStatus;
+  externalRef: string | null; syncRef: Record<string, unknown> | null; secretDigest: string | null;
+}
+export interface NativeOauthContext {
+  protocol: "native_oauth_v1"; accountId: string; initiatedBy: string;
+  contextGeneration: number; platform: string; expiresAt: string; targets: NativeOauthBinding[];
+}
+
+export async function beginNativeOauth(db: DbClient, row: OauthStateRow & { created_at: string; initiated_by: string }): Promise<void> {
+  await unwrap("oauth.native.begin", db.rpc("begin_native_connector_oauth", { input: row }));
+}
+
+export async function checkNativeOauth(db: DbClient, state: string, context: NativeOauthContext, actor: string): Promise<boolean> {
+  return await unwrap<boolean>("oauth.native.check", db.rpc("check_native_connector_oauth", {
+    state_value: state, context_value: context, actor, allow_expired: false,
+  })) === true;
+}
+
+export async function finishNativeOauth(db: DbClient, state: string, context: NativeOauthContext, actor: string,
+  replacements: { connectorId: string; externalRef: string | null; sealed: SealedSecret }[]): Promise<boolean> {
+  return await unwrap<boolean>("oauth.native.finish", db.rpc("finish_native_connector_oauth", {
+    state_value: state, context_value: context, actor, replacements,
+  })) === true;
+}
+
+export async function failNativeOauth(db: DbClient, state: string, context: NativeOauthContext, actor: string): Promise<void> {
+  await unwrap("oauth.native.fail", db.rpc("fail_native_connector_oauth", { state_value: state, context_value: context, actor }));
 }
 
 const CONNECTOR_COLS = "id, account_id, platform, status, external_ref, last_sync_at, last_sync_result, sync_ref";
@@ -169,7 +200,7 @@ export async function consumeOauthState(db: DbClient, state: string): Promise<Oa
   return unwrap<OauthStateRow | null>(
     "oauth_states.consume",
     db.from("oauth_states").delete().eq("state", state)
-      .select("state, account_id, platform, code_verifier, shop, redirect_to, expires_at").maybeSingle(),
+      .select("state, account_id, platform, code_verifier, shop, redirect_to, expires_at, auth_context").maybeSingle(),
   );
 }
 

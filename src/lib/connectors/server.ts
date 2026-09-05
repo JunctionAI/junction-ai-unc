@@ -56,15 +56,16 @@ export async function handlerDeps(req: Request): Promise<HandlerDeps> {
     now,
     log,
     provisioner: db ? getProvisioner({ db, fetch: fetchFn, now, log }, process.env) : undefined,
-    /* "Reading your last 90 days now": runs after the response is sent (next/server `after`),
+    /* First read runs after the response is sent (next/server `after`),
        so the founder sees Connected at once and the card polls /api/connectors/state for
        Reading… → Read ✓. A failure lands as a receipt + error:first_read, never a thrown error. */
     onConnected:
       service && keyring
-        ? ({ accountId, platform }) => {
+        ? ({ accountId, platform, connectorId, contextGeneration, externalRef }) => {
             after(async () => {
               try {
-                await readNowAfterConnect({ db: service, keyring, env: process.env, fetch: fetchFn, now, log }, accountId, platform);
+                await readNowAfterConnect({ db: service, keyring, env: process.env, fetch: fetchFn, now, log }, accountId, platform,
+                  { connectorId, contextGeneration, externalRef, initiatedBy: userId });
               } catch (e) {
                 log(`first_read platform=${platform} account=${accountId} result=threw ${e instanceof Error ? e.name : "error"}`);
               }

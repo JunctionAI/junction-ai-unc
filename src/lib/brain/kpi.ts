@@ -133,6 +133,9 @@ export interface SnapshotDeps {
   /** Override the connected platforms (tests); default: connectors.status = 'connected'. */
   connected?: string[];
   log?: (event: string, fields: Record<string, unknown>) => void;
+  /** Optional atomic sink for connection-bound reads. It must persist rows AND
+   * failure receipts under its own database identity check or throw. */
+  commit?: (rows: KpiSnapshotRow[], failures: SnapshotReport["couldntAsk"]) => Promise<void>;
 }
 
 /** connectors.status = 'connected' for the account — the only platforms a snapshot may ask. */
@@ -210,6 +213,13 @@ export async function snapshotKpis(deps: SnapshotDeps): Promise<SnapshotReport> 
     });
   }
 
+  if (deps.commit) {
+    await guard();
+    await deps.commit(rows, report.couldntAsk);
+    report.written = rows;
+    await guard();
+    return report;
+  }
   if (rows.length) {
     await guard();
     await unwrap("kpi_snapshots.upsert", deps.db.from("kpi_snapshots").upsert(rows as unknown as Row[], { onConflict: "account_id,context_generation,metric_key,window_end" }));
