@@ -10,12 +10,13 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 25, 5 September 2026, approximately 09:29 UTC
+## Latest state — Batch 25, 5 September 2026, approximately 09:34 UTC
 
-**Source and private database progress.** Batch 24 remains the current app/worker release until a new matched deployment is recorded. Added one-use start claiming shared by the first keyword start and explicit recovery of its untouched original run. A lost issuance can be recovered without another allowance; possibly started/legacy/expired/changed runs cannot replay. Nguyen's wrapper is untouched.
+**Source, private database and matched live-release progress.** Added one-use start claiming shared by the first keyword start and explicit recovery of its untouched original run. A lost issuance can be recovered without another allowance; possibly started/legacy/expired/changed runs cannot replay. Nguyen's wrapper is untouched.
 
 - **198 files / 2,476 tests PASS**, app/worker TypeScript, production build, lint zero errors / 39 existing warnings, and diff checks. Real PostgreSQL rollback canary passes its 13 refusal scenarios and one-winner check; application concurrency fixtures do not claim live multi-session SQL proof.
 - Private start RPC applied as migration `20260905092758_keyword_shadow_prepared_start`. Independent 09:29:04 UTC readback: AVGAR generation 1 / paused, zero registrations/permits/runs/enabled routines; public/signed-in execution denied, service-role execution allowed. No business/credential/channel data or live workflow was changed.
+- Source `dc349188ec326d4e7b42318d44109b469c53b7e8` is pushed and live on Vercel `dpl_DuvSLuycvCBiuoNA7dAqkaxrRjvY` and the existing Fly machine, release 17 / image `94bddaa45d1adfa0715f477708b101cf7961eece90107b1f6c82dc17f1834fcc`. Canonical/worker health match; two new worker ticks, zero runs, all five action flags false. Signed-in owner page reload, 401/disabled Apple 503 checks and independent SQL readback pass. Bounded deployment error scan has zero entries; continuous monitoring is not signed off. Unrelated `context 2.ts` preserved and excluded.
 - [Exact recovery behavior, evidence and limitations](KEYWORD-PREPARED-START-2026-09-05.md). Recovery after an ambiguous start claim or missing provider-response checkpoint remains open. n8n API entitlement/key approval, receiver reconciliation and real US/NZ/AU pilot acceptance remain the immediate launch gates; full B01–B24 goal is active, not complete or globally blocked.
 - New frontend ZIP remains mapped, not deployed: [frontend wiring map](integration/FRONTEND-HANDOFF-MAP-2026-09-05.md). Landing capture, catalog reconciliation and ops authorization still need implementation against the existing backend.
 

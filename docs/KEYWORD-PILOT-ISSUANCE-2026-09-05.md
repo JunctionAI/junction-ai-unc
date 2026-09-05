@@ -1,4 +1,6 @@
-# Keyword pilot issuance — verified source, not deployed
+# Keyword pilot issuance — original implementation record
+
+**Current update, 09:34 UTC:** issuance is deployed; the [prepared-start recovery release](KEYWORD-PREPARED-START-2026-09-05.md) adds a one-use claim shared by initial starts and explicit recovery of untouched runs. The source-only/deployment statements below describe the 08:38 snapshot, not current deployment status. Live n8n acceptance remains unproven.
 
 5 September 2026, approximately 08:38 UTC. B01–B24 remain the full goal. This advances B04/B13/B15/B16, not customer acceptance.
 
