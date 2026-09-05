@@ -12,7 +12,19 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 32, 6 September NZ / 5 September UTC
+## Latest state — Batch 33, 6 September NZ / 5 September UTC
+
+**Native client-system reconciliation: verified read-only progress, not a new runtime release.** Previous turn delivered Batch 32; this turn identifies actual existing agents, current attachments, saved failures and warehouse timestamps rather than inferring readiness from empty Unc records. Full B01–B24 plus all-screen/all-client acceptance remains active, without reset or invented numeric budget.
+
+- Native H1 Email, Domes Sales, Unity MMA Operations, DBH Email and AVGAR Paid Ads identities inspected. Current H1 writer connection is Writer7, not the historical Writer6. Additional existing clients appear outside the seven Unc records. Rory search has no current-filter match, not proof no system exists. No memberships/bindings inferred from names.
+- Saved H1 September 5 review and AVGAR September 5 Shopify refresh both stop at the ChatGPT usage limit. Deterministic warehouse refresh must not depend solely on model availability. Aerspan has an Outlook reconnect-by-September-11 warning and a separate saved incomplete 1/15 lead run with an Exa plan-access failure; an improvement request already exists.
+- Direct 12:19:38 UTC warehouse aggregate: H1 85 campaign rows, newest metrics September 3 19:07 UTC, 13 missing metric timestamps; DBH 195 rows, newest metrics September 4 18:42 UTC, zero missing. These are data timestamps, not completed agent runs or freshness-SLA acceptance. Unity's historical fixed-21 error is not reproduced: the inspected Mission Control functions now use 1–40 plus approval-count matching, but its August baseline receipts do not reconcile the native September source. No speculative repair/replay.
+- Official supported Hyperagent `threads:read`-only server-side OAuth connection identified; Access Gate sent and unanswered. No token/connection created. Proposed adapter must explicitly map native IDs to verified Unc accounts, retain external provenance and not count native results as Unc/n8n runs. It remains Codex work, not a completed integration.
+- No agent/provider invocation, credential/model/schedule/autonomy/workflow/client mutation, migration, model call, purchase or deployment. Production remains Batch 32 source `332dd3092b8de65cc145647478412385b52a0e8a`; no redundant full-suite/build run for these documentation-only changes. [Exact evidence, constraints and work order](integration/NATIVE-CLIENT-SYSTEMS-2026-09-06.md).
+
+**Next independent work:** complete the existing atomic routine configuration/manual-run journey and data/auth coverage while the Hyperagent and n8n access decisions remain pending. Bind external history only after supported authorization and canonical mapping. Do not claim Nguyen is the only blocker or repeat unchanged provider probes; no native agent reconfiguration is authorized by this audit.
+
+## Batch 32, 6 September NZ / 5 September UTC
 
 **Shared routine controls and truthful inspector released with live readback.** Previous turn made Batch 31 release progress; this turn also makes verified progress, not a blocked repetition. Full B01–B24 plus all-screen/all-client acceptance remains active, with no reset or invented token budget.
 

@@ -2,6 +2,8 @@
 
 5 September 2026, approximately 11:14 UTC. **PARTIAL, read-only inventory.** An empty Unc account does not show whether the client's existing agents work. No accounts, grants, connector secrets, agent configuration or schedules were copied between projects; no provider/agent invocation occurred.
 
+**Follow-up:** [6 September NZ native-agent and warehouse audit](NATIVE-CLIENT-SYSTEMS-2026-09-06.md) verifies five actual native identities, attachment/source evidence and specific execution failures. It supersedes the missing-native-inspection portions below, not the outstanding canonical owner/Unc binding or client acceptance gates.
+
 ## Sources inspected
 
 - Fresh project discovery confirms separate active `junction-mission-control` (`ebcatvidixdjjwmmades`) and `junction-ai-unc` (`ycgayfsvcjpsnryrpukv`); also a separate Aerspan CRM project. They are not interchangeable databases.

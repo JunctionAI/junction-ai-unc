@@ -6,7 +6,7 @@
 
 Finish one real AVGAR keyword round trip first, then expand the ready capabilities across the five areas: Meta, SEO, Content, Email and Google Ads. Five areas does not mean five routines, nor that all capabilities within each area are ready.
 
-The first release is a supervised read/draft private beta. Publishing, customer messaging, ad mutations and spend activation remain disabled. General self-service/phone/second-client claims require their own acceptance. Tom's new landing, operator and client pages should consume the same authenticated account/run/artifact/receipt interfaces; a visual redesign must not replace those controls or hard-code readiness. His ZIP has now been inspected read-only: [actual frontend wiring map and gaps](FRONTEND-HANDOFF-MAP-2026-09-05.md). No live frontend was replaced. The 38 prototype job labels are not interchangeable with the 35 executable backend IDs.
+The first release is a supervised read/draft private beta. Publishing, customer messaging, ad mutations and spend activation remain disabled. General self-service/phone/second-client claims require their own acceptance. **Update through Batch 33:** Tom's supplied landing, client and operator screens are now deployed against the existing authenticated interfaces; real provider-result and all-client acceptance remain incomplete. The 38 prototype job labels map explicitly to 35 existing backend IDs, with five other unavailable jobs shown separately. [Current launch acceptance](../LAUNCH-ACCEPTANCE.md), [frontend wiring map](FRONTEND-HANDOFF-MAP-2026-09-05.md).
 
 ## D03-W01: no more wrapper redesign
 
@@ -58,11 +58,11 @@ Missing rights/access/settings for those routines must not hold up independently
 
 ## Work order and acceptance
 
-1. Codex finishes the in-flight reconnect release without changing secrets or action flags.
+1. Codex's reconnect and supplied-screen releases are deployed with action flags unchanged. Continue remaining auth/data/client acceptance; [native-system audit](NATIVE-CLIENT-SYSTEMS-2026-09-06.md) identifies additional Codex-owned reliability/integration work, not new requests to redesign Nguyen's wrapper.
 2. Codex + credential owner reconcile receiver auth; Tom approves any required n8n plan/key permissions; Codex proves saved-execution access and completes pilot admission prerequisites.
 3. Codex issues the exact authorized registration/run context. Nguyen then runs the three separate country tests. Codex independently verifies each original execution and reloadable result/receipt. No blind paid reruns after uncertain responses.
 4. Codex supplies versioned per-lane adapters/contracts, starting with the ready Meta/Content/SEO semantics above; Nguyen packages his proven logic. Exact Email subset, separate backlink mapping and Google Ads contract are explicit remaining work, not guesses.
-5. Wire Tom's new client/operator pages once supplied; prove sign in → correct account → enabled routine → request → real output → reload/history → disabled-routine refusal. Tom judges usefulness.
+5. Finish acceptance on the now-deployed client/operator pages: sign in → correct account → enabled routine → request → real output → reload/history → disabled-routine refusal. Tom judges usefulness. UI wiring and ordinary chat alone do not prove routine delivery.
 6. Record promotional footage only from demonstrated behavior. A prototype, ordinary chat, passing unit tests or an n8n-only execution does not prove the whole app works. Existing clients beyond AVGAR need named, tenant-isolated acceptance before claiming their agents were upgraded.
 
 No release date is established by this plan. The immediate milestone is the first independently verified end-to-end keyword result, not another infrastructure-only completion report.
