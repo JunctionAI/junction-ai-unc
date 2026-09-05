@@ -11,11 +11,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const json = (body: unknown, status=200) => Response.json(body,{status,headers:{"cache-control":"private, no-store"}});
 const failure = () => json({error:"Couldn’t verify the saved agent settings. Refresh before trying again."},503);
+const noStore = (response: Response) => { response.headers.set("cache-control","private, no-store"); return response; };
 async function snapshot(req: Request) {
   const session = await requireAccountSession();
-  if (session instanceof Response) return session.status===200 ? failure() : session;
+  if (session instanceof Response) return session.status===200 ? failure() : noStore(session);
   const ctx = await captureArtifactContext(session.service,session.accountId,req);
-  if (ctx instanceof Response) return ctx;
+  if (ctx instanceof Response) return noStore(ctx);
   const [listing,states,member,account] = await Promise.all([
     routinesStateForAccount({store:getStore(),db:session.service},session.accountId,{contextGeneration:ctx.contextGeneration}),
     unwrap<{routine_id:string; updated_at:string; enabled:boolean; version:number}[]>("agents.states",session.service.from("routine_states").select("routine_id,updated_at,enabled,version").eq("account_id",session.accountId)),

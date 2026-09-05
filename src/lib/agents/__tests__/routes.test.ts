@@ -19,6 +19,10 @@ beforeEach(()=>{
   listing.mockReset();listing.mockResolvedValue({routines:[{routineId:"D01-W01",enabled:false,version:1,canEnable:true,skillSource:"builtin",availabilityCopy:"drafts only"}],connected:[],business:{},recommendedFirst:[],planChannel:null});
 });
 describe("account-bound Agents API",()=>{
+  it("marks authentication and context denials private and non-cacheable",async()=>{
+    expect((await GET(request(undefined,U))).headers.get("cache-control")).toBe("private, no-store");
+    session=Response.json({error:"sign in"},{status:401});const r=await GET(request());expect(r.status).toBe(401);expect(r.headers.get("cache-control")).toBe("private, no-store");
+  });
   it("reads current-generation history and authoritative role, pause and revision",async()=>{
     const r=await GET(request());expect(r.status).toBe(200);expect(r.headers.get("cache-control")).toBe("private, no-store");
     const b=await r.json();expect(b).toMatchObject({accountId:A,contextGeneration:1,role:"owner",paused:false});expect(b.routines[0].stateUpdatedAt).toBeNull();

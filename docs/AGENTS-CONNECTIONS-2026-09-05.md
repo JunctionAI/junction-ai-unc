@@ -22,6 +22,8 @@ Previous goal turn: Batch 30 verified ops release, not blocked. Full B01–B24 a
 
 ## Remaining gates / compatibility
 
+First candidate `dpl_8fL5b5NwK4vThyfb75hLGGYTSHvc` / `e25c6254f691b68bfdc7a9196e3254f644f37130` built successfully but was **not promoted**: `/api/health` reported `sha:null` because CLI metadata did not populate the runtime environment. Build metadata alone is not the health marker. Rebuild with exact source SHA in both `--env VERCEL_GIT_COMMIT_SHA=<sha>` and `--build-env VERCEL_GIT_COMMIT_SHA=<sha>`, alongside commit metadata. Denied Agents responses were also tightened to `private, no-store` and a regression test added. Preserve this recipe on subsequent CLI releases; do not change any secret or action flags.
+
 - App deployment, actual signed-in navigation and canonical health readback pending at this checkpoint. Rollback target is Batch 30 `dpl_2AWqiFLsPJTpDT3h4m5bwJ2fVgYF`, source `170c765a9c8180cfc92650fd40ecf01bef056258`. Additive unused function need not be removed for UI rollback.
 - No worker contract or dependency behavior changes: existing callers omit the new optional history-generation argument and retain their behavior. Keep compatible Batch 27 worker rather than restarting just to match frontend SHA. Its unchanged source is not evidence of broader worker acceptance.
 - General/legacy switch and inspector/setup paths still need consolidation with the new CAS endpoint; this batch does not close all routine-selection races. Effective promoted-spec readiness, canonical integration receipts, actual schedule presentation and pagination (recent history is bounded at 300) remain open. A stored run status is not independent n8n verification.
