@@ -79,6 +79,8 @@ import type {
 } from "./types";
 import { assertValidSpec } from "./validate";
 import { assertSameRuntimeContext, runtimeGeneration, RuntimeContextError, type RuntimeContextIdentity } from "./contextFence";
+import { MemoryStore } from "./store/memory";
+import { assertShadowRequest } from "../n8n/shadowContract";
 
 const UNSAFE_PROPOSAL_STATUSES = new Set(["BLOCKED", "HOLD", "PARTIAL"]);
 
@@ -125,6 +127,9 @@ export interface Adapters {
   producer?: Producer;
   /** Hands a produce step to a registered n8n workflow, or runs an explicit n8n node. */
   n8n?: N8nBridge;
+  /** Atomic keyword artifact + dry review/receipt completion from the verified ledger.
+   * Never accepted from a workflow callback or a model-provided result. */
+  completeKeywordShadow?: (run: RunRecord) => Promise<RunResult>;
   /** Injectable clock (tests, replays). */
   now?: () => Date;
   /** Injectable id generator. */
@@ -459,6 +464,28 @@ class RunSession {
   private async callN8n(node: ProduceNode | N8nNode, index: number, workflow: Awaited<ReturnType<Store["findN8nWorkflow"]>>): Promise<RunResult | undefined> {
     const bridge = this.adapters.n8n;
     if (!bridge) return this.fail(node.id, "no n8n bridge is configured — nothing was drafted", { node: node.id });
+    if (node.kind === "n8n" && node.shadowContract) {
+      if (!this.adapters.completeKeywordShadow) return this.fail(node.id, "Atomic keyword completion is not configured; nothing was dispatched.");
+      assertKeywordShadowTail(this.spec, index);
+      const snapshot: RunSnapshot = { spec: this.spec, ctx: this.ctx, nextNodeIndex: index + 1, awaiting: "keyword_shadow" };
+      this.run = await this.store.updateRun(this.run.id, { snapshot,
+        summary: "Keyword shadow work is awaiting verified completion. Do not repeat this request." });
+      try {
+        const out = await bridge.call(node, this.ctx, workflow);
+        if (out.kind === "needs") return this.waitForInput(node, index, out.needs);
+        if (out.kind !== "artifact") throw new Error("Keyword shadow requires a synchronous verified result");
+        // The completion adapter reads the independently verified durable result;
+        // the in-flight return object cannot substitute for that evidence.
+        return await this.adapters.completeKeywordShadow(this.run);
+      } catch (error) {
+        if (error instanceof RuntimeContextError) throw error;
+        // A commit may have succeeded despite a lost response. Never overwrite it
+        // with failed status or clear the pre-dispatch continuation. Recovery uses
+        // the same atomic completion key, not another paid dispatch.
+        return this.result("running", "Keyword shadow completion is unconfirmed. Reconcile the original run; do not repeat it.",
+          "keyword_shadow_reconciliation_required");
+      }
+    }
     const out = await bridge.call(node, this.ctx, workflow);
     if (out.kind === "needs") return this.waitForInput(node, index, out.needs);
     if (out.kind === "artifact") {
@@ -780,4 +807,40 @@ export async function completeExternalArtifact(runId: string, result: { artifact
   const session = new RunSession(spec, ctx, run, adapters);
   if ("needs" in result) return session.deliverExternalNeeds(node, index, result.needs);
   return session.deliverExternal(node, result.artifact, nextNodeIndex);
+}
+
+function assertKeywordShadowTail(spec: RoutineSpec, index: number): void {
+  const node = spec.nodes[index], tail = spec.nodes.slice(index + 1);
+  if (spec.id !== "D03-W01" || !node || node.kind !== "n8n" || !node.shadowContract ||
+      spec.nodes.filter(n => n.kind === "produce" || n.kind === "n8n").length !== 1 || spec.nodes.some(n => n.kind === "execute") ||
+      tail.length < 1 || tail.length > 10 || tail.at(-1)?.kind !== "receipt" ||
+      tail.slice(0, -1).some(n => n.kind !== "gate")) throw new Error("Keyword shadow continuation must contain only draft review gates and its final receipt");
+}
+
+/** Run the ORIGINAL post-producer semantics into an isolated staging store. This is
+ * a deterministic commit plan, not a second execution or synthetic provider output.
+ * No caller adapters are available, so no provider/model/executor can be invoked. */
+export async function planKeywordShadowCompletion(run: RunRecord, draft: ArtifactDraft,
+  opts: { now?: () => Date; idGen?: () => string } = {}): Promise<{ result: RunResult; snapshot: RunSnapshot }> {
+  if (!run.snapshot || run.snapshot.awaiting !== "keyword_shadow" || !["running", "failed"].includes(run.status) || run.mode !== "dry_run")
+    throw new Error("Original keyword shadow continuation is unavailable");
+  const snapshot = structuredClone(run.snapshot), { spec, ctx, nextNodeIndex } = snapshot;
+  assertValidSpec(spec); assertKeywordShadowTail(spec, nextNodeIndex - 1);
+  assertSameRuntimeContext(run, ctx.account);
+  assertShadowRequest((spec.nodes[nextNodeIndex - 1] as N8nNode).shadowContract!, {
+    accountId: run.accountId, runId: run.id, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt,
+  });
+  if (run.routineId !== spec.id || run.version !== spec.version || run.specHash !== stableHash(spec) || ctx.runId !== run.id ||
+      ctx.routineId !== run.routineId || ctx.version !== run.version || ctx.mode !== "dry_run" || ctx.startedAt !== run.startedAt ||
+      ctx.artifact || ctx.execution || ctx.approval) throw new Error("Original keyword continuation identity mismatch");
+  const store = new MemoryStore(); await store.createRun(structuredClone(run));
+  const unavailable = async (): Promise<never> => { throw new Error("External work is forbidden during keyword completion"); };
+  const plannedAt = (opts.now ?? (() => new Date()))();
+  const session = new RunSession(spec, ctx, structuredClone(run), { store,
+    reader: { read: unavailable }, decider: { decide: unavailable }, executor: { execute: unavailable }, ...opts, now: () => plannedAt });
+  const node = spec.nodes[nextNodeIndex - 1] as N8nNode;
+  const result = await session.deliverExternal(node, structuredClone(draft), nextNodeIndex);
+  if (result.status !== "done" || !result.artifact || result.receipts.some(r => r.kind !== "draft"))
+    throw new Error("Keyword completion did not finish its original draft continuation");
+  return { result, snapshot: structuredClone(run.snapshot) };
 }

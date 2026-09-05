@@ -4,7 +4,7 @@ import { AVGAR_PILOT_ACCOUNT, AVGAR_SEO_WORKFLOW, KEYWORD_SHADOW_CONTRACT, asser
 import { keywordShadowSpec } from "../keywordShadowSpec";
 import { HttpN8nBridge, parseN8nReply, buildN8nPayload } from "../../../worker/providers/n8n";
 import { shadowRequestDigest } from "../executionEvidence";
-import { runRoutine } from "../../runtime/engine";
+import { runRoutine, planKeywordShadowCompletion } from "../../runtime/engine";
 import { adapters as buildAdapters, FakeProducer } from "../../runtime/__tests__/helpers";
 import type { N8nNode, RunContext } from "../../runtime/types";
 
@@ -121,7 +121,19 @@ describe("AVGAR keyword shadow contract", () => {
         observedDigest = shadowRequestDigest(request);
         return new Response(JSON.stringify({ ...reply(), executionReceipt: { ...receipt(), runId: request.runId } }), { status: 200 });
       } });
-    const result = await runRoutine(spec, { account: ctx.account, triggeredBy: "manual" }, { ...adapters, now: () => new Date(start), n8n: b }, { mode: "dry_run" });
+    let verifiedDraft: import("../../runtime/types").ArtifactDraft | undefined;
+    const result = await runRoutine(spec, { account: ctx.account, triggeredBy: "manual" }, { ...adapters, now: () => new Date(start),
+      n8n: { async call(...args) { const out = await b.call(...args); if (out.kind === "artifact") verifiedDraft = out.artifact; return out; } },
+      // This fixture exercises engine/receipt shaping only; database atomicity has
+      // its own PostgreSQL canary and completion adapter tests.
+      completeKeywordShadow: async run => {
+        const planned = await planKeywordShadowCompletion(run, verifiedDraft!, { now: () => now });
+        await store.putArtifact(planned.result.artifact!);
+        for (const r of planned.result.receipts) await store.appendReceipt(r);
+        await store.updateRun(run.id, { status: "done", snapshot: undefined });
+        return planned.result;
+      },
+    }, { mode: "dry_run" });
     expect(result.status).toBe("done");
     expect(result.artifact).toMatchObject({ accountId: contract.accountId, routineId: "D03-W01", status: "draft", meta: { via: "n8n", executionReceipt: { executionId: "12345" } } });
     const draft = result.receipts.find(r => r.kind === "draft");

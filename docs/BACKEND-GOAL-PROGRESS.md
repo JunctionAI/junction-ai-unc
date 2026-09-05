@@ -10,7 +10,16 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 20, 5 September 2026, approximately 08:11 UTC
+## Latest state — Batch 21, 5 September 2026, approximately 08:23 UTC
+
+**Verified source and rollback-only database progress; no production rollout.** The previous goal turn was progress: Batch 20 was pushed as `1d7caf8c8045d12f0412e92603cfd448f3d39a4a`. The n8n plan/API-key approval remains unanswered; the automatic continuation does not supply that authority.
+
+- Normal keyword success and recovery now use one atomic original-run artifact/review/receipt completion. The engine captures its continuation before dispatch; the existing engine stages only its original draft gates/final receipt with no external adapters. SQL rechecks owner/context/snapshot/spec and exact verified artifact, then commits all records together with one immutable completion identity. Lost responses cannot overwrite done status or cause another provider call.
+- **196 files / 2,398 tests PASS**, app/worker TypeScript/compilation, production build and diff checks pass; lint zero errors / 39 existing warnings. Real admission/recovery/completion PostgreSQL rollback canaries pass together, including a forced failure after partial inserts. No synthetic result is counted as live provider/customer acceptance.
+- Independent **08:23:08 UTC** readback: all staged shadow tables absent, zero synthetic accounts, AVGAR generation 1 / paused, zero registrations/enabled routines/AVGAR runs. Security advisors unchanged (six WARN/eight INFO). Canonical **08:23:10 UTC** health remains `00fc57cfd07b`, healthy DB/fresh worker. No persistent DDL, deployment, provider/model call, message, workflow mutation, purchase or key creation.
+- [Detailed semantics, operator option and limits](KEYWORD-COMPLETION-2026-09-05.md). Next Codex work: atomic operator-approved pilot registration/run/permit issuance and prepared-start continuation; coordinate nine staged migrations with app/worker and original-chat preservation. Unknown-response discovery, full failure classification/recovery scheduling, OAuth identity and live/browser/phone/second-client acceptance remain open. Full B01–B24 scope is unchanged and uncompleted.
+
+## Batch 20, 5 September 2026, approximately 08:11 UTC
 
 **Verified source and rollback-only database progress; no production rollout.** Batch 19 was committed/pushed as `c46b6b3b6114a54a4fedc2993ea213908f56bc64`. The pending n8n plan/API-key scope question was not answered by the automatic goal continuation; no purchase or key creation was attempted.
 

@@ -206,7 +206,7 @@ export interface RunSnapshot {
   /** waiting_input: what the producer asked for (resume-input re-runs the produce node). */
   needs?: ProduceNeed[];
   /** A run whose artifact an n8n workflow will deliver later (POST /api/routines/artifacts). */
-  awaiting?: "n8n";
+  awaiting?: "n8n" | "keyword_shadow";
 }
 
 export interface ListArtifactsOptions {

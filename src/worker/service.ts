@@ -32,6 +32,7 @@ import { RulesDecisionProvider, type PresetSource } from "../lib/actions";
 import { presetSource } from "../lib/runtime/presets/store";
 import { HttpN8nBridge } from "./providers/n8n";
 import { DbShadowAdmission } from "../lib/n8n/shadowAdmission";
+import { completeKeywordShadowRun } from "./completeKeywordShadow";
 import { createProducerClient, DbProducerContext, LlmProducer } from "./providers/producer";
 import type { ScheduleCandidate } from "./scheduler";
 import { defaultCredentialProvider, serviceDb } from "./wiring";
@@ -122,6 +123,8 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
       log: deps.log,
     }),
     store: deps.store,
+    ...(db ? { completeKeywordShadow: (run: import("../lib/runtime/store/interface").RunRecord) =>
+      completeKeywordShadowRun(db, { accountId: run.accountId, contextGeneration: run.contextGeneration, runId: run.id }, { now }) } : {}),
     ...(db ? { assertContext: (identity: import("../lib/runtime/contextFence").RuntimeContextIdentity) => assertRuntimeContext(db, identity) } : {}),
     ...(producer ? { producer } : {}),
     ...(n8n ? { n8n } : {}),

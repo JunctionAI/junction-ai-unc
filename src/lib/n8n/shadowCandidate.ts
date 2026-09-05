@@ -1,5 +1,5 @@
 /** Private recovery checkpoint, NOT a verified or customer-visible artifact. */
-import { validateArtifactObject } from "../artifacts/validate";
+import { EVIDENCE_MAX, validateArtifactObject } from "../artifacts/validate";
 import type { ArtifactDraft, N8nCallResult } from "../runtime/types";
 
 export interface ShadowCandidate {
@@ -20,7 +20,7 @@ export function shadowCandidate(artifact: unknown, reportedReceipt: Record<strin
 export function verifiedShadowResult(candidate: ShadowCandidate, receipt: Record<string, unknown>): Extract<N8nCallResult, { kind: "artifact" }> {
   return { kind: "artifact", artifact: { ...candidate.artifact,
     meta: { executionReceipt: receipt, approval_status: "pending_approval", executed_action: "none" },
-    evidence: [...(candidate.artifact.evidence ?? []), { source: "n8n_execution",
+    evidence: [...(candidate.artifact.evidence ?? []).slice(0, EVIDENCE_MAX - 1), { source: "n8n_execution",
       ref: `https://junctionai8.app.n8n.cloud/workflow/${receipt.workflowId}/executions/${receipt.executionId}` }],
   } };
 }

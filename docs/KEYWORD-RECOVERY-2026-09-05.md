@@ -2,6 +2,8 @@
 
 5 September 2026, approximately 08:11 UTC. Source and rollback tests pass; not deployed.
 
+**Subsequent update:** [Batch 21 atomic completion](KEYWORD-COMPLETION-2026-09-05.md) adds the original customer artifact/review/receipt/run commit path for both normal success and recovery. Archive-only remains the operator default; `--complete-original-run` explicitly requests projection. The historical limitations below describe this batch; live/browser acceptance and unknown-response discovery remain unproven.
+
 ## What changed
 
 The bridge now atomically checkpoints the reported execution ID **and the validated business response** before attempting independent verification. Previously an interrupted verification retained the ID but lost the response needed to recover its artifact.

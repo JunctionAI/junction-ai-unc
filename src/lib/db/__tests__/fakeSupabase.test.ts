@@ -38,6 +38,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "llm_usage",
       "memories",
       "n8n_shadow_candidates",
+      "n8n_shadow_completions",
       "n8n_shadow_permits",
       "n8n_workflows",
       "oauth_states",
@@ -60,6 +61,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     ]);
     // 0014 launch hardening
     expect(s.n8n_shadow_candidates.primaryKey).toEqual(["permit_id"]);
+    expect(s.n8n_shadow_completions.primaryKey).toEqual(["permit_id"]);
     expect([...s.n8n_shadow_candidates.columns]).toEqual(expect.arrayContaining([
       "account_id", "context_generation", "run_id", "run_started_at", "execution_id", "candidate", "recorded_at",
     ]));
