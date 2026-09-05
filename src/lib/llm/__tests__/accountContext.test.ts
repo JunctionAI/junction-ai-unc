@@ -60,4 +60,14 @@ describe("browser model-call account boundary", () => {
     mocks.session.mockResolvedValue({ accountId: "unknown", service });
     expect((await requireModelAccountContext() as Response).status).toBe(503);
   });
+
+  it("rejects a stale tab from another account even at the same generation", async () => {
+    mocks.configured.mockReturnValue(true);
+    const service = new FakeSupabase();
+    service.insertRow("accounts", { id: "new-account", context_generation: 1 });
+    mocks.session.mockResolvedValue({ accountId: "new-account", service });
+    const response = await requireModelAccountContext(new Request("https://unc.test", { headers: { "x-unc-account-id": "old-account", "x-unc-context-generation": "1" } }));
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).status).toBe(409);
+  });
 });

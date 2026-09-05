@@ -10,6 +10,8 @@
 
 import { listThread } from "@/lib/channels/thread";
 import { requireAccountSession } from "@/lib/db/session";
+import { captureMemoryContext, contextChangedResponse } from "@/lib/db/contextGeneration";
+import { RuntimeContextError } from "@/lib/runtime/contextFence";
 import { withErrorCapture } from "@/lib/observability/errors";
 
 export const runtime = "nodejs";
@@ -18,17 +20,26 @@ export const dynamic = "force-dynamic";
 async function handleGET(req: Request) {
   const session = await requireAccountSession();
   if (session instanceof Response) return session;
+  const requestedAccount = req.headers.get("x-unc-account-id");
+  if (requestedAccount && requestedAccount !== session.accountId) return contextChangedResponse();
+  const context = await captureMemoryContext(session.db, session.accountId, req);
+  if (context instanceof Response) return context;
   const url = new URL(req.url);
   const sinceRaw = url.searchParams.get("since");
   const since = sinceRaw && !Number.isNaN(new Date(sinceRaw).getTime()) ? new Date(sinceRaw).toISOString() : null;
   const limitRaw = Number(url.searchParams.get("limit") ?? "200");
   const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 200;
   try {
-    const messages = await listThread(session.db, session.accountId, { since, limit });
-    return Response.json({ messages: messages.map((m) => ({ id: m.id, at: m.at, sender: m.sender, body: m.body, channel: m.channel, externalMsgId: m.externalMsgId })), now: new Date().toISOString() });
+    const messages = await listThread(session.db, session.accountId, { since, limit, contextGeneration: context.generation, includeAppAnchor: !since });
+    return Response.json({ accountId: session.accountId, contextGeneration: context.generation, messages: messages.map((m) => ({ id: m.id, at: m.at, sender: m.sender, body: m.body, channel: m.channel, externalMsgId: m.externalMsgId, appPosition: m.appPosition })), now: new Date().toISOString() });
   } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : "thread read failed" }, { status: 500 });
+    if (err instanceof RuntimeContextError && err.code === "context_changed") return contextChangedResponse();
+    return Response.json({ error: "Couldn't verify your conversation. Please try again." }, { status: 503 });
   }
 }
 
-export const GET = withErrorCapture("api/channels/thread", handleGET);
+export const GET = withErrorCapture("api/channels/thread", async (req: Request) => {
+  const response = await handleGET(req);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+});

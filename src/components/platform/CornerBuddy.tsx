@@ -46,7 +46,7 @@ export function accountBubble(V: Pick<PlatformVals, "isStrategy" | "isSystems" |
 export function accountThread(msgs: ChatMsg[], lane: "ai" | "human", remote: ThreadRow[] = []): Bubble[] {
   const real = stripDemoSeed(msgs, lane === "ai" ? DEMO_CORNER_SEED : DEMO_HUMAN_SEED);
   if (lane === "human") return real;
-  const merged = mergeThread<Bubble>(real, remote, bubbleFromRow);
+  const merged = mergeThread<Bubble>(real, remote, bubbleFromRow, msgs.length - real.length);
   if (merged.length) return merged;
   return [{ text: FIRST_UNC_LINE, fromUser: false, fromJunction: true, typing: false, link: false, linkLabel: undefined, linkGo: () => {} }];
 }
@@ -56,7 +56,8 @@ export default function CornerBuddy({ V, initialThread = null }: { V: PlatformVa
   const { mode, facts } = useAccountFacts();
   const acct = mode === "account";
   const lane = V.chatIsHuman ? "human" : "ai";
-  const remote = useChannelThread(acct && lane === "ai", V.chatOpen, initialThread);
+  const remote = useChannelThread(acct && lane === "ai", V.chatOpen,
+    V.accountId ? { accountId: V.accountId, contextGeneration: V.contextGeneration } : null, initialThread);
   const msgs: Bubble[] = acct ? accountThread(V.chatMsgs, lane, remote) : V.chatMsgs;
   const humanOffline = acct && V.chatIsHuman;
   const bubbleText = acct ? accountBubble(V, facts) : V.buddyText;

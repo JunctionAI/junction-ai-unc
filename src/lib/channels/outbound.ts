@@ -143,6 +143,7 @@ export async function listOutbound(db: DbClient, accountId: string, opts: { sinc
 export type SendOutcome = { status: "sent"; ledgerId: string; externalMsgId: string | null } | { status: "failed"; ledgerId: string; error: string } | { status: "queued"; ledgerId: string } | { status: "skipped"; reason: "no_adapter" | "not_configured" | "pref_off" | "quiet_hours" | "unverified" };
 
 export interface SendOnLinkOptions {
+  contextGeneration?: number;
   ref?: string | null;
   /** Set on briefs: outside the WhatsApp window this goes as the approved template instead of queuing. */
   allowTemplate?: boolean;
@@ -181,7 +182,7 @@ export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: Ou
     await deps.guard?.();
     if (opts.appendToThread ?? true) {
       try {
-        await appendOutbound(deps.db, { accountId: link.accountId, channel: link.channel, text: payload.text, externalMsgId: result.externalMsgId ? `out:${result.externalMsgId}` : null, delivery: { status: "sent", kind, ref: opts.ref ?? null, link_id: link.id }, now });
+        await appendOutbound(deps.db, { accountId: link.accountId, contextGeneration: opts.contextGeneration, externalScope: link.id, channel: link.channel, text: payload.text, externalMsgId: result.externalMsgId ? `out:${result.externalMsgId}` : null, delivery: { status: "sent", kind, ref: opts.ref ?? null, link_id: link.id }, now });
       } catch (err) {
         deps.log?.("channels.thread_write_failed", { accountId: link.accountId, error: err instanceof Error ? err.message : String(err) });
       }
@@ -198,6 +199,7 @@ export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: Ou
 
 export interface PushInput {
   accountId: string;
+  contextGeneration?: number;
   kind: Exclude<OutboundKind, "reply">;
   /** Durable dedup key — one send per link per ref, ever. */
   ref: string;
@@ -233,7 +235,7 @@ export async function pushToAccount(deps: OutboundDeps, input: PushInput): Promi
       continue; // not ledgered: the next tick outside the window sends it
     }
     if (await alreadyPushed(deps.db, input.accountId, link.id, input.ref)) continue;
-    const out = await sendOnLink(deps, link, input.kind, input.payload, { ref: input.ref, allowTemplate: input.allowTemplate, appendToThread: !threadWritten });
+    const out = await sendOnLink(deps, link, input.kind, input.payload, { contextGeneration: input.contextGeneration, ref: input.ref, allowTemplate: input.allowTemplate, appendToThread: !threadWritten });
     if (out.status === "sent") {
       report.sent++;
       threadWritten = true;

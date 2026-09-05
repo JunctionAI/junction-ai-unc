@@ -23,7 +23,9 @@ import { requireModelAccountContext } from "@/lib/llm/accountContext";
 import type { LlmMessage } from "@/lib/llm/types";
 import type { UncSurface } from "@/lib/unc/prompt";
 import { buildServerContext, buildServerHistory, MAX_TURN_CHARS, respondAsUnc } from "@/lib/unc/respond";
-import { contextStillCurrent, CONTEXT_CHANGED_MESSAGE } from "@/lib/db/contextGeneration";
+import { CONTEXT_CHANGED_MESSAGE } from "@/lib/db/contextGeneration";
+import { assertRuntimeContext } from "@/lib/db/runtimeContext";
+import { RuntimeContextError } from "@/lib/runtime/contextFence";
 import { withErrorCapture } from "@/lib/observability/errors";
 import { routeCommand } from "@/lib/commands/message";
 import { getStore } from "@/lib/runtime/store";
@@ -67,33 +69,46 @@ async function handlePOST(req: Request) {
   if (!history) return Response.json({ error: "invalid messages" }, { status: 400 });
   if (history[history.length - 1].role !== "user") return Response.json({ error: "last message must be from the user" }, { status: 400 });
   const surface: UncSurface = body.surface === "onboarding" ? "onboarding" : "corner";
+  const guard = account ? () => assertRuntimeContext(account.db, {
+    accountId: account.accountId, contextGeneration: account.contextGeneration ?? 0,
+  }, { allowPaused: true }) : undefined;
 
-  if (account && surface === "corner") {
-    const command = await routeCommand(account.db, getStore(), { accountId: account.accountId, contextGeneration: account.contextGeneration, userId: account.userId ?? "", channel: "app", requestId: typeof body.requestId === "string" ? body.requestId : "" }, history[history.length - 1].content);
-    if (command) return Response.json(command);
-  }
-
-  // Once signed in, ordinary chat uses persisted account facts, not a stale or
-  // fabricated browser context. Onboarding may still discuss unsaved draft inputs;
-  // it cannot dispatch commands and never grants runtime permissions.
-  let context = body.context;
-  if (account && surface === "corner") {
-    try {
-      context = await buildServerContext(account.db, account.accountId);
-      history = await buildServerHistory(account.db, account.accountId, history[history.length - 1]);
-    } catch {
-      return Response.json({ error: "Couldn't load your business context. Please try again." }, { status: 503 });
+  try {
+    await guard?.();
+    if (account && surface === "corner") {
+      const command = await routeCommand(account.db, getStore(), { accountId: account.accountId, contextGeneration: account.contextGeneration, userId: account.userId ?? "", channel: "app", requestId: typeof body.requestId === "string" ? body.requestId : "" }, history[history.length - 1].content);
+      await guard?.();
+      if (command) return Response.json(command);
     }
+
+    // Once signed in, ordinary chat uses persisted account facts, not a stale or
+    // fabricated browser context. Onboarding may still discuss unsaved draft inputs;
+    // it cannot dispatch commands and never grants runtime permissions.
+    let context = body.context;
+    if (account && surface === "corner") {
+      try {
+        context = await buildServerContext(account.db, account.accountId);
+        history = await buildServerHistory(account.db, account.accountId, history[history.length - 1], account.contextGeneration ?? 0);
+      } catch (error) {
+        if (error instanceof RuntimeContextError) throw error;
+        return Response.json({ error: "Couldn't load your business context. Please try again." }, { status: 503 });
+      }
+    }
+    const result = await respondAsUnc({ history, context, surface, account, guard });
+    await guard?.();
+    if (!result.ok) return result.reason === "invalid_history" ? Response.json({ error: "invalid messages" }, { status: 400 }) : fallback();
+    return Response.json({ reply: result.reply });
+  } catch (error) {
+    if (error instanceof RuntimeContextError) return Response.json({
+      error: error.code === "context_changed" ? CONTEXT_CHANGED_MESSAGE : "Couldn't verify business context.",
+      code: error.code,
+    }, { status: error.code === "context_changed" ? 409 : 503 });
+    throw error;
   }
-  const result = await respondAsUnc({ history, context, surface, account });
-  if (account?.contextGeneration !== undefined) {
-    try {
-      if (!await contextStillCurrent(account.db, account.accountId, account.contextGeneration))
-        return Response.json({ error: CONTEXT_CHANGED_MESSAGE, code: "context_changed" }, { status: 409 });
-    } catch { return Response.json({ error: "Couldn't verify business context." }, { status: 503 }); }
-  }
-  if (!result.ok) return result.reason === "invalid_history" ? Response.json({ error: "invalid messages" }, { status: 400 }) : fallback();
-  return Response.json({ reply: result.reply });
 }
 
-export const POST = withErrorCapture("api/unc/chat", handlePOST);
+export const POST = withErrorCapture("api/unc/chat", async (req: Request) => {
+  const response = await handlePOST(req);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+});

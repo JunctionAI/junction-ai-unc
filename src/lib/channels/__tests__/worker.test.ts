@@ -40,6 +40,24 @@ function seeded() {
 }
 
 describe("runChannelsTick", () => {
+  it("does not turn archived briefs, receipts or approvals into current-context pushes", async () => {
+    const { db, clk } = seeded();
+    db.rows("accounts")[0].context_generation = 1;
+    seedLink(db);
+    const adapters = fakeAdapters();
+    const store = new SupabaseStore(db);
+    await runChannelsTick({ store, db, now: clk.now, adapters });
+    expect(db.rows("outbound_messages")).toEqual([]);
+    db.seed("daily_briefs", [{ account_id: ACCT, context_generation: 1, day: "2026-09-03", body: "Current business only", items: [], created_at: "2026-09-02T18:31:00Z" }]);
+    await runChannelsTick({ store, db, now: clk.now, adapters });
+    expect(db.rows("outbound_messages")).toHaveLength(1);
+    expect(db.rows("chat_messages")[0]).toMatchObject({ context_generation: 1, body: expect.stringContaining("Current business only") });
+    db.rows("accounts")[0].automation_paused = true;
+    const report = await runChannelsTick({ store, db, now: clk.now, adapters });
+    expect(report.failed).toBe(1);
+    expect(db.rows("outbound_messages")).toHaveLength(1);
+  });
+
   it("no database → skipped; an account with no verified link gets nothing", async () => {
     const r = await runChannelsTick({ store: new MemoryStore(), db: null });
     expect(r).toMatchObject({ skipped: true, accounts: 0 });

@@ -117,6 +117,7 @@ export interface ConnectorRow {
 }
 export interface ChatMessageRow {
   account_id: string;
+  context_generation?: number;
   thread: "corner" | "onboarding" | "human";
   position: number;
   lane: "ai" | "human";
@@ -306,6 +307,7 @@ export function stateToRows(accountId: string, S: PlatformState, opts: { userId?
       .filter((m) => !m.typing)
       .map((m, position) => ({
         account_id: accountId,
+        context_generation: S.contextGeneration ?? 0,
         thread,
         position,
         lane,

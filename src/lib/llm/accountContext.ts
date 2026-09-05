@@ -24,6 +24,9 @@ export async function requireModelAccountContext(req?: Request): Promise<ModelAc
   if (!isDbConfigured()) return process.env.NODE_ENV === "production" ? unavailable() : null;
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
+  const requestedAccount = req?.headers.get("x-unc-account-id");
+  if (requestedAccount && requestedAccount !== session.accountId)
+    return Response.json({ error: CONTEXT_CHANGED_MESSAGE, code: "context_changed" }, { status: 409 });
   try {
     const contextGeneration = await accountContextGeneration(session.service, session.accountId);
     if (req && !contextRequestMatches(req, contextGeneration)) return Response.json({ error: CONTEXT_CHANGED_MESSAGE, code: "context_changed" }, { status: 409 });

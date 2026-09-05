@@ -26,6 +26,8 @@ describe("chat command polling captures business context", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls[0][1].headers["x-unc-context-generation"]).toBe("1");
     expect(fetcher.mock.calls[1][1].headers["x-unc-context-generation"]).toBe("1");
+    expect(fetcher.mock.calls[0][1].headers["x-unc-account-id"]).toBe("a");
+    expect(fetcher.mock.calls[1][1].headers["x-unc-account-id"]).toBe("a");
     expect(h.state.messages.at(-1)?.text).toBe("finished");
   });
   it("drops a late status after the same account changes generation", async () => {

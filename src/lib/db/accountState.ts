@@ -16,6 +16,8 @@
 import { accountInitialState, type PlatformState } from "../platform/state";
 import { rowsToState, stateToRows, type AccountRows, type LoadedRows } from "./mapping";
 import { unwrap, type DbClient } from "./types";
+import { assertRuntimeContext } from "./runtimeContext";
+import { runtimeGeneration } from "../runtime/contextFence";
 
 export type MembershipRole = "owner" | "member";
 
@@ -44,8 +46,9 @@ export async function createAccount(db: DbClient, opts: { name?: string; currenc
 
 export async function loadAccountRows(db: DbClient, accountId: string): Promise<LoadedRows> {
   const byAccount = (table: string, columns: string) => db.from(table).select(columns).eq("account_id", accountId);
-  const [account, goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages, stateMeta] = await Promise.all([
-    unwrap<LoadedRows["account"]>("accounts.select", db.from("accounts").select("id, currency, name, context_generation, automation_paused").eq("id", accountId).maybeSingle()),
+  const account = await unwrap<LoadedRows["account"]>("accounts.select", db.from("accounts").select("id, currency, name, context_generation, automation_paused").eq("id", accountId).maybeSingle());
+  const contextGeneration = runtimeGeneration(account?.context_generation);
+  const [goals, resourceProfile, teamMembers, businessProfile, routineStates, connectors, chatMessages, stateMeta] = await Promise.all([
     unwrap<LoadedRows["goals"]>("goals.select", byAccount("goals", "account_id, category, tier, title, baseline, deadline").order("created_at", { ascending: true })),
     unwrap<LoadedRows["resourceProfile"]>(
       "resource_profiles.select",
@@ -55,9 +58,10 @@ export async function loadAccountRows(db: DbClient, accountId: string): Promise<
     unwrap<LoadedRows["businessProfile"]>("business_profiles.select", byAccount("business_profiles", "account_id, scan_status, profile, scanned_at").maybeSingle()),
     unwrap<LoadedRows["routineStates"]>("routine_states.select", byAccount("routine_states", "account_id, routine_id, enabled")),
     unwrap<LoadedRows["connectors"]>("connectors.select", byAccount("connectors", "account_id, platform, status")),
-    unwrap<LoadedRows["chatMessages"]>("chat_messages.select", byAccount("chat_messages", "account_id, thread, position, lane, sender, body, meta, channel").order("position", { ascending: true })),
+    unwrap<LoadedRows["chatMessages"]>("chat_messages.select", byAccount("chat_messages", "account_id, context_generation, thread, position, lane, sender, body, meta, channel").eq("context_generation", contextGeneration).order("position", { ascending: true })),
     unwrap<LoadedRows["stateMeta"]>("account_state_meta.select", byAccount("account_state_meta", "account_id, schema_version, client_state").maybeSingle()),
   ]);
+  if (account) await assertRuntimeContext(db, { accountId, contextGeneration }, { allowPaused: true });
   // Only the app's own turns hydrate the client (rows before 0012 have no channel yet; the
   // column default is 'app'). Channel turns are read through GET /api/channels/thread.
   const appMessages = chatMessages.filter((m) => {
@@ -161,7 +165,7 @@ export async function saveAccountRows(db: DbClient, rows: AccountRows, opts: { t
   }
 
   if (rows.chatMessages.length)
-    await unwrap("chat_messages.upsert", acct("chat_messages").upsert(rows.chatMessages as unknown as Record<string, unknown>[], { onConflict: "account_id,thread,position" }));
+    await unwrap("chat_messages.upsert", acct("chat_messages").upsert(rows.chatMessages as unknown as Record<string, unknown>[], { onConflict: "account_id,context_generation,thread,position" }));
 
   await unwrap(
     "account_state_meta.upsert",

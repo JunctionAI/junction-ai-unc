@@ -111,10 +111,13 @@ export function loadSchema(dir = MIGRATIONS_DIR): Schema {
       }
     }
 
+    // Retired indexes must stop constraining later generation-aware fixtures.
+    for (const m of sql.matchAll(/drop index (?:if exists )?(?:public\.)?(\w+)/gi))
+      for (const t of Object.values(schema)) t.uniques = t.uniques.filter(u => u.name !== m[1]);
     // unique indexes (incl. partial "where col is not null")
-    const idxRe = /create unique index (?:if not exists )?\w+ on (\w+) \(([^)]*)\)(?: where (\w+) is not null)?/gi;
+    const idxRe = /create unique index (?:if not exists )?(\w+) on (?:public\.)?(\w+) \(([^)]*)\)(?: where (\w+) is not null)?/gi;
     for (const m of sql.matchAll(idxRe)) {
-      table(m[1]).uniques.push({ columns: cols(m[2]), partialNotNull: m[3] });
+      table(m[2]).uniques.push({ name: m[1], columns: cols(m[3]), partialNotNull: m[4] });
     }
   }
   return schema;
@@ -140,6 +143,7 @@ export interface Call {
   values?: Row | Row[];
   filters: Filter[];
   order?: { column: string; ascending: boolean };
+  orders?: { column: string; ascending: boolean }[];
   limit?: number;
   single?: "single" | "maybeSingle";
   onConflict?: string;
@@ -333,6 +337,7 @@ export class FakeSupabase implements DbClient {
     for (const c of t.columns) out[c] = c in row ? row[c] : null;
     if (t.columns.has("context_generation") && !("context_generation" in row)) out.context_generation = 0;
     if (table === "channel_links" && !("binding_version" in row)) out.binding_version = 0;
+    if (table === "chat_messages" && !("external_scope" in row)) out.external_scope = "";
     if (table === "accounts" && !("automation_paused" in row)) out.automation_paused = false;
     if (t.columns.has("id") && out.id === null) out.id = fakeUuid();
     for (const c of ["created_at", "updated_at", "started_at", "saved_at"]) if (t.columns.has(c) && out[c] === null) out[c] = this.now();
@@ -482,6 +487,7 @@ class FakeFilter implements DbFilter {
   order(column: string, opts: { ascending?: boolean } = {}) {
     this.db.assertColumns(this.call.table, [column]);
     this.call.order = { column, ascending: opts.ascending ?? true };
+    (this.call.orders ??= []).push(this.call.order);
     return this;
   }
   limit(count: number) {
@@ -558,8 +564,14 @@ class FakeFilter implements DbFilter {
           break;
       }
       if (this.call.order) {
-        const { column, ascending } = this.call.order;
-        affected = [...affected].sort((a, b) => (ascending ? 1 : -1) * cmp(a[column], b[column]));
+        const orders = this.call.orders ?? [this.call.order];
+        affected = [...affected].sort((a, b) => {
+          for (const { column, ascending } of orders) {
+            const comparison = (ascending ? 1 : -1) * cmp(a[column], b[column]);
+            if (comparison) return comparison;
+          }
+          return 0;
+        });
       }
       if (this.call.limit !== undefined) affected = affected.slice(0, this.call.limit);
       if (!this.call.returning) {

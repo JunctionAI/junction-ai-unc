@@ -152,7 +152,8 @@ describe("column mapping (0001 + 0003)", () => {
 
   it("chat_messages: three threads, positions, senders, link meta; typing placeholders dropped", () => {
     const corner = rows.chatMessages.filter((m) => m.thread === "corner");
-    expect(corner).toEqual([
+    expect(corner.every(row => row.context_generation === 0)).toBe(true);
+    expect(corner.map(row => Object.fromEntries(Object.entries(row).filter(([key]) => key !== "context_generation")))).toEqual([
       { account_id: ACCT, thread: "corner", position: 0, lane: "ai", sender: "unc", body: "Morning Ana. One decision is waiting.", meta: { link: "D02-W01", linkLabel: "Inspect the system →" } },
       { account_id: ACCT, thread: "corner", position: 1, lane: "ai", sender: "user", body: "Why?", meta: {} },
       { account_id: ACCT, thread: "corner", position: 2, lane: "ai", sender: "unc", body: "Because ROAS.", meta: {} },

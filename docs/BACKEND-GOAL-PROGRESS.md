@@ -10,7 +10,19 @@ Started 5 September 2026. This file records progress; it does not replace the 24
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 14, 5 September 2026, approximately 06:34 UTC
+## Latest state — Batch 15, 5 September 2026, approximately 06:50 UTC
+
+**Verified source and rollback-only database progress; no production rollout.** The preceding handoff-only reply did not advance authoritative backend state. This continuation revalidated the dirty checkout and completed the chat/history generation patch rather than treating the pending n8n approval as a whole-goal blocker.
+
+- Current-context history is filtered before limits; web and phone use the same customer conversation. The web route now passes its captured generation and guards pre/post model work. Explicit cross-account request headers fail closed even when generations match.
+- Browser polling masks old-account/generation rows, discards disposed/overlapping responses and uses bounded full snapshots so delayed commits are not lost behind a wall-clock cursor. App anchors are retained, including one preceding anchor for a channel-only tail, preserving long-thread order.
+- Channel message dedupe is account/generation/sender scoped. Current-only proactive brief/receipt/approval reads and captured-generation propagation now reach channel/reply/command writers. Atomic provider-send/binding/outbox protection remains unfinished; messaging stays off.
+- Staged `20260905061454_chat_context_fence` adds immutable generation/sender identity, rejects stale app autosave payloads, preserves archives and updates the atomic snapshot/save functions. Real PostgreSQL rehearsal passed for both the new chat canary and the existing atomic-save canary; all changes rolled back. No grants were broadened to fix test-harness issues.
+- **189 test files / 2,290 tests pass**; app/worker TypeScript and production build pass; lint zero errors / 39 existing warnings; diff checks pass. Live advisors remain six WARN/eight INFO, not a clean security sign-off.
+- Independent **06:50:40 UTC** readback: zero test accounts/staged columns, AVGAR revision 15 unchanged. **06:48:54 UTC**: generation 1, paused, zero enabled routines and zero n8n registrations. No app/worker deployment, provider call, workflow change, plan purchase, API key or message occurred in this batch.
+- [Detailed behavior, SQL evidence and coordinated release requirements](CHAT-CONTEXT-ISOLATION-2026-09-05.md). Still required before rollout: exact provenance-checked preservation of current AVGAR chat rows, remaining atomic channel-binding/outbox and delayed-write safeguards, compatible schema/app/worker deployment and real browser/phone acceptance. n8n authority/reader/registration/admission gates remain as in Batch 14. The full B01–B24 goal remains active.
+
+## Batch 14, 5 September 2026, approximately 06:34 UTC
 
 **Live integration-configuration progress; full goal remains active.** Verified Vercel's existing signing root against the live authority endpoint, provisioned that same root and canonical data/receiver URLs to the worker, and read back a matching HMAC challenge without exposing secrets. Configured the URLs in Vercel Production and redeployed the existing production deployment, not the dirty source.
 

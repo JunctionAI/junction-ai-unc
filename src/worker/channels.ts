@@ -23,6 +23,9 @@ import { pushToAccount, type AdapterRegistry, type OutboundDeps, type PushReport
 import type { Env, FetchLike } from "../lib/channels/types";
 import type { Keyring } from "../lib/connectors/crypto";
 import { unwrap, type DbClient } from "../lib/db/types";
+import { accountContextGeneration } from "../lib/db/contextGeneration";
+import { assertRuntimeContext } from "../lib/db/runtimeContext";
+import { assertSameRuntimeContext } from "../lib/runtime/contextFence";
 import { ALL_SYSTEMS } from "../lib/platform/catalog";
 import type { Store } from "../lib/runtime/store/interface";
 import type { Receipt } from "../lib/runtime/types";
@@ -99,6 +102,17 @@ export async function runChannelsTick(deps: ChannelsDeps, opts: { accountId?: st
     const links = await verifiedLinks(db, accountId);
     if (!links.length) continue;
     report.accounts++;
+    let contextGeneration: number;
+    try {
+      contextGeneration = await accountContextGeneration(db, accountId);
+      await assertRuntimeContext(db, { accountId, contextGeneration });
+    } catch {
+      report.failed++;
+      log("channels.context_unavailable", { accountId });
+      continue;
+    }
+    const identity = { accountId, contextGeneration };
+    const guard = () => assertRuntimeContext(db, identity);
     const at = now();
     const since = new Date(at.getTime() - lookback).toISOString();
     let timezone: string | null = null;
@@ -108,23 +122,28 @@ export async function runChannelsTick(deps: ChannelsDeps, opts: { accountId?: st
       log("channels.timezone_failed", { accountId, error: err instanceof Error ? err.message : String(err) });
     }
     const push = (kind: "brief" | "draft_landed" | "approval" | "reminder", ref: string, payload: { text: string; buttons?: { id: string; label: string }[] }, allowTemplate = false) =>
-      pushToAccount(out, { accountId, kind, ref, payload, links, timezone, allowTemplate });
+      pushToAccount({ ...out, guard }, { accountId, contextGeneration, kind, ref, payload, links, timezone, allowTemplate });
 
     try {
       // the morning brief
-      const briefs = await unwrap<{ id: string; body: string; items: unknown; created_at: string }[]>("daily_briefs.select", db.from("daily_briefs").select("id, body, items, created_at").eq("account_id", accountId).gte("created_at", since).order("created_at", { ascending: true }));
+      const briefs = await unwrap<{ id: string; body: string; items: unknown; created_at: string }[]>("daily_briefs.select", db.from("daily_briefs").select("id, body, items, created_at").eq("account_id", accountId).eq("context_generation", contextGeneration).gte("created_at", since).order("created_at", { ascending: true }));
+      await guard();
       for (const b of briefs) tally(report, "briefs", await push("brief", `brief:${b.id}`, briefPayload({ body: b.body, items: Array.isArray(b.items) ? (b.items as { kind: string; text: string }[]) : [] }), true));
 
       // drafts that landed
-      const receipts = await deps.store.listReceipts(accountId, { kind: "draft", since, limit: 200 });
+      const receipts = await deps.store.listReceipts(accountId, { kind: "draft", since, limit: 200, contextGeneration });
+      await guard();
       for (const [runId, r] of firstDraftPerRun(receipts)) {
         const run = await deps.store.getRun(runId);
+        if (!run) continue;
+        assertSameRuntimeContext(identity, run);
         const preview = ((r.payload as { approvalPreview?: { title?: unknown; detail?: unknown } } | undefined)?.approvalPreview ?? {}) as { title?: unknown; detail?: unknown };
         tally(report, "drafts", await push("draft_landed", `draft:${runId}`, draftPayload({ title: typeof preview.title === "string" && preview.title ? preview.title : r.description, detail: typeof preview.detail === "string" ? preview.detail : null, routineName: run ? (NAME_BY_ID.get(run.routineId) ?? run.routineId) : null })));
       }
 
       // decisions waiting, and the ones about to lapse
-      const pending = (await deps.store.listApprovals(accountId, "pending")).filter((a) => !!a.runId && a.expiresAt > at.toISOString());
+      const pending = (await deps.store.listApprovals(accountId, "pending", contextGeneration)).filter((a) => !!a.runId && a.expiresAt > at.toISOString());
+      await guard();
       for (const a of pending) {
         const routineName = NAME_BY_ID.get(a.routineId) ?? null;
         if (a.createdAt >= since) tally(report, "approvals", await push("approval", `approval:${a.id}`, approvalPayload(a, { routineName, now: at })));
@@ -132,6 +151,7 @@ export async function runChannelsTick(deps: ChannelsDeps, opts: { accountId?: st
         if (left > 0 && left <= REMINDER_WINDOW_MS) tally(report, "reminders", await push("reminder", `reminder:${a.id}`, approvalPayload(a, { routineName, now: at, reminder: true })));
       }
     } catch (err) {
+      report.failed++;
       deps.log?.warn("channels.tick_account_failed", { accountId, error: err instanceof Error ? err.message : String(err) });
     }
   }

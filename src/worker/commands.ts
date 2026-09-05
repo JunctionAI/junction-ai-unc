@@ -55,7 +55,7 @@ export async function notifyCommand(db: DbClient, c: RoutineCommand): Promise<vo
   try {
     await guard();
     const adapters = channelAdapters({ db, env: process.env, fetch: (url, init) => fetch(url, init), keyring: keyringFromEnv(process.env) });
-    const out = await sendOnLink({ db, adapters, now: () => new Date() }, link, "reply", { text: `${c.reply} Request ${c.id.slice(0, 8)}.` }, { ref: `command:${c.id}`, appendToThread: true });
+    const out = await sendOnLink({ db, adapters, now: () => new Date(), guard }, link, "reply", { text: `${c.reply} Request ${c.id.slice(0, 8)}.` }, { contextGeneration: identity.contextGeneration, ref: `command:${c.id}`, appendToThread: true });
     if (out.status === "sent" || out.status === "queued") status = "sent";
   } finally {
     await guard();

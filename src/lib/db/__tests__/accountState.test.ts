@@ -188,7 +188,7 @@ describe("save → load through the (schema-checked) fake", () => {
     expect(pick(state)).toEqual(pick({ ...expectedAfterRoundTrip(S), routineOn: initialState.routineOn, connState: initialState.connState }));
   });
 
-  it("uses the 0003 upsert keys for every list", async () => {
+  it("uses current upsert keys including captured chat generation", async () => {
     const accountId = await createAccount(db);
     await saveAccountState(db, accountId, richState());
     const conflicts = Object.fromEntries(db.calls.filter((c) => c.op === "upsert").map((c) => [c.table, c.onConflict]));
@@ -197,7 +197,7 @@ describe("save → load through the (schema-checked) fake", () => {
       resource_profiles: "account_id",
       team_members: "account_id,position",
       business_profiles: "account_id",
-      chat_messages: "account_id,thread,position",
+      chat_messages: "account_id,context_generation,thread,position",
       account_state_meta: "account_id",
     });
     expect(db.lastCall("accounts", "update")).toMatchObject({ values: { currency: "AUD" }, filters: [{ kind: "eq", column: "id", value: accountId }] });

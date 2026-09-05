@@ -10,6 +10,8 @@ export const dynamic = "force-dynamic";
 async function handleGET(req: Request) {
   const session = await requireAccountOwnerSession();
   if (session instanceof Response) return session;
+  const requestedAccount = req.headers.get("x-unc-account-id");
+  if (requestedAccount && requestedAccount !== session.accountId) return contextChangedResponse();
   const generation = await accountContextGeneration(session.service, session.accountId);
   if (!contextRequestMatches(req, generation)) return contextChangedResponse();
   const id = new URL(req.url).searchParams.get("id") ?? "";

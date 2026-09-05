@@ -247,7 +247,7 @@ describe("CornerBuddy — one conversation: channel turns with a 'via' chip, in 
 
   it("accounts mode renders the Telegram turns as the same bubbles with the chip; no 'first line' placeholder once there is a thread", () => {
     __setAccountFactsForTests(account());
-    const html = renderToStaticMarkup(createElement(CornerBuddy, { V: V(state({ chatOpen: true, messages: [] })), initialThread: rows }));
+    const html = renderToStaticMarkup(createElement(CornerBuddy, { V: { ...V(state({ chatOpen: true, messages: [] })), accountId: "acct-1" }, initialThread: rows }));
     expect((html.match(/data-testid="via-chip"/g) ?? []).length).toBe(2);
     expect(html).toContain("via Telegram");
     expect(html).toContain("Approve the welcome email");

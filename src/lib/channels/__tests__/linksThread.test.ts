@@ -98,6 +98,34 @@ describe("link codes", () => {
 });
 
 describe("one thread", () => {
+  it("includes a preceding app anchor when a bounded UI tail contains only channel turns", async () => {
+    const db = channelDb();
+    db.seed("chat_messages", [{ account_id: ACCT, context_generation: 0, thread: "corner", position: 599, channel: "app", sender: "user", body: "app anchor", created_at: "2026-09-05T00:00:00Z" }]);
+    db.seed("chat_messages", Array.from({ length: 510 }, (_, i) => ({ account_id: ACCT, context_generation: 0, thread: "corner", position: 100000000 + i, channel: "sms", sender: "user", body: `sms ${i}`, created_at: "2026-09-05T01:00:00Z" })));
+    const snapshot = await listThread(db, ACCT, { limit: 500, includeAppAnchor: true });
+    expect(snapshot).toHaveLength(501);
+    expect(snapshot[0]).toMatchObject({ body: "app anchor", appPosition: 599 });
+    expect(snapshot[1].body).toBe("sms 10");
+    expect(snapshot.at(-1)?.body).toBe("sms 509");
+    expect(await listThread(db, ACCT, { limit: 2 })).toHaveLength(2);
+  });
+
+  it("scopes delivery dedupe to tenant, context and sender instead of global provider message IDs", async () => {
+    const db = channelDb();
+    const input = { accountId: ACCT, contextGeneration: 0, externalScope: "link-a", channel: "sms" as const, text: "hello", externalMsgId: "same", now: new Date("2026-09-05T01:00:00Z") };
+    const first = await appendInbound(db, input);
+    expect((await appendInbound(db, input)).created).toBe(false);
+    expect((await appendInbound(db, { ...input, externalScope: "link-b" })).id).not.toBe(first.id);
+    expect((await appendInbound(db, { ...input, accountId: OTHER })).id).not.toBe(first.id);
+    db.rows("accounts")[0].context_generation = 1;
+    await expect(appendInbound(db, input)).rejects.toMatchObject({ code: "context_changed" });
+    const current = await appendInbound(db, { ...input, contextGeneration: 1 });
+    expect(current.created).toBe(true);
+    expect((await listThread(db, ACCT, { contextGeneration: 1 })).map(r => r.id)).toEqual([current.id]);
+    expect((await loadAccountRows(db, ACCT)).chatMessages).toEqual([]);
+    expect(db.rows("chat_messages")).toHaveLength(4);
+  });
+
   it("channel positions live in their own band and never collide; append is idempotent on the platform message id", async () => {
     const db = channelDb();
     const clk = clock();

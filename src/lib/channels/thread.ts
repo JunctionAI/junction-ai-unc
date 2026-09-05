@@ -15,12 +15,14 @@
    retry on the unique key — ordering for readers is created_at, never position. The client
    hydrates only channel='app' rows (loadAccountRows), so it never re-saves a channel row.
 
-   Idempotent on (channel, external_msg_id): a redelivered webhook appends nothing.
+   Idempotent on (account, generation, channel, original link scope, external_msg_id).
 
    Relative imports only (worker-buildable). */
 
 import { unwrap, type DbClient, type DbError, type Row } from "../db/types";
 import type { MessageChannel } from "./types";
+import { assertRuntimeContext } from "../db/runtimeContext";
+import { runtimeGeneration, RuntimeContextError } from "../runtime/contextFence";
 
 export const THREAD = "corner";
 export const HISTORY_TURNS = 24;
@@ -39,6 +41,8 @@ export interface UnifiedMessage {
   body: string;
   channel: MessageChannel;
   externalMsgId: string | null;
+  /** Absolute app index for merging a bounded remote snapshot with local app history. */
+  appPosition?: number;
   meta: Record<string, unknown>;
   delivery: Record<string, unknown>;
 }
@@ -51,6 +55,7 @@ export function rowToUnified(r: Row): UnifiedMessage {
     body: String(r.body ?? ""),
     channel: (typeof r.channel === "string" ? r.channel : "app") as MessageChannel,
     externalMsgId: r.external_msg_id ? String(r.external_msg_id) : null,
+    ...((r.channel ?? "app") === "app" ? { appPosition: Number(r.position) } : {}),
     meta: r.meta && typeof r.meta === "object" ? (r.meta as Record<string, unknown>) : {},
     delivery: r.delivery && typeof r.delivery === "object" ? (r.delivery as Record<string, unknown>) : {},
   };
@@ -63,6 +68,10 @@ export function positionFor(now: Date, attempt = 0): number {
 
 export interface AppendInput {
   accountId: string;
+  /** Captured before any model/provider wait. Missing is legacy generation zero only. */
+  contextGeneration?: number;
+  /** Original link's stable ID; separates provider message IDs across senders/workspaces. */
+  externalScope?: string;
   channel: MessageChannel;
   sender: "user" | "unc";
   text: string;
@@ -81,9 +90,16 @@ export interface AppendResult {
 const isUnique = (e: DbError | null | undefined) => !!e && (e.code === "23505" || /duplicate key|unique/i.test(e.message));
 
 export async function appendMessage(db: DbClient, input: AppendInput): Promise<AppendResult> {
+  const generation = runtimeGeneration(input.contextGeneration);
+  const identity = { accountId: input.accountId, contextGeneration: generation };
+  const scope = input.externalScope ?? "";
+  await assertRuntimeContext(db, identity, { allowPaused: true });
   const text = input.text.replace(/\s+$/, "").slice(0, MAX_TURN_CHARS);
+  const findDuplicate = () => db.from("chat_messages").select("id").eq("account_id", input.accountId)
+    .eq("context_generation", generation).eq("channel", input.channel).eq("external_scope", scope).eq("external_msg_id", input.externalMsgId);
   if (input.externalMsgId) {
-    const dup = await unwrap<{ id: string } | null>("chat_messages.select", db.from("chat_messages").select("id").eq("channel", input.channel).eq("external_msg_id", input.externalMsgId).maybeSingle());
+    const dup = await unwrap<{ id: string } | null>("chat_messages.select", findDuplicate().maybeSingle());
+    await assertRuntimeContext(db, identity, { allowPaused: true });
     if (dup) return { id: dup.id, created: false };
   }
   let lastError: DbError | null = null;
@@ -92,6 +108,8 @@ export async function appendMessage(db: DbClient, input: AppendInput): Promise<A
       .from("chat_messages")
       .insert({
         account_id: input.accountId,
+        context_generation: generation,
+        external_scope: scope,
         thread: THREAD,
         position: positionFor(input.now, attempt),
         lane: "ai",
@@ -105,11 +123,16 @@ export async function appendMessage(db: DbClient, input: AppendInput): Promise<A
       })
       .select("id")
       .single();
-    if (!error) return { id: String((data as { id: string }).id), created: true };
+    if (!error) {
+      await assertRuntimeContext(db, identity, { allowPaused: true });
+      return { id: String((data as { id: string }).id), created: true };
+    }
+    if (error.code === "40001") throw new RuntimeContextError("context_changed", "The chat's business context changed.");
     if (!isUnique(error)) throw new Error(`chat_messages.insert: ${error.message}`);
     // a clash on external_msg_id is a concurrent redelivery, not a position clash
-    if (input.externalMsgId && /external_msg/i.test(error.message)) {
-      const dup = await unwrap<{ id: string } | null>("chat_messages.select", db.from("chat_messages").select("id").eq("channel", input.channel).eq("external_msg_id", input.externalMsgId).maybeSingle());
+    if (input.externalMsgId) {
+      const dup = await unwrap<{ id: string } | null>("chat_messages.select", findDuplicate().maybeSingle());
+      await assertRuntimeContext(db, identity, { allowPaused: true });
       if (dup) return { id: dup.id, created: false };
     }
     lastError = error;
@@ -121,6 +144,9 @@ export const appendInbound = (db: DbClient, input: Omit<AppendInput, "sender">) 
 export const appendOutbound = (db: DbClient, input: Omit<AppendInput, "sender">) => appendMessage(db, { ...input, sender: "unc" });
 
 export interface ListThreadOptions {
+  contextGeneration?: number;
+  /** UI snapshots may include one older app anchor in addition to the bounded tail. */
+  includeAppAnchor?: boolean;
   /** ISO; only rows created at/after it. */
   since?: string | null;
   limit?: number;
@@ -136,12 +162,23 @@ const byTime = (a: Row, b: Row) => {
 /** Oldest first. Both app and channel rows — one conversation. Under RLS this is the member's
     own account; under the service role the caller pins the account. */
 export async function listThread(db: DbClient, accountId: string, opts: ListThreadOptions = {}): Promise<UnifiedMessage[]> {
-  let q = db.from("chat_messages").select(COLS).eq("account_id", accountId).eq("thread", THREAD);
+  const identity = { accountId, contextGeneration: runtimeGeneration(opts.contextGeneration) };
+  await assertRuntimeContext(db, identity, { allowPaused: true });
+  let q = db.from("chat_messages").select(COLS).eq("account_id", accountId).eq("context_generation", identity.contextGeneration).eq("thread", THREAD);
   if (opts.since) q = q.gte("created_at", opts.since);
-  const rows = await unwrap<Row[]>("chat_messages.select", q.order("created_at", { ascending: true }));
+  const limit = Number.isFinite(opts.limit ?? 500) ? Math.min(500, Math.max(1, Math.floor(opts.limit ?? 500))) : 500;
+  const rows = await unwrap<Row[]>("chat_messages.select", q.order("created_at", { ascending: false }).order("position", { ascending: false }).limit(limit));
+  const oldest = rows.at(-1);
+  if (opts.includeAppAnchor && oldest && oldest.channel !== "app") {
+    const anchors = await unwrap<Row[]>("chat_messages.anchor", db.from("chat_messages").select(COLS)
+      .eq("account_id", accountId).eq("context_generation", identity.contextGeneration).eq("thread", THREAD)
+      .eq("channel", "app").in("sender", ["user", "unc"]).lte("created_at", oldest.created_at)
+      .order("created_at", { ascending: false }).order("position", { ascending: false }).limit(1));
+    for (const anchor of anchors) if (!rows.some(row => row.id === anchor.id)) rows.push(anchor);
+  }
+  await assertRuntimeContext(db, identity, { allowPaused: true });
   const sorted = [...rows].sort(byTime);
-  const limit = opts.limit ?? 500;
-  return (sorted.length > limit ? sorted.slice(sorted.length - limit) : sorted).map(rowToUnified);
+  return sorted.map(rowToUnified);
 }
 
 export interface HistoryTurn {
@@ -151,8 +188,8 @@ export interface HistoryTurn {
 
 /** The last `turns` turns across every channel, as the model sees them. Staff (human-lane)
     rows never sit on this thread; typing placeholders are never persisted. */
-export async function historyFor(db: DbClient, accountId: string, turns = HISTORY_TURNS): Promise<HistoryTurn[]> {
-  const all = await listThread(db, accountId);
+export async function historyFor(db: DbClient, accountId: string, turns = HISTORY_TURNS, contextGeneration = 0): Promise<HistoryTurn[]> {
+  const all = await listThread(db, accountId, { contextGeneration });
   const out: HistoryTurn[] = [];
   for (const m of all) {
     if (m.sender === "staff") continue;

@@ -72,8 +72,9 @@ const defaultRespond: RespondFn = async ({ accountId, db, history, channel, cont
   return respondAsUnc({ history, context, surface: "corner", account: { accountId, db }, voice: channel === "sms" ? "sms" : "default", guard });
 };
 
-async function seen(db: DbClient, event: InboundEvent): Promise<boolean> {
-  const row = await unwrap<{ id: string } | null>("chat_messages.select", db.from("chat_messages").select("id").eq("channel", event.channel).eq("external_msg_id", event.externalMsgId).maybeSingle());
+async function seen(db: DbClient, event: InboundEvent, accountId: string, contextGeneration: number, linkId: string): Promise<boolean> {
+  const row = await unwrap<{ id: string } | null>("chat_messages.select", db.from("chat_messages").select("id").eq("account_id", accountId)
+    .eq("context_generation", contextGeneration).eq("external_scope", linkId).eq("channel", event.channel).eq("external_msg_id", event.externalMsgId).maybeSingle());
   return !!row;
 }
 
@@ -132,18 +133,18 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
   const outbound: OutboundDeps = { db: deps.db, adapters: deps.adapters, now: deps.now, log, guard: () => guard(control.kind === "linked" || control.kind === "handoff") };
   if (control.kind === "linked") {
     await guard(true);
-    await sendOnLink(outbound, link, "link", { text: welcomeLine(event.channel) }, { appendToThread: false });
+    await sendOnLink(outbound, link, "link", { text: welcomeLine(event.channel) }, { contextGeneration, appendToThread: false });
     return { kind: "linked", accountId, linkId: link.id };
   }
   if (control.kind === "handoff") {
     await guard(true);
     const reply = "i’ve paused automated replies here. open Junction in the app for support. a human has not been assigned yet.";
-    await sendOnLink(outbound, link, "system", { text: reply });
+    await sendOnLink(outbound, link, "system", { text: reply }, { contextGeneration });
     return { kind: "replied", accountId, reply, live: false };
   }
   if (event.channel === "apple" && link.meta.human_support_requested) return { kind: "ignored", reason: "human support requested; automation paused" };
   await guard();
-  if (await seen(deps.db, event)) return { kind: "duplicate" };
+  if (await seen(deps.db, event, accountId, contextGeneration, link.id)) return { kind: "duplicate" };
   await guard();
   const openedLink = link;
   // Legacy WhatsApp queue rows have no captured generation/link revision. They must not
@@ -158,7 +159,7 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
     await guard();
     // The founder's turn, as said — so the app thread shows the decision was taken here.
     const said = event.text ?? (resolved.ok ? `${verb === "why" ? "Why" : verb === "approve" ? "Approve" : "Hold"} — ${resolved.approval.title}` : `${verb}`);
-    const turn = await appendInbound(deps.db, { accountId, channel: event.channel, text: said, externalMsgId: event.externalMsgId, now });
+    const turn = await appendInbound(deps.db, { accountId, contextGeneration, externalScope: link.id, channel: event.channel, text: said, externalMsgId: event.externalMsgId, now });
     if (!turn.created) return { kind: "duplicate" };
     let reply: string;
     let outcome: InboundOutcome;
@@ -200,18 +201,18 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
     await guard();
     await deps.adapters[event.channel]?.ack?.(event, reply.slice(0, 200)).catch(() => undefined);
     await guard();
-    const sent = await sendOnLink(outbound, openedLink, "reply", { text: reply }, { appendToThread: false });
+    const sent = await sendOnLink(outbound, openedLink, "reply", { text: reply }, { contextGeneration, appendToThread: false });
     await guard();
-    await appendOutbound(deps.db, { accountId, channel: event.channel, text: reply, externalMsgId: sent.status === "sent" && sent.externalMsgId ? `out:${sent.externalMsgId}` : null, delivery: { status: sent.status, in_reply_to: event.externalMsgId }, now: deps.now() });
+    await appendOutbound(deps.db, { accountId, contextGeneration, externalScope: link.id, channel: event.channel, text: reply, externalMsgId: sent.status === "sent" && sent.externalMsgId ? `out:${sent.externalMsgId}` : null, delivery: { status: sent.status, in_reply_to: event.externalMsgId }, now: deps.now() });
     return outcome;
   }
 
   // 4. a message → the same conversation, the same Unc
   if (!event.text) return { kind: "ignored", reason: "no text" };
   await guard();
-  const turn = await appendInbound(deps.db, { accountId, channel: event.channel, text: event.text, externalMsgId: event.externalMsgId, meta: { ...(event.displayName ? { from: event.displayName } : {}) }, now });
+  const turn = await appendInbound(deps.db, { accountId, contextGeneration, externalScope: link.id, channel: event.channel, text: event.text, externalMsgId: event.externalMsgId, meta: { ...(event.displayName ? { from: event.displayName } : {}) }, now });
   if (!turn.created) return { kind: "duplicate" };
-  const history = await historyFor(deps.db, accountId);
+  const history = await historyFor(deps.db, accountId, undefined, contextGeneration);
   await guard();
   const respond = deps.respond ?? defaultRespond;
   let reply = event.channel === "sms" ? SMS_NO_MODEL_LINE : NO_MODEL_LINE;
@@ -230,8 +231,8 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
     log("channels.respond_failed", { accountId, error: err instanceof Error ? err.message : String(err) });
   }
   await guard();
-  const sent = await sendOnLink(outbound, openedLink, "reply", { text: reply }, { appendToThread: false });
+  const sent = await sendOnLink(outbound, openedLink, "reply", { text: reply }, { contextGeneration, appendToThread: false });
   await guard();
-  await appendOutbound(deps.db, { accountId, channel: event.channel, text: reply, externalMsgId: sent.status === "sent" && sent.externalMsgId ? `out:${sent.externalMsgId}` : null, delivery: { status: sent.status, live, in_reply_to: event.externalMsgId }, now: deps.now() });
+  await appendOutbound(deps.db, { accountId, contextGeneration, externalScope: link.id, channel: event.channel, text: reply, externalMsgId: sent.status === "sent" && sent.externalMsgId ? `out:${sent.externalMsgId}` : null, delivery: { status: sent.status, live, in_reply_to: event.externalMsgId }, now: deps.now() });
   return { kind: "replied", accountId, reply, live };
 }

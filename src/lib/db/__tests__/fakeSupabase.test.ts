@@ -84,20 +84,20 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.approvals.columns.has("client_key")).toBe(true);
     expect(s.subscriptions.primaryKey).toEqual(["account_id"]); // 0004
     expect(s.subscriptions.enums.status).toEqual(new Set(["trialing", "active", "past_due", "canceled", "incomplete", "none"]));
-    expect(s.subscriptions.uniques).toEqual(expect.arrayContaining([{ columns: ["stripe_subscription_id"], partialNotNull: "stripe_subscription_id" }]));
+    expect(s.subscriptions.uniques).toContainEqual(expect.objectContaining({ columns: ["stripe_subscription_id"], partialNotNull: "stripe_subscription_id" }));
     expect(s.billing_events.primaryKey).toEqual(["id"]);
     expect(s.routine_states.primaryKey).toEqual(["account_id", "routine_id"]);
     expect(s.account_members.primaryKey).toEqual(["account_id", "user_id"]);
     expect(s.routine_runs.enums.status).toEqual(new Set(["running", "waiting_approval", "waiting_input", "done", "failed", "skipped"]));
     expect(s.chat_messages.enums.thread).toEqual(new Set(["corner", "onboarding", "human"]));
-    expect(s.approvals.uniques).toContainEqual({ columns: ["account_id", "client_key"], partialNotNull: "client_key" });
+    expect(s.approvals.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "client_key"], partialNotNull: "client_key" }));
     expect(s.connectors.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "platform"] }));
     expect(s.connectors.columns.has("sync_ref")).toBe(true); // 0005
     expect(s.connector_secrets.primaryKey).toEqual(["connector_id"]);
     expect([...s.connector_secrets.columns]).toEqual(expect.arrayContaining(["ciphertext", "iv", "tag", "key_version"]));
     expect(s.oauth_states.primaryKey).toEqual(["state"]);
     expect([...s.oauth_states.columns]).toEqual(expect.arrayContaining(["account_id", "platform", "code_verifier", "shop", "expires_at"]));
-    expect(s.beta_invites.uniques).toContainEqual({ columns: ["email", "account_id"], partialNotNull: undefined }); // 0009
+    expect(s.beta_invites.uniques).toContainEqual(expect.objectContaining({ columns: ["email", "account_id"] })); // 0009
     expect(s.beta_invites.enums.role).toEqual(new Set(["owner", "member"]));
     expect([...s.beta_invites.columns]).toEqual(expect.arrayContaining(["email", "invited_by", "note", "accepted_at", "accepted_user_id"]));
     // 0010 client brain
@@ -109,9 +109,11 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     // 0012 channels: the one thread carries its channel; links / ledger / secrets are keyed and enum-checked
     expect([...s.chat_messages.columns]).toEqual(expect.arrayContaining(["channel", "external_msg_id", "delivery"]));
     expect([...s.chat_messages.enums.channel]).toEqual(["app", "telegram", "whatsapp", "slack", "sms", "email", "apple"]);
-    expect(s.chat_messages.uniques).toContainEqual({ columns: ["channel", "external_msg_id"], partialNotNull: "external_msg_id" });
+    expect(s.chat_messages.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "context_generation", "channel", "external_scope", "external_msg_id"], partialNotNull: "external_msg_id" }));
+    expect(s.chat_messages.uniques).not.toContainEqual(expect.objectContaining({ columns: ["channel", "external_msg_id"] }));
+    expect(s.chat_messages.uniques).not.toContainEqual(expect.objectContaining({ columns: ["account_id", "thread", "position"] }));
     expect(s.channel_links.uniques).toContainEqual(expect.objectContaining({ columns: ["channel", "external_id"] }));
-    expect(s.channel_links.uniques).toContainEqual({ columns: ["link_code"], partialNotNull: "link_code" });
+    expect(s.channel_links.uniques).toContainEqual(expect.objectContaining({ columns: ["link_code"], partialNotNull: "link_code" }));
     expect([...s.outbound_messages.enums.status]).toEqual(["sent", "failed", "queued"]);
     expect(s.channel_secrets.uniques).toContainEqual(expect.objectContaining({ columns: ["channel", "scope_id"] }));
     expect(s.kpi_snapshots.uniques).toContainEqual(expect.objectContaining({ columns: ["account_id", "context_generation", "metric_key", "window_end"] }));

@@ -65,7 +65,7 @@ export function useUncChat(S: PlatformState, set: Setter): UncSend {
       fetch("/api/unc/chat", {
         method: "POST",
         signal: requestController.signal,
-        headers: { "Content-Type": "application/json", "x-unc-context-generation": String(s0.contextGeneration ?? 0) },
+        headers: { "Content-Type": "application/json", "x-unc-context-generation": String(sendingGeneration), ...(sendingAccountId ? { "x-unc-account-id": sendingAccountId } : {}) },
         body: JSON.stringify({ surface, messages: history, context, requestId }),
       })
         .then(async (r) => {
@@ -97,7 +97,7 @@ export function useUncChat(S: PlatformState, set: Setter): UncSend {
                   const lookupTimeout = setTimeout(abortLookup, 10_000);
                   let result: { status: string; reply: string };
                   try {
-                    const response = await fetch(`/api/unc/commands?id=${encodeURIComponent(data.commandId!)}`, { signal: lookup.signal, cache: "no-store", headers: { "x-unc-context-generation": String(sendingGeneration) } });
+                    const response = await fetch(`/api/unc/commands?id=${encodeURIComponent(data.commandId!)}`, { signal: lookup.signal, cache: "no-store", headers: { "x-unc-context-generation": String(sendingGeneration), ...(sendingAccountId ? { "x-unc-account-id": sendingAccountId } : {}) } });
                     if (!response.ok) throw new Error("status unavailable");
                     result = await response.json() as { status: string; reply: string };
                   } finally { clearTimeout(lookupTimeout); controller.signal.removeEventListener("abort", abortLookup); }

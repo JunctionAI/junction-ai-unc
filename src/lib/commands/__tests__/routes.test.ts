@@ -72,6 +72,7 @@ describe("owner-bound command status", () => {
 describe("app dispatch boundary", () => {
   it("derives identity from the session and never from client context", async () => {
     const { db } = await seed();
+    db.rows("accounts")[0].context_generation = 3;
     modelAccount.current = { accountId: "account-a", contextGeneration: 3, userId: "owner-a", db };
     router.route.mockResolvedValue({ reply: "Queued", commandId: "command" });
     const response = await POST(new Request("http://unc.test/api/unc/chat", { method: "POST", body: JSON.stringify({ requestId: "message-a", accountId: "victim", context: { accountId: "victim", enabled: true }, messages: [{ role: "user", content: "Run founder content" }] }) }));

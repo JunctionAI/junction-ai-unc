@@ -188,6 +188,37 @@ describe("/api/channels/links", () => {
 });
 
 describe("/api/channels/thread", () => {
+  it("binds responses to account and generation, filters before LIMIT, and never caches private history", async () => {
+    db.rows("accounts")[0].context_generation = 1;
+    db.rows("accounts")[0].automation_paused = true;
+    db.seed("chat_messages", Array.from({ length: 60 }, (_, position) => ({ account_id: ACCT, context_generation: 0, thread: "corner", position, sender: "user", body: "old business", created_at: "2026-09-05T03:00:00Z" })));
+    db.seed("chat_messages", [{ account_id: ACCT, context_generation: 1, thread: "corner", position: 0, sender: "user", body: "current business", created_at: "2026-09-05T01:00:00Z" }]);
+    const headers = { "x-unc-account-id": ACCT, "x-unc-context-generation": "1" };
+    const result = await THREAD(new Request("https://unc.test/api/channels/thread?limit=1", { headers }));
+    expect(result.status).toBe(200);
+    expect(result.headers.get("cache-control")).toContain("no-store");
+    expect(await result.json()).toMatchObject({ accountId: ACCT, contextGeneration: 1, messages: [{ body: "current business", appPosition: 0 }] });
+    expect((await THREAD(new Request("https://unc.test/api/channels/thread"))).status).toBe(409);
+    expect((await THREAD(new Request("https://unc.test/api/channels/thread", { headers: { ...headers, "x-unc-account-id": "other-account" } }))).status).toBe(409);
+  });
+
+  it("rejects a context change during the history query and sanitizes storage failures", async () => {
+    const from = db.from.bind(db);
+    db.from = table => {
+      if (table === "chat_messages") db.rows("accounts")[0].context_generation = 1;
+      return from(table);
+    };
+    expect((await THREAD(req("GET", undefined, "/api/channels/thread"))).status).toBe(409);
+    db.rows("accounts")[0].context_generation = 0;
+    db.from = table => {
+      if (table === "chat_messages") throw new Error("private database internals credential-shaped-string");
+      return from(table);
+    };
+    const result = await THREAD(req("GET", undefined, "/api/channels/thread"));
+    expect(result.status).toBe(503);
+    expect(await result.text()).not.toContain("credential-shaped-string");
+  });
+
   it("returns the one conversation oldest first, since a timestamp, with the channel on each row", async () => {
     db.seed("chat_messages", [{ account_id: ACCT, thread: "corner", position: 0, lane: "ai", sender: "user", body: "Morning.", channel: "app", created_at: "2026-09-02T08:00:00.000Z" }]);
     await appendInbound(db, { accountId: ACCT, channel: "telegram", text: "what ran?", externalMsgId: "555:1", now: new Date("2026-09-02T08:10:00.000Z") });
