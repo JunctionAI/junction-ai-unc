@@ -12,7 +12,18 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
-## Latest state — Batch 33, 6 September NZ / 5 September UTC
+## Latest state — Batch 34, 6 September NZ / 5 September UTC
+
+**Atomic routine editor deployed and verified.** Previous turn produced native-client evidence and a pushed handoff; this turn makes implementation/database/release progress. Full B01–B24 and all-screen/all-client acceptance remain active. Pending n8n and Hyperagent access approvals were not re-probed or inferred.
+
+- One consistent account/member/generation editor snapshot and one owner-checked transaction now save parameters + draft together. Snapshot CAS includes preset/business inputs and unbound values. Promotion rechecks the current draft and latest matching current-generation dry-run result; no switch or run is created. Optional steps can be re-included after promotion; no-store covers denial responses. General manual execution idempotency is **not** completed by this save transaction.
+- **206 files / 2,587 tests PASS**, app/worker types and production build pass; changed-file lint zero errors/warnings. Actual rollback canary passes before/after migration `20260905123515`; forced second-write failure leaves no params. Two concurrent real SQL requests with the same revision yield exactly one commit and one `40001`; readback confirms only the winner. Exact synthetic account/cascades removed and absence verified. Existing grants/RLS unchanged; advisors still six WARN/fourteen INFO.
+- Pushed/live source **`4284dcbc50c43f648dbcf678e603df2d8d8e2534`**, deployment **`dpl_EDhJQqkpGZ74FUbWAK8NK6TgK3R7` READY/promoted**, 43.835 seconds building-to-ready. Candidate/canonical health and anonymous params 401/private-no-store pass. Actual owner app reload → D02-W03 inspector → refresh works; disabled Save/Run and no-row-creation independently verified. Unchanged compatible worker ticks 134→135; no restart needed.
+- **12:40:48 UTC:** AVGAR generation 1/paused, zero params/runs/canaries; all eight routine state timestamps retain the previous fingerprint. Seven accounts, two members and nineteen connectors preserved. Bounded error/fatal/5xx scans empty; no provider/model/workflow/native-agent invocation or external action. [Full receipt and exact limits](ROUTINE-EDITOR-2026-09-06.md).
+
+**Next Codex work:** durable manual start/validation/resume admission and duplicate/restart recovery, plus the exposed legacy unknown-budget-as-zero display. Retain execution-time owner/context/selection checks; browser in-flight protection and a save CAS are not at-most-once provider execution. Then continue current-client data/auth, native-history bindings after approval, lane contracts/results, schedules/history/monitoring/cost/security/retention and customer acceptance. No completion or blocked-goal claim.
+
+## Batch 33, 6 September NZ / 5 September UTC
 
 **Native client-system reconciliation: verified read-only progress, not a new runtime release.** Previous turn delivered Batch 32; this turn identifies actual existing agents, current attachments, saved failures and warehouse timestamps rather than inferring readiness from empty Unc records. Full B01–B24 plus all-screen/all-client acceptance remains active, without reset or invented numeric budget.
 
