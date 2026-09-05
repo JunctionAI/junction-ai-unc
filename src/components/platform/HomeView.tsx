@@ -14,7 +14,7 @@ import GettingSetUp, { SetupMotionStyles } from "./GettingSetUp";
 import type { SetupProgressState } from "@/lib/setup/useSetupProgress";
 import type { SetupAnchor } from "@/lib/setup/progress";
 import type { TurnOnResult } from "@/lib/setup/routine";
-import { automationStrip, cadenceLabel, HOME_COPY, paidInPlan, realPlanTimeline, realProposals } from "@/lib/setup/home";
+import { automationStrip, cadenceLabel, HOME_COPY, savedPlanTimeline, savedPlanRoutineIds, realProposals } from "@/lib/setup/home";
 import { platformName } from "@/lib/setup/channels";
 import type { DailyBriefRecord } from "@/lib/brain/brief";
 import type { ArtifactView } from "@/lib/artifacts/handlers";
@@ -756,16 +756,16 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
   const progress = setup?.data ?? null;
   const drafts = isLive ? live.drafts : [];
   const anyOn = V.enabledRoutineIds.length > 0;
-  const proposals = realProposals(V.realInputs);
-  const plan = realPlanTimeline({ ...V.realInputs, deadline: V.deadline, planAgreedAt: V.planAgreedAt });
-  const showAds = paidInPlan(V.realInputs);
+  const paused = V.automationPaused || progress?.automationPaused === true;
+  const proposals = realProposals(V.realInputs, savedPlanRoutineIds(V.savedPlan));
+  const plan = savedPlanTimeline(V.savedPlan, paused);
   const auto = automationStrip({ routineOn: V.realInputs.routineOn }, tele ? tele.automation : null);
   const runsDone = progress?.counts.runsDone ?? 0;
   const showAutomation = runsDone >= 1 || (tele?.automation.runsThisWeek ?? 0) >= 1;
 
   /* Headline bubble: latest self-review → today's brief → the first-day line. */
   const [briefState, setBriefState] = useState<"loading" | "present" | "absent">(briefInitial === undefined ? "loading" : briefInitial ? "present" : "absent");
-  const firstDayLine = anyOn ? HOME_COPY.firstDayRunning : HOME_COPY.firstDay;
+  const firstDayLine = paused ? HOME_COPY.paused : anyOn ? HOME_COPY.firstDayRunning : HOME_COPY.firstDay;
 
   /* Motion 1: the plan card settles into the timeline on the first Home after "Agree the plan →". */
   const [settle] = useState(() => V.settlePlan);
@@ -793,7 +793,7 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
   const [turnOnNote, setTurnOnNote] = useState<Record<string, string>>({});
   const [turnOnTick, setTurnOnTick] = useState(0);
   const turnOn = async (id: string) => {
-    if (!onTurnOn) return;
+    if (!onTurnOn || paused) return;
     setBusyId(id);
     try {
       const r = await onTurnOn(id);
@@ -865,7 +865,7 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
         {review && <ReviewBubble review={review} V={V} />}
         {!review && briefState === "absent" && <UncBubble testId="first-day-line">{firstDayLine}</UncBubble>}
         <div id={BRIEF_ID}>
-          <TodayBrief accountMode initial={briefInitial} onLoaded={(b) => setBriefState(b ? "present" : "absent")} />
+          <TodayBrief accountMode paused={paused} initial={briefInitial} onLoaded={(b) => setBriefState(b ? "present" : "absent")} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {liveLoading && (
@@ -902,20 +902,21 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
 
         {/* ---- what I drafted (real artifacts; receipt previews as the fallback) ---- */}
         <div id={DRAFTED_ID}>
-          <Drafts accountMode initial={artifactsInitial ?? (isLive ? [] : undefined)} fallback={isLive ? drafts : []} refreshKey={draftsRefreshKey + (turnOnTick)} anyOn={anyOn} onOpenRoutine={V.openRoutineById} onNoDrafts={() => go("#setting-up-next")} slideFirst={slide} />
+          <Drafts accountMode paused={paused} initial={artifactsInitial ?? (isLive ? [] : undefined)} fallback={isLive ? drafts : []} refreshKey={draftsRefreshKey + (turnOnTick)} anyOn={anyOn} onOpenRoutine={V.openRoutineById} onNoDrafts={() => go("#setting-up-next")} slideFirst={slide} />
         </div>
       </section>
 
       {/* ---- the plan (from plans: real weeks from agreed_at) ---- */}
-      <section id="plan" data-buddy="Your plan, on one timeline. The phase we're in is lit up." style={{ marginTop: 34 }}>
+      <section id="plan" data-buddy="Your saved plan. Agreement and execution progress are separate." style={{ marginTop: 34 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
           <span style={sectionLabel}>The plan</span>
-          {V.planAgreedAt && <span style={{ fontSize: 12, color: "var(--muted)" }}>— agreed {new Date(V.planAgreedAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</span>}
+          {V.savedPlan?.agreedAt && <span style={{ fontSize: 12, color: "var(--muted)" }}>— agreed {new Date(V.savedPlan.agreedAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short" })}</span>}
           <button onClick={V.goStrategy} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12, fontWeight: 500, cursor: "pointer", padding: 0 }}>
             adjust →
           </button>
         </div>
         <div className={settle ? "j-settle" : undefined} data-testid="plan-timeline" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {plan.length === 0 && <EmptyLine testId="plan-empty">{HOME_COPY.noPlan}</EmptyLine>}
           {plan.map((hp) => (
             <div key={hp.n} data-testid="plan-phase" data-st={hp.st} style={{ display: "flex", alignItems: "center", gap: 16, background: "white", border: `1.5px solid ${hp.on ? "oklch(0.78 0.13 220 / 0.6)" : "oklch(0.91 0.01 260)"}`, borderRadius: 13, padding: "14px 18px" }}>
               <span style={{ flex: "none", width: 88, fontSize: 11, fontWeight: 700, color: hp.on ? "oklch(0.45 0.1 240)" : "oklch(0.6 0.02 260)" }}>{hp.weeks}</span>
@@ -927,7 +928,6 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
             </div>
           ))}
         </div>
-        {showAds && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.6 }}>{V.homeAdsLine}</div>}
       </section>
 
       {/* ---- the bar ---- */}
@@ -973,13 +973,13 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
       )}
 
       {/* ---- setting up next (phase-1 wave-1 routines not yet on) ---- */}
-      <section id={SETTING_UP_NEXT_ID} data-buddy="Turn one on and I dry-run it now — draft only. Nothing sends without you." style={{ marginTop: 38 }}>
+      <section id={SETTING_UP_NEXT_ID} data-buddy={paused ? HOME_COPY.paused : "Suggestions from your saved plan. We check readiness before requesting a draft run."} style={{ marginTop: 38 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
           <span style={sectionLabel}>Setting up next</span>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>— from your plan’s first phase · always dry-run first</span>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>— saved plan suggestions · readiness checked before a run</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {proposals.length === 0 && <EmptyLine testId="proposals-empty">{HOME_COPY.allProposalsOn}</EmptyLine>}
+          {proposals.length === 0 && <EmptyLine testId="proposals-empty">{plan.length ? "No additional first-phase suggestions. Review routines for their individual readiness." : HOME_COPY.noPlan}</EmptyLine>}
           {proposals.map((p, i) => (
             <div key={p.id} data-testid="proposal" data-routine={p.id} style={{ background: "white", border: `1px solid ${i === 0 ? "oklch(0.78 0.13 220 / 0.6)" : "var(--card-border)"}`, borderRadius: 13, padding: "16px 20px", display: "flex", alignItems: "center", gap: 20 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -989,13 +989,13 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
                   {i === 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--cyan-text)", background: "var(--cyan-wash)", borderRadius: 999, padding: "2px 9px" }}>Recommended first</span>}
                 </div>
                 <div style={{ fontSize: 12.5, color: "var(--muted-2)", marginTop: 5 }}>
-                  {p.why} Runs {cadenceLabel(p.id)}.
+                  {p.why} Configured cadence: {cadenceLabel(p.id)}. {paused ? "Paused for setup verification." : "Run history confirms what actually happened."}
                 </div>
                 {turnOnNote[p.id] && <div style={{ fontSize: 12.5, color: "var(--cyan-text)", marginTop: 6 }}>{turnOnNote[p.id]}</div>}
               </div>
               {p.ready && !turnOnNote[p.id] && (
-                <button onClick={() => void turnOn(p.id)} disabled={busyId === p.id} className="btn-cyan" style={{ flex: "none", padding: "8px 18px", fontSize: 12.5, fontWeight: 700 }}>
-                  {busyId === p.id ? "Turning on…" : "Turn on"}
+                <button onClick={() => void turnOn(p.id)} disabled={paused || busyId === p.id} className="btn-cyan" style={{ flex: "none", padding: "8px 18px", fontSize: 12.5, fontWeight: 700 }}>
+                  {paused ? "Paused" : busyId === p.id ? "Turning on…" : "Turn on"}
                 </button>
               )}
               {p.blocked && (
@@ -1054,11 +1054,11 @@ export function AccountHome({ V, live = null, telemetry = null, setup = null, on
               <div key={id} style={{ display: "flex", gap: 11 }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: "oklch(0.82 0.02 260)", marginTop: 5.5, flex: "none" }}></span>
                 <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
-                  {V.routineNameById(id)} <span style={{ color: "var(--muted)" }}>· {cadenceLabel(id)} · dry run</span>
+                  {V.routineNameById(id)} <span style={{ color: "var(--muted)" }}>· {paused ? "paused" : `configured: ${cadenceLabel(id)} · dry run`}</span>
                 </div>
               </div>
             ))}
-            {V.enabledRoutineIds.length === 0 && !progress?.running.length && <div data-testid="nothing-scheduled" style={{ fontSize: 13, color: "var(--muted-2)", lineHeight: 1.5 }}>{HOME_COPY.nothingScheduled}</div>}
+            {V.enabledRoutineIds.length === 0 && !progress?.running.length && <div data-testid="nothing-scheduled" style={{ fontSize: 13, color: "var(--muted-2)", lineHeight: 1.5 }}>{paused ? HOME_COPY.paused : HOME_COPY.nothingScheduled}</div>}
           </div>
         </section>
       </div>

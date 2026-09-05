@@ -38,7 +38,7 @@ export function accountPhases(V: Pick<PlatformVals, "phases" | "goSystems">, fac
   const on = new Set(enabledRoutines(facts).map((r) => r.name));
   const defs = facts?.plan?.phases?.length
     ? facts.plan.phases.map((p, i) => ({ n: p.n ?? String(i + 1), name: p.name, routines: p.routines ?? [], you: p.from_you ?? "", go: V.phases[i]?.goRoutines ?? V.goSystems }))
-    : V.phases.map((p) => ({ n: p.n, name: p.name, routines: p.routines.map((r) => r.name), you: p.you, go: p.goRoutines }));
+    : [];
   return defs.map((d, i) => {
     const onHere = d.routines.filter((r) => on.has(r)).length;
     const active = onHere > 0;
@@ -79,14 +79,15 @@ const POSTURE_BY_LABEL: Record<string, Posture> = { "Brand-led organic": "brand"
 
 /** The scoring inputs for the reasoning: the account's resource profile when it has one, else
     the state's own onboarding answers (demo, or an account still in onboarding). */
-export function reasoningInputs(V: Pick<PlatformVals, "realInputs" | "obHoursWk" | "obScan" | "curSym" | "postureName">, facts: Pick<AccountFacts, "resources"> | null): ReasoningInput {
+export function reasoningInputs(V: Pick<PlatformVals, "realInputs" | "obHoursWk" | "obScan" | "curSym" | "postureName">, facts: Pick<AccountFacts, "resources"> | null): ReasoningInput | null {
   const res = facts?.resources ?? null;
+  if (res && res.budgetMonthly === null) return null;
   const posture = (res?.postures?.[0] && POSTURE_BY_LABEL[res.postures[0]]) || (res?.postures?.[0] as Posture | undefined) || V.realInputs.posture;
   const profile = V.obScan?.status === "done" ? V.obScan.profile : null;
   return {
     posture: posture === "brand" || posture === "sales" || posture === "paid" ? posture : V.realInputs.posture,
     strengths: res ? res.skills : V.realInputs.obStrengths,
-    budgetMo: res ? res.budgetMonthly : V.realInputs.budgetMo,
+    budgetMo: res?.budgetMonthly ?? V.realInputs.budgetMo,
     hoursWk: res ? res.hoursWeekly : typeof V.obHoursWk === "number" && Number.isFinite(V.obHoursWk) ? V.obHoursWk : null,
     businessType: profile?.businessType ?? null,
     currencySymbol: V.curSym,
@@ -128,8 +129,10 @@ export default function StrategyView({ V }: { V: PlatformVals }) {
     : onTotal
       ? `${onTotal} routine${onTotal === 1 ? "" : "s"} on under this play. Change the play here and the routines follow — nothing sends without you.`
       : "Nothing is on yet. Agree the play, turn on the first routine, and I carry it from there.";
-  const why = acct ? accountWhy(V, agreedAt, strengths.length ? strengths : V.obStrengthSummary.split(" · ").filter(Boolean)) : V.postureWhy;
-  const reasoning = planReasoning(reasoningInputs(V, acct ? facts : null));
+  const hasPlan = !!facts?.plan?.phases.length;
+  const why = acct && !hasPlan ? "No saved plan yet. Confirm your budget, available hours and business priorities before choosing a strategy." : acct ? accountWhy(V, agreedAt, strengths.length ? strengths : V.obStrengthSummary.split(" · ").filter(Boolean)) : V.postureWhy;
+  const inputs = acct && !hasPlan ? null : reasoningInputs(V, acct ? facts : null);
+  const reasoning = inputs ? planReasoning(inputs) : null;
   return (
     <div style={{ maxWidth: 940, margin: "0 auto", padding: "50px 48px 96px" }}>
       <div data-buddy={buddy} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
@@ -149,7 +152,7 @@ export default function StrategyView({ V }: { V: PlatformVals }) {
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--cyan-link)", fontWeight: 700 }}>{po.tag}</span>
-              {po.selected && (
+              {po.selected && (!acct || !!agreedAt) && (
                 <span style={{ fontSize: 10, fontWeight: 700, color: "var(--cyan-text)", background: "var(--cyan-wash)", borderRadius: 5, padding: "2px 7px" }}>YOURS</span>
               )}
             </div>
@@ -167,7 +170,7 @@ export default function StrategyView({ V }: { V: PlatformVals }) {
           <div style={{ fontSize: 12, color: "var(--faint-on-navy)", marginTop: 12 }}>Shaped by your budget, hours and strengths from onboarding — tell me when they change.</div>
         </div>
       </div>
-      {reasoning.pushback && (
+      {reasoning?.pushback && (
         <div data-testid="strategy-pushback" style={{ marginTop: 12, background: "var(--cyan-wash)", border: "1px solid oklch(0.85 0.06 225)", borderRadius: 12, padding: "14px 18px", display: "flex", gap: 12, alignItems: "baseline" }}>
           <span style={{ flex: "none", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700, color: "var(--cyan-text)" }}>What I’d push back on</span>
           <span style={{ fontSize: 13, color: "var(--ink)", lineHeight: 1.55 }}>{reasoning.pushback}</span>
@@ -201,7 +204,7 @@ export default function StrategyView({ V }: { V: PlatformVals }) {
                   <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 11, lineHeight: 1.5 }}>
                     <span style={{ fontWeight: 600, color: "oklch(0.4 0.04 262)" }}>From you:</span> {ph.you}
                   </div>
-                  <PhaseWhy r={phaseReasoning(reasoning, ph.name, ph.routines)} testId="strategy-phase-why" />
+                  {reasoning && <PhaseWhy r={phaseReasoning(reasoning, ph.name, ph.routines)} testId="strategy-phase-why" />}
                 </div>
               ))
             : V.phases.map((ph) => (
@@ -225,7 +228,7 @@ export default function StrategyView({ V }: { V: PlatformVals }) {
                   <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 11, lineHeight: 1.5 }}>
                     <span style={{ fontWeight: 600, color: "oklch(0.4 0.04 262)" }}>From you:</span> {ph.you}
                   </div>
-                  <PhaseWhy r={phaseReasoning(reasoning, ph.name, ph.routines.map((r) => r.name))} testId="strategy-phase-why" />
+                  {reasoning && <PhaseWhy r={phaseReasoning(reasoning, ph.name, ph.routines.map((r) => r.name))} testId="strategy-phase-why" />}
                 </div>
               ))}
         </div>

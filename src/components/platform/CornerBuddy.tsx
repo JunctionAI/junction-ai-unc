@@ -30,7 +30,8 @@ export function bubbleFromRow(r: ThreadRow): Bubble {
 
 /** The bubble text for the current view in accounts mode. Strategy carries its own real-fact
     data-buddy attributes, so its text passes straight through. */
-export function accountBubble(V: Pick<PlatformVals, "isStrategy" | "isSystems" | "isConnectors" | "buddyText" | "libTotal">, facts: AccountFacts | null, now: Date = new Date()): string {
+export function accountBubble(V: Pick<PlatformVals, "isStrategy" | "isSystems" | "isConnectors" | "buddyText" | "libTotal"> & { automationPaused?: boolean }, facts: AccountFacts | null, now: Date = new Date()): string {
+  if (V.automationPaused) return "Automation is paused for setup verification. Your account chat and connections remain available.";
   if (V.isStrategy) return V.buddyText;
   if (V.isSystems) {
     const on = enabledCount(facts);

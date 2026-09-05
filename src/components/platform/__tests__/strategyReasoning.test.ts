@@ -55,12 +55,12 @@ describe("reasoningInputs", () => {
     expect(acct).toMatchObject({ posture: "paid", strengths: ["Paid media"], budgetMo: 900, hoursWk: 6, businessType: null });
     const demo = reasoningInputs(v, null);
     expect(demo).toMatchObject({ posture: v.realInputs.posture, strengths: v.realInputs.obStrengths, budgetMo: v.realInputs.budgetMo, hoursWk: v.obHoursWk });
-    expect(demo.currencySymbol).toBe(v.curSym);
+    expect(demo?.currencySymbol).toBe(v.curSym);
     // a posture key stored directly still works; an unknown label falls back to the state's posture
-    expect(reasoningInputs(v, facts({ resources: { budgetMonthly: 0, hoursWeekly: 2, skills: [], postures: ["sales"] } })).posture).toBe("sales");
-    expect(reasoningInputs(v, facts({ resources: { budgetMonthly: 0, hoursWeekly: 2, skills: [], postures: ["nope"] } })).posture).toBe(v.realInputs.posture);
+    expect(reasoningInputs(v, facts({ resources: { budgetMonthly: 0, hoursWeekly: 2, skills: [], postures: ["sales"] } }))?.posture).toBe("sales");
+    expect(reasoningInputs(v, facts({ resources: { budgetMonthly: 0, hoursWeekly: 2, skills: [], postures: ["nope"] } }))?.posture).toBe(v.realInputs.posture);
     // no resource profile row yet → the state's answers, never a made-up number
-    expect(reasoningInputs(v, facts({ resources: null })).budgetMo).toBe(v.realInputs.budgetMo);
+    expect(reasoningInputs(v, facts({ resources: null }))?.budgetMo).toBe(v.realInputs.budgetMo);
   });
 });
 
@@ -82,7 +82,8 @@ describe("StrategyView — the judgement under the phases", () => {
   });
 
   it("accounts mode, paid-led on NZ$30/day: the pushback line names the gate and leaves the call; phases read from the routines", () => {
-    __setAccountFactsForTests(account());
+    const phases = V(state()).phases.map((p) => ({ n: p.n, name: p.name, routines: p.routines.map((r) => r.name), from_you: p.you, status: "DRAFT" }));
+    __setAccountFactsForTests(account({ facts: facts({ plan: { title: "Saved pilot proposal", agreedAt: null, phases } }) }));
     const html = renderToStaticMarkup(createElement(StrategyView, { V: V(state({ view: "strategy" })) }));
     expect(html).toContain('data-testid="strategy-pushback"');
     expect(html).toContain("What I’d push back on");
@@ -90,7 +91,7 @@ describe("StrategyView — the judgement under the phases", () => {
     expect(html).toContain("Your call.");
     expect(html).not.toContain("var(--amber");
     expect((html.match(/data-testid="strategy-phase-why"/g) ?? []).length).toBe(4);
-    // the demo posture's phases (no plan row) are reasoned by their routines, with the account's own numbers
+    // Explicit saved proposal phases are reasoned with the account's own numbers.
     expect(html).toContain("NZ$30/day is testing money");
     expect(html).toContain("6 h/wk");
     expect(html).not.toContain("8 h/wk");

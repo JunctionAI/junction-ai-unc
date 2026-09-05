@@ -25,17 +25,17 @@ describe("GettingSetUp — per state", () => {
     expect(count(html, 'data-testid="setup-next-dot"')).toBe(1);
     expect(count(html, 'data-testid="setup-next-action"')).toBe(1);
     expect(html).toContain('data-testid="setup-row-plan" data-done="0" data-next="1"');
-    expect(html).toContain("Agree the plan →");
+    expect(html).toContain("Review business settings →");
   });
 
   it("2/5: two cyan checks, amber moves to the routine row with its label", () => {
-    const html = render({ progress: computeSetupProgress(rows({ plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected" }] }), NOW) });
+    const html = render({ progress: computeSetupProgress(rows({ plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }] }), NOW) });
     expect(html).toContain("2 of 5 done");
     expect(count(html, 'data-testid="setup-check"')).toBe(2);
     expect(count(html, 'data-testid="setup-next-dot"')).toBe(1);
     expect(html).toContain('data-testid="setup-row-routine" data-done="0" data-next="1"');
     expect(html).toContain("Turn on Founder content engine →");
-    expect(html).toContain("1 connected — Shopify.");
+    expect(html).toContain("1 verified connection — Shopify.");
   });
 
   it("'later' on connect: a quiet 'later' tag, the connect row is never amber, the routine row is", () => {
@@ -43,7 +43,7 @@ describe("GettingSetUp — per state", () => {
     expect(html).toContain(">later<");
     expect(html).toContain('data-testid="setup-row-connect" data-done="0" data-next="0"');
     expect(html).toContain('data-testid="setup-row-routine" data-done="0" data-next="1"');
-    expect(html).toContain("You said later. Connect Instagram and I&#x27;ll read your last 90 days tonight.");
+    expect(html).toContain("You said later. Connect Instagram, select the right account, and verify its first read.");
   });
 
   it("4/5: review done, the brief row is the action", () => {
@@ -51,7 +51,7 @@ describe("GettingSetUp — per state", () => {
       progress: computeSetupProgress(
         rows({
           plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }],
-          connectors: [{ platform: "shopify", status: "connected" }],
+          connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }],
           routineStates: [{ routine_id: "D01-W01", enabled: true }],
           runs: [{ id: "r1", routine_id: "D01-W01", status: "done", started_at: "2026-09-02T07:00:00.000Z" }],
           firstTasteEventAt: "2026-09-02T08:00:00.000Z",
@@ -68,7 +68,7 @@ describe("GettingSetUp — per state", () => {
     const p = computeSetupProgress(
       rows({
         plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }],
-        connectors: [{ platform: "shopify", status: "connected" }],
+        connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }],
         routineStates: [{ routine_id: "D01-W01", enabled: true }],
         runs: [{ id: "r1", routine_id: "D01-W01", status: "done", started_at: "2026-09-02T07:00:00.000Z" }],
         firstTasteEventAt: "2026-09-02T08:00:00.000Z",

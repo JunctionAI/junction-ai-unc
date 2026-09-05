@@ -2,7 +2,7 @@
    Pure over PlatformState + what the setup-progress / telemetry fetches return, so nothing
    from derive.ts's demo constants can reach a real account's Home:
 
-     realPlanTimeline   the agreed plan's three phases with weeks counted from plans.agreed_at
+     savedPlanTimeline  persisted phases only; agreement is not execution progress
      realProposals      "Setting up next" = phase-1 wave-1 routines not yet on, with the honest
                         availability ("needs Klaviyo connected" only when that connector is
                         really not connected)
@@ -14,24 +14,28 @@
 
 import { CONNECTOR_PLATFORMS } from "../db/mapping";
 import { CATEGORIES, ALL_SYSTEMS } from "../platform/catalog";
-import { scoreChannels, span, type ChannelKey } from "../platform/plan";
+import { scoreChannels, type ChannelKey } from "../platform/plan";
 import type { PlatformState } from "../platform/state";
 import { CATALOG_SPECS, CATALOG_SPEC_BY_ID } from "../runtime/catalog-specs";
 import type { Platform, RoutineId } from "../runtime/types";
 import { modelFromProfile, type BusinessModel } from "../unc/businessType";
 import { platformName, recommendationPool, requiredPlatform } from "./channels";
+import type { AccountFacts } from "../unc/accountFacts";
+import { fitsBusiness } from "../runtime/availability";
 
 export const HOME_COPY = {
   nothingWaiting: "Nothing waiting on you right now — I’ll bring the next decision here.",
-  noDraftsYet: "Turn on your first routine and I’ll have a draft here within the hour.",
-  noDraftsRunning: "Your first routine is on — the first draft lands here within the hour.",
+  noDraftsYet: "No drafts yet. Choose a ready routine to request a draft.",
+  noDraftsRunning: "A routine is enabled. Its first verified draft will appear here after a successful run.",
   /** Generic on purpose: the platform is the founder's own (noKpiLine), never a default. */
-  noKpi: "Connect your first data source and I’ll read your last 90 days tonight.",
-  firstDay: "I’ve read your plan. Turn on your first routine and I’ll have something for you within the hour.",
-  firstDayRunning: "Your first routine is running. I’ll bring what I draft here and write your first brief tomorrow morning.",
+  noKpi: "Connect a data source, select the right account, and verify its first read.",
+  firstDay: "We can review your setup and choose a ready routine. Nothing has run yet.",
+  firstDayRunning: "A routine is enabled. Check its run history for progress; enabled does not mean a run has finished.",
+  paused: "Automation is paused for setup verification. Your connections and account chat remain available.",
+  noPlan: "No saved plan yet. Confirm your business settings before reviewing a proposed plan.",
   noReceipts: "No receipts yet — the first run writes one, and it lands here.",
-  nothingScheduled: "Nothing scheduled yet — turn on your first routine and it runs on its cadence.",
-  setupDone: "Set up ✓ — running on your plan.",
+  nothingScheduled: "No enabled routines. A schedule is not proof of a completed run.",
+  setupDone: "Setup milestones recorded ✓ — check run history for current activity.",
   goalNotSet: "Tell me the goal — a number and a date — and I’ll work the pace out from there.",
   allProposalsOn: "Every phase-1 routine is on. I’ll propose the next one when the numbers earn it.",
 } as const;
@@ -43,51 +47,25 @@ export interface PlanPhaseView {
   weeks: string;
   title: string;
   focus: string;
-  st: "Done" | "Now" | "Next" | "Later";
+  st: "Done" | "Now" | "Next" | "Later" | "Draft" | "Agreed" | "Paused";
   on: boolean;
-}
-
-const WEEK_MS = 6048e5;
-
-/** ~30/30/40 split from a real anchor (plans.agreed_at) to the deadline; < 4 weeks clamps to 4. */
-export function weekSplitFrom(anchorIso: string, deadline: string): { weeksLeft: number; w1: number; w2end: number } {
-  const anchor = new Date(anchorIso).getTime();
-  const end = new Date(`${deadline}T00:00:00`).getTime();
-  const weeksLeft = Math.max(4, Math.round((end - anchor) / WEEK_MS));
-  const w1 = Math.max(2, Math.round(weeksLeft * 0.3));
-  const w2end = Math.min(weeksLeft - 1, w1 + Math.max(2, Math.round(weeksLeft * 0.3)));
-  return { weeksLeft, w1, w2end };
 }
 
 export function phaseChannels(S: Pick<PlatformState, "posture" | "obStrengths" | "budgetMo">): ChannelKey[] {
   return scoreChannels(S.posture, S.obStrengths ?? [], S.budgetMo).map((c) => c.k);
 }
 
-/** The three phases as Home shows them. Without an agreed_at yet the phases still show (the
-    plan is real) but carry no week numbers — weeks are counted from the day it was agreed. */
-export function realPlanTimeline(S: Pick<PlatformState, "posture" | "obStrengths" | "budgetMo" | "deadline" | "planAgreedAt">, now: Date = new Date()): PlanPhaseView[] {
-  const chans = phaseChannels(S);
-  const rest = chans.slice(2).join(" + ");
-  const titles = [`${chans[0]} — your strength, running first`, `Add ${chans[1].toLowerCase()}`, rest];
-  const focus = ["Get the engine working. You: taste + okays.", "Turn momentum into revenue. You: a few okays a day.", "Switch on as the numbers earn it."];
-  // No agreed_at (or no deadline yet, accounts mode): the phases are real but carry no week numbers.
-  if (!S.planAgreedAt || !S.deadline) {
-    return titles.map((title, i) => ({ n: i + 1, weeks: `Phase ${i + 1}`, title, focus: focus[i], st: i === 0 ? "Now" : i === 1 ? "Next" : "Later", on: i === 0 }));
-  }
-  const { weeksLeft, w1, w2end } = weekSplitFrom(S.planAgreedAt, S.deadline);
-  const elapsed = Math.floor((now.getTime() - new Date(S.planAgreedAt).getTime()) / WEEK_MS) + 1; // week 1 starts on the agreed day
-  const bounds: [number, number][] = [
-    [1, w1],
-    [w1 + 1, w2end],
-    [w2end + 1, weeksLeft],
-  ];
-  const idx = bounds.findIndex(([, b]) => elapsed <= b);
-  const current = idx === -1 ? 2 : idx;
-  return titles.map((title, i) => {
-    const [a, b] = bounds[i];
-    const st: PlanPhaseView["st"] = i < current ? "Done" : i === current ? "Now" : i === current + 1 ? "Next" : "Later";
-    return { n: i + 1, weeks: i === 2 ? `${span(a, b)}+` : span(a, b), title, focus: focus[i], st, on: st === "Now" };
-  });
+/** Persisted phases only. Time elapsed, default posture and a saved phase label
+ * cannot prove execution progress. Agreement is consent to a plan, not a run. */
+export function savedPlanTimeline(plan: AccountFacts["plan"], paused = false): PlanPhaseView[] {
+  return (plan?.phases ?? []).map((p, i) => ({
+    n: i + 1, weeks: `Phase ${i + 1}`, title: p.name, focus: p.from_you,
+    st: paused ? "Paused" : plan?.agreedAt ? "Agreed" : "Draft", on: false,
+  }));
+}
+export function savedPlanRoutineIds(plan: AccountFacts["plan"]): RoutineId[] {
+  const names = new Set(plan?.phases[0]?.routines ?? []);
+  return ALL_SYSTEMS.filter((s) => names.has(s.id) || names.has(s.name)).map((s) => s.id as RoutineId);
 }
 
 /** True when paid media is in the first two phases — the only time Home explains the ad budget. */
@@ -122,9 +100,9 @@ export function enabledRoutineIds(S: Pick<PlatformState, "routineOn">): RoutineI
   return ALL_SYSTEMS.filter((s) => S.routineOn[s.name] === true).map((s) => s.id as RoutineId);
 }
 
-/** "Connect Shopify and I'll read your last 90 days tonight." — with the founder's OWN first platform; the generic line when there is none. */
+/** Name the founder's own first platform and the verification step, without promising a scheduled read. */
 export function noKpiLine(anchorName: string | null | undefined): string {
-  return anchorName ? `Connect ${anchorName} and I’ll read your last 90 days tonight.` : HOME_COPY.noKpi;
+  return anchorName ? `Connect ${anchorName}, select the right account, and verify its first read.` : HOME_COPY.noKpi;
 }
 
 /** The business model off the client state's scan profile (null fields when nothing is known). */
@@ -134,11 +112,15 @@ export function businessModelOf(S: { scan?: { profile: unknown } | null }): Busi
 
 /** "Setting up next" = the recommendation pool (src/lib/setup/channels.ts recommendationPool:
     phase-1 wave-1 routines that fit the business, else the generic ones) minus what is on. */
-export function realProposals(S: Pick<PlatformState, "routineOn" | "connState" | "posture" | "obStrengths" | "budgetMo"> & { scan?: PlatformState["scan"]; obPlatforms?: string[] }): ProposalView[] {
+export function realProposals(S: Pick<PlatformState, "routineOn" | "connState" | "posture" | "obStrengths" | "budgetMo"> & { scan?: PlatformState["scan"]; obPlatforms?: string[] }, savedRoutineIds?: readonly RoutineId[]): ProposalView[] {
   const channel = phaseChannels(S)[0];
   const on = new Set(enabledRoutineIds(S));
   const connected = connectedSet(S);
-  return recommendationPool(channel, { model: businessModelOf(S), knownPlatforms: S.obPlatforms ?? [] })
+  const model = businessModelOf(S);
+  const pool = savedRoutineIds === undefined
+    ? recommendationPool(channel, { model, knownPlatforms: S.obPlatforms ?? [] })
+    : CATALOG_SPECS.filter((spec) => savedRoutineIds.includes(spec.id) && spec.wave === 1 && fitsBusiness(spec, model));
+  return pool
     .filter((spec) => !on.has(spec.id))
     .map((spec) => {
       const def = NAME_BY_ID.get(spec.id);

@@ -162,9 +162,10 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
     if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
   };
   const onTurnOn = async (routineId: string) => {
-    V.enableRoutineLocal(routineId);
-    V.setFirstRunPending(true);
+    if (S.automationPaused) return { kind: "error" as const, message: "Automation is paused for setup verification." };
     const r = await turnOnRoutine({ routineId, accountId: runTarget.accountId, account: runTarget.account });
+    if (r.kind === "ran" || r.kind === "enabled_only") V.enableRoutineLocal(routineId);
+    if (r.kind === "ran" && r.drafts > 0) V.setFirstRunPending(true);
     setupRefresh();
     liveRefresh();
     return r;

@@ -140,15 +140,15 @@ describe("StrategyView", () => {
     expect(html).toContain("one phase at a time, on your say-so");
   });
 
-  it("accounts mode with no plan row and nothing on: draft header, START HERE on phase 1, everything else ready when you are", () => {
+  it("accounts mode with no plan row does not manufacture phases or readiness", () => {
     __setAccountFactsForTests(account({ facts: facts({ plan: null, routineStates: [] }) }));
     const html = renderToStaticMarkup(createElement(StrategyView, { V: V(state({ view: "strategy" })) }));
     expect(html).toContain("draft — not agreed yet");
-    expect(html).toContain(">START HERE<");
-    expect(html).toContain("It stays a draft until you agree it from Home.");
+    expect(html).not.toContain(">START HERE<");
+    expect(html).toContain("No saved plan yet.");
     expect(html).not.toContain(">ACTIVE<");
     expect(html).not.toContain("GATED");
-    expect((html.match(/READY WHEN YOU ARE/g) ?? []).length).toBe(3);
+    expect((html.match(/READY WHEN YOU ARE/g) ?? []).length).toBe(0);
   });
 
   it("accountPhases / accountWhy are pure over the rows", () => {

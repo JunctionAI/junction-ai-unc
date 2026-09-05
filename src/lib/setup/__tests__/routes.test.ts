@@ -33,7 +33,7 @@ beforeEach(() => {
   db.now = () => "2026-09-02T09:00:00.000Z";
   db.userId = USER;
   user = { id: USER, email: "founder@example.test" };
-  db.seed("accounts", [{ id: ACCT, name: "Example Co" }]);
+  db.seed("accounts", [{ id: ACCT, name: "Example Co", automation_paused: false }]);
   db.seed("account_members", [{ account_id: ACCT, user_id: USER, role: "owner" }]);
   db.seed("resource_profiles", [{ account_id: ACCT, budget_monthly: 3600, hours_weekly: 6, skills: ["Writing"], postures: ["brand_led"], breadth: "focused", known_platforms: ["Instagram"] }]);
   db.seed("plans", [{ account_id: ACCT, title: "Brand-led organic", phases: [], created_at: "2026-09-01T00:00:00.000Z" }]);

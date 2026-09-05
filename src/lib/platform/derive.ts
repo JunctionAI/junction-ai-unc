@@ -13,7 +13,7 @@ import type { ConnStatus, NarrativeState, PlatformState, ScanState, Setter } fro
 import { DEFAULT_FOOTNOTE, type NarrativeRequest } from "../unc/narrative";
 import { connectorHasRealSync } from "../connectors/sync";
 import type { AccountFacts } from "../unc/accountFacts";
-import { paidInPlan, realPlanTimeline, realProposals } from "../setup/home";
+import { paidInPlan, savedPlanTimeline, realProposals } from "../setup/home";
 
 type Ev = { target: { value: string } };
 type KEv = { key: string };
@@ -428,9 +428,9 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     ? `You need ${fmt(gapLeft)} more by the deadline. Right now you’re on pace. Keep clearing your part below.`
     : `You need ${fmt(gapLeft)} more by the deadline. You’re a little behind — the plan below closes the gap. Your part is below.`;
   type HomePlanDef = { weeks: string; title: string; focus: string; on: boolean; st: string };
-  /* Accounts: the three phases with weeks counted from plans.agreed_at (src/lib/setup/home.ts) — never the demo week anchor. */
+  /* Accounts: persisted phases only; elapsed time cannot establish execution progress. */
   const homePlanDefs: HomePlanDef[] = account
-    ? realPlanTimeline({ posture: S.posture, obStrengths: S.obStrengths, budgetMo: S.budgetMo, deadline: S.deadline, planAgreedAt: S.planAgreedAt }, now).map((p) => ({ weeks: p.weeks, title: p.title, focus: p.focus, on: p.on, st: p.st }))
+    ? savedPlanTimeline(facts?.plan ?? null, S.automationPaused).map((p) => ({ weeks: p.weeks, title: p.title, focus: p.focus, on: p.on, st: p.st }))
     : [
         { weeks: span(1, w1), title: `${homeChans[0].k} — your strength, running first`, focus: "Get the engine working. You: taste + okays.", on: true, st: "Now" },
         { weeks: span(w1 + 1, w2end), title: `Add ${homeChans[1].k.toLowerCase()}`, focus: "Turn momentum into revenue. You: a few okays a day.", on: false, st: "Next" },
@@ -1165,6 +1165,8 @@ export function derive(S: PlatformState, set: Setter, currentMRR?: number, uncSe
     setupCardDismissed: S.setupCardDismissed,
     dismissSetupCard: () => set({ setupCardDismissed: true }),
     planAgreedAt: S.planAgreedAt,
+    savedPlan: facts?.plan ?? null,
+    automationPaused: account && S.automationPaused === true,
     setPlanAgreedAt: (iso: string | null) => set((s) => (s.planAgreedAt === iso ? {} : { planAgreedAt: iso })),
     settlePlan: S.settlePlan,
     clearSettlePlan: () => set((s) => (s.settlePlan ? { settlePlan: false } : {})),

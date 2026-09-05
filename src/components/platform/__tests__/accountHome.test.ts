@@ -37,7 +37,8 @@ const NOW = new Date("2026-09-02T09:00:00.000Z");
 const ACCOUNT: DeriveOptions = { mode: "account", now: NOW };
 const dv = (S: PlatformState, opts?: DeriveOptions) => derive(S, noop, undefined, undefined, opts);
 /** Home renders: `accountMode` in the props ⇒ derive runs in accounts mode too (as Platform.tsx wires it). */
-const render = (S: PlatformState, props: Partial<HomeViewProps> = {}) => renderToStaticMarkup(createElement(HomeView, { V: dv(S, props.accountMode ? ACCOUNT : undefined), ...props }));
+const render = (S: PlatformState, props: Partial<HomeViewProps> = {}, facts?: AccountFacts) => renderToStaticMarkup(createElement(HomeView, { V: dv(S, props.accountMode ? { ...ACCOUNT, facts } : undefined), ...props }));
+const storedFacts = (plan: AccountFacts["plan"]): AccountFacts => ({ accountId: "test-account", plan, connectors: [], resources: null, routineStates: [], approvals: [], decided: [], runs: [], receipts: [], fetchedAt: NOW.toISOString() });
 
 const liveList = (over: Partial<LiveApprovals> = {}): LiveApprovals => ({ active: true, loading: false, error: null, approvals: [], pendingCount: 0, receipts: [], drafts: [], refresh: noop, ...over });
 const setupState = (over: Partial<Parameters<typeof computeSetupProgress>[0]> = {}): SetupProgressState => ({
@@ -154,13 +155,13 @@ describe("Home in accounts mode — no demo constant can render", () => {
     expect(html).toContain(esc(HOME_COPY.noReceipts));
     expect(html).toContain(esc(HOME_COPY.nothingScheduled));
     expect(html).not.toContain("automation-strip");
-    // the plan is real: phase 1 from the founder's own answers, with no demo week anchor
-    expect(html).toContain("Content — your strength, running first");
+    // Answers alone are not a saved plan.
+    expect(html).toContain(esc(HOME_COPY.noPlan));
+    expect(html).not.toContain("Content — your strength, running first");
     expect(html).toContain("data-testid=\"getting-set-up\"");
     // "Setting up next" = phase-1 wave-1 routines with honest availability
     expect(html).toContain("Founder content engine");
-    expect(html).toContain("Recommended first");
-    expect(html).toContain("Draft-only for now");
+    expect(html).not.toContain("Recommended first");
     expect(html).not.toContain("Needs Klaviyo");
   });
 
@@ -174,7 +175,7 @@ describe("Home in accounts mode — no demo constant can render", () => {
         drafts: [{ runId: "r1", sys: "D01-W01", routineName: "Founder content engine", title: "3 founder posts drafted for your voice check", line: "Drafted from 12 customer questions." }],
         receipts: [{ id: "abcdef12-0000-4000-8000-000000000000", handle: "abcdef12", kind: "draft", text: "Founder content engine: drafts handed over." }],
       }),
-      setup: setupState({ plans: [{ agreed_at: "2026-08-26T00:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected" }], routineStates: [{ routine_id: "D01-W01", enabled: true }], runs: [{ id: "r1", routine_id: "D01-W01", status: "done", started_at: "2026-09-02T07:00:00Z" }] }),
+      setup: setupState({ plans: [{ agreed_at: "2026-08-26T00:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }], routineStates: [{ routine_id: "D01-W01", enabled: true }], runs: [{ id: "r1", routine_id: "D01-W01", status: "done", started_at: "2026-09-02T07:00:00Z" }] }),
       briefInitial: null,
       telemetry: { active: true, error: null, refresh: noop, data: { review: { weekStart: "2026-08-31", worked: "Three drafts landed.", changing: "Nothing yet.", ask: "Approve one.", changes: [], author: "deterministic", createdAt: "2026-09-01T00:00:00Z" }, segment: "all", bar: [], automation: { hoursSavedWk: 1.5, runsThisWeek: 1, routinesOn: 1 } } },
     });
@@ -186,13 +187,13 @@ describe("Home in accounts mode — no demo constant can render", () => {
     expect(html).not.toContain(esc(HOME_COPY.firstDay));
     expect(html).toContain("automation-strip");
     expect(html).toContain("1 of 35 routines on · 1 run this week · ~1.5 h saved this week");
-    // real weeks from agreed_at (26 Aug → 31 Dec deadline ≈ 18 weeks: phase 1 = weeks 1–5)
-    expect(html).toContain("Weeks 1–5");
-    expect(html).toContain("agreed 26 Aug");
+    // Agreement metadata in local state is not a persisted plan.
+    expect(html).not.toContain("Weeks 1–5");
+    expect(html).toContain(esc(HOME_COPY.noPlan));
     // running & next from real routine_states + the spec's cadence
     expect(html).toContain("daily at 07:00 · dry run");
-    // the recommended card moved on to the next wave-1 routine of the channel
-    expect(html).toContain("Customer-question mining");
+    // No saved plan was supplied, so there are no inferred phase recommendations.
+    expect(html).not.toContain("Customer-question mining");
   });
 
   it("the first-day line vs a brief: a brief in hand becomes the headline, the first-day line goes", () => {
@@ -221,10 +222,11 @@ describe("Home in accounts mode — no demo constant can render", () => {
 
   it("'Setting up next' blocks honestly on the routine's real connector: an Email plan needs Shopify until it is connected", () => {
     const email: PlatformState = { ...base, posture: "paid", obPostureSet: ["paid"], obStrengths: [], budgetMo: 0 };
-    const blocked = render(email, { accountMode: true, live: liveList(), setup: setupState({ resourceProfile: { postures: ["paid_led"], skills: [], budget_monthly: 0 } }) });
+    const facts = storedFacts({ title: "Email pilot", agreedAt: null, phases: [{ n: "1", name: "Email pilot", status: "DRAFT", routines: ["Abandoned cart recovery"], from_you: "Review drafts" }] });
+    const blocked = render(email, { accountMode: true, live: liveList(), setup: setupState({ resourceProfile: { postures: ["paid_led"], skills: [], budget_monthly: 0 } }) }, facts);
     expect(blocked).toContain("Abandoned cart recovery");
     expect(blocked).toContain("Needs Shopify connected");
-    const ok = render({ ...email, connState: { Shopify: "ok" } }, { accountMode: true, live: liveList(), setup: setupState({ resourceProfile: { postures: ["paid_led"], skills: [], budget_monthly: 0 }, connectors: [{ platform: "shopify", status: "connected" }] }) });
+    const ok = render({ ...email, connState: { Shopify: "ok" } }, { accountMode: true, live: liveList(), setup: setupState({ resourceProfile: { postures: ["paid_led"], skills: [], budget_monthly: 0 }, connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }] }) }, facts);
     expect(ok).not.toContain("Needs Shopify connected");
     expectNoDemo(blocked);
   });
@@ -252,7 +254,7 @@ describe("Home in accounts mode — no demo constant can render", () => {
   it("the Getting-set-up card collapses at 5/5 and is gone once dismissed", () => {
     const five = setupState({
       plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }],
-      connectors: [{ platform: "shopify", status: "connected" }],
+      connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }],
       routineStates: [{ routine_id: "D01-W01", enabled: true }],
       runs: [{ id: "r1", routine_id: "D01-W01", status: "done", started_at: "2026-09-02T07:00:00.000Z" }],
       firstTasteEventAt: "2026-09-02T08:00:00.000Z",
@@ -333,7 +335,7 @@ describe("derive(mode: account) — no catalog demo status, no catalog 'Active',
     expect(A.gamRank).toBe("0%");
     expect(A.gamHireLine).not.toContain("Pro move");
     expect(A.homeAds).toBe(false); // brand posture, no paid phase in the first two
-    expect(A.homePlan.map((p) => p.weeks)).toEqual(["Phase 1", "Phase 2", "Phase 3"]); // no agreed_at, no deadline → no demo week anchor
+    expect(A.homePlan).toEqual([]); // no stored plan means no generated phases
     expect(A.goalMissing).toBe(true);
     expect(A.deadlineMissing).toBe(true);
     expect(A.daysLeftLabel).toBe("no deadline yet");
@@ -373,10 +375,9 @@ describe("derive(mode: account) — no catalog demo status, no catalog 'Active',
     expect(dv({ ...empty, connState: { Klaviyo: "ok" } }, { ...ACCOUNT, facts: f }).klaviyoDown).toBe(false);
   });
 
-  it("the plan's weeks count from plans.agreed_at (never the demo clock); the real clock drives days left", () => {
+  it("a local agreement date does not manufacture a plan; the real clock drives days left", () => {
     const A = dv({ ...empty, deadline: "2026-12-31", planAgreedAt: "2026-08-26T00:00:00.000Z" }, ACCOUNT);
-    expect(A.homePlan[0].weeks).toBe("Weeks 1–5");
-    expect(A.homePlan[0].st).toBe("Now");
+    expect(A.homePlan).toEqual([]);
     expect(A.daysLeftLabel).toMatch(/^(119|120) days$/); // 2 Sep → 31 Dec on the real clock (±1 for the machine's timezone), never the demo's 31 Aug
     expect(A.deadlineMissing).toBe(false);
   });
@@ -579,7 +580,7 @@ describe("Onboarding in accounts mode — empty inputs with placeholders, a plan
     expectNoDemo(gate);
     expect(gate).toContain(esc(PLAN_GATE_TITLE));
     expect((gate.match(/data-testid="plan-gate-item"/g) ?? []).length).toBe(4);
-    expect(gate).not.toContain("Agree the plan →");
+    expect(gate).not.toContain("Review business settings →");
     expect(gate).not.toContain("here’s the shortest path");
     const plan = ob({ ...base, onboarded: false, obStep: 6 }, ACCOUNT);
     expect(plan).not.toContain(esc(PLAN_GATE_TITLE));

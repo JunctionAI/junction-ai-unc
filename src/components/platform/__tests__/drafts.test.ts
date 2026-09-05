@@ -91,7 +91,7 @@ describe("Drafts", () => {
     expect(rows).toContain("old preview");
     const empty = renderToStaticMarkup(createElement(Drafts, { accountMode: true, initial: [], anyOn: false, onOpenRoutine: noop }));
     expect(empty).toContain('data-testid="no-drafts"');
-    expect(empty).toContain("Turn on your first routine");
+    expect(empty).toContain("No drafts yet. Choose a ready routine");
     const loading = renderToStaticMarkup(createElement(Drafts, { accountMode: true, anyOn: false, onOpenRoutine: noop }));
     expect(loading).toContain('data-testid="drafts-loading"');
   });

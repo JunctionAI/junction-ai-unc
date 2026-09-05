@@ -33,28 +33,28 @@ describe("computeSetupProgress — 0/5 → 5/5", () => {
     expect(p.allDone).toBe(false);
     expect(p.channel).toBe("Content");
     expect(p.steps.map((s) => s.done)).toEqual([false, false, false, false, false]);
-    expect(p.nextAction).toEqual({ step: "plan", label: "Agree the plan", anchor: "view:strategy" });
+    expect(p.nextAction).toEqual({ step: "plan", label: "Review business settings", anchor: "view:strategy" });
     expect(p.platforms.map((x) => x.platform)).toEqual(["instagram", "shopify"]);
     expect(p.platforms.every((x) => x.status === "disconnected")).toBe(true);
     expect(p.recommended).toMatchObject({ routineId: "D01-W01", name: "Founder content engine", enabled: false, requiredPlatform: null, requiredConnected: true });
-    expect(p.steps[1].status).toBe("Connect Instagram and I'll read your last 90 days tonight.");
-    expect(p.steps[2].status).toBe("Your plan starts with Content — Founder content engine first.");
+    expect(p.steps[1].status).toBe("Connect Instagram, select the right account, and verify its first read.");
+    expect(p.steps[2].status).toBe("Suggested starting point: Founder content engine. Check its readiness before enabling it.");
     expect(p.steps[3].status).toBe("Your first draft brings the first review — nothing to judge yet.");
-    expect(p.steps[4].status).toBe("Your first brief comes the morning after your first routine runs.");
+    expect(p.steps[4].status).toBe("No brief yet. A completed routine does not guarantee a scheduled brief.");
   });
 
   it("1/5: plan agreed → the next action is connecting, with the agreed date in the plan line", () => {
     const p = computeSetupProgress(empty({ plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }] }), NOW);
     expect(p.done).toBe(1);
     expect(p.agreedAt).toBe("2026-09-01T20:00:00.000Z");
-    expect(p.steps[0].status).toBe("Agreed 1 Sep — phase 1 is Content.");
+    expect(p.steps[0].status).toBe("Plan agreed 1 Sep. Agreement does not mean routines are running.");
     expect(p.nextAction).toEqual({ step: "connect", label: "Connect Instagram", anchor: "view:connectors" });
   });
 
   it("the guided flow's step is the anchor while the founder is inside it", () => {
     const p = computeSetupProgress(empty({ plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }], clientState: { setupFlow: "connect" } }), NOW);
     expect(p.nextAction?.anchor).toBe("step:connect");
-    const q = computeSetupProgress(empty({ plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected" }], clientState: { setupFlow: "routine" } }), NOW);
+    const q = computeSetupProgress(empty({ plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }], clientState: { setupFlow: "routine" } }), NOW);
     expect(q.nextAction).toEqual({ step: "routine", label: "Turn on Founder content engine", anchor: "step:routine" });
   });
 
@@ -63,20 +63,20 @@ describe("computeSetupProgress — 0/5 → 5/5", () => {
     expect(p.done).toBe(1);
     expect(p.connectLater).toBe(true);
     expect(p.steps[1]).toMatchObject({ done: false, later: true });
-    expect(p.steps[1].status).toBe("You said later. Connect Instagram and I'll read your last 90 days tonight.");
+    expect(p.steps[1].status).toBe("You said later. Connect Instagram, select the right account, and verify its first read.");
     expect(p.nextAction?.step).toBe("routine");
   });
 
   it("2/5: one connector connected — names listed, counts real", () => {
-    const p = computeSetupProgress(empty({ plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected" }, { platform: "klaviyo", status: "needs_reconnect" }] }), NOW);
+    const p = computeSetupProgress(empty({ plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }, { platform: "klaviyo", status: "needs_reconnect" }] }), NOW);
     expect(p.done).toBe(2);
     expect(p.counts.connected).toBe(1);
-    expect(p.steps[1].status).toBe("1 connected — Shopify. I read them on the nightly run.");
+    expect(p.steps[1].status).toBe("1 verified connection — Shopify. Each has a selected account and a successful dated read; this is not a live feed.");
     expect(p.platforms.find((x) => x.platform === "shopify")?.status).toBe("connected");
   });
 
   it("3/5 needs BOTH an enabled routine and a finished run; a routine on with no run yet says so", () => {
-    const base = { plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected" }], routineStates: [{ routine_id: "D01-W01", enabled: true }] };
+    const base = { plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }], connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }], routineStates: [{ routine_id: "D01-W01", enabled: true }] };
     const on = computeSetupProgress(empty(base), NOW);
     expect(on.done).toBe(2);
     expect(on.steps[2].status).toBe("Founder content engine is on — the first dry run hasn't landed yet.");
@@ -99,7 +99,7 @@ describe("computeSetupProgress — 0/5 → 5/5", () => {
   it("4/5: the first taste_event; 5/5: a brief exists — then the card collapses and no action remains", () => {
     const rows = empty({
       plans: [{ agreed_at: "2026-09-01T20:00:00.000Z" }],
-      connectors: [{ platform: "shopify", status: "connected" }],
+      connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }],
       routineStates: [{ routine_id: "D01-W01", enabled: true }],
       runs: [{ id: "r1", routine_id: "D01-W01", status: "done", started_at: "2026-09-02T07:00:00.000Z" }],
       firstTasteEventAt: "2026-09-02T08:00:00.000Z",
@@ -113,7 +113,7 @@ describe("computeSetupProgress — 0/5 → 5/5", () => {
     expect(five.allDone).toBe(true);
     expect(five.nextAction).toBeNull();
     expect(five.dismissed).toBe(true);
-    expect(five.steps[4].status).toBe("Brief written for 2 Sep — the next one comes each morning.");
+    expect(five.steps[4].status).toBe("Brief written for 2 Sep. Check its date before using it.");
   });
 
   it("running runs are listed; the channel follows the founder's posture/strengths/budget", () => {
@@ -131,7 +131,7 @@ describe("computeSetupProgress — 0/5 → 5/5", () => {
     const paid = computeSetupProgress({ ...rows, resourceProfile: { postures: ["paid_led"], skills: [], budget_monthly: 0 } }, NOW);
     expect(paid.channel).toBe("Email & SMS");
     expect(paid.recommended).toMatchObject({ routineId: "D05-W02", requiredPlatform: "shopify", requiredConnected: false });
-    const withShop = computeSetupProgress({ ...rows, resourceProfile: { postures: ["paid_led"], skills: [], budget_monthly: 0 }, connectors: [{ platform: "shopify", status: "connected" }] }, NOW);
+    const withShop = computeSetupProgress({ ...rows, resourceProfile: { postures: ["paid_led"], skills: [], budget_monthly: 0 }, connectors: [{ platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }] }, NOW);
     expect(withShop.recommended?.requiredConnected).toBe(true);
   });
 });
@@ -171,7 +171,7 @@ describe("setupProgress + agreePlan on the schema-checked fake", () => {
   function seeded(): FakeSupabase {
     const db = new FakeSupabase();
     db.now = () => NOW.toISOString();
-    db.seed("accounts", [{ id: ACCT, name: "Example Co" }]);
+    db.seed("accounts", [{ id: ACCT, name: "Example Co", automation_paused: false }]);
     db.seed("resource_profiles", [{ account_id: ACCT, budget_monthly: 3600, hours_weekly: 6, skills: ["Writing"], postures: ["brand_led"], breadth: "focused" }]);
     return db;
   }
@@ -254,7 +254,7 @@ describe("setupProgress + agreePlan on the schema-checked fake", () => {
     expect(p.emailQuestion).toBe(true);
     // nothing in Email fits a business with no store (and no email tool yet) → the generic first routine
     expect(p.recommended?.routineId).toBe("D01-W01");
-    expect(p.steps[1].status).toBe("Connect LinkedIn and I'll read your last 90 days tonight.");
+    expect(p.steps[1].status).toBe("Connect LinkedIn, select the right account, and verify its first read.");
     // the founder answers "none yet": the question is gone, Klaviyo-reading routines stay out
     db.rows("resource_profiles")[0].known_platforms = ["LinkedIn", "Email / SMS", "No email tool yet"];
     const q = await setupProgress(db, ACCT, NOW);
@@ -265,7 +265,7 @@ describe("setupProgress + agreePlan on the schema-checked fake", () => {
   it("walks the whole spine on real rows: 5/5", async () => {
     const db = seeded();
     await agreePlan(db, ACCT, NOW);
-    db.seed("connectors", [{ account_id: ACCT, platform: "shopify", status: "connected" }]);
+    db.seed("connectors", [{ account_id: ACCT, platform: "shopify", status: "connected", external_ref: "test-asset", last_sync_at: "2026-09-01T00:00:00Z", last_sync_result: "ok" }]);
     db.seed("routine_states", [{ account_id: ACCT, routine_id: "D01-W01", enabled: true, version: 1 }]);
     db.seed("routine_runs", [{ id: "00000000-0000-4000-8000-00000000f001", account_id: ACCT, routine_id: "D01-W01", version: 1, mode: "dry_run", status: "done", started_at: "2026-09-02T07:00:00.000Z", finished_at: "2026-09-02T07:01:00.000Z" }]);
     db.seed("taste_events", [{ account_id: ACCT, routine_id: "D01-W01", action: "approved", context: {}, created_at: "2026-09-02T08:00:00.000Z" }]);

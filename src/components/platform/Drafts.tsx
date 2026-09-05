@@ -23,6 +23,7 @@ export interface DraftsProps {
   /** Bump to refetch (a run just finished). */
   refreshKey?: number;
   anyOn: boolean;
+  paused?: boolean;
   onOpenRoutine: (routineId: string) => void;
   onNoDrafts?: () => void;
   /** First-run moment: the newest card slides in. */
@@ -32,7 +33,7 @@ export interface DraftsProps {
 
 type Listing = { artifacts?: ArtifactView[]; channels?: string[]; fallback?: boolean; error?: string };
 
-export default function Drafts({ accountMode, initial, initialChannels = [], fallback = [], refreshKey = 0, anyOn, onOpenRoutine, onNoDrafts, slideFirst = false, persisted = true }: DraftsProps) {
+export default function Drafts({ accountMode, initial, initialChannels = [], fallback = [], refreshKey = 0, anyOn, paused = false, onOpenRoutine, onNoDrafts, slideFirst = false, persisted = true }: DraftsProps) {
   const [artifacts, setArtifacts] = useState<ArtifactView[] | null>(initial === undefined ? null : initial);
   const [channels, setChannels] = useState<string[]>(initialChannels);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +102,7 @@ export default function Drafts({ accountMode, initial, initialChannels = [], fal
           <div data-testid="no-drafts" style={{ display: "flex", gap: 10, alignItems: "center", background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "14px 18px" }}>
             <img src="/brand/mascot-small.png" alt="" style={smallMascot} />
             <div style={{ fontSize: 13, color: "var(--muted-2)", lineHeight: 1.5 }}>
-              {anyOn ? (
+              {paused ? HOME_COPY.paused : anyOn ? (
                 HOME_COPY.noDraftsRunning
               ) : (
                 <button onClick={onNoDrafts} className="hov-underline" style={{ border: "none", background: "transparent", padding: 0, font: "inherit", color: "var(--cyan-link)", cursor: "pointer", textAlign: "left" }}>

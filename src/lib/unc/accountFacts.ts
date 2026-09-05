@@ -34,6 +34,7 @@ export interface ConnectorFact {
   lastSyncAt: string | null;
   /** ok | empty | error:<code> | null (never read). Null is in-flight — not connected. */
   lastSyncResult: string | null;
+  externalRef?: string | null;
 }
 
 export interface RoutineStateFact {
@@ -68,7 +69,7 @@ export interface AccountFacts {
   connectors: ConnectorFact[];
   routineStates: RoutineStateFact[];
   plan: { title: string; phases: PlanPhaseJson[]; agreedAt: string | null } | null;
-  resources: { budgetMonthly: number; hoursWeekly: number; skills: string[]; postures: string[] } | null;
+  resources: { budgetMonthly: number | null; hoursWeekly: number | null; skills: string[]; postures: string[] } | null;
   /** Pending, newest first. */
   approvals: ApprovalFact[];
   /** Decided (approved / held / expired), newest first, ≤ 10. */
@@ -264,7 +265,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 /** The corner buddy's line for the Home view in accounts mode — real counts, or the honest first step. */
 export function homeBubble(facts: AccountFacts | null, now: Date = new Date()): string {
   const on = enabledCount(facts);
-  if (!on) return "Nothing running yet — turn on your first routine and I’ll have a draft here within the hour.";
+  if (!on) return "No routines are enabled. Choose a ready routine when your setup is verified.";
   const parts = [`${plural(on, "routine")} on`];
   const pending = pendingCount(facts);
   const drafts = draftsThisWeek(facts, now);

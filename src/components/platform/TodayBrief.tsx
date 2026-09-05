@@ -78,7 +78,7 @@ export function TodayBriefCard({ brief }: { brief: DailyBriefRecord }) {
 
 type Fetched = { brief: DailyBriefRecord | null } | { fallback: true } | { error: string };
 
-export default function TodayBrief({ accountMode, initial, onLoaded }: { accountMode: boolean; initial?: DailyBriefRecord | null; onLoaded?: (brief: DailyBriefRecord | null) => void }) {
+export default function TodayBrief({ accountMode, paused = false, initial, onLoaded }: { accountMode: boolean; paused?: boolean; initial?: DailyBriefRecord | null; onLoaded?: (brief: DailyBriefRecord | null) => void }) {
   const [state, setState] = useState<{ loaded: boolean; brief: DailyBriefRecord | null; error: string | null }>({ loaded: initial !== undefined, brief: initial ?? null, error: null });
   const [busy, setBusy] = useState(false);
   /* Home reads whether a brief exists (its headline bubble falls back to the first-day line without one). */
@@ -114,6 +114,7 @@ export default function TodayBrief({ accountMode, initial, onLoaded }: { account
   if (state.brief) return <TodayBriefCard brief={state.brief} />;
 
   const generate = async () => {
+    if (paused) return;
     setBusy(true);
     try {
       const res = await fetch("/api/unc/brief", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
@@ -131,11 +132,11 @@ export default function TodayBrief({ accountMode, initial, onLoaded }: { account
     <div data-testid="today-brief-empty" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, paddingLeft: 36 }}>
       <button
         onClick={generate}
-        disabled={busy}
+        disabled={paused || busy}
         className="hov-border-muted"
         style={{ border: "1px solid oklch(0.88 0.015 260)", background: "transparent", color: "var(--muted-2)", borderRadius: 999, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}
       >
-        {busy ? "Writing it…" : GENERATE_LABEL}
+        {paused ? "Briefs paused for setup verification" : busy ? "Writing it…" : GENERATE_LABEL}
       </button>
       {state.error && <span style={{ fontSize: 12, color: "var(--amber-text)" }}>{state.error}</span>}
     </div>

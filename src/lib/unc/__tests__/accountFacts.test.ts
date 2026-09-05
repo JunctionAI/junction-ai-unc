@@ -72,8 +72,8 @@ describe("account facts — pure copy helpers", () => {
   it("homeBubble: real counts, or the honest first step when nothing is on", () => {
     expect(homeBubble(facts(), NOW)).toBe("3 routines on · 1 decision waiting · 2 drafts this week.");
     expect(homeBubble(facts({ approvals: [], runs: [] }), NOW)).toBe("3 routines on · nothing waiting on you.");
-    expect(homeBubble(facts({ routineStates: [] }), NOW)).toBe("Nothing running yet — turn on your first routine and I’ll have a draft here within the hour.");
-    expect(homeBubble(null, NOW)).toBe("Nothing running yet — turn on your first routine and I’ll have a draft here within the hour.");
+    expect(homeBubble(facts({ routineStates: [] }), NOW)).toBe("No routines are enabled. Choose a ready routine when your setup is verified.");
+    expect(homeBubble(null, NOW)).toBe("No routines are enabled. Choose a ready routine when your setup is verified.");
     for (const demoLine of ["Only you can clear these", "Three taps and the machine keeps moving", "48.2k"]) expect(homeBubble(facts(), NOW)).not.toContain(demoLine);
   });
 

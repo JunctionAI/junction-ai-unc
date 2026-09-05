@@ -15,6 +15,7 @@
    amber on at most one row. */
 
 import { ensureAccountName } from "../db/accountState";
+import { connectorHasRealSync } from "../connectors/sync";
 import { unwrap, type DbClient } from "../db/types";
 import type { ChannelKey, Posture } from "../platform/plan";
 import type { Platform } from "../runtime/types";
@@ -68,6 +69,7 @@ export interface SetupRoutineView {
 }
 
 export interface SetupProgress {
+  automationPaused: boolean;
   channel: ChannelKey;
   agreedAt: string | null;
   steps: SetupStepView[];
@@ -95,7 +97,8 @@ export interface SetupProgress {
 
 export interface SetupRows {
   plans: { agreed_at: string | null; created_at?: string | null }[];
-  connectors: { platform: string; status: string }[];
+  connectors: { platform: string; status: string; external_ref?: string | null; last_sync_at?: string | null; last_sync_result?: string | null }[];
+  automationPaused?: boolean;
   routineStates: { routine_id: string; enabled: boolean }[];
   /** Newest first. */
   runs: { id: string; routine_id: string; status: string; started_at: string; finished_at?: string | null; mode?: string }[];
@@ -129,7 +132,11 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
 
   const agreedAt = rows.plans.map((p) => p.agreed_at).filter((a): a is string => typeof a === "string" && !!a).sort()[0] ?? null;
 
-  const connStatus = new Map(rows.connectors.map((c) => [c.platform, c.status]));
+  const paused = rows.automationPaused === true;
+  // This is evidence of a past read, not a freshness SLA or guaranteed schedule.
+  const verified = (c: SetupRows["connectors"][number]) => connectorHasRealSync(c.status, c.last_sync_result)
+    && !!c.external_ref?.trim() && Number.isFinite(Date.parse(c.last_sync_at ?? "")) && Date.parse(c.last_sync_at!) <= now.getTime();
+  const connStatus = new Map(rows.connectors.map((c) => [c.platform, c.status === "connected" && !verified(c) ? "connecting" : c.status]));
   const knownPlatforms = rp?.known_platforms ?? [];
   const profile = rows.businessProfile?.profile ?? null;
   const business = modelFromProfile(profile);
@@ -141,7 +148,7 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
     source: s.source,
     ...(s.evidence ? { evidence: s.evidence } : {}),
   }));
-  const connectedAll = rows.connectors.filter((c) => c.status === "connected");
+  const connectedAll = rows.connectors.filter(verified);
   const emailQuestion = emailQuestionNeeded({ channel, knownPlatforms, spotted, connected: connectedAll.map((c) => c.platform) });
   const connectLater = rows.clientState?.setupConnectLater === true;
   const dismissed = rows.clientState?.setupCardDismissed === true;
@@ -152,7 +159,7 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
   const weekAgo = new Date(now.getTime() - 7 * DAY_MS).toISOString();
   const runsThisWeek = finishedRuns.filter((r) => r.started_at >= weekAgo).length;
 
-  const rec = recommendedRoutine(channel, enabledIds, { model: business, knownPlatforms });
+  const rec = rp?.budget_monthly == null ? null : recommendedRoutine(channel, enabledIds, { model: business, knownPlatforms });
   const recRequired = rec ? requiredPlatform(rec) : null;
   const recommended = rec
     ? { routineId: rec.id, name: routineName(rec.id), benefit: routineBenefit(rec.id), enabled: enabledIds.includes(rec.id), requiredPlatform: recRequired, requiredConnected: !recRequired || connStatus.get(recRequired) === "connected" }
@@ -168,7 +175,7 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
   /* The connect line names the founder's own first platform — never a default. With nothing
      picked or spotted there is nothing to name: Unc asks for the tools instead. */
   const anchorName = platforms[0]?.name ?? null;
-  const connectAsk = anchorName ? `Connect ${anchorName} and I'll read your last 90 days tonight.` : "Tell me which tools you use and I'll connect only what the plan reads.";
+  const connectAsk = anchorName ? `Connect ${anchorName}, select the right account, and verify its first read.` : "Tell me which tools you use so we can connect and verify the right accounts.";
   const planDone = !!agreedAt;
   const connectDone = connectedAll.length >= 1;
   const routineDone = enabledIds.length >= 1 && !!firstRun;
@@ -180,7 +187,7 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
       key: "plan",
       title: SETUP_STEP_TITLES.plan,
       done: planDone,
-      status: planDone ? `Agreed ${dayLabel(agreedAt!)} — phase 1 is ${channel}.` : "Agree the plan and I build everything else around it.",
+      status: planDone ? `Plan agreed ${dayLabel(agreedAt!)}. Agreement does not mean routines are running.` : "No plan agreed yet. Confirm your settings and review a proposed plan.",
     },
     {
       key: "connect",
@@ -188,7 +195,7 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
       done: connectDone,
       later: !connectDone && connectLater,
       status: connectDone
-        ? `${connectedAll.length} connected — ${list(connectedAll.map((c) => platformName(c.platform)))}. I read them on the nightly run.`
+        ? `${connectedAll.length} verified ${connectedAll.length === 1 ? "connection" : "connections"} — ${list(connectedAll.map((c) => platformName(c.platform)))}. Each has a selected account and a successful dated read; this is not a live feed.`
         : connectLater
           ? `You said later. ${connectAsk}`
           : connectAsk,
@@ -197,13 +204,13 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
       key: "routine",
       title: SETUP_STEP_TITLES.routine,
       done: routineDone,
-      status: routineDone
+      status: paused ? "Automated routines are paused for setup verification. Existing results remain available." : routineDone
         ? `${enabledIds.length} on — first run finished ${dayLabel(firstRun!.finished_at || firstRun!.started_at)}.`
         : enabledIds.length >= 1
           ? `${routineName(enabledIds[0])} is on — the first dry run hasn't landed yet.`
           : rec
-            ? `Your plan starts with ${channel} — ${routineName(rec.id)} first.`
-            : `Your plan starts with ${channel}.`,
+            ? `Suggested starting point: ${routineName(rec.id)}. Check its readiness before enabling it.`
+            : "Confirm your business settings before choosing the first routine.",
     },
     {
       key: "review",
@@ -215,12 +222,12 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
       key: "brief",
       title: SETUP_STEP_TITLES.brief,
       done: briefDone,
-      status: briefDone ? `Brief written for ${dayLabel(rows.latestBrief!.day)} — the next one comes each morning.` : routineDone ? "Write today's brief now, or wait for tomorrow morning's." : "Your first brief comes the morning after your first routine runs.",
+      status: paused ? "Brief generation is paused for setup verification." : briefDone ? `Brief written for ${dayLabel(rows.latestBrief!.day)}. Check its date before using it.` : routineDone ? "You can request a brief from the available results." : "No brief yet. A completed routine does not guarantee a scheduled brief.",
     },
   ];
 
   const actions: Partial<Record<SetupStepKey, SetupNextAction>> = {
-    plan: { step: "plan", label: "Agree the plan", anchor: "view:strategy" },
+    plan: { step: "plan", label: "Review business settings", anchor: "view:strategy" },
     connect: { step: "connect", label: anchorName ? `Connect ${anchorName}` : "Choose your tools", anchor: rows.clientState?.setupFlow === "connect" ? "step:connect" : "view:connectors" },
     routine:
       enabledIds.length >= 1
@@ -231,17 +238,19 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
     review: firstRun ? { step: "review", label: "Review the first draft", anchor: "#what-i-drafted" } : undefined,
     brief: routineDone ? { step: "brief", label: "Write today's brief", anchor: "#today-brief" } : undefined,
   };
+  if (paused) { delete actions.plan; delete actions.routine; delete actions.brief; }
   // "later" on connect is an honest answer, not a nag: the next action moves on to the routine.
   const first = steps.find((s) => !s.done && !(s.key === "connect" && connectLater) && actions[s.key]);
   const nextAction = first ? actions[first.key]! : null;
 
   const done = steps.filter((s) => s.done).length;
   return {
+    automationPaused: paused,
     channel,
     agreedAt,
     steps,
     done,
-    allDone: done === steps.length,
+    allDone: !paused && done === steps.length,
     nextAction,
     connectLater,
     dismissed,
@@ -259,9 +268,9 @@ export function computeSetupProgress(rows: SetupRows, now: Date = new Date()): S
 
 export async function loadSetupRows(db: DbClient, accountId: string): Promise<SetupRows> {
   const by = (table: string, columns: string) => db.from(table).select(columns).eq("account_id", accountId);
-  const [plans, connectors, routineStates, runs, taste, briefs, meta, rp, bp] = await Promise.all([
+  const [plans, connectors, routineStates, runs, taste, briefs, meta, rp, bp, account] = await Promise.all([
     unwrap<SetupRows["plans"]>("plans.select", by("plans", "agreed_at, created_at")),
-    unwrap<SetupRows["connectors"]>("connectors.select", by("connectors", "platform, status")),
+    unwrap<SetupRows["connectors"]>("connectors.select", by("connectors", "platform, status, external_ref, last_sync_at, last_sync_result")),
     unwrap<SetupRows["routineStates"]>("routine_states.select", by("routine_states", "routine_id, enabled")),
     unwrap<SetupRows["runs"]>("routine_runs.select", by("routine_runs", "id, routine_id, status, mode, started_at, finished_at").order("started_at", { ascending: false }).limit(60)),
     unwrap<{ created_at: string }[]>("taste_events.select", by("taste_events", "created_at").order("created_at", { ascending: true }).limit(1)),
@@ -269,8 +278,10 @@ export async function loadSetupRows(db: DbClient, accountId: string): Promise<Se
     unwrap<{ client_state: SetupRows["clientState"] } | null>("account_state_meta.select", by("account_state_meta", "client_state").maybeSingle()),
     unwrap<SetupRows["resourceProfile"]>("resource_profiles.select", by("resource_profiles", "postures, skills, budget_monthly, known_platforms").maybeSingle()),
     unwrap<{ profile: unknown } | null>("business_profiles.select", by("business_profiles", "profile").maybeSingle()),
+    unwrap<{ automation_paused: boolean } | null>("accounts.select", db.from("accounts").select("automation_paused").eq("id", accountId).maybeSingle()),
   ]);
   return {
+    automationPaused: account?.automation_paused !== false,
     plans: plans ?? [],
     connectors: connectors ?? [],
     routineStates: routineStates ?? [],
