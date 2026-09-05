@@ -8,12 +8,15 @@
    resumeRunWithInput): the owner's answers land in ctx.inputs and the produce step re-runs. */
 
 import { isDbConfigured } from "@/lib/db/client";
-import { requireAccountOwnerSession } from "@/lib/db/session";
+
 import { getStore } from "@/lib/runtime/store";
 import { resumeWithInput, type ServiceDeps } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun } from "../shared";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { agentSnapshot } from "@/lib/agents/server";
+import { routineBlock } from "@/lib/agents/types";
+import type { AgentContext } from "@/lib/agents/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,18 +32,23 @@ async function handlePOST(req: Request) {
   } catch {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
+  if(!body || typeof body!=="object" || Array.isArray(body))return Response.json({error:"invalid body"},{status:400});
   const runId = typeof body.runId === "string" ? body.runId.trim().slice(0, 128) : "";
   if (!runId) return Response.json({ error: "runId is required" }, { status: 400 });
   if (!body.answers || typeof body.answers !== "object" || Array.isArray(body.answers)) return Response.json({ error: "answers must be an object of strings" }, { status: 400 });
+  let captured:AgentContext|undefined;
   if (isDbConfigured()) {
-    const session = await requireAccountOwnerSession();
-    if (session instanceof Response) return session;
+    const access=await agentSnapshot(req);if(access instanceof Response)return access;
+    if(access.data.role!=="owner")return Response.json({error:"Only the account owner can run routines.",code:"owner_only"},{status:403});
     const run = await getStore().getRun(runId);
-    if (!run || run.accountId !== session.accountId) return Response.json({ error: `run ${runId} not found` }, { status: 404 });
+    if (!run || run.accountId !== access.data.accountId || run.contextGeneration!==access.data.contextGeneration) return Response.json({ error: "Run not found in this business context." }, { status: 404 });
+    const block=routineBlock(access.data,run.routineId);
+    if(block)return Response.json({error:block},{status:access.data.role!=="owner"?403:409});
+    captured={accountId:access.data.accountId,contextGeneration:access.data.contextGeneration};
   }
   try {
     const result = await resumeWithInput(deps(), { runId, answers: body.answers as Record<string, unknown> });
-    return Response.json({ run: summariseRun(result) });
+    return Response.json({ ...captured, run: summariseRun(result) },{headers:{"cache-control":"private, no-store"}});
   } catch (err) {
     const message = err instanceof Error ? err.message : "resume failed";
     if (/not found/.test(message)) return Response.json({ error: message }, { status: 404 });
@@ -50,4 +58,4 @@ async function handlePOST(req: Request) {
   }
 }
 
-export const POST = withErrorCapture("api/routines/resume-input", handlePOST);
+export const POST = withErrorCapture("api/routines/resume-input", async (req:Request)=>{const response=await handlePOST(req);response.headers.set("cache-control","private, no-store");return response;});

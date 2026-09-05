@@ -3,10 +3,8 @@
 
    ONE recommended wave-1 routine from the plan's phase-1 channel (src/lib/setup/channels.ts
    recommendedRoutine over src/lib/runtime/catalog-specs.ts), its benefit in one line, and
-   "Turn it on": Platform.tsx flips routine_states.enabled and fires an immediate dry run
-   (src/lib/setup/routine.ts turnOnRoutine → POST /api/setup/enable + POST /api/routines/run).
-   Then: "Running now — your first draft lands in What I drafted" and "Continue to Home".
-   Skippable ("Not now"), idempotent on refresh (an already-enabled routine shows as on). */
+   Selection saves a preference through the shared Agents endpoint. No immediate run is
+   implied or requested. The current account, role, pause and routine revision are verified. */
 
 import React, { useState } from "react";
 import type { PlatformVals } from "@/lib/platform/derive";
@@ -19,6 +17,8 @@ import { ALL_SYSTEMS } from "@/lib/platform/catalog";
 const ALL_CAT: Record<string, string> = Object.fromEntries(ALL_SYSTEMS.map((s) => [s.id, s.cat]));
 import { turnOnLine, type TurnOnResult } from "@/lib/setup/routine";
 import { GuidedShell, UncLine } from "./ConnectDataStep";
+import { useRoutinesState } from "./useRoutinesState";
+import { routineBlock } from "@/lib/agents/types";
 
 const stepLabel: React.CSSProperties = { fontSize: 10.5, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--cyan-link)", fontWeight: 700 };
 const stepH2: React.CSSProperties = { fontWeight: 600, fontSize: 26, margin: "10px 0 0", letterSpacing: "-0.015em" };
@@ -43,7 +43,9 @@ export default function FirstRoutineStep({ V, channel, onTurnOn, onContinue, onS
   });
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TurnOnResult | null>(null);
-  const isOn = !!spec && V.routineOnById(spec.id);
+  const live=useRoutinesState(true,null,{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration});
+  const isOn = !!spec && !!live.eligibility?.routines.find(r=>r.routineId===spec.id)?.enabled;
+  const block=spec ? routineBlock(live.eligibility ?? null,spec.id,"select") : null;
 
   if (!spec) {
     // Nothing draft-only fits this business and channel: say so and move on (never a placeholder card).
@@ -71,14 +73,16 @@ export default function FirstRoutineStep({ V, channel, onTurnOn, onContinue, onS
      spend (Paid ads), or nothing in it fits this business (an Email plan with no store, no email tool yet). */
   const outsideChannel = (ALL_CAT[spec.id] ?? channel) !== channel;
   const channelHasWaveOne = waveOneRoutines(channel).length > 0;
-  const why = !outsideChannel ? " — this one first" : channelHasWaveOne ? ` — nothing in ${channel.toLowerCase()} fits your business yet, so this one first` : ` — every ${channel.toLowerCase()} routine changes live spend and waits for your budget sign-off in wave 2, so this one first`;
+  const why = !outsideChannel ? " — this one first" : channelHasWaveOne ? ` — nothing in ${channel.toLowerCase()} fits your business yet, so this one first` : ` — this setup path has no eligible ${channel.toLowerCase()} starter yet, so this one first`;
 
   async function turnOn() {
+    if(busy || block)return;
     setBusy(true);
     try {
       setResult(await onTurnOn(spec!.id));
     } finally {
       setBusy(false);
+      live.refresh();
     }
   }
 
@@ -97,12 +101,12 @@ export default function FirstRoutineStep({ V, channel, onTurnOn, onContinue, onS
         </div>
         <div style={{ fontSize: 14, color: "oklch(0.35 0.05 262)", marginTop: 8, lineHeight: 1.5 }}>{routineBenefit(spec.id)}</div>
         <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6, lineHeight: 1.5 }}>
-          Runs {cadenceLabel(spec.id)}
+          Catalog cadence: {cadenceLabel(spec.id)} — not a verified active schedule
           {reads.length ? ` · reads ${reads.join(", ")}` : ""} · draft-only for now
         </div>
         {!reqOk && req && (
           <div style={{ fontSize: 12.5, color: "var(--amber-text)", background: "var(--amber-wash)", borderRadius: 10, padding: "8px 12px", marginTop: 10, lineHeight: 1.5 }}>
-            Needs {platformName(req)} connected for its number — I can still dry-run it now from what I can read.
+            Needs verified {platformName(req)} data. A saved connection alone does not prove that this routine can run.
           </div>
         )}
         {result && (
@@ -113,15 +117,16 @@ export default function FirstRoutineStep({ V, channel, onTurnOn, onContinue, onS
         )}
         {!result && isOn && (
           <div data-testid="first-routine-already-on" style={{ fontSize: 12.5, color: "var(--muted-2)", marginTop: 12, lineHeight: 1.5 }}>
-            Already on — its drafts land in What I drafted on Home.
+            Already selected — this does not prove a run or schedule. Inspect it in Agents to request work.
           </div>
         )}
         {!isOn && !result && (
-          <button onClick={() => void turnOn()} disabled={busy} data-testid="first-routine-turn-on" className="btn-cyan" style={{ marginTop: 14, padding: "10px 22px", fontSize: 13.5, fontWeight: 700 }}>
-            {busy ? "Turning it on…" : "Turn it on"}
+          <button onClick={() => void turnOn()} disabled={busy || !!block} data-testid="first-routine-turn-on" className="btn-cyan" style={{ marginTop: 14, padding: "10px 22px", fontSize: 13.5, fontWeight: 700 }}>
+            {busy ? "Saving selection…" : "Select this routine"}
           </button>
         )}
       </div>
+      {block && <p role="status">{block}</p>}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 28 }}>
         {!isOn && !result ? (
           <button onClick={onSkip} data-testid="first-routine-skip" className="hov-fg-ink" style={{ border: "none", background: "transparent", color: "var(--muted)", fontSize: 13, cursor: "pointer" }}>

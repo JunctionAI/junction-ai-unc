@@ -11,9 +11,11 @@
    input (and a Connectors pointer per platform); "Send answers" POSTs /api/routines/resume-input
    and the run carries on from the same panel. */
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { receiptHandle } from "@/lib/platform/approvals";
 import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
+import { artifactHeaders } from "@/lib/artifacts/client";
+import { routineBlock, type AgentsSnapshot } from "@/lib/agents/types";
 
 const PLATFORM_NAME: Record<string, string> = Object.fromEntries(Object.entries(CONNECTOR_PLATFORMS).map(([n, p]) => [p, n]));
 
@@ -24,6 +26,9 @@ export interface RunNowProps {
   account: { currency: string; budgetMonthly: number };
   /** false = demo/MemoryStore: say so, in one line. */
   persisted: boolean;
+  contextGeneration?: number;
+  eligibility?: AgentsSnapshot | null;
+  blockReason?: string | null;
   /** Accounts mode: called after a run finishes (any status) so the caller can re-read state. */
   onDone?: () => void;
   onOpenConnectors?: () => void;
@@ -53,49 +58,60 @@ export function runStatusHeading(status: string): string {
   }
 }
 
-export default function RunNowPanel({ routineId, accountId, account, persisted, onDone, onOpenConnectors }: RunNowProps) {
+export default function RunNowPanel({ routineId, accountId, account, persisted, contextGeneration, eligibility, blockReason, onDone, onOpenConnectors }: RunNowProps) {
   const [busy, setBusy] = useState(false);
+  const inFlight=useRef(false);
   const [run, setRun] = useState<RunView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const blocked=persisted ? blockReason || routineBlock(eligibility ?? null,routineId) : null;
+  const row=eligibility?.routines.find(r=>r.routineId===routineId);
+  const headers={"content-type":"application/json",...(persisted ? artifactHeaders(accountId,contextGeneration) : {})};
+  const matches=(data: RunResponse & {accountId?:string;contextGeneration?:number})=>!persisted || data.accountId===accountId && data.contextGeneration===contextGeneration && (data.run as (RunView & {routineId?:string})|undefined)?.routineId===routineId;
 
   async function sendAnswers() {
-    if (!run) return;
+    if (!run || inFlight.current || blocked) return;
+    inFlight.current=true;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/routines/resume-input", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runId: run.runId, answers }) });
+      const res = await fetch("/api/routines/resume-input", { method: "POST", headers, body: JSON.stringify({ runId: run.runId, answers }) });
       const data = (await res.json().catch(() => ({}))) as RunResponse;
-      if (!res.ok || !data.run) setError(data.error ?? `couldn’t resume (${res.status})`);
+      if (!res.ok || !data.run || !matches(data)) setError("Resume not confirmed. Refresh to inspect the saved run before retrying.");
       else {
         setRun({ ...data.run, receipts: [...run.receipts, ...data.run.receipts] });
         setAnswers({});
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+    } catch {
+      setError("Resume outcome is uncertain. Inspect the saved run before retrying; no automatic retry was sent.");
     } finally {
+      inFlight.current=false;
       setBusy(false);
       onDone?.();
     }
   }
 
   async function runNow() {
+    if (inFlight.current || blocked) return;
+    inFlight.current=true;
     setBusy(true);
+    setRun(null);
     setError(null);
     try {
       const res = await fetch("/api/routines/run", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ accountId, routineId, account: { currency: account.currency, budgetMonthly: account.budgetMonthly } }),
+        headers,
+        body: JSON.stringify(persisted ? {accountId,routineId,version:row?.version,stateUpdatedAt:row?.stateUpdatedAt} : { accountId, routineId, account: { currency: account.currency, budgetMonthly: account.budgetMonthly } }),
       });
       const data = (await res.json().catch(() => ({}))) as RunResponse;
-      if (!res.ok || !data.run) {
-        setError(data.error ?? `run failed (${res.status})`);
+      if (!res.ok || !data.run || !matches(data)) {
+        setError(data.error ?? "Run not confirmed. Inspect the saved run before retrying; no automatic retry was sent.");
         setRun(null);
       } else setRun(data.run);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+    } catch {
+      setError("Run outcome is uncertain. Inspect the saved run before retrying; no automatic retry was sent.");
     } finally {
+      inFlight.current=false;
       setBusy(false);
       onDone?.();
     }
@@ -107,7 +123,7 @@ export default function RunNowPanel({ routineId, accountId, account, persisted, 
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         <button
           onClick={() => void runNow()}
-          disabled={busy}
+          disabled={busy || !!blocked}
           className="hov-border-muted"
           style={{ flex: "none", border: "1px solid oklch(0.88 0.015 260)", background: "transparent", color: "var(--muted-2)", borderRadius: 999, padding: "8px 17px", fontSize: 12.5, fontWeight: 600, cursor: busy ? "wait" : "pointer" }}
         >
@@ -120,6 +136,7 @@ export default function RunNowPanel({ routineId, accountId, account, persisted, 
           </span>
         )}
       </div>
+      {blocked && <p role="status" style={{fontSize:12.5,color:"var(--amber-text)"}}>{blocked}</p>}
       {error && (
         <div style={{ fontSize: 12.5, color: "var(--amber-text)", marginTop: 10, lineHeight: 1.5 }}>Couldn’t run it: {error}</div>
       )}
@@ -173,7 +190,7 @@ export default function RunNowPanel({ routineId, accountId, account, persisted, 
                 ))}
               </div>
               {run.needs.some((n) => n.input) && (
-                <button onClick={() => void sendAnswers()} disabled={busy || !Object.values(answers).some((v) => v.trim())} className="btn-navy" style={{ marginTop: 10, padding: "8px 17px", fontSize: 12.5, fontWeight: 600 }}>
+                <button onClick={() => void sendAnswers()} disabled={busy || !!blocked || !Object.values(answers).some((v) => v.trim())} className="btn-navy" style={{ marginTop: 10, padding: "8px 17px", fontSize: 12.5, fontWeight: 600 }}>
                   {busy ? "Drafting…" : "Send answers and draft"}
                 </button>
               )}

@@ -32,7 +32,7 @@ async function listing(): Promise<RoutinesStateListing> {
   await store.putRoutineState({ accountId: ACCT, routineId: "D05-W07", enabled: true, version: 3, draftSpec: null, liveSpec: null, updatedAt: "2026-09-02T00:00:00.000Z" });
   await store.createRun({ id: "run-1", accountId: ACCT, routineId: "D05-W07", version: 3, mode: "dry_run", status: "done", startedAt: "2026-09-02T06:00:00.000Z", finishedAt: "2026-09-02T06:00:05.000Z", summary: "Campaign calendar prep: drafts handed over." });
   await store.appendReceipt({ id: "rc-1", accountId: ACCT, runId: "run-1", kind: "draft", description: "Would ask Tom: 3 campaigns drafted", payload: {}, createdAt: "2026-09-02T06:00:04.000Z" });
-  return routinesStateForAccount({ store, db }, ACCT);
+  return routinesStateForAccount({ store, db }, ACCT, {routineId:"D05-W07"});
 }
 
 const emailState: PlatformState = { ...initialState, onboarded: true, view: "systems", selCat: "Email & SMS" };
@@ -96,12 +96,13 @@ describe("RoutineDetail — accounts mode shows the real routine", () => {
   const selState: PlatformState = { ...initialState, onboarded: true, view: "systems", sel: ALL_SYSTEMS.find((s) => s.id === "D05-W07")! };
   it("real state pill, real version, the spec's own chain, the real setup (sources vs connected), no demo wizard", async () => {
     const live = await listing();
-    const liveHook = { active: true, loading: false, data: live, error: null, refresh: noop, patch: noop };
+    const eligible={...live,accountId:ACCT,contextGeneration:0,fetchedAt:new Date().toISOString(),role:"owner" as const,paused:false,routines:live.routines.map(r=>({...r,stateUpdatedAt:null,selectionBlock:null}))};
+    const liveHook = { active: true, loading: false, data: live,eligibility:eligible, error: null, refresh: noop, patch: noop };
     const html = renderToStaticMarkup(createElement(RoutineDetail, { V: derive(selState, noop), run: acctRun, live: liveHook }));
     expect(html).toContain('data-testid="detail-state"');
     expect(html).toContain("On · drafts only — nothing goes out without you");
     expect(html).toContain("Better with Klaviyo connected");
-    expect(html).toContain("v3 · active");
+    expect(html).toContain("v3 · configured");
     expect(html).toContain('data-testid="spec-node"');
     expect(html).toContain("Schedule");
     expect(html).toContain('data-testid="contract-cadence"');

@@ -60,7 +60,7 @@ describe("RoutineInspector", () => {
     expect(html).toContain(">yours<");
     expect(html).toContain("Industry: NZ$36–54 · yours: NZ$48");
     expect(html).not.toContain('data-testid="param-fatigueFrequency"'); // not relevant to D02-W01
-    expect(html).toContain("v1 live");
+    expect(html).toContain("v1 configured");
     expect(html).not.toContain('data-testid="inspector-draft"');
     const content = renderToStaticMarkup(createElement(RoutineInspector, { routineId: "D01-W01", currency: "NZD", initial: view("D01-W01") }));
     expect(content).toContain("Include: gorgias tickets · 7d");
@@ -75,10 +75,10 @@ describe("RoutineInspector", () => {
     expect(html).toContain(NO_BAND_LINE);
     expect(html).toContain('data-testid="inspector-draft"');
     expect(html).toContain("Run dry-run validation");
-    expect(html).not.toContain("Promote to production");
+    expect(html).not.toContain("Use validated configuration");
     html = renderToStaticMarkup(createElement(RoutineInspector, { routineId: "D02-W01", currency: "NZD", initial: view("D02-W01", { version: { live: 1, draft: 2 }, canPromote: true }) }));
-    expect(html).toContain("Promote to production");
-    expect(html).toContain("v1 live · v2 draft");
+    expect(html).toContain("Use validated configuration");
+    expect(html).toContain("v1 configured · v2 draft");
   });
 
   it("loading state without a view", () => {

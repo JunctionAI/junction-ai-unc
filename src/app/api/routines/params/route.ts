@@ -33,11 +33,17 @@ import { discardDraft, effectiveSpec, getOrInitState, latestDryRunFor, dryRunPas
 import { buildAdapters, resolveAccount, WorkerError } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { workerErrorStatus } from "../shared";
+import { captureArtifactContext } from "@/lib/artifacts/context";
+import { automationPauseResponse } from "@/lib/db/automationPause";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const bad = (error: string, status = 400, extra: Record<string, unknown> = {}) => Response.json({ error, ...extra }, { status });
+const bad = (error: string, status = 400, extra: Record<string, unknown> = {}) => Response.json({ error, ...extra }, { status,headers:{"cache-control":"private, no-store"} });
+
+async function readState(store:Store,accountId:string,routineId:string) {
+  return await store.getRoutineState(accountId,routineId) ?? {accountId,routineId,enabled:false,version:1,liveSpec:null,draftSpec:null,updatedAt:null};
+}
 
 async function readBody(req: Request): Promise<Record<string, unknown> | null> {
   try {
@@ -55,7 +61,7 @@ function routineIdOf(v: unknown): string | null {
 
 /** The response shape: fields flagged relevant / bound, the steps, the version pair. */
 async function shapeView(store: Store, accountId: string, catalog: RoutineSpec, view: RoutinePresetView) {
-  const state = await getOrInitState({ store }, accountId, catalog.id);
+  const state = await readState(store, accountId, catalog.id);
   const draft = state.draftSpec;
   let canPromote = false;
   if (draft) {
@@ -72,6 +78,7 @@ async function shapeView(store: Store, accountId: string, catalog: RoutineSpec, 
     fields: view.set.fields.map((f) => ({ ...f, relevant: relevant.has(f.key), bound: bound.has(f.key) })),
     steps: view.steps,
     version: { live: state.version, draft: draft?.version ?? null },
+    stateUpdatedAt:state.updatedAt,
     canPromote,
     skillFile: skillFor(catalog.id)?.file ?? null,
     agreement: await scoreAgreement(store, accountId, catalog.id),
@@ -79,8 +86,8 @@ async function shapeView(store: Store, accountId: string, catalog: RoutineSpec, 
 }
 
 async function currentView(db: DbClient, store: Store, accountId: string, catalog: RoutineSpec) {
-  const state = await getOrInitState({ store }, accountId, catalog.id);
-  const spec = effectiveSpec(state, catalog);
+  const state = await store.getRoutineState(accountId,catalog.id);
+  const spec = state ? effectiveSpec(state, catalog) : catalog;
   const view = await getRoutinePreset(db, accountId, spec);
   if (!view) throw new Error(`routine ${catalog.id} has no preset domain`);
   return { spec, view };
@@ -88,14 +95,15 @@ async function currentView(db: DbClient, store: Store, accountId: string, catalo
 
 async function handleGET(req: Request) {
   const session = await requireAccountSession();
-  if (session instanceof Response) return session;
+  if (session instanceof Response) return session.status===200 ? bad("Settings require a saved account.",503) : session;
+  const ctx=await captureArtifactContext(session.service,session.accountId,req);if(ctx instanceof Response)return ctx;
   const routineId = routineIdOf(new URL(req.url).searchParams.get("routineId"));
   if (!routineId) return bad("routineId must be a catalog routine (D0x-W0y)");
   const store = getStore();
   const catalog = CATALOG_SPEC_BY_ID[routineId];
   try {
     const { view } = await currentView(session.service, store, session.accountId, catalog);
-    return Response.json(await shapeView(store, session.accountId, catalog, view), { headers: { "cache-control": "no-store" } });
+    return Response.json({...ctx,role:session.role,...await shapeView(store, session.accountId, catalog, view)}, { headers: { "cache-control": "private, no-store" } });
   } catch (err) {
     return bad(err instanceof Error ? err.message : "couldn't read the routine's settings", 500);
   }
@@ -117,10 +125,14 @@ async function handlePATCH(req: Request) {
     }
   }
   const session = await requireAccountOwnerSession();
-  if (session instanceof Response) return session;
+  if (session instanceof Response) return session.status===200 ? bad("Settings require a saved account.",503) : session;
+  const ctx=await captureArtifactContext(session.service,session.accountId,req);if(ctx instanceof Response)return ctx;
+  const paused=await automationPauseResponse(session.service,session.accountId);if(paused)return paused;
   const store = getStore();
   const catalog = CATALOG_SPEC_BY_ID[routineId];
   try {
+    const expected=await readState(store,session.accountId,routineId);
+    if(body.version!==expected.version || body.stateUpdatedAt!==expected.updatedAt)return bad("Routine changed. Refresh before saving.",409);
     const state = await getOrInitState({ store }, session.accountId, catalog.id);
     const spec = effectiveSpec(state, catalog);
     await setRoutineParams(session.service, session.accountId, spec, { params: body.params, steps });
@@ -131,7 +143,7 @@ async function handlePATCH(req: Request) {
     // The founder's rule policy lives in the spec too: a new draft version, promoted through
     // the existing flow. The unversioned routine_params row is never runtime authority.
     if (JSON.stringify(nodes) !== JSON.stringify(spec.nodes)) await saveDraft({ store }, session.accountId, catalog, nodes);
-    return Response.json(await shapeView(store, session.accountId, catalog, view));
+    return Response.json({...ctx,role:session.role,...await shapeView(store, session.accountId, catalog, view)},{headers:{"cache-control":"private, no-store"}});
   } catch (err) {
     if (err instanceof PresetValidationError) return bad(err.message, 400, { issues: err.issues });
     return bad(err instanceof Error ? err.message : "couldn't save", 500);
@@ -145,11 +157,17 @@ async function handlePOST(req: Request) {
   if (!routineId) return bad("routineId must be a catalog routine (D0x-W0y)");
   const action = body.action;
   if (action !== "validate" && action !== "promote" && action !== "discard") return bad("action must be validate, promote or discard");
-  const session = action === "validate" ? await requireAccountSession() : await requireAccountOwnerSession();
-  if (session instanceof Response) return session;
+  const session = await requireAccountOwnerSession();
+  if (session instanceof Response) return session.status===200 ? bad("Settings require a saved account.",503) : session;
+  const ctx=await captureArtifactContext(session.service,session.accountId,req);if(ctx instanceof Response)return ctx;
+  const paused=await automationPauseResponse(session.service,session.accountId);if(paused)return paused;
+  if(routineId==="D03-W01" && action!=="discard")return bad("Keyword pilot requires operator-authorized registration and independent execution verification.",409);
   const store = getStore();
   const catalog = CATALOG_SPEC_BY_ID[routineId];
   try {
+    const expected=await readState(store,session.accountId,routineId);
+    if(body.version!==expected.version || body.stateUpdatedAt!==expected.updatedAt)return bad("Routine changed. Refresh before continuing.",409);
+    if(action==="validate" && !expected.enabled)return bad("Select this routine in Agents before requesting validation.",409);
     if (action === "discard") {
       await discardDraft({ store }, session.accountId, routineId);
     } else if (action === "promote") {
@@ -157,12 +175,13 @@ async function handlePOST(req: Request) {
     } else {
       const deps = { store, accounts: defaultAccountsSource() };
       const acct = await resolveAccount(deps, session.accountId);
+      if(acct.account.contextGeneration!==ctx.contextGeneration)return bad("Account changed before validation.",409);
       const outcome = await validateDraft({ store }, buildAdapters(deps), session.accountId, routineId, { account: acct.account, triggeredBy: "manual", vars: acct.vars ?? {} });
       const { view } = await currentView(session.service, store, session.accountId, catalog);
-      return Response.json({ ...(await shapeView(store, session.accountId, catalog, view)), run: { runId: outcome.run.runId, status: outcome.run.status, summary: outcome.run.summary }, passed: outcome.passed });
+      return Response.json({ ...ctx,role:session.role,...(await shapeView(store, session.accountId, catalog, view)), run: { runId: outcome.run.runId, status: outcome.run.status, summary: outcome.run.summary }, passed: outcome.passed },{headers:{"cache-control":"private, no-store"}});
     }
     const { view } = await currentView(session.service, store, session.accountId, catalog);
-    return Response.json(await shapeView(store, session.accountId, catalog, view));
+    return Response.json({...ctx,role:session.role,...await shapeView(store, session.accountId, catalog, view)},{headers:{"cache-control":"private, no-store"}});
   } catch (err) {
     if (err instanceof PromoteRefusedError) return bad(err.message, 409);
     if (err instanceof WorkerError) return bad(err.message, workerErrorStatus(err));

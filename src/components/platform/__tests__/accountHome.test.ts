@@ -462,7 +462,8 @@ describe("Routines in accounts mode — no demo constant can render", () => {
     expectNoDemo(html);
     expect(html).toContain('data-testid="detail-state"');
     expect(html).toContain(">Off · draft-only for now<");
-    expect(html).toContain("v1 · active");
+    expect(html).toContain("Configuration not verified");
+    expect(html).not.toContain("v1 · active");
     expect(html).toContain('data-testid="real-setup"');
     expect(html).toContain("Budget guardrail · NZD 1,200/mo");
     expect(html).not.toContain("Set this up");

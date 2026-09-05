@@ -27,9 +27,12 @@ import { GET, PATCH, POST } from "@/app/api/routines/params/route";
 const ACCT = "00000000-0000-4000-8000-00000000acc1";
 const USER = "00000000-0000-4000-8000-00000000u5e1";
 const url = (q = "") => `http://unc.test/api/routines/params${q}`;
-const get = (q: string) => GET(new Request(url(q)));
-const patch = (body: unknown) => PATCH(new Request(url(), { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
-const post = (body: unknown) => POST(new Request(url(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
+const headers={"content-type":"application/json","x-unc-account-id":ACCT,"x-unc-context-generation":"0"};
+const get=(q:string)=>GET(new Request(url(q),{headers}));
+// Simulate a fresh settings GET before each sequential UI edit. Stale-request cases below retain their old revision explicitly.
+const revision=(body:unknown)=>{const b=body as {routineId?:string};const r=db.rows("routine_states").find(r=>r.routine_id===b.routineId);return {version:r?.version??1,stateUpdatedAt:r?.updated_at??null,...b};};
+const patch=(body:unknown)=>PATCH(new Request(url(),{method:"PATCH",headers,body:JSON.stringify(revision(body))}));
+const post=(body:unknown)=>POST(new Request(url(),{method:"POST",headers,body:JSON.stringify(revision(body))}));
 
 interface View {
   routineId: string;
@@ -73,7 +76,7 @@ afterEach(() => {
 describe("auth + demo", () => {
   it("no database → fallback; no session → 401; bad routine id → 400", async () => {
     clearBillingEnv();
-    expect(await (await get("?routineId=D02-W01")).json()).toEqual({ fallback: true });
+    expect((await get("?routineId=D02-W01")).status).toBe(503);
     restoreEnv();
     setFakeEnv();
     user = null;
@@ -90,7 +93,8 @@ describe("GET — the view", () => {
     const res = await get("?routineId=D02-W01");
     expect(res.status).toBe(200);
     const v = (await res.json()) as View;
-    expect(v).toMatchObject({ routineId: "D02-W01", domain: "paid", currency: "NZD", version: { live: 1, draft: null }, canPromote: false });
+    expect(db.rows("routine_states")).toHaveLength(0);
+    expect(v).toMatchObject({ accountId:ACCT,contextGeneration:0,stateUpdatedAt:null,routineId: "D02-W01", domain: "paid", currency: "NZD", version: { live: 1, draft: null }, canPromote: false });
     expect(v.band?.id).toBe("dtc_supplements");
     const by = Object.fromEntries(v.fields.map((f) => [f.key, f]));
     expect(by.roasFloor).toMatchObject({ value: 2.5, source: "industry", relevant: true, bound: true });
@@ -162,6 +166,7 @@ describe("POST — validate then promote (the existing versioning, unchanged)", 
   it("promote before a dry run → 409; validate records the run; promote then bumps live to v2", async () => {
     await patch({ routineId: "D01-W01", steps: { read_posts: false } });
     expect((await post({ routineId: "D01-W01", action: "promote" })).status).toBe(409);
+    db.rows("routine_states")[0].enabled=true;
     const val = (await (await post({ routineId: "D01-W01", action: "validate" })).json()) as View;
     expect(val.run?.status).toBeDefined();
     expect(val.passed).toBe(true);
@@ -183,14 +188,24 @@ describe("POST — validate then promote (the existing versioning, unchanged)", 
     expect((await post({ routineId: "D02-W01", action: "discard" })).status).toBe(200);
   });
 
-  it("members may read and validate, but cannot configure, promote or discard", async () => {
+  it("members may read, but cannot execute validation or change configuration", async () => {
     await patch({ routineId: "D01-W01", steps: { read_posts: false } });
     db.rows("account_members")[0].role = "member";
     expect((await get("?routineId=D01-W01")).status).toBe(200);
     expect((await patch({ routineId: "D01-W01", params: { postsPerWeek: 4 } })).status).toBe(403);
-    expect((await post({ routineId: "D01-W01", action: "validate" })).status).toBe(200);
+    expect((await post({ routineId: "D01-W01", action: "validate" })).status).toBe(403);
     expect((await post({ routineId: "D01-W01", action: "promote" })).status).toBe(403);
     expect((await post({ routineId: "D01-W01", action: "discard" })).status).toBe(403);
     expect((db.rows("routine_states")[0].draft_spec as RoutineSpec | null)?.version).toBe(2);
   });
+});
+
+it("rejects stale context/revision and paused edits before writing",async()=>{
+  const stale=new Request(url(),{method:"PATCH",headers,body:JSON.stringify({routineId:"D01-W01",version:7,stateUpdatedAt:null,params:{postsPerWeek:4}})});
+  expect((await PATCH(stale)).status).toBe(409);expect(db.rows("routine_params")).toHaveLength(0);
+  db.rows("accounts")[0].automation_paused=true;
+  expect((await patch({routineId:"D01-W01",params:{postsPerWeek:4}})).status).toBe(503);
+  expect(db.rows("routine_states")).toHaveLength(0);
+  db.rows("accounts")[0].automation_paused=false;db.rows("accounts")[0].context_generation=1;
+  expect((await get("?routineId=D01-W01")).status).toBe(409);
 });

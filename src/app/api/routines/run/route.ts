@@ -19,13 +19,16 @@
    account (the body's accountId is ignored); no session → 401. Demo mode → unbound. */
 
 import { isDbConfigured } from "@/lib/db/client";
-import { requireAccountOwnerSession } from "@/lib/db/session";
+
 import { getStore } from "@/lib/runtime/store";
 import { ROUTINE_ID_RE } from "@/lib/runtime/validate";
 import { triggerRun, WorkerError, type ServiceDeps } from "@/worker/service";
 import { defaultAccountsSource } from "@/worker/wiring";
 import { summariseRun, workerErrorStatus } from "../shared";
 import { withErrorCapture } from "@/lib/observability/errors";
+import { agentSnapshot } from "@/lib/agents/server";
+import { routineBlock } from "@/lib/agents/types";
+import type { AgentContext } from "@/lib/agents/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,18 +38,26 @@ function deps(): ServiceDeps {
 }
 
 async function handlePOST(req: Request) {
-  let body: { accountId?: unknown; routineId?: unknown; vars?: unknown; account?: unknown; mode?: unknown };
+  let body: { accountId?: unknown; routineId?: unknown; vars?: unknown; account?: unknown; mode?: unknown; version?:unknown;stateUpdatedAt?:unknown };
   try {
     body = await req.json();
   } catch {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
+  if (!body || typeof body!=="object" || Array.isArray(body)) return Response.json({error:"invalid body"},{status:400});
 
-  let accountId = typeof body.accountId === "string" ? body.accountId.trim().slice(0, 128) : "";
+  const accountId = typeof body.accountId === "string" ? body.accountId.trim().slice(0, 128) : "";
+  let captured: AgentContext | undefined;
   if (isDbConfigured()) {
-    const session = await requireAccountOwnerSession();
-    if (session instanceof Response) return session;
-    accountId = session.accountId;
+    const access=await agentSnapshot(req);if(access instanceof Response)return access;
+    if(access.data.role!=="owner")return Response.json({error:"Only the account owner can run routines.",code:"owner_only"},{status:403});
+    if(accountId!==access.data.accountId)return Response.json({error:"Account changed. Reload before running."},{status:409});
+    const block=routineBlock(access.data,String(body.routineId));
+    if(block)return Response.json({error:block},{status:access.data.role!=="owner"?403:409});
+    const row=access.data.routines.find(r=>r.routineId===body.routineId)!;
+    if(body.version!==row.version || body.stateUpdatedAt!==row.stateUpdatedAt)return Response.json({error:"Routine changed. Refresh before running."},{status:409});
+    if(body.vars!==undefined || body.account!==undefined)return Response.json({error:"Account inputs are loaded by the server."},{status:400});
+    captured={accountId:access.data.accountId,contextGeneration:access.data.contextGeneration};
   }
   const routineId = typeof body.routineId === "string" ? body.routineId.trim() : "";
   if (!accountId) return Response.json({ error: "accountId is required" }, { status: 400 });
@@ -64,8 +75,17 @@ async function handlePOST(req: Request) {
   }
 
   try {
-    const result = await triggerRun(deps(), { accountId, routineId, mode: body.mode as "dry_run" | "live" | undefined, triggeredBy: "manual", vars, accountFallback });
-    return Response.json({ run: summariseRun(result) });
+    const executionDeps=deps();
+    if(captured){
+      const source=executionDeps.accounts, ctx=captured;
+      executionDeps.accounts={listAccounts:()=>source.listAccounts(),getAccount:async id=>{
+        const acct=await source.getAccount(id);
+        if(!acct || acct.account.accountId!==ctx.accountId || acct.account.contextGeneration!==ctx.contextGeneration)throw new WorkerError("invalid_request","Account context changed before execution. Reload to inspect it.");
+        return acct;
+      }};
+    }
+    const result = await triggerRun(executionDeps, { accountId, routineId, mode: body.mode as "dry_run" | "live" | undefined, triggeredBy: "manual", vars, accountFallback });
+    return Response.json({ ...captured, run: summariseRun(result) },{headers:{"cache-control":"private, no-store"}});
   } catch (err) {
     if (err instanceof WorkerError) return Response.json({ error: err.message, code: err.code }, { status: workerErrorStatus(err) });
     const message = err instanceof Error ? err.message : "run failed";
@@ -73,4 +93,4 @@ async function handlePOST(req: Request) {
   }
 }
 
-export const POST = withErrorCapture("api/routines/run", handlePOST);
+export const POST = withErrorCapture("api/routines/run", async (req:Request)=>{const response=await handlePOST(req);response.headers.set("cache-control","private, no-store");return response;});

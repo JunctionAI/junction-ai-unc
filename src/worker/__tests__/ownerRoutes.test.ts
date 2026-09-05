@@ -35,7 +35,7 @@ const ACCOUNT = "00000000-0000-4000-8000-00000000acc1";
 const USER = "00000000-0000-4000-8000-00000000u5e1";
 const post = (path: string, body: unknown) => new Request(`http://unc.test${path}`, {
   method: "POST",
-  headers: { "content-type": "application/json" },
+  headers: { "content-type": "application/json", "x-unc-account-id": ACCOUNT, "x-unc-context-generation": "0" },
   body: JSON.stringify(body),
 });
 

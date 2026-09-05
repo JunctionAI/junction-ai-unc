@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { isAgentSnapshot } from "@/lib/agents/client";
+import { routineBlock, type AgentsSnapshot } from "@/lib/agents/types";
 import { CONNECTOR_PLATFORMS } from "@/lib/db/mapping";
 import { receiptHandle } from "@/lib/platform/approvals";
 import type { PlatformVals } from "@/lib/platform/derive";
@@ -11,7 +13,7 @@ import RunNowPanel, { type RunNowProps } from "./RunNowPanel";
 import DraftCard, { type ArtifactView } from "./DraftCard";
 import { artifactHeaders } from "@/lib/artifacts/client";
 import RoutineInspector, { type ParamsView } from "./RoutineInspector";
-import { agoLabel, runStatusLabel, type RoutinesLive, type RoutineStateView } from "./useRoutinesState";
+import { agoLabel, runStatusLabel, type RoutinesLive } from "./useRoutinesState";
 
 const contractCard: React.CSSProperties = { background: "white", border: "1px solid var(--card-border)", borderRadius: 13, padding: "17px 19px" };
 const contractLabel: React.CSSProperties = { fontSize: 10, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 };
@@ -25,7 +27,7 @@ const contractLabel: React.CSSProperties = { fontSize: 10, letterSpacing: "0.13e
    is connected, the account's currency and budget, then Run now. No demo furniture. */
 
 type Trail = { id: string; kind: string; platform: string | null; description: string; createdAt: string }[];
-type StateOne = { routines?: RoutineStateView[]; lastRunReceipts?: Trail; connected?: string[]; error?: string; fallback?: boolean };
+
 
 const NAME_BY_PLATFORM: Record<string, string> = Object.fromEntries(Object.entries(CONNECTOR_PLATFORMS).map(([n, p]) => [p, n]));
 
@@ -76,8 +78,8 @@ function accountKpi(spec: RoutineSpec | undefined, currency: string): string {
 }
 
 /** The spec's chain as canvas cards: name + one honest line per node. */
-export function specNodes(routineId: string): { tag: string; name: string; desc: string; color: string }[] {
-  const spec = CATALOG_SPEC_BY_ID[routineId];
+export function specNodes(routineId: string, configured?: RoutineSpec): { tag: string; name: string; desc: string; color: string }[] {
+  const spec = configured ?? CATALOG_SPEC_BY_ID[routineId];
   if (!spec) return [];
   return spec.nodes.map((n) => {
     const s = NODE_STYLE[n.kind];
@@ -114,29 +116,34 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
   const [tick, setTick] = useState(0);
   const [lastArtifact, setLastArtifact] = useState<ArtifactView | null | undefined>(undefined);
   const [channels, setChannels] = useState<string[]>([]);
+  const [detail, setDetail] = useState<AgentsSnapshot | null>(live?.eligibility ?? null);
+  const [artifactError, setArtifactError] = useState(false);
 
   useEffect(() => {
     if (!accounts || !routineId) return;
     let cancelled = false;
+    const c=new AbortController();const timer=setTimeout(()=>c.abort(),20_000);
     (async () => {
       try {
-        const res = await fetch(`/api/routines/state?routineId=${encodeURIComponent(routineId)}`, { cache: "no-store" });
-        const body = (await res.json().catch(() => ({}))) as StateOne;
+        const res = await fetch(`/api/agents?routineId=${encodeURIComponent(routineId)}`, { cache: "no-store", signal:c.signal, headers:artifactHeaders(V.accountId,V.contextGeneration) });
+        const body = await res.json().catch(() => ({}));
         if (cancelled) return;
-        if (!res.ok || body.fallback) setTrailErr(body.error ?? `couldn’t load the last run (${res.status})`);
+        if (!res.ok || !isAgentSnapshot(body,{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration}) || body.spec?.id!==routineId) throw new Error("Routine context or configuration could not be verified.");
         else {
+          setDetail(body);
           setTrail(body.lastRunReceipts ?? []);
           if (Array.isArray(body.connected)) setConnected(body.connected);
           setTrailErr(null);
         }
       } catch (e) {
-        if (!cancelled) setTrailErr(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {setDetail(null);setTrail(null);setConnected(null);setTrailErr(e instanceof Error ? e.message : String(e));}
+      } finally {clearTimeout(timer);
       }
     })();
     return () => {
-      cancelled = true;
+      cancelled = true;c.abort();clearTimeout(timer);
     };
-  }, [accounts, routineId, tick]);
+  }, [accounts, routineId, tick, V.accountId, V.contextGeneration]);
 
   /* The last artifact this routine produced (GET /api/artifacts?routineId=…&limit=1). */
   useEffect(() => {
@@ -150,9 +157,9 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
         if (res.ok && body.accountId === V.accountId && body.contextGeneration === V.contextGeneration && Array.isArray(body.artifacts)) {
           setLastArtifact(body.artifacts[0] ?? null);
           setChannels(Array.isArray(body.channels) ? body.channels : []);
-        } else setLastArtifact(null);
+        } else {setLastArtifact(undefined);setChannels([]);setArtifactError(true);}
       } catch {
-        if (!cancelled) setLastArtifact(null);
+        if (!cancelled) {setLastArtifact(undefined);setChannels([]);setArtifactError(true);}
       }
     })();
     return () => {
@@ -161,12 +168,17 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
   }, [accounts, routineId, tick, V.accountId, V.contextGeneration]);
 
   const refresh = () => {
+    setDetail(null);setTrail(null);setTrailErr(null);setLastArtifact(undefined);setArtifactError(false);
     setTick((n) => n + 1);
     live?.refresh();
   };
 
-  const nodes = accounts ? specNodes(routineId) : [];
-  const spec = accounts ? CATALOG_SPEC_BY_ID[routineId] : undefined;
+  const spec = accounts ? detail?.spec : undefined;
+  const nodes = accounts && spec ? specNodes(routineId,spec) : [];
+  const detailRow=detail?.routines.find(r=>r.routineId===routineId);
+  const currentRow=live?.eligibility?.routines.find(r=>r.routineId===routineId);
+  const eligibility = detail && live?.eligibility && !live.loading && detailRow?.version===currentRow?.version && detailRow?.stateUpdatedAt===currentRow?.stateUpdatedAt ? {...detail,role:live.eligibility.role,paused:live.eligibility.paused,routines:live.eligibility.routines} : null;
+  const block = accounts ? (live?.error || trailErr || routineBlock(eligibility,routineId)) : null;
   const sources = spec ? readPlatforms(spec) : [];
   const have = new Set(connected ?? []);
   const minimum = spec?.minimum ?? null;
@@ -175,8 +187,8 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
   const stateText = accounts ? (mine ? (mine.enabled ? "On" : "Off") : "…") : V.selState;
   const stateColor = accounts ? (mine?.enabled ? "oklch(0.45 0.1 240)" : "oklch(0.52 0.03 260)") : V.selStateColor;
   const stateBg = accounts ? (mine?.enabled ? "oklch(0.94 0.03 225)" : "oklch(0.945 0.008 260)") : V.selStateBg;
-  const cadence = accounts ? accountCadence(spec) : V.selCadence;
-  const writeMode = accounts ? accountWriteMode(spec) : V.selMode;
+  const cadence = accounts ? (spec ? accountCadence(spec) : "Configuration not verified") : V.selCadence;
+  const writeMode = accounts ? (spec ? accountWriteMode(spec) : "Configuration not verified") : V.selMode;
   const kpi = accounts ? accountKpi(spec, run.account.currency) : V.selKpi;
 
   return (
@@ -189,23 +201,25 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
       >
         ← All routines
       </button>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24, marginTop: 18 }}>
+      {accounts && <button onClick={refresh} style={{marginLeft:18}}>Refresh routine</button>}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap:"wrap", gap: 24, marginTop: 18 }}>
         <div>
           <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "var(--cyan-link)" }}>
             {V.selId} · {V.selCat}
           </div>
           <h1 style={{ fontWeight: 600, fontSize: 26, margin: "8px 0 0", letterSpacing: "-0.015em" }}>{V.selName}</h1>
         </div>
-        <span data-testid="detail-state" style={{ flex: "none", fontSize: 11, fontWeight: 600, color: stateColor, background: stateBg, borderRadius: 6, padding: "5px 11px", marginTop: 6 }}>
+        <span data-testid="detail-state" style={{ maxWidth:"100%", boxSizing:"border-box", fontSize: 11, fontWeight: 600, color: stateColor, background: stateBg, borderRadius: 6, padding: "5px 11px", marginTop: 6 }}>
           {stateText}
           {accounts && mine ? ` · ${mine.availabilityCopy}` : ""}
         </span>
       </div>
-      <div style={{ fontSize: 15, lineHeight: 1.6, color: "oklch(0.4 0.04 262)", marginTop: 12, maxWidth: 640 }}>{V.selPurpose}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 28 }}>
+      <div style={{ fontSize: 15, lineHeight: 1.6, color: "oklch(0.4 0.04 262)", marginTop: 12, maxWidth: 640 }}>{accounts ? "Inspect this routine’s saved configuration and execution evidence." : V.selPurpose}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 12, marginTop: 28 }}>
         <div style={contractCard}>
-          <div style={contractLabel}>Trigger &amp; cadence</div>
+          <div style={contractLabel}>{accounts ? "Configured cadence" : "Trigger & cadence"}</div>
           <div data-testid="contract-cadence" style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.5 }}>{cadence}</div>
+          {accounts && <p style={{fontSize:12,color:"var(--muted)"}}>Configuration only. No upcoming run or active schedule is verified here.</p>}
         </div>
         <div style={contractCard}>
           <div style={contractLabel}>Write mode</div>
@@ -220,9 +234,9 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
       <div style={{ marginTop: 28 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
           <span style={{ fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Workflow</span>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>{accounts ? "— the chain this routine runs, step by step" : "— click a step to inspect and edit it"}</span>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>{accounts ? "— saved configuration, not an execution receipt" : "— click a step to inspect and edit it"}</span>
           <span data-testid="detail-version" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600, color: accounts ? "oklch(0.45 0.1 240)" : V.wfVerColor, background: accounts ? "oklch(0.94 0.03 225)" : V.wfVerBg, borderRadius: 6, padding: "4px 10px" }}>
-            {accounts ? (mine ? `v${mine.version} · active` : "…") : V.wfVersion}
+            {accounts ? (spec ? `v${spec.version} · configured` : "Configuration not verified") : V.wfVersion}
           </span>
         </div>
         <div
@@ -269,7 +283,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
           </div>
         </div>
         {/* Accounts mode: the one-screen "Adjust this routine" panel (industry presets + optional steps → routine_params + a draft version). */}
-        {accounts && routineId && <RoutineInspector routineId={routineId} currency={run.account.currency} initial={inspectorInitial} onSaved={refresh} />}
+        {accounts && routineId && <RoutineInspector key={`${V.accountId}:${V.contextGeneration}:${routineId}`} routineId={routineId} currency={run.account.currency} initial={inspectorInitial} onSaved={refresh} context={{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration}} blockReason={eligibility?.role==="owner" && !eligibility.paused && !trailErr ? null : block ?? "Account eligibility unavailable."} runBlockReason={block} />}
         {!accounts && (
           <div style={{ marginTop: 12, background: "white", border: "1px solid var(--card-border)", borderRadius: 14, padding: "18px 22px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -322,7 +336,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
           {!trailErr && trail === null && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8 }}>Reading the last run…</div>}
           {!trailErr && trail !== null && trail.length === 0 && (
             <div data-testid="last-run-empty" style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
-              This routine hasn’t run for you yet. Switch it on, or run it now below, and the receipts land here.
+              No saved run found in this context’s recent history. Selection, eligibility and execution are checked separately.
             </div>
           )}
           {!trailErr && trail !== null && trail.length > 0 && (
@@ -345,22 +359,23 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
             <span style={{ fontSize: 11, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Last draft</span>
             <span style={{ fontSize: 12, color: "var(--muted)" }}>— the real work this routine produced last time it ran</span>
           </div>
-          {lastArtifact === undefined && <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Reading the last draft…</div>}
+          {artifactError && <p role="alert">Couldn’t verify the last draft. Refresh; no empty result has been assumed.</p>}
+          {lastArtifact === undefined && !artifactError && <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Reading the last draft…</div>}
           {lastArtifact === null && (
             <div data-testid="last-artifact-empty" style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.5 }}>
-              Nothing drafted by this routine yet{minimum ? ` — it needs ${minimum.summary}.` : "."} Run it now and the draft lands here.
+              No saved draft found for this routine in the current business context.
             </div>
           )}
-          {lastArtifact && lastArtifact.accountId === V.accountId && lastArtifact.contextGeneration === V.contextGeneration && lastArtifact.routineId === routineId && <DraftCard artifact={lastArtifact} defaultOpen channels={channels} onChange={(a) => setLastArtifact(a)} />}
+          {live?.eligibility && lastArtifact && lastArtifact.accountId === V.accountId && lastArtifact.contextGeneration === V.contextGeneration && lastArtifact.routineId === routineId && <DraftCard artifact={lastArtifact} defaultOpen channels={channels} onChange={(a) => setLastArtifact(a)} />}
         </div>
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10, background: "var(--cyan-wash)", borderRadius: 13, padding: "16px 20px", flexWrap: "wrap" }}>
         <img src="/brand/mascot-small.png" alt="" style={{ width: 38, height: 41, objectFit: "contain", flex: "none" }} />
         <div style={{ fontSize: 13, lineHeight: 1.5, color: "oklch(0.3 0.06 262)", flex: 1, minWidth: 260 }}>
-          Every run writes a receipt: what was read, prepared, changed and learned. Consequential actions wait for your approval until you graduate them.
+          Review saved run receipts for what was actually read or prepared. Publishing, customer messaging and ad changes remain disabled.
         </div>
-        {V.selId && <RunNowPanel routineId={V.selId} accountId={run.accountId} account={run.account} persisted={run.persisted} onDone={accounts ? refresh : undefined} />}
+        {V.selId && <RunNowPanel key={`${V.accountId}:${V.contextGeneration}:${routineId}`} routineId={V.selId} accountId={run.accountId} account={run.account} persisted={run.persisted} contextGeneration={V.contextGeneration} eligibility={eligibility} blockReason={block} onDone={accounts ? refresh : undefined} />}
         {!accounts && V.setupIdle && (
           <button onClick={V.openSetup} className="btn-navy" style={{ flex: "none", marginLeft: "auto", padding: "9px 18px", fontSize: 12.5, fontWeight: 600 }}>
             Set this up
@@ -398,29 +413,13 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
           )}
           {mine?.skillSource === "n8n" && (
             <div data-testid="skill-source-n8n" style={{ fontSize: 12.5, color: "oklch(0.35 0.05 262)", marginTop: 10, lineHeight: 1.5 }}>
-              <span style={{ fontWeight: 600 }}>Powered by your n8n workflow.</span> <span style={{ color: "var(--muted)" }}>It reads your data through me, never with its own keys; if it doesn’t answer I draft with my built-in skill instead.</span>
+              <span style={{ fontWeight: 600 }}>An n8n workflow is registered.</span> <span style={{ color: "var(--muted)" }}>Registration alone is not execution proof. Credential ownership and independent receipts are verified per integration; a fallback draft is not n8n success.</span>
             </div>
           )}
           <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.5 }}>
-            {sources.some((p) => required.has(p) && !have.has(p)) ? (
-              <>
-                Connect the missing source and I can read for real; until then a run answers “couldn’t ask”, never a guess.{" "}
-                <button onClick={V.goConnectors} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", padding: 0 }}>
-                  Open Connectors →
-                </button>
-              </>
-            ) : sources.some((p) => !have.has(p)) ? (
-              <>
-                Everything this routine must have is in hand. Better with {sources.filter((p) => !have.has(p)).map((p) => NAME_BY_PLATFORM[p] ?? p).join(", ")} connected — then it reads real numbers too.{" "}
-                <button onClick={V.goConnectors} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12.5, fontWeight: 500, cursor: "pointer", padding: 0 }}>
-                  Open Connectors →
-                </button>
-              </>
-            ) : minimum ? (
-              "Everything this routine must have is in hand. Switch it on in the list, or run it now — it drafts real work; nothing goes out without you."
-            ) : (
-              "Every source this chain reads is connected. Switch it on in the list, or run it now — drafts only, nothing goes out without you."
-            )}
+            <p role={block?"status":undefined}>{block ?? "Requirements check passed for a manual shadow request. Provider data and output still need execution evidence."}</p>
+            {mine?.betterWithCopy && <p>{mine.betterWithCopy}</p>}
+            <button onClick={V.goConnectors} className="hov-underline" style={{border:"none",background:"transparent",color:"var(--cyan-link)",cursor:"pointer"}}>Open Connectors →</button>
           </div>
         </div>
       )}

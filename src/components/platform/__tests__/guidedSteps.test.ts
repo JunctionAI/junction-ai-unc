@@ -196,25 +196,24 @@ describe("FirstRoutineStep — rendered per state", () => {
     expect(html).toContain('data-testid="first-routine-card" data-routine="D01-W01" data-on="0"');
     expect(html).toContain("Founder content engine");
     expect(html).toContain("Posts in your voice, drafted for you");
-    expect(html).toContain("Runs daily at 07:00");
+    expect(html).toContain("Catalog cadence: daily at 07:00");
     expect(html).toContain("draft-only for now");
     expect(html).toContain('data-testid="first-routine-turn-on"');
     expect(html).toContain("Not now");
   });
 
-  it("refresh after turning it on: the same routine shows On ✓, no Turn-it-on, no Not-now, Continue to Home", () => {
-    const html = render({ ...initialState, routineOn: { "Founder content engine": true } });
-    expect(html).toContain('data-routine="D01-W01" data-on="1"');
-    expect(html).toContain("On ✓");
-    expect(html).toContain("first-routine-already-on");
-    expect(html).not.toContain("first-routine-turn-on");
-    expect(html).not.toContain("first-routine-skip");
-    expect(html).toContain("Continue to Home");
+  it("a local enabled flag cannot certify a saved selection before the account read", () => {
+    const html=render({...initialState,routineOn:{"Founder content engine":true}});
+    expect(html).toContain('data-routine="D01-W01" data-on="0"');
+    expect(html).toContain("Account eligibility has not been verified");
+    expect(html).toContain('disabled="" data-testid="first-routine-turn-on"');
+    expect(html).not.toContain("On ✓");
+    expect(html).toContain("Not now");
   });
 
   it("per channel (business type unknown — nothing hidden): Email → Abandoned cart recovery (needs Shopify for its number), SEO → Keyword opportunity scan, Sales → Lead research & scoring", () => {
     expect(render(initialState, "Email & SMS")).toContain('data-routine="D05-W02"');
-    expect(render(initialState, "Email & SMS")).toContain("Needs Shopify connected for its number");
+    expect(render(initialState, "Email & SMS")).toContain("Needs verified Shopify data");
     expect(render({ ...initialState, connState: { Shopify: "ok" } }, "Email & SMS")).not.toContain("Needs Shopify connected");
     expect(render(initialState, "SEO")).toContain('data-routine="D03-W01"');
     expect(render(initialState, "Sales")).toContain('data-routine="D04-W01"');
@@ -235,7 +234,7 @@ describe("FirstRoutineStep — rendered per state", () => {
   it("Paid ads has no draft-only routine: the first generic one, and Unc says why it comes from outside the channel", () => {
     const html = render(initialState, "Paid ads");
     expect(html).toContain('data-routine="D01-W01"');
-    expect(html).toContain("every paid ads routine changes live spend");
+    expect(html).toContain("this setup path has no eligible paid ads starter yet");
     expect(html).toContain("Continue to Home");
   });
 });
@@ -251,33 +250,26 @@ describe("client helpers against a stubbed fetch", () => {
     expect(await startConnect("klaviyo", { fetch: json(500, { error: "nope" }) as unknown as typeof fetch })).toEqual({ kind: "error", message: "nope" });
   });
 
-  it("turnOnRoutine happy path: enable then dry-run → 'Running now — your first draft lands in What I drafted.'", async () => {
-    const calls: string[] = [];
-    const f = (async (url: string, init?: RequestInit) => {
-      calls.push(`${init?.method} ${url} ${init?.body}`);
-      if (url === "/api/setup/enable") return new Response(JSON.stringify({ routineId: "D01-W01", enabled: true, version: 1 }), { status: 200 });
-      return new Response(JSON.stringify({ run: { runId: "r1", status: "done", summary: "Drafted 3 posts", receipts: [{ kind: "read" }, { kind: "draft" }, { kind: "draft" }] } }), { status: 200 });
-    }) as unknown as typeof fetch;
-    const r = await turnOnRoutine({ routineId: "D01-W01", accountId: "acct", account: { currency: "NZD", budgetMonthly: 3600 }, fetch: f });
-    expect(r).toEqual({ kind: "ran", runId: "r1", status: "done", summary: "Drafted 3 posts", drafts: 2 });
-    expect(turnOnLine(r)).toBe("Running now — your first draft lands in What I drafted.");
-    expect(calls[0]).toBe('POST /api/setup/enable {"routineId":"D01-W01"}');
-    expect(calls[1]).toContain("POST /api/routines/run");
-    expect(calls[1]).toContain('"accountId":"acct"');
+  const snapshot={accountId:"acct",contextGeneration:1,role:"owner",paused:false,routines:[{routineId:"D01-W01",enabled:false,version:1,stateUpdatedAt:null,selectionBlock:null}]};
+  const turnInput={routineId:"D01-W01",accountId:"acct",contextGeneration:1,account:{currency:"NZD",budgetMonthly:0}};
+  it("selects the exact saved revision without starting a run",async()=>{
+    const calls:RequestInit[]=[];
+    const f=(async(url:string,init?:RequestInit)=>{
+      expect(url).toBe("/api/agents");calls.push(init!);
+      expect(init?.headers).toMatchObject({"x-unc-account-id":"acct","x-unc-context-generation":"1"});
+      return Response.json(init?.method==="POST" ? {saved:{...snapshot.routines[0],...turnInput,enabled:true,version:1,stateUpdatedAt:"2026-09-05T12:00:00Z"}} : snapshot);
+    }) as typeof fetch;
+    const result=await turnOnRoutine({...turnInput,fetch:f});expect(result).toEqual({kind:"selected"});
+    expect(turnOnLine(result)).toContain("No run started");expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[1].body as string)).toEqual({routineId:"D01-W01",enabled:true,version:1,stateUpdatedAt:null});
   });
-
-  it("turnOnRoutine is honest when the run can't start, was skipped, or the enable failed", async () => {
-    const enabledOnly = (async (url: string) => (url === "/api/setup/enable" ? new Response(JSON.stringify({ enabled: true }), { status: 200 }) : new Response(JSON.stringify({ error: "worker offline" }), { status: 500 }))) as unknown as typeof fetch;
-    const r1 = await turnOnRoutine({ routineId: "D01-W01", accountId: "a", account: { currency: "NZD", budgetMonthly: 0 }, fetch: enabledOnly });
-    expect(r1).toEqual({ kind: "enabled_only", error: "worker offline" });
-    expect(turnOnLine(r1)).toContain("it runs on its schedule instead");
-
-    const skipped = (async (url: string) => (url === "/api/setup/enable" ? new Response(JSON.stringify({ enabled: true }), { status: 200 }) : new Response(JSON.stringify({ run: { runId: "r2", status: "skipped", summary: "Not enough customer material", receipts: [] } }), { status: 200 }))) as unknown as typeof fetch;
-    const r2 = await turnOnRoutine({ routineId: "D01-W01", accountId: "a", account: { currency: "NZD", budgetMonthly: 0 }, fetch: skipped });
-    expect(turnOnLine(r2)).toBe("On. First dry run found nothing to draft yet — Not enough customer material. The next run is on its schedule.");
-
-    const failed = (async () => new Response(JSON.stringify({ error: "no account for this user" }), { status: 403 })) as unknown as typeof fetch;
-    const r3 = await turnOnRoutine({ routineId: "D01-W01", accountId: "a", account: { currency: "NZD", budgetMonthly: 0 }, fetch: failed });
-    expect(r3).toEqual({ kind: "error", message: "no account for this user" });
+  it("refuses foreign/paused/member/blocked inputs and does not replay an uncertain save",async()=>{
+    for(const change of [{accountId:"foreign"},{paused:true},{role:"member"},{routines:[{...snapshot.routines[0],selectionBlock:"needs provider"}]}]){
+      let writes=0;const f=(async(_url:unknown,init?:RequestInit)=>{if(init?.method==="POST")writes++;return Response.json({...snapshot,...change});}) as typeof fetch;
+      expect((await turnOnRoutine({...turnInput,fetch:f})).kind).toBe("error");expect(writes).toBe(0);
+    }
+    let writes=0;const lost=(async(_url:unknown,init?:RequestInit)=>{if(init?.method==="POST"){writes++;throw new Error("lost response");}return Response.json(snapshot);}) as typeof fetch;
+    const result=await turnOnRoutine({...turnInput,fetch:lost});expect(result.kind).toBe("uncertain");expect(writes).toBe(1);
+    expect(turnOnLine(result)).not.toContain("runs on its schedule");
   });
 });

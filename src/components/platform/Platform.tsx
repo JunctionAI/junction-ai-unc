@@ -167,8 +167,8 @@ function PlatformReady({ S, set, persistence, billing }: { S: PlatformState; set
   };
   const onTurnOn = async (routineId: string) => {
     if (S.automationPaused) return { kind: "error" as const, message: "Automation is paused for setup verification." };
-    const r = await turnOnRoutine({ routineId, accountId: runTarget.accountId, account: runTarget.account });
-    if (r.kind === "ran" || r.kind === "enabled_only") V.enableRoutineLocal(routineId);
+    const r = await turnOnRoutine({ routineId, accountId: runTarget.accountId, contextGeneration:S.contextGeneration ?? 0, account: runTarget.account });
+    if (r.kind === "selected") V.enableRoutineLocal(routineId);
     if (r.kind === "ran" && r.drafts > 0) V.setFirstRunPending(true);
     setupRefresh();
     liveRefresh();

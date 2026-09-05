@@ -10,7 +10,9 @@
    Reads GET /api/routines/params?routineId=; `initial` lets a server render / test start with the
    view in hand (no fetch). */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { artifactHeaders } from "@/lib/artifacts/client";
+import type { AgentContext } from "@/lib/agents/client";
 import { formatValue, industryLine } from "@/lib/runtime/presets/industry";
 import type { PresetField, PresetValue } from "@/lib/runtime/presets/types";
 import type { SkillFile } from "@/lib/runtime/skills/types";
@@ -22,6 +24,7 @@ export interface ParamsField extends PresetField {
 }
 
 export interface ParamsView {
+  accountId?:string;contextGeneration?:number;role?:"owner"|"member";stateUpdatedAt?:string|null;
   routineId: string;
   domain: string;
   currency: string;
@@ -47,53 +50,59 @@ export function sourceLabel(source: PresetField["source"]): string {
   return source === "founder" ? "yours" : source === "unc" ? "my adjustment" : "industry";
 }
 
-export default function RoutineInspector({ routineId, currency, initial, onSaved }: { routineId: string; currency: string; initial?: ParamsView | null; onSaved?: () => void }) {
+export default function RoutineInspector({ routineId, currency, initial, onSaved, context, blockReason, runBlockReason }: { routineId: string; currency: string; initial?: ParamsView | null; onSaved?: () => void; context?:AgentContext; blockReason?:string|null; runBlockReason?:string|null }) {
   const [view, setView] = useState<ParamsView | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, PresetValue>>({});
   const [stepEdits, setStepEdits] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<"save" | "validate" | "promote" | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [tick,setTick]=useState(0);
+  const accountId=context?.accountId, contextGeneration=context?.contextGeneration;
+  const matches=useCallback((b:Body)=>!!accountId && b.accountId===accountId && b.contextGeneration===contextGeneration && b.routineId===routineId && Array.isArray(b.fields) && !!b.version,[accountId,contextGeneration,routineId]);
+  const headers={"content-type":"application/json",...artifactHeaders(context?.accountId,context?.contextGeneration)};
+  const blocked=blockReason || (!context || view?.role!=="owner" ? "Only a verified account owner can change these settings." : null);
 
   useEffect(() => {
     if (initial !== undefined || !routineId) return;
-    let cancelled = false;
+    let cancelled = false;const c=new AbortController();const timer=setTimeout(()=>c.abort(),20_000);
     (async () => {
       try {
-        const res = await fetch(`/api/routines/params?routineId=${encodeURIComponent(routineId)}`, { cache: "no-store" });
+        const res = await fetch(`/api/routines/params?routineId=${encodeURIComponent(routineId)}`, { cache: "no-store",headers:artifactHeaders(context?.accountId,context?.contextGeneration),signal:c.signal });
         const body = (await res.json().catch(() => ({}))) as Body;
         if (cancelled) return;
-        if (!res.ok || body.fallback || !Array.isArray(body.fields)) setError(body.error ?? `couldn’t load the settings (${res.status})`);
+        if (!res.ok || !matches(body)) {setView(null);setError("Couldn’t verify these account settings. Refresh to try again.");}
         else {
           setView(body as ParamsView);
           setError(null);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {setView(null);setError(e instanceof Error ? e.message : String(e));}
+      } finally {clearTimeout(timer);
       }
     })();
     return () => {
-      cancelled = true;
+      cancelled = true;c.abort();clearTimeout(timer);
     };
-  }, [routineId, initial]);
+  }, [routineId, initial, context?.accountId, context?.contextGeneration, tick,matches]);
 
   const cur = view?.currency ?? currency;
   const fields = (view?.fields ?? []).filter((f) => f.relevant);
   const dirty = Object.keys(edits).length > 0 || Object.keys(stepEdits).length > 0;
 
   const apply = (body: Body) => {
-    if (Array.isArray(body.fields)) setView(body as ParamsView);
+    if (matches(body)) setView(body as ParamsView);
   };
 
   async function save() {
-    if (!view) return;
+    if (!view || busy || blocked) return;
     setBusy("save");
     setError(null);
     setNote(null);
     try {
-      const res = await fetch("/api/routines/params", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ routineId, params: edits, steps: stepEdits }) });
+      const res = await fetch("/api/routines/params", { method: "PATCH", headers, body: JSON.stringify({ routineId, params: edits, steps: stepEdits, version:view.version.live,stateUpdatedAt:view.stateUpdatedAt }) });
       const body = (await res.json().catch(() => ({}))) as Body;
-      if (!res.ok) setError(body.issues?.length ? body.issues.map((i) => i.message).join(" · ") : (body.error ?? `couldn’t save (${res.status})`));
+      if (!res.ok || !matches(body)) {setError(body.issues?.length ? body.issues.map((i)=>i.message).join(" · ") : "Save not confirmed. Refresh to inspect the saved settings; no automatic retry.");}
       else {
         apply(body);
         setEdits({});
@@ -109,17 +118,18 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
   }
 
   async function act(action: "validate" | "promote" | "discard") {
+    if(!view || busy || blocked || action!=="discard" && runBlockReason)return;
     setBusy(action === "discard" ? "save" : action);
     setError(null);
     setNote(null);
     try {
-      const res = await fetch("/api/routines/params", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ routineId, action }) });
+      const res = await fetch("/api/routines/params", { method: "POST", headers, body: JSON.stringify({ routineId, action,version:view.version.live,stateUpdatedAt:view.stateUpdatedAt }) });
       const body = (await res.json().catch(() => ({}))) as Body;
-      if (!res.ok) setError(body.error ?? `${action} failed (${res.status})`);
+      if (!res.ok || !matches(body)) setError("Outcome not confirmed. Refresh to inspect the saved settings; no automatic retry.");
       else {
         apply(body);
         if (action === "validate") setNote(body.passed ? `Dry run passed (${body.run?.summary ?? "no incident"}). Promote when you’re happy.` : `Dry run did not pass: ${body.run?.summary ?? body.run?.status ?? "no summary"}. Nothing promoted.`);
-        if (action === "promote") setNote(`Promoted — v${body.version?.live ?? "?"} is live. Every run from now uses your numbers.`);
+        if (action === "promote") setNote(`Configured version v${body.version?.live ?? "?"} saved. This does not enable a routine or verify a schedule.`);
         if (action === "discard") setNote("Draft discarded. The live version stands.");
         onSaved?.();
       }
@@ -138,10 +148,12 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
         <span style={{ fontSize: 12, color: "var(--muted)" }}>{INSPECTOR_SUB}</span>
         {view && (
           <span data-testid="inspector-version" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600, color: "oklch(0.45 0.1 240)", background: "oklch(0.94 0.03 225)", borderRadius: 6, padding: "4px 10px" }}>
-            v{view.version.live} live{view.version.draft ? ` · v${view.version.draft} draft` : ""}
+            v{view.version.live} configured{view.version.draft ? ` · v${view.version.draft} draft` : ""}
           </span>
         )}
       </div>
+      <button onClick={()=>{setView(null);setError(null);setTick(n=>n+1);setEdits({});setStepEdits({});}} disabled={!!busy}>Refresh settings</button>
+      {blocked && <p role="status">{blocked}</p>}
       {error && <div style={{ fontSize: 12.5, color: "var(--amber-text)", marginTop: 10 }}>{error}</div>}
       {!view && !error && <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 10 }}>Reading the settings…</div>}
       {view && (
@@ -176,7 +188,8 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
               NO_BAND_LINE
             )}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginTop: 14 }}>
+          <fieldset disabled={!!blocked || !!busy} style={{border:0,padding:0,margin:0,minWidth:0}}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 14, marginTop: 14 }}>
             {fields.map((f) => {
               const value = edits[f.key] !== undefined ? edits[f.key] : f.value;
               const shown: ParamsField = { ...f, value };
@@ -249,15 +262,15 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
           </div>
           {(view.version.draft || note) && (
             <div data-testid="inspector-draft" style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 14, background: "var(--amber-wash)", borderRadius: 10, padding: "12px 16px", flexWrap: "wrap" }}>
-              <div style={{ fontSize: 12.5, color: "oklch(0.4 0.1 70)", lineHeight: 1.5, flex: 1, minWidth: 260 }}>{note ?? `Draft v${view.version.draft} is waiting. Run the dry-run validation, then promote it — the live version keeps running meanwhile.`}</div>
+              <div style={{ fontSize: 12.5, color: "oklch(0.4 0.1 70)", lineHeight: 1.5, flex: 1, minWidth: 260 }}>{note ?? `Draft v${view.version.draft} is waiting. Run the dry-run validation, then promote it — the configured version stays unchanged; a schedule is not verified here.`}</div>
               {view.version.draft && (
                 <>
-                  <button onClick={() => void act("validate")} disabled={busy !== null} className="btn-navy" style={{ flex: "none", padding: "8px 17px", fontSize: 12.5, fontWeight: 600 }}>
+                  <button onClick={() => void act("validate")} disabled={busy !== null || !!runBlockReason} className="btn-navy" style={{ flex: "none", padding: "8px 17px", fontSize: 12.5, fontWeight: 600 }}>
                     {busy === "validate" ? "Running…" : "Run dry-run validation"}
                   </button>
                   {view.canPromote && (
-                    <button onClick={() => void act("promote")} disabled={busy !== null} className="btn-cyan" style={{ flex: "none", padding: "8px 17px", fontSize: 12.5, fontWeight: 700 }}>
-                      {busy === "promote" ? "Promoting…" : "Promote to production"}
+                    <button onClick={() => void act("promote")} disabled={busy !== null || !!runBlockReason} className="btn-cyan" style={{ flex: "none", padding: "8px 17px", fontSize: 12.5, fontWeight: 700 }}>
+                      {busy === "promote" ? "Promoting…" : "Use validated configuration"}
                     </button>
                   )}
                   <button onClick={() => void act("discard")} disabled={busy !== null} className="hov-underline" style={{ border: "none", background: "transparent", color: "oklch(0.4 0.1 70)", fontSize: 12, cursor: "pointer", padding: 0 }}>
@@ -267,6 +280,7 @@ export default function RoutineInspector({ routineId, currency, initial, onSaved
               )}
             </div>
           )}
+          </fieldset>
         </>
       )}
     </div>

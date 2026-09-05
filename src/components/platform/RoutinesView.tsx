@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { routineBlock } from "@/lib/agents/types";
+import { saveAgentPreference } from "@/lib/agents/client";
 import type { PlatformVals } from "@/lib/platform/derive";
 import type { RunNowProps } from "./RunNowPanel";
 import RoutineDetail from "./RoutineDetail";
@@ -16,9 +18,8 @@ export type RunTarget = Omit<RunNowProps, "routineId">;
    now") plus the "Better with Gorgias connected" hint for optional sources (a nudge, never a
    block), the last run and the last draft, and a "Recommended first" chip on the agreed plan's
    phase-1 launch-wave routines. Switching one on persists routine_states.enabled
-   (POST /api/routines/state) AND dry-runs it at once (POST /api/routines/run): the row shows
-   "Running now…" then "Draft ready · view". The client-side switch is kept in step (derive's
-   toggle) so the autosave never writes the old value back. */
+   (POST /api/agents), using the same captured context/CAS as the modern catalog. No run is
+   implicitly requested. The client mirror is not a second persistence owner. */
 
 export const ROUTINES_COPY = {
   recommended: "Recommended first",
@@ -33,59 +34,29 @@ export const ROUTINES_COPY = {
   betterWith: (names: string) => `Better with ${names} connected`,
 } as const;
 
-type RunOutcome = { status: string; summary: string; drafts: number; runId: string } | { error: string };
-type RunResponse = { run?: { runId: string; status: string; summary: string; receipts: { kind: string }[] }; error?: string };
-type StateResponse = { routine?: RoutineStateView; error?: string; fallback?: boolean };
 
 const ON_KNOB = "19.5px"; // derive.ts channelRows.knobLeft when the client-side switch is on
 
 export default function RoutinesView({ V, run, initialLive = null }: { V: PlatformVals; run: RunTarget; initialLive?: RoutinesStateListing | null }) {
-  const live = useRoutinesState(run.persisted, initialLive);
+  const live = useRoutinesState(run.persisted, initialLive, { accountId: V.accountId ?? "", contextGeneration: V.contextGeneration });
+  const saving = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [running, setRunning] = useState<string | null>(null);
-  const [outcomes, setOutcomes] = useState<Record<string, RunOutcome>>({});
   const [switchErr, setSwitchErr] = useState<Record<string, string>>({});
 
   const rowsByName = Object.fromEntries(V.channelRows.map((cr) => [cr.name, cr]));
 
-  /** Keep derive's client-side switch equal to the persisted value (its toggle flips whatever it currently shows). */
-  const syncClient = (name: string, enabled: boolean) => {
-    const cr = rowsByName[name];
-    if (cr && (cr.knobLeft === ON_KNOB) !== enabled) cr.toggle();
-  };
-
   async function switchTo(r: RoutineStateView, enabled: boolean) {
-    if (busy) return;
-    setBusy(r.routineId);
-    setSwitchErr((e) => ({ ...e, [r.routineId]: "" }));
+    const snapshot=live.eligibility;
+    const row=snapshot?.routines.find(x=>x.routineId===r.routineId);
+    if(saving.current || live.loading || !snapshot || !row || snapshot.role!=="owner" || enabled && routineBlock(snapshot,r.routineId,"select"))return;
+    saving.current=true;setBusy(r.routineId);setSwitchErr(e=>({...e,[r.routineId]:""}));
+    const c=new AbortController();const timer=setTimeout(()=>c.abort(),20_000);
     try {
-      const res = await fetch("/api/routines/state", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ routineId: r.routineId, enabled }) });
-      const data = (await res.json().catch(() => ({}))) as StateResponse;
-      if (!res.ok || !data.routine) {
-        setSwitchErr((e) => ({ ...e, [r.routineId]: data.error ?? `couldn’t save that (${res.status})` }));
-        return;
-      }
-      live.patch(data.routine);
-      syncClient(r.name, enabled);
-      if (!enabled) return;
-      // On → dry run now. The draft lands in "What I drafted" and on this row.
-      setRunning(r.routineId);
-      try {
-        const rr = await fetch("/api/routines/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountId: run.accountId, routineId: r.routineId, account: run.account }) });
-        const rd = (await rr.json().catch(() => ({}))) as RunResponse;
-        if (!rr.ok || !rd.run) setOutcomes((o) => ({ ...o, [r.routineId]: { error: rd.error ?? `run failed (${rr.status})` } }));
-        else setOutcomes((o) => ({ ...o, [r.routineId]: { status: rd.run!.status, summary: rd.run!.summary, drafts: rd.run!.receipts.filter((x) => x.kind === "draft").length, runId: rd.run!.runId } }));
-      } catch (e) {
-        setOutcomes((o) => ({ ...o, [r.routineId]: { error: e instanceof Error ? e.message : String(e) } }));
-      } finally {
-        setRunning(null);
-        live.refresh();
-      }
-    } catch (e) {
-      setSwitchErr((x) => ({ ...x, [r.routineId]: e instanceof Error ? e.message : String(e) }));
-    } finally {
-      setBusy(null);
-    }
+      const saved=await saveAgentPreference(snapshot,row,enabled,fetch,c.signal);
+      V.setRoutineLocal(r.routineId,saved.enabled);
+    } catch {
+      setSwitchErr(e=>({...e,[r.routineId]:"Save not confirmed. Checking the saved switch; no run or retry was requested."}));
+    } finally {clearTimeout(timer);saving.current=false;setBusy(null);live.refresh();}
   }
 
   const accounts = run.persisted;
@@ -93,11 +64,6 @@ export default function RoutinesView({ V, run, initialLive = null }: { V: Platfo
   const anyOn = !!liveRows?.some((r) => r.enabled);
 
   function statusLine(r: RoutineStateView): { text: string; tone: "cyan" | "muted" | "amber"; view: boolean } {
-    if (running === r.routineId) return { text: ROUTINES_COPY.running, tone: "cyan", view: false };
-    const o = outcomes[r.routineId];
-    if (o && "error" in o) return { text: `Couldn’t run it: ${o.error}`, tone: "amber", view: false };
-    if (o && o.drafts > 0) return { text: `${ROUTINES_COPY.draftReady} ·`, tone: "cyan", view: true };
-    if (o) return { text: `${runStatusLabel(o.status)} — ${o.summary}`, tone: "muted", view: true };
     if (r.lastRun) {
       const bits = [`Last run ${agoLabel(r.lastRun.at)} · ${runStatusLabel(r.lastRun.status)}`];
       if (r.lastDraft) bits.push(`${ROUTINES_COPY.draftReady} ·`);
@@ -108,6 +74,7 @@ export default function RoutinesView({ V, run, initialLive = null }: { V: Platfo
 
   return (
     <div style={{ maxWidth: 1020, margin: "0 auto", padding: "50px 48px 96px" }}>
+      {accounts && <p>Selections save preferences only. Runs and schedules require their own eligibility checks.</p>}
       {V.noSel && (
         <>
           {V.catAll && (
@@ -212,14 +179,14 @@ export default function RoutinesView({ V, run, initialLive = null }: { V: Platfo
                     .map((r) => {
                       const cr = rowsByName[r.name];
                       const on = r.enabled;
-                      const disabled = busy === r.routineId || (!on && !r.canEnable);
+                      const disabled = !!busy || live.loading || live.eligibility?.role!=="owner" || (!on && !!routineBlock(live.eligibility ?? null,r.routineId,"select"));
                       const sl = statusLine(r);
                       return (
                         <div key={r.routineId} data-testid={`routine-${r.routineId}`} data-enabled={on ? "1" : "0"} style={{ display: "flex", alignItems: "center", gap: 16, background: "white", border: `1px solid ${r.recommended && !on ? "oklch(0.78 0.13 220 / 0.6)" : "var(--card-border)"}`, borderRadius: 13, padding: "16px 20px" }}>
                           <button
                             onClick={() => void switchTo(r, !on)}
                             disabled={disabled}
-                            title={on ? "Switch off" : r.canEnable ? "Switch on — dry-runs now" : r.availabilityCopy}
+                            title={on ? "Switch off" : r.canEnable ? "Select routine — no run starts" : r.availabilityCopy}
                             aria-label={`${r.name} — ${on ? "on" : "off"}`}
                             style={{ flex: "none", width: 40, height: 23, borderRadius: 999, border: "none", background: on ? "oklch(0.72 0.17 150)" : "oklch(0.88 0.015 260)", position: "relative", cursor: disabled ? "not-allowed" : "pointer", opacity: !on && !r.canEnable ? 0.55 : 1, transition: "background 0.25s" }}
                           >
@@ -245,7 +212,6 @@ export default function RoutinesView({ V, run, initialLive = null }: { V: Platfo
                             </div>
                             {(sl.text || switchErr[r.routineId]) && (
                               <div data-testid="routine-status" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginTop: 5, fontWeight: 500, color: switchErr[r.routineId] ? "var(--amber-text)" : sl.tone === "cyan" ? "var(--cyan-text)" : sl.tone === "amber" ? "var(--amber-text)" : "var(--muted)" }}>
-                                {running === r.routineId && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan-link)", animation: "jpulse 1.6s infinite", flex: "none" }}></span>}
                                 <span>{switchErr[r.routineId] || sl.text}</span>
                                 {sl.view && !switchErr[r.routineId] && (
                                   <button onClick={cr?.how} className="hov-underline" style={{ border: "none", background: "transparent", color: "var(--cyan-link)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
@@ -266,7 +232,7 @@ export default function RoutinesView({ V, run, initialLive = null }: { V: Platfo
           )}
         </>
       )}
-      {V.hasSel && <RoutineDetail V={V} run={run} live={accounts ? live : null} />}
+      {V.hasSel && <RoutineDetail key={`${V.accountId}:${V.contextGeneration}:${V.selId}`} V={V} run={run} live={accounts ? live : null} />}
     </div>
   );
 }

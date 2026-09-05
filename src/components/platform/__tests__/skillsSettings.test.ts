@@ -80,7 +80,7 @@ describe("Sidebar + RoutineDetail", () => {
     expect(renderToStaticMarkup(createElement(Sidebar, { V }))).not.toContain("sidebar-skills");
   });
 
-  it("routine detail says 'Powered by your n8n workflow' only when the listing says n8n", () => {
+  it("routine detail distinguishes n8n registration from execution proof", () => {
     const base = (source: "n8n" | "builtin"): RoutinesStateListing => ({
       routines: [{ routineId: "D01-W01", name: "Founder content engine", category: "Content", wave: 1, enabled: true, version: 1, availability: "draft_only", availabilityCopy: "drafts only", canEnable: true, betterWith: [], betterWithCopy: null, recommended: false, lastRun: null, lastDraft: null, skillSource: source }],
       recommendedFirst: [],
@@ -92,7 +92,8 @@ describe("Sidebar + RoutineDetail", () => {
     const run = { accountId: ACCT, account: { currency: "NZD", budgetMonthly: 3000 }, persisted: true };
     const withN8n = renderToStaticMarkup(createElement(RoutineDetail, { V: derive(S, noop), run, live: { data: base("n8n"), loading: false, error: null, refresh: noop } as unknown as Parameters<typeof RoutineDetail>[0]["live"] }));
     expect(withN8n).toContain('data-testid="skill-source-n8n"');
-    expect(withN8n).toContain("Powered by your n8n workflow");
+    expect(withN8n).toContain("An n8n workflow is registered.");
+    expect(withN8n).toContain("Registration alone is not execution proof.");
     const builtin = renderToStaticMarkup(createElement(RoutineDetail, { V: derive(S, noop), run, live: { data: base("builtin"), loading: false, error: null, refresh: noop } as unknown as Parameters<typeof RoutineDetail>[0]["live"] }));
     expect(builtin).not.toContain("skill-source-n8n");
   });

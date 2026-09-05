@@ -5,6 +5,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { RoutinesStateListing, RoutineStateView } from "@/lib/runtime/routinesState";
+import { isAgentSnapshot, readAgents, type AgentContext } from "@/lib/agents/client";
+import type { AgentsSnapshot } from "@/lib/agents/types";
 
 export type { RoutinesStateListing, RoutineStateView };
 
@@ -13,43 +15,42 @@ export interface RoutinesLive {
   active: boolean;
   loading: boolean;
   data: RoutinesStateListing | null;
+  eligibility?: AgentsSnapshot | null;
   error: string | null;
   refresh: () => void;
   /** Patch one routine in place (after a switch / a run) without waiting for the refetch. */
   patch: (routine: RoutineStateView) => void;
 }
 
-export function useRoutinesState(enabled: boolean, initial: RoutinesStateListing | null = null): RoutinesLive {
+export function useRoutinesState(enabled: boolean, initial: RoutinesStateListing | null = null, context?: AgentContext): RoutinesLive {
   const [data, setData] = useState<RoutinesStateListing | null>(initial);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(enabled && !initial);
   const [tick, setTick] = useState(0);
+  const accountId=context?.accountId; const contextGeneration=context?.contextGeneration;
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    const c=new AbortController();const timer=setTimeout(()=>c.abort(),20_000);
     (async () => {
       try {
-        const res = await fetch("/api/routines/state", { cache: "no-store" });
-        const body = (await res.json().catch(() => ({}))) as Partial<RoutinesStateListing> & { fallback?: boolean; error?: string };
+        if (!accountId || !Number.isSafeInteger(contextGeneration)) throw new Error("Account context is unavailable.");
+        const body = await readAgents({accountId,contextGeneration:contextGeneration!},fetch,c.signal);
         if (cancelled) return;
-        if (!res.ok || body.fallback || !Array.isArray(body.routines)) {
-          setData(null);
-          setError(body.error ?? (body.fallback ? "routine state is unavailable — nothing is verified as running." : res.status === 401 ? "your session expired — sign in again." : `couldn’t load routines (${res.status})`));
-        } else {
-          setData(body as RoutinesStateListing);
-          setError(null);
-        }
+        setData(body);setError(null);
       } catch (e) {
         if (!cancelled) { setData(null); setError(e instanceof Error ? e.message : String(e)); }
       } finally {
+        clearTimeout(timer);
         if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
+      c.abort();clearTimeout(timer);
     };
-  }, [enabled, tick]);
+  }, [enabled, tick, accountId, contextGeneration]);
 
   const patch = useCallback((routine: RoutineStateView) => {
     setData((d) => (d ? { ...d, routines: d.routines.map((r) => (r.routineId === routine.routineId ? routine : r)) } : d));
@@ -59,8 +60,10 @@ export function useRoutinesState(enabled: boolean, initial: RoutinesStateListing
     setLoading(true);
     setTick((n) => n + 1);
   }, []);
+  useEffect(()=>{if(!enabled)return;const visible=()=>{if(document.visibilityState==="visible")refresh();};document.addEventListener("visibilitychange",visible);return()=>document.removeEventListener("visibilitychange",visible);},[enabled,refresh]);
 
-  return { active: data !== null, loading: loading || (enabled && data === null && error === null), data, error, refresh, patch };
+  const eligibility = !loading && context && isAgentSnapshot(data,context) ? data : null;
+  return { active: data !== null, loading: loading || (enabled && data === null && error === null), data, eligibility, error, refresh, patch };
 }
 
 /** "2h ago" · "just now" · "3d ago" — for the last-run line. */

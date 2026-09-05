@@ -21,8 +21,8 @@ import { modelFromProfile, type BusinessModel } from "../unc/businessType";
 import { availabilityCopy, betterWith, betterWithCopy, canEnable, fitsBusiness, routineAvailability, type Availability } from "./availability";
 import { CATALOG_SPECS, CATALOG_SPEC_BY_ID } from "./catalog-specs";
 import type { Store } from "./store/interface";
-import type { Receipt, RunStatus } from "./types";
-import { getOrInitState, setEnabled } from "./versioning";
+import type { Receipt, RunStatus, RoutineSpec } from "./types";
+import { effectiveSpec, getOrInitState, setEnabled } from "./versioning";
 
 export interface RoutineLastRun {
   id: string;
@@ -61,6 +61,8 @@ export interface RoutineStateView {
 }
 
 export interface RoutinesStateListing {
+  /** Requested routine's actual promoted/catalog configuration; not execution evidence. */
+  spec?: RoutineSpec;
   routines: RoutineStateView[];
   /** Phase-1, wave-1 routine ids from the agreed plan, in plan order. */
   recommendedFirst: string[];
@@ -147,9 +149,10 @@ export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId
   const recommendedFirst = recommendedFirstFrom(phases).filter((id) => fitsBusiness({ id }, business));
   const planChannel = recommendedFirst.length ? (catalog.get(recommendedFirst[0])?.cat ?? null) : phaseOneRoutineIds(phases).length ? (catalog.get(phaseOneRoutineIds(phases)[0])?.cat ?? null) : null;
 
-  const routines: RoutineStateView[] = CATALOG_SPECS.map((spec) => {
-    const def = catalog.get(spec.id);
-    const st = stateById.get(spec.id);
+  const routines: RoutineStateView[] = CATALOG_SPECS.map((base) => {
+    const def = catalog.get(base.id);
+    const st = stateById.get(base.id);
+    const spec = st ? effectiveSpec(st, base) : base;
     const availability = routineAvailability(spec, connected, business);
     const helpful = betterWith(spec, connected, business);
     return {
@@ -173,8 +176,11 @@ export async function routinesStateForAccount(deps: RoutinesStateDeps, accountId
 
   const out: RoutinesStateListing = { routines, recommendedFirst, planChannel, connected, business };
   if (opts.routineId) {
+    const base = CATALOG_SPEC_BY_ID[opts.routineId];
+    const state = stateById.get(opts.routineId);
+    if (base) out.spec = state ? effectiveSpec(state, base) : base;
     const last = lastRunById.get(opts.routineId);
-    out.lastRunReceipts = last ? (await deps.store.listReceipts(accountId, { runId: last.id })).map(receiptLine) : [];
+    out.lastRunReceipts = last ? (await deps.store.listReceipts(accountId, { runId: last.id, ...(opts.contextGeneration !== undefined ? { contextGeneration: opts.contextGeneration } : {}) })).map(receiptLine) : [];
   }
   return out;
 }

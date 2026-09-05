@@ -11,6 +11,8 @@ vi.mock("@/lib/db/runtimeContext",()=>({assertRuntimeContext:async()=>{}}));
 vi.mock("@/lib/runtime/store",()=>({getStore:()=>({})}));
 vi.mock("@/lib/runtime/routinesState",()=>({routinesStateForAccount:listing}));
 import {GET,POST} from "@/app/api/agents/route";
+import {GET as legacyGet,POST as legacyPost} from "@/app/api/routines/state/route";
+import {POST as setupPost} from "@/app/api/setup/enable/route";
 const request=(body?:unknown,account=A,generation="1")=>new Request("https://unc.test/api/agents",{method:body===undefined?"GET":"POST",headers:{"content-type":"application/json","x-unc-account-id":account,"x-unc-context-generation":generation},...(body===undefined?{}:{body:JSON.stringify(body)})});
 const change={routineId:"D01-W01",enabled:true,stateUpdatedAt:null,version:1};
 beforeEach(()=>{
@@ -19,6 +21,17 @@ beforeEach(()=>{
   listing.mockReset();listing.mockResolvedValue({routines:[{routineId:"D01-W01",enabled:false,version:1,canEnable:true,skillSource:"builtin",availabilityCopy:"drafts only"}],connected:[],business:{},recommendedFirst:[],planChannel:null});
 });
 describe("account-bound Agents API",()=>{
+  it("uses one contract on every legacy switch URL and refuses old revision-less writes",async()=>{
+    expect(legacyGet).toBe(GET);expect(legacyPost).toBe(POST);expect(setupPost).toBe(POST);
+    for(const handler of [legacyPost,setupPost])expect((await handler(request({routineId:"D01-W01",enabled:true}))).status).toBe(400);
+    expect(listing).not.toHaveBeenCalled();
+  });
+  it("passes exact requested detail into current-generation history and refuses unknown queries",async()=>{
+    const r=request();const detailed=new Request(r.url+"?routineId=D01-W01",{headers:r.headers});
+    expect((await GET(detailed)).status).toBe(200);expect(listing).toHaveBeenLastCalledWith(expect.anything(),A,{routineId:"D01-W01",contextGeneration:1});
+    expect((await GET(new Request(r.url+"?routineId=made-up",{headers:r.headers}))).status).toBe(400);
+    expect((await GET(new Request(r.url+"?routineId=D01-W01&routineId=D02-W01",{headers:r.headers}))).status).toBe(400);
+  });
   it("marks authentication and context denials private and non-cacheable",async()=>{
     expect((await GET(request(undefined,U))).headers.get("cache-control")).toBe("private, no-store");
     session=Response.json({error:"sign in"},{status:401});const r=await GET(request());expect(r.status).toBe(401);expect(r.headers.get("cache-control")).toBe("private, no-store");
