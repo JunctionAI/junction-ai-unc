@@ -59,13 +59,19 @@ current six-week contract and remains unenabled until that gap is versioned and
 tested. H1's daily source/learning review remains internal continuity
 infrastructure, not an eighth customer switch.
 
-The release candidate passes **3,237 tests / 243 files**, app and worker
-TypeScript, production build, lint with zero errors and diff checks. No provider
+The release passes **3,237 tests / 243 files**, app and worker TypeScript,
+production build, lint with zero errors and diff checks. Exact source
+`468578aa37b0773785252ddbdaba06e1e4573832` is live as Vercel deployment
+`dpl_9CkSX6VmRjnWYLzQE7zd7EYGrJDj` and Fly worker release 45. Canonical app
+health reports SHA `468578aa37b0`, database healthy and a fresh worker; the sole
+Sydney worker reports the full matching SHA, dry-run mode, zero runs started and
+all command, messaging, live-action, TNZ SMS and Apple Messages flags false.
+Bounded post-release Vercel error/fatal scans returned no entries. No provider
 request or outward action was made. [Adoption evidence and remaining acceptance](integration/CLIENT-ROUTINE-ADOPTION-2026-09-06.md).
 
-**Next vertical slice:** deploy this exact accepted source, independently verify
-the production catalog and health identity, then bind one approved real H1 brief
-to a source-grounded draft without activating Slack or provider delivery.
+**Next vertical slice:** bind one approved real H1 brief to a source-grounded
+draft and independently verify the durable artifact/receipt, without activating
+Slack or provider delivery.
 
 ## Previous state — Batch 89, 6 September NZ
 
