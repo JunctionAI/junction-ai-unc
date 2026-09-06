@@ -9,7 +9,7 @@ export interface OpsSourceBinding {
   id: string; accountId: string; sourceSystem: string; sourceProject: string;
   sourceKind: string; sourceKey: string; displayName: string;
   status: "verified" | "superseded"; evidenceRef: string; revision: number;
-  verifiedAt: string; verifiedBy: string;
+  verifiedAt: string; verifiedBy: string; sourceReadAuthorized: boolean;
 }
 export interface OpsDetail {
   accountId: string; contextGeneration: number;

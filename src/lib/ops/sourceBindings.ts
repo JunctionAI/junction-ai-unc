@@ -20,6 +20,7 @@ export const sourceBindingSchema = z.object({
   revision: z.number().int().nonnegative(),
   verifiedAt: z.string().refine(value => Number.isFinite(Date.parse(value))),
   verifiedBy: uuid,
+  sourceReadAuthorized: z.boolean().optional().default(false),
 });
 export type SourceBinding = z.infer<typeof sourceBindingSchema>;
 

@@ -39,6 +39,24 @@ compare-and-swap and function-ACL cases with zero provider and zero remote calls
 The operator API separately rejects unsigned, cross-origin, malformed, oversized,
 foreign-account and stale requests.
 
+The Mission Control table inventory reports 65 existing tables with RLS disabled.
+A separate privilege readback across every `h1`, `dbh`, `nzph` and `junction`
+table found no `SELECT`, `INSERT`, `UPDATE` or `DELETE` privilege for either
+`anon` or `authenticated`. The advisory therefore remains hardening debt, but
+the checked browser roles are not currently granted access to those tables.
+Do not blanket-enable RLS without mapping the existing database-role callers;
+that could interrupt the working ingestion jobs.
+
+## Application release
+
+Source `68d975298e87d9405db1e3916d6ac8a3974e2403` is live as Vercel deployment
+`dpl_HLBvtt6JxRhpBk32C5kd7aAFMuuh`. Candidate and canonical health report the
+matching source, a healthy database and fresh compatible worker. Anonymous source
+reads return 401 with private/no-store caching. The signed-in ops console shows
+the exact AVGAR binding and a second isolated Deep Blue Health binding after
+reload; DBH still truthfully shows zero login members, zero dated connector reads
+and zero enabled routines.
+
 ## What this unlocks next
 
 Each client's source read adapter and routine registry can now resolve from a

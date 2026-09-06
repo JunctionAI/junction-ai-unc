@@ -24,9 +24,11 @@ try{
     create table public.ops_account_access(user_id uuid,account_id uuid,granted_at timestamptz default now(),granted_by uuid not null,reason text not null,revoked_at timestamptz,expires_at timestamptz,primary key(user_id,account_id));
     grant usage on schema auth,public to service_role;grant all on all tables in schema auth,public to service_role;`);
   await admin.query(await readFile(new URL('../supabase/migrations/20260906002000_account_source_bindings.sql',import.meta.url),'utf8'));
+  await admin.query(await readFile(new URL('../supabase/migrations/20260906011000_ops_source_read_authority.sql',import.meta.url),'utf8'));
+  await admin.query(await readFile(new URL('../supabase/migrations/20260906011200_source_read_status.sql',import.meta.url),'utf8'));
   await admin.query('insert into auth.users values($1),($2)',[actor,peer]);
   await admin.query('insert into accounts values($1,1),($2,1)',[a,b]);
-  await admin.query("insert into ops_account_access(user_id,account_id,granted_by,reason,source_binding_granted_at,source_binding_granted_by,source_binding_reason) values($1,$2,$1,'Isolated operator read grant',now(),$1,'Isolated source binding grant'),($1,$3,$1,'Isolated operator read grant',now(),$1,'Isolated source binding grant')",[actor,a,b]);
+  await admin.query("insert into ops_account_access(user_id,account_id,granted_by,reason,source_binding_granted_at,source_binding_granted_by,source_binding_reason,source_read_granted_at,source_read_granted_by,source_read_reason) values($1,$2,$1,'Isolated operator read grant',now(),$1,'Isolated source binding grant',now(),$1,'Isolated source read grant'),($1,$3,$1,'Isolated operator read grant',now(),$1,'Isolated source binding grant',now(),$1,'Isolated source read grant')",[actor,a,b]);
   const args=[actor,a,1,'mission_control','project-one','public.client_accounts','source-1','Client A','verified','isolated source row evidence',null];
   for(const role of ['anon','authenticated']){await operator.query(`set role ${role}`);await assert.rejects(operator.query('select public.upsert_ops_account_source_binding($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',args),{code:'42501'});}
   await operator.query('set role service_role');
@@ -39,13 +41,21 @@ try{
   saved=(await operator.query('select public.upsert_ops_account_source_binding($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) value',update)).rows[0].value;
   assert.equal(saved.displayName,'Client A renamed');assert.equal(saved.revision,1);
   let read=(await operator.query('select public.read_ops_account_source_bindings($1,$2) value',[actor,a])).rows[0].value;
-  assert.equal(read.length,1);assert.equal(read[0].sourceKey,'source-1');
+  assert.equal(read.length,1);assert.equal(read[0].sourceKey,'source-1');assert.equal(read[0].sourceReadAuthorized,true);
+  const authorized=(await operator.query('select public.authorize_ops_account_source_read($1,$2,$3,$4) value',[actor,a,1,saved.id])).rows[0].value;
+  assert.equal(authorized.id,saved.id);assert.equal(authorized.accountId,a);
+  await assert.rejects(operator.query('select public.authorize_ops_account_source_read($1,$2,$3,$4)',[peer,a,1,saved.id]),{code:'42501'});
+  await assert.rejects(operator.query('select public.authorize_ops_account_source_read($1,$2,$3,$4)',[actor,a,2,saved.id]),{code:'PT409'});
   await assert.rejects(operator.query('select public.read_ops_account_source_bindings($1,$2)',[peer,a]),{code:'42501'});
+  await admin.query('update ops_account_access set source_read_granted_at=null,source_read_granted_by=null,source_read_reason=null where account_id=$1',[a]);
+  await assert.rejects(operator.query('select public.authorize_ops_account_source_read($1,$2,$3,$4)',[actor,a,1,saved.id]),{code:'42501'});
+  read=(await operator.query('select public.read_ops_account_source_bindings($1,$2) value',[actor,a])).rows[0].value;
+  assert.equal(read[0].sourceReadAuthorized,false);
   await admin.query('update ops_account_access set source_binding_granted_at=null,source_binding_granted_by=null,source_binding_reason=null where account_id=$1',[a]);
   await assert.rejects(operator.query('select public.upsert_ops_account_source_binding($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',update),{code:'42501'});
   await admin.query('update ops_account_access set revoked_at=now() where account_id=$1',[a]);
   await assert.rejects(operator.query('select public.read_ops_account_source_bindings($1,$2)',[actor,a]),{code:'42501'});
-  const acl=(await admin.query("select p.proname,p.prosecdef,p.proconfig,has_function_privilege('anon',p.oid,'execute') anon,has_function_privilege('authenticated',p.oid,'execute') authenticated,has_function_privilege('service_role',p.oid,'execute') server from pg_proc p where p.proname in ('upsert_ops_account_source_binding','read_ops_account_source_bindings') order by p.proname")).rows;
+  const acl=(await admin.query("select p.proname,p.prosecdef,p.proconfig,has_function_privilege('anon',p.oid,'execute') anon,has_function_privilege('authenticated',p.oid,'execute') authenticated,has_function_privilege('service_role',p.oid,'execute') server from pg_proc p where p.proname in ('upsert_ops_account_source_binding','read_ops_account_source_bindings','authorize_ops_account_source_read') order by p.proname")).rows;
   assert(acl.every(x=>!x.prosecdef&&x.proconfig?.includes('search_path=""')&&!x.anon&&!x.authenticated&&x.server));
-  console.log(JSON.stringify({status:'PASS',checks:['browser roles refused','exact account and generation required','one source cannot bind two accounts','compare-and-swap update','unknown and revoked operators refused','service-only invoker functions'],providerCalls:0,remoteDatabaseCalls:0},null,2));
+  console.log(JSON.stringify({status:'PASS',checks:['browser roles refused','exact account and generation required','one source cannot bind two accounts','compare-and-swap update','separate source-read authority','unknown and revoked operators refused','service-only invoker functions'],providerCalls:0,remoteDatabaseCalls:0},null,2));
 }finally{for(const c of clients)await c.end().catch(()=>{});await cluster.stop().catch(()=>{});}

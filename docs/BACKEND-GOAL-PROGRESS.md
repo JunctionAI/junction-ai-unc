@@ -62,11 +62,18 @@ The isolated PostgreSQL verifier passes browser-role refusal, account generation
 source uniqueness, revision races, revoked operators and function ACLs with zero
 provider calls. The operator HTTP contract adds exact-account reads and bounded,
 same-origin writes; its seven focused tests, app TypeScript and changed-file lint
-pass. [Contract and exact binding inventory](integration/ACCOUNT-SOURCE-BINDINGS-2026-09-06.md).
+pass. Source `68d975298e87d9405db1e3916d6ac8a3974e2403` is live as Vercel
+`dpl_HLBvtt6JxRhpBk32C5kd7aAFMuuh`. Candidate/canonical health, anonymous 401 and
+signed-in exact AVGAR plus isolated DBH source display pass after reload. DBH still
+shows zero login members, dated connector reads and enabled routines; no source
+binding is mislabeled as readiness. The Mission Control RLS advisory remains
+hardening debt, but an independent all-table privilege read found no browser-role
+read or write grants in the four checked custom schemas. Do not blanket-enable
+RLS without mapping existing job roles. [Contract, release and exact binding inventory](integration/ACCOUNT-SOURCE-BINDINGS-2026-09-06.md).
 
-**Next vertical slice:** deploy and signed-in verify the operator API, then use
-these stable identities to bind one fresh source read and eligible routine per
-client. Customer-facing membership and outward-action authority stay separate.
+**Next vertical slice:** use these stable identities to bind one fresh source read
+and eligible routine per client. Customer-facing membership and outward-action
+authority stay separate.
 
 ## Previous state — Batch 86, 6 September NZ
 
