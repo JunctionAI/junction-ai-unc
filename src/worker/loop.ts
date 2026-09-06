@@ -40,6 +40,7 @@ import { keyringFromEnv } from "../lib/connectors/crypto";
 import type { SelfReviewLlm } from "../lib/telemetry/selfReview";
 import { readTimezone, type BriefLlm } from "../lib/brain/brief";
 import { runCommandsTick } from "./commands";
+import { runSeoPackagesTick } from "./seoPackages";
 
 export interface WorkerOptions {
   /** Seconds between ticks. Default 60. */
@@ -165,6 +166,7 @@ export class Worker {
     try {
       if (!this.stopping && Date.now() - t0 < this.tickBudgetMs)
         await runCommandsTick(this.deps, this.adapters, Math.max(0, this.tickBudgetMs - (Date.now() - t0)));
+        if(this.deps.db && Date.now()-t0<this.tickBudgetMs) await runSeoPackagesTick(this.deps.db);
     } catch {
       this.log.warn("commands.tick_failed", { reason: "command queue unavailable; queued work was not acknowledged as complete" });
     }
