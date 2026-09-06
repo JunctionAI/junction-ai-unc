@@ -23,6 +23,7 @@ try{
     create table dbh.email_campaigns(like h1.email_campaigns including all);
     grant usage on schema public,junction,h1,dbh to service_role;grant select on h1.email_campaigns,dbh.email_campaigns to service_role;`);
   await admin.query(await readFile(new URL('../integrations/mission-control/supabase/migrations/20260906010000_unc_source_read_contract.sql',import.meta.url),'utf8'));
+  await admin.query(await readFile(new URL('../integrations/mission-control/supabase/migrations/20260906012000_unc_source_read_definer.sql',import.meta.url),'utf8'));
   await admin.query("insert into junction.unc_source_read_grants(account_id,source_project,source_kind,source_key,warehouse_schema,dataset,granted_by,reason) values($1,'ebcatvidixdjjwmmades','junction.client_orgs','h1','h1','email_campaigns','isolated verifier','Exact isolated source grant')",[account]);
   await admin.query("insert into h1.email_campaigns(id,campaign_id,name,subject,sent_at,recipients,open_rate,revenue,metrics_updated_at,updated_at) values($1,'campaign-1','Sent one','Subject one','2026-09-05T00:00:00Z',100,0.5,250,'2026-09-05T01:00:00Z','2026-09-05T01:00:00Z'),($2,'campaign-2','Draft','Draft subject',null,0,0,0,now(),now())",[randomUUID(),randomUUID()]);
   const args=[account,'ebcatvidixdjjwmmades','junction.client_orgs','h1',500];
@@ -35,7 +36,7 @@ try{
   await assert.rejects(reader.query('select public.read_unc_source_email_campaigns($1,$2,$3,$4,$5)',[...args.slice(0,4),501]),{code:'22023'});
   await admin.query('update junction.unc_source_read_grants set revoked_at=now() where account_id=$1',[account]);
   await assert.rejects(reader.query('select public.read_unc_source_email_campaigns($1,$2,$3,$4,$5)',args),{code:'42501'});
-  const acl=(await admin.query("select p.prosecdef,p.proconfig,has_function_privilege('anon',p.oid,'execute') anon,has_function_privilege('authenticated',p.oid,'execute') authenticated,has_function_privilege('service_role',p.oid,'execute') server from pg_proc p where p.proname='read_unc_source_email_campaigns'")).rows[0];
-  assert(!acl.prosecdef&&acl.proconfig?.includes('search_path=""')&&!acl.anon&&!acl.authenticated&&acl.server);
-  console.log(JSON.stringify({status:'PASS',checks:['browser roles refused','exact account and source identity','sent campaigns only','no raw or message copy','bounded rows','revocation','service-only invoker function'],providerCalls:0,remoteDatabaseCalls:0},null,2));
+  const acl=(await admin.query("select p.prosecdef,p.proconfig,has_function_privilege('anon',p.oid,'execute') anon,has_function_privilege('authenticated',p.oid,'execute') authenticated,has_function_privilege('service_role',p.oid,'execute') server,has_table_privilege('service_role','h1.email_campaigns','select') h1_direct,has_table_privilege('service_role','dbh.email_campaigns','select') dbh_direct from pg_proc p where p.proname='read_unc_source_email_campaigns'")).rows[0];
+  assert(acl.prosecdef&&acl.proconfig?.includes('search_path=""')&&!acl.anon&&!acl.authenticated&&acl.server&&!acl.h1_direct&&!acl.dbh_direct);
+  console.log(JSON.stringify({status:'PASS',checks:['browser roles refused','exact account and source identity','sent campaigns only','no raw or message copy','bounded rows','revocation','service-only definer function','no direct service-role campaign-table read'],providerCalls:0,remoteDatabaseCalls:0},null,2));
 }finally{for(const c of clients)await c.end().catch(()=>{});await cluster.stop().catch(()=>{});}

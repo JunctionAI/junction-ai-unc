@@ -38,7 +38,41 @@ approval cannot be inferred. Delegated patches are isolated, bounded, tested and
 reviewed before integration. Publishing, customer campaigns, ad mutation and
 spend remain separately authorized actions.
 
-## Latest state — Batch 87, 6 September NZ
+## Latest state — Batch 88, 6 September NZ
+
+**The first governed existing-client stored-data bridge is released and proven
+through the signed-in production console.** Home1nvasion and Deep Blue Health
+now have exact account/source bindings plus separate, fresh operator source-read
+authority. The bridge reads bounded normalized campaign rows already stored in
+Mission Control; it does not make a new Klaviyo call, mark a connector connected,
+enable a routine or grant client login/action authority.
+
+Production browser acceptance at `2026-09-06T01:00Z` returned 73 sent H1
+campaigns (source max `2026-09-05T19:08:11.737281Z`) and 195 sent DBH campaigns
+(source max `2026-09-05T18:42:53.175923Z`). The H1 figure is lower than the 86
+warehouse rows because the contract intentionally excludes unsent rows. AVGAR's
+verified source binding displayed no source-read authority and no read control.
+
+The source Edge Function accepts only server-to-server calls with the rotated
+shared secret, exact allowlisted account/source identity and a maximum 500 rows.
+Its database RPC is `SECURITY DEFINER` so the trusted bridge can execute the
+allowlisted read, while `service_role`, `anon` and `authenticated` retain no
+direct SELECT on the H1/DBH tables; browser roles cannot execute the RPC.
+Unauthenticated function calls return 401, browser-origin calls return 403, and
+the Unc HTTP endpoint returns 401 without a verified operator session. No raw
+provider payloads, contact/customer PII or email body copy cross the bridge.
+
+Canonical production is Vercel `dpl_DDfK1oSjv48oq4d426YM4S7HPytk`, rebuilt from
+the accepted `e0e7e58ecb3dee4a4adb578a39c8da3d372d92a4` application release after
+secret rotation. Database and worker health pass. [Contract, controls and live
+receipts](integration/MISSION-CONTROL-SOURCE-READ-2026-09-06.md).
+
+**Next vertical slice:** persist normalized source rows as separately identified
+source-backed datasets, without pretending provider OAuth is connected, then
+bind one eligible read/draft routine to those datasets and prove useful results.
+Source age remains visible and must satisfy each routine's freshness policy.
+
+## Previous state — Batch 87, 6 September NZ
 
 **Canonical account-to-source identity is implemented in production data and
 verified for five existing clients.** This closes the name-matching gap without

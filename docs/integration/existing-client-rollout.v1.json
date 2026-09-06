@@ -1,14 +1,15 @@
 {
   "schema": "unc.existing-client-rollout.v1",
-  "observedAt": "2026-09-06T00:31:58.670623Z",
-  "status": "verified_source_bindings_not_membership_or_runtime",
+  "observedAt": "2026-09-06T01:00:38.000Z",
+  "status": "two_governed_stored_source_reads_verified_not_provider_or_runtime",
   "ownerDirection": "Hyperagent is reference configuration/history/channel inventory, not target execution. Junction owns runtime identity, permissions, routing, stored data and approved structured routine execution; preserve the same client Slack channels through controlled cutover.",
   "sources": {
     "nativeRoster": "https://hyperagent.com/agents",
     "priorAudit": "docs/integration/NATIVE-CLIENT-SYSTEMS-2026-09-06.md",
     "uncDatabaseReadAt": "2026-09-05T21:54:47.921082Z",
     "h1WarehouseReadAt": "2026-09-05T21:54:58.597027Z",
-    "uncSourceBindingReadAt": "2026-09-06T00:31:58.670623Z"
+    "uncSourceBindingReadAt": "2026-09-06T00:31:58.670623Z",
+    "uncGovernedSourceReadAt": "2026-09-06T01:00:38.000Z"
   },
   "authority": {
     "activate": false,
@@ -17,6 +18,17 @@
     "spend": false,
     "createClientMembership": false,
     "changeNativeAgent": false
+  },
+  "governedStoredSourceReads": {
+    "contract": "junction.source.email-campaigns.v1",
+    "sourceProject": "ebcatvidixdjjwmmades",
+    "verifiedThrough": "signed-in production Unc operator console",
+    "records": [
+      {"client":"Home1nvasion","targetAccountId":"1620999d-ee8e-4490-bfd6-b908a9fa86dc","sourceKind":"junction.client_orgs","sourceKey":"h1","dataset":"email_campaigns","sentRows":73,"warehouseRows":86,"sourceMaxUpdatedAt":"2026-09-05T19:08:11.737281Z","bridgeCheckedAt":"2026-09-06T01:00:00Z"},
+      {"client":"Deep Blue Health","targetAccountId":"4fae2ad8-194f-49c4-9954-39a6b6d35b14","sourceKind":"public.client_accounts","sourceKey":"82d2ebf1-33aa-42a9-8d6e-f4238a5c7ac6","dataset":"email_campaigns","sentRows":195,"warehouseRows":195,"sourceMaxUpdatedAt":"2026-09-05T18:42:53.175923Z","bridgeCheckedAt":"2026-09-06T01:00:38Z"}
+    ],
+    "negativeControls": ["AVGAR has no source-read grant or UI read control","anonymous Edge Function request returns 401","browser-origin Edge Function request returns 403","anonymous Unc source-read request returns 401","browser roles cannot execute the source RPC","service_role has no direct SELECT on H1 or DBH campaign tables"],
+    "notEstablished": ["fresh provider OAuth read","provider connector readiness","routine readiness","client login membership","outward-action authority"]
   },
   "accountSourceReconciliation": {
     "observedAt":"2026-09-05T23:32:17.726040Z",
