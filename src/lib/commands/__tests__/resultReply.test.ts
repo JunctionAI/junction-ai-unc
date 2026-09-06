@@ -41,4 +41,10 @@ describe("saved result summaries", () => {
     const reply = await call();
     expect(reply).not.toContain("https://evil.test"); expect(reply).not.toContain("<"); expect(reply).not.toContain("@");
   });
+  it("uses conversational wording and singular grammar for one keyword", async () => {
+    const { artifact, call } = fixture(); artifact.items = [{ title: "golf travel bag" }];
+    const reply = await call();
+    expect(reply).toContain("i've saved 1 keyword candidate to review");
+    expect(reply).not.toContain("1 keyword candidates");
+  });
 });

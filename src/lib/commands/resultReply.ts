@@ -19,7 +19,7 @@ export async function savedResultReply(store: Store, c: RoutineCommand, fallback
   const link = `${APP}?account=${encodeURIComponent(c.actor.accountId)}`;
   const titles = a.items.slice(0, 3).map(i => safeTitle(i.title)).filter(Boolean);
   const heading = a.kind === "keyword_list"
-    ? `keyword scan done 🔎 the saved draft contains ${a.items.length} keyword candidates.`
+    ? `i've saved ${a.items.length} keyword ${a.items.length === 1 ? "candidate" : "candidates"} to review 🔎`
     : `your draft is ready: ${safeTitle(a.title)}.`;
   return [heading, ...titles.map(t => `• ${t}`),
     a.kind === "keyword_list" ? "use these to shortlist search terms for page/content review; they aren't proven winners yet." : "review the findings and supporting sources before acting.",

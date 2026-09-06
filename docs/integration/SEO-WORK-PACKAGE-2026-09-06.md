@@ -56,3 +56,19 @@ on observed site/product context, and returns one plain-English review. No publi
 an exact approval. This end-to-end package test is still outstanding.
 
 Local planner tests: 17 passing. App and worker TypeScript checks pass.
+
+## Saved-result readback and conversational status
+
+Added `seoSavedResults.ts`: reads the actual saved run and artifact, verifies account,
+generation, routine, kind, run completion, spec hash, artifact revision and held status.
+Bindings must originate from the trusted package controller, not a request body. It refuses
+article completion until an actual producer mapping exists. Storage errors propagate rather
+than being disguised as no work. No database migration or provider call was made.
+
+Added `seoConversation.ts`: concise lowercase status messages, no routine IDs, no extra model
+call, no claim that a ready step has started. Missing work is described alongside completed
+work. The existing command result reply also gets conversational singular/plural wording.
+
+These helpers are locally tested together using a fake Store; they are not yet connected to
+the live package controller, scheduler, review UI or Slack package notifications. The existing
+keyword command reply change also requires a worker deployment before users receive it.
