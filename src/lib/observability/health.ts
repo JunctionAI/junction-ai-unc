@@ -28,9 +28,17 @@ export function workerMaxAgeMs(env: Record<string, string | undefined>): number 
   return sec * 1000 * WORKER_FRESH_MULTIPLIER;
 }
 
+export function buildSha(env: Record<string, string | undefined>): string | null {
+  for (const candidate of [env.VERCEL_GIT_COMMIT_SHA, env.UNC_BUILD_SHA]) {
+    const value = (candidate ?? "").trim();
+    if (/^[0-9a-f]{7,64}$/i.test(value)) return value.slice(0, 12).toLowerCase();
+  }
+  return null;
+}
+
 export async function healthReport(deps: HealthDeps): Promise<HealthReport> {
   const now = (deps.now ?? (() => new Date()))();
-  const sha = (deps.env.VERCEL_GIT_COMMIT_SHA ?? "").trim().slice(0, 12) || null;
+  const sha = buildSha(deps.env);
   const report: HealthReport = { ok: true, build: { sha, version: deps.version }, db: { configured: !!deps.db, ok: !deps.db, ms: null }, worker: null, time: now.toISOString() };
   if (!deps.db) return report;
   const t0 = Date.now();

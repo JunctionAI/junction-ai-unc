@@ -38,7 +38,35 @@ approval cannot be inferred. Delegated patches are isolated, bounded, tested and
 reviewed before integration. Publishing, customer campaigns, ad mutation and
 spend remain separately authorized actions.
 
-## Latest state — Batch 88, 6 September NZ
+## Latest state — Batch 89, 6 September NZ
+
+**The first existing-client source-backed runtime reader is released and proven
+in the compiled production worker.** Home1nvasion and Deep Blue Health now have
+separate service-only runtime grants for normalized Mission Control campaign
+history. Exact account, context generation, source binding, dataset contract and
+maximum source age are enforced. The reader never unseals a provider credential
+and cannot silently fall back to a provider call.
+
+The production worker returned one H1 and fifteen DBH sent campaigns in the
+routine's 90-day window, with exact source timestamps and
+`providerApiCall=false`. The full operator bridge still returns 73 H1 and 195 DBH
+sent rows; the different counts reflect the runtime query window. Twelve isolated
+authority/denial checks and **3,234 tests / 243 files** pass, as do app/worker
+TypeScript, production build, lint and diff checks.
+
+Application source `2b903868a066dd6dce1f7d6b7792f217134f243f` is live as
+Vercel `dpl_EE8yo3AocYs4uhEJna2RHL8oLCXJ`; Fly worker release 44 was built from
+the same short SHA. H1/DBH remain at zero enabled routines and zero runs. No
+client membership, workflow, schedule, provider record, Slack route or outward
+action changed. H1's daily source-and-learning review is correctly classified as
+internal continuity infrastructure, not one of seven customer-facing Email & SMS
+switches. [Contract, runtime controls and receipts](integration/MISSION-CONTROL-RUNTIME-SOURCE-2026-09-06.md).
+
+**Next vertical slice:** record exact native-to-Unc routine adoption without
+guessing, then run one eligible source-backed draft for useful-output acceptance.
+Customer membership and delivery authority remain separate.
+
+## Previous state — Batch 88, 6 September NZ
 
 **The first governed existing-client stored-data bridge is released and proven
 through the signed-in production console.** Home1nvasion and Deep Blue Health

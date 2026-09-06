@@ -102,6 +102,15 @@ describe("healthReport + GET /api/health", () => {
     expect(await res.json()).toMatchObject({ ok: true, build: { sha: "feedfacefeed" }, db: { ok: true }, worker: { ticks: 60 } });
   });
 
+  it("uses a validated UNC_BUILD_SHA when deployment metadata is unavailable", async () => {
+    const fallback = await healthReport({ db: null, env: { UNC_BUILD_SHA: "2B903868A066DD6DCE1F7D6B7792F217134F243F" }, version: "0.1.0", now: () => NOW });
+    expect(fallback.build.sha).toBe("2b903868a066");
+    const preferred = await healthReport({ db: null, env: { VERCEL_GIT_COMMIT_SHA: "abcdef1234567890", UNC_BUILD_SHA: "2b903868a066dd6dce1f7d6b7792f217134f243f" }, version: "0.1.0", now: () => NOW });
+    expect(preferred.build.sha).toBe("abcdef123456");
+    const invalid = await healthReport({ db: null, env: { VERCEL_GIT_COMMIT_SHA: "not-a-sha", UNC_BUILD_SHA: "also-not-a-sha" }, version: "0.1.0", now: () => NOW });
+    expect(invalid.build.sha).toBeNull();
+  });
+
   it("database configured but unreachable → ok:false / 503", async () => {
     const broken = { from: () => ({ select: () => ({ limit: async () => ({ data: null, error: { message: "connection refused" } }) }) }), rpc: async () => ({ data: null, error: null }) } as unknown as FakeSupabase;
     const r = await healthReport({ db: broken, env: {}, version: "0.1.0", now: () => NOW });
