@@ -15,16 +15,19 @@ try{
  for(let i=0;i<3;i++){const c=pg.getPgClient('seo_test','127.0.0.1');await c.connect();clients.push(c);}
  const [db,a,b]=clients;
  await db.query(`create role anon;create role authenticated;create role service_role bypassrls;
- create schema auth;create table auth.users(id uuid primary key);
+ create schema auth;create schema unc_private;create table auth.users(id uuid primary key);
  create table accounts(id uuid primary key,context_generation bigint,automation_paused boolean);
  create table account_members(account_id uuid,user_id uuid,role text);
  create table routine_states(account_id uuid,routine_id text,enabled boolean);
  create table routine_runs(id uuid primary key,account_id uuid,context_generation bigint,routine_id text,status text,mode text);
  create table artifacts(id uuid primary key,account_id uuid,run_id uuid,revision integer,kind text,status text,meta jsonb);
  create table n8n_shadow_permits(account_id uuid,run_id uuid,status text);
+ create table routine_commands(id uuid primary key,account_id uuid,context_generation bigint,user_id uuid,routine_id text,status text,channel text,channel_binding jsonb);
+ create table outbound_messages(id uuid primary key default gen_random_uuid(),account_id uuid,context_generation bigint,ref text,status text,binding jsonb,kind text,payload jsonb);
  grant usage on schema public to service_role;grant select,insert,update on all tables in schema public to service_role;`);
  await db.query(await readFile(new URL('../supabase/migrations/20260906041528_seo_work_packages.sql',import.meta.url),'utf8'));
  await db.query(await readFile(new URL('../supabase/migrations/20260906042437_seo_package_recovery.sql',import.meta.url),'utf8'));
+ await db.query(await readFile(new URL('../supabase/migrations/20260906043800_seo_package_delivery.sql',import.meta.url),'utf8'));
  const A=randomUUID(),U=randomUUID(),R=randomUUID(),K=randomUUID();
  await db.query('insert into auth.users values($1)',[U]);await db.query('insert into accounts values($1,1,false)',[A]);
  await db.query("insert into account_members values($1,$2,'owner')",[A,U]);
@@ -48,11 +51,22 @@ try{
  assert.equal((await a.query('select prior_results from seo_work_packages where id=$1',[id])).rows[0].prior_results.length,1);
  await a.query('select claim_seo_package()');
  await assert.rejects(a.query("update seo_work_packages set status='ready',result=$2 where id=$1",[id,{artifact:{kind:'generic',meta:{publishEnabled:true}}}]));
- await a.query("update seo_work_packages set status='ready',result=$2 where id=$1",[id,{artifact:{kind:'generic',meta:{publishEnabled:false}}}]);
+ await a.query("update seo_work_packages set status='ready',result=$2 where id=$1",[id,{artifact:{kind:'generic',items:[{title:'fixture'}],meta:{publishEnabled:false}}}]);
  await assert.rejects(a.query("update seo_work_packages set status='running' where id=$1",[id]));
+ const binding={accountId:A,contextGeneration:1,userId:U,channel:'slack',threadId:'1788663363.765019'};
+ await db.query("insert into routine_commands values($1,$2,1,$3,'D03-W01','done','slack',$4)",[R,A,U,binding]);
+ const text=`your US SEO drafts are ready 🔎 i've prepared 1 items from your keyword research and website. nothing is published. review the guide and page changes in Agents → SEO → Find searches you can win: https://junction-unc.vercel.app/app?account=${A}`;
+ const delivery=(b=binding,t=text)=>a.query("insert into outbound_messages(account_id,context_generation,ref,status,binding,kind,payload)values($1,1,$2,'queued',$3,'draft_landed',$4)returning id",[A,`seo-package:${id}`,b,{text:t}]);
+ await assert.rejects(delivery({...binding,threadId:'1788663363.000000'}));
+ await assert.rejects(delivery(binding,'invented summary'));
+ const outbound=(await delivery()).rows[0].id;
+ await db.query('update seo_package_settings set enabled=false');
+ await assert.rejects(a.query("update outbound_messages set status='sending' where id=$1",[outbound]));
+ await db.query('update seo_package_settings set enabled=true');
+ await a.query("update outbound_messages set status='sending' where id=$1",[outbound]);
  await db.query('update accounts set automation_paused=true');
  await a.query('update seo_package_settings set enabled=false');
  const acl=(await db.query("select has_table_privilege('anon','seo_work_packages','select') a,has_function_privilege('authenticated','claim_seo_package()','execute') b")).rows[0];
  assert.equal(acl.a,false);assert.equal(acl.b,false);
- console.log(JSON.stringify({status:'PASS',checks:['foreign owner refused','wrong source revision refused','duplicate refused','one concurrent claim','disabled settings revoke completion','publishing refused','draft saved','no completed replay','public access denied'],externalCalls:0}));
+ console.log(JSON.stringify({status:'PASS',checks:['foreign owner refused','wrong source revision refused','duplicate refused','one concurrent claim','disabled settings revoke completion','publishing refused','draft saved','no completed replay','public access denied','delivery redirect refused','invented summary refused','disabled package cannot send','valid original delivery claim'],externalCalls:0}));
 }finally{for(const c of clients)await c.end().catch(()=>{});await pg.stop().catch(()=>{});}

@@ -31,6 +31,7 @@ import { ALL_SYSTEMS } from "../lib/platform/catalog";
 import type { Store } from "../lib/runtime/store/interface";
 import type { Receipt } from "../lib/runtime/types";
 import type { Logger } from "./log";
+import { notifySeoPackages } from "./seoNotifications";
 
 export const CHANNELS_LOOKBACK_MS = 24 * 3_600_000;
 export const REMINDER_WINDOW_MS = 2 * 3_600_000;
@@ -100,6 +101,7 @@ export async function runChannelsTick(deps: ChannelsDeps, opts: { accountId?: st
   if (repaired.uncertain || repaired.expired || repaired.projected) log("channels.outbox_repaired", repaired);
   const adapters = deps.adapters ?? buildAdapters({ env: deps.env ?? process.env, fetch: deps.fetch ?? ((input, init) => fetch(input, init)), db, keyring: deps.keyring ?? null });
   const out: OutboundDeps = { db, adapters, now, log };
+  await notifySeoPackages(db, adapters, now);
   const lookback = opts.lookbackMs ?? CHANNELS_LOOKBACK_MS;
   const ids = opts.accountId ? [opts.accountId] : await accountsWithLinks(db);
 
