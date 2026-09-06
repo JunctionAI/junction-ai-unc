@@ -5,6 +5,12 @@ export interface OpsClient {
   runCount: number; lastRunAt: string | null; failedRunCount: number; verifiedChannelCount: number; registeredWorkflowCount: number;
 }
 export interface OpsRun { id: string; accountId: string; routineId: string; version: number; mode: string; status: string; startedAt: string; finishedAt: string | null }
+export interface OpsSourceBinding {
+  id: string; accountId: string; sourceSystem: string; sourceProject: string;
+  sourceKind: string; sourceKey: string; displayName: string;
+  status: "verified" | "superseded"; evidenceRef: string; revision: number;
+  verifiedAt: string; verifiedBy: string;
+}
 export interface OpsDetail {
   accountId: string; contextGeneration: number;
   connectors: { id: string; platform: string; status: string; externalRef: string | null; lastReadAt: string | null; lastReadResult: string | null; lastReadMetrics: number | null }[];

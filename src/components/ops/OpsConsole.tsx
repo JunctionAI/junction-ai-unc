@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ALL_SYSTEMS } from "@/lib/platform/catalog";
-import { OPS_STAGES, opsNext, opsStage, opsTime, type OpsClient, type OpsRun, type OpsSnapshot } from "@/lib/ops/types";
+import { OPS_STAGES, opsNext, opsStage, opsTime, type OpsClient, type OpsRun, type OpsSnapshot, type OpsSourceBinding } from "@/lib/ops/types";
 import styles from "./ops.module.css";
 import OpsRunReview from "./OpsRunReview";
 
@@ -17,6 +17,7 @@ export default function OpsConsole() {
   const [view, setView] = useState<View>("clients");
   const [revision, refresh] = useState(0);
   const [state, setState] = useState<{ key: string; data?: OpsSnapshot; error?: string; code?: number }>({ key: "" });
+  const [sourceState, setSourceState] = useState<{ key: string; bindings?: OpsSourceBinding[]; error?: string }>({ key: "" });
   const [search, setSearch] = useState("");
   const [runStatus, setRunStatus] = useState("all");
   const [runClient, setRunClient] = useState("all");
@@ -26,6 +27,8 @@ export default function OpsConsole() {
   const data = state.key === key ? state.data : undefined;
   const error = state.key === key ? state.error : undefined;
   const loading = !data && !error;
+  const sources = accountId && sourceState.key === key ? sourceState.bindings : undefined;
+  const sourceError = accountId && sourceState.key === key ? sourceState.error : undefined;
   useEffect(() => {
     const sync = () => { if (window.location.hash !== "#ops-main") setView(readView()); };
     sync(); window.addEventListener("hashchange", sync);
@@ -47,6 +50,25 @@ export default function OpsConsole() {
         if (!Array.isArray(snapshot.clients) || !Array.isArray(snapshot.runs) || !snapshot.checkedAt || (accountId && snapshot.selected?.accountId !== accountId)) throw new Error("Invalid scope");
         if (!cancelled) setState({ key, data: snapshot });
       } catch { if (!cancelled) setState({ key, error: "Couldn't verify saved records. Refresh to retry; no empty or healthy state is inferred." }); }
+      finally { clearTimeout(timeout); }
+    })();
+    return () => { cancelled = true; controller.abort(); clearTimeout(timeout); };
+  }, [accountId, key]);
+  useEffect(() => {
+    if (!accountId) return;
+    const controller = new AbortController(); let cancelled = false;
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    void (async () => {
+      try {
+        const response = await fetch(`/api/ops/sources?accountId=${encodeURIComponent(accountId)}`, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) {
+          if (!cancelled) setSourceState({ key, error: response.status === 403 ? "This operator cannot read source identities for this client." : "Source identity could not be verified." });
+          return;
+        }
+        const body = await response.json() as { accountId?: unknown; bindings?: unknown };
+        if (body.accountId !== accountId || !Array.isArray(body.bindings) || body.bindings.some(row => !row || typeof row !== "object" || (row as { accountId?: unknown }).accountId !== accountId)) throw new Error("Invalid source scope");
+        if (!cancelled) setSourceState({ key, bindings: body.bindings as OpsSourceBinding[] });
+      } catch { if (!cancelled) setSourceState({ key, error: "Source identity could not be verified." }); }
       finally { clearTimeout(timeout); }
     })();
     return () => { cancelled = true; controller.abort(); clearTimeout(timeout); };
@@ -93,8 +115,9 @@ export default function OpsConsole() {
         {accountId && reviewingRun && data && detail && <OpsRunReview key={`${accountId}:${reviewingRun}:${revision}`} accountId={accountId} runId={reviewingRun} />}
         {accountId && !reviewingRun && data && client && detail && <>
           <p className={styles.code}>{client.id} · generation {client.contextGeneration} · {client.currency}</p>
-          <div className={styles.stats}>{count("Login members", client.memberCount)}{count("Dated connector reads", client.datedReadCount, `of ${client.connectorCount} saved connector rows`)}{count("Routines enabled", client.enabledCount)}{count("Verified channel links", client.verifiedChannelCount, "Not delivery acceptance")}</div>
-          <section className={styles.card}><h2>Setup checklist</h2><p className={styles.badge}>{opsStage(client)}{client.paused ? " · automation paused" : " · no account pause recorded"}</p><p>{opsNext(client)}</p><ul><li>Saved website: {client.website || "Not recorded"}</li><li>Login membership: {client.memberCount ? `${client.memberCount} saved member(s); role grants are separate from operator access.` : "No assigned login. Reconcile ownership before inviting."}</li><li>Callable registry: {client.registeredWorkflowCount} active row(s). Independent execution verification still required.</li><li>Existing-system mapping: not yet certified in Unc. Do not merge or reconnect accounts from display names.</li><li>Customer acceptance: not inferred from these records.</li></ul></section>
+          <div className={styles.stats}>{count("Login members", client.memberCount)}{count("Verified source identities", sources?.filter(source => source.status === "verified").length, "Not provider access")}{count("Dated connector reads", client.datedReadCount, `of ${client.connectorCount} saved connector rows`)}{count("Routines enabled", client.enabledCount)}</div>
+          <section className={styles.card}><h2>Setup checklist</h2><p className={styles.badge}>{opsStage(client)}{client.paused ? " · automation paused" : " · no account pause recorded"}</p><p>{opsNext(client)}</p><ul><li>Saved website: {client.website || "Not recorded"}</li><li>Login membership: {client.memberCount ? `${client.memberCount} saved member(s); role grants are separate from operator access.` : "No assigned login. Reconcile ownership before inviting."}</li><li>Callable registry: {client.registeredWorkflowCount} active row(s). Independent execution verification still required.</li><li>Existing-system mapping: {sources ? sources.some(source => source.status === "verified") ? `${sources.filter(source => source.status === "verified").length} exact source identity binding(s); provider grants and data freshness remain separate.` : "No verified binding. Do not merge or reconnect accounts from display names." : sourceError ? "Could not verify it; no missing or valid mapping is inferred." : "Checking exact identity."}</li><li>Customer acceptance: not inferred from these records.</li></ul></section>
+          <section><h2>Existing system identity</h2><p className={styles.muted}>Exact source bindings only. These do not contain credentials or establish a fresh provider read, login access or routine readiness.</p>{sourceError ? <div role="alert" className={styles.error}>{sourceError}</div> : sources ? sources.length ? sources.map(source => <article className={styles.card} key={source.id}><h3>{source.displayName}</h3><span className={styles.badge}>{source.status}</span><p className={styles.code}>{source.sourceSystem} · {source.sourceProject}<br />{source.sourceKind} · {source.sourceKey}</p><small>Verified {opsTime(source.verifiedAt)} · revision {source.revision}</small></article>) : <p className={styles.empty}>No verified existing-system source identity. Do not join by display name.</p> : <div role="status" className={styles.loading}>Checking exact source identity…</div>}</section>
           <section><h2>Connections and read freshness</h2>{detail.connectors.length ? <div className={styles.connectionGrid}>{detail.connectors.map(c => <article className={styles.card} key={c.id}><h3>{c.platform}</h3><span className={styles.badge}>{c.status.replaceAll("_", " ")}</span><p className={styles.code}>{c.externalRef || "Business asset not selected"}</p><p>Last read: {opsTime(c.lastReadAt)}<br />Result: {c.lastReadResult || "Not recorded"}<br />Metrics: {c.lastReadMetrics ?? "Unknown"}</p><small>Saved read evidence, not a fresh provider check.</small></article>)}</div> : <p className={styles.empty}>No connector records for this account.</p>}</section>
           <section><h2>Routine switches</h2><p className={styles.muted}>Saved switches only. No operator-side activation or change of customer permissions.</p><div className={styles.routines}>{ALL_SYSTEMS.map(r => <div key={r.id}><span>{r.name}<small>{r.id}</small></span><strong>{detail.routines.find(s => s.id === r.id)?.enabled ? "Enabled" : "Off"}</strong></div>)}</div></section>
           <section><h2>Saved review queue</h2><p className={styles.muted}>{client.pendingDraftCount} pending draft(s) · {client.pendingRunApprovalCount} unexpired run approval(s). Opening work requires a separate read grant and never gives approval or execution authority.</p>{detail.drafts.length ? detail.drafts.map(d => <article className={styles.card} key={d.id}><h3>{d.title}</h3><p>{d.status} · revision {d.revision} · {opsTime(d.createdAt)}</p><code>Artifact {d.id}<br />Run {d.runId}</code><p><a href={`#run/${accountId}/${d.runId}`}>Review output and receipts →</a></p></article>) : <p className={styles.empty}>No saved draft headers in this context.</p>}</section>
