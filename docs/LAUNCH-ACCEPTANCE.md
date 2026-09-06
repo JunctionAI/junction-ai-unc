@@ -6,6 +6,53 @@ Tom's 5 September clarification is the delivery bar: every agreed screen must us
 
 ## Delivery and token discipline
 
+### 6 September — funded continuation and acceptance order
+
+Tom authorized continued implementation after adding credits, with strict cost
+discipline. The product outcome remains the full agreed launch scope. The goal
+service currently reports `usageLimited`; editing this document does not resume
+that service. Resume requires the app/user control, not a fabricated completion.
+
+Execute in this order, carrying forward valid receipts:
+
+1. Reconcile the interrupted release before another deploy. Verify GitHub HEAD,
+   canonical Vercel alias and actual candidate, runtime build markers, Fly image
+   and flags, and the newly applied operator-preview migration/permissions.
+   Resolve the accidentally created `unc-deploy-94f4ea7` Vercel project and its
+   GitHub integration after inspecting its exact resources. Do not call the new
+   app live merely because a candidate built or an environment marker changed.
+2. Complete H1's real newsletter draft: authenticated operator request, approved
+   brief and governed campaign source, one saved run/artifact, independent
+   readback, useful subject/preview/copy and exact links. Add the smallest usable
+   ops control if the API cannot be exercised through the supported UI. Close
+   temporary grants after the pilot. Record current pause state from live data.
+3. Complete the same client's app request-to-result journey and prepare its
+   existing Slack route. Verify eligible switches, account identity, result
+   correlation, duplicate handling, reload and switch-off. Escalate only the
+   exact remaining owner/provider or outward-message decision.
+4. Resolve DBH's four-week calendar/production-brief contract and reuse the
+   established path across verified existing clients. Each client needs a row
+   listing identity, data freshness, enabled routines, channel and saved proof.
+5. Finish the agreed Meta, SEO, Content, Email and Google Ads routines in
+   specialty batches. Reuse registered contracts and credentials. Mark routines
+   requiring missing rights, CMS, provider data or business inputs explicitly;
+   a catalog entry does not establish a working routine.
+6. Complete new-client onboarding and cross-tenant acceptance, then reconcile
+   all supplied screens, booking, the launch video/materials and operational
+   requirements against the original B01–B24 register. Declare launch ready
+   only with production journey evidence and an explicit unresolved-item list.
+
+Efficiency rules: one concrete outcome per slice; inspect state before retrying
+an interrupted operation; focused tests for changed behavior; one combined release
+per coherent slice; no repeated whole-suite run or deployment without a change
+or unresolved failure that justifies it. Read deployment configuration and target
+identity before executing. Reuse provider results and existing context. Stop an
+unchanged blocked path at the first established dependency and continue an
+independent item. Use cheaper models only for bounded, reviewable tasks when
+delegation is authorized; reserve primary reasoning for integration and review.
+No additional paid services or dollar budget conversion is implied by the credit
+purchase. Report pass/partial/blocked per journey, with evidence and next owner.
+
 ### 6 September, 09:52 NZ — existing-client continuity first
 
 **Tom's subsequent clarification overrides the native-execution reuse assumption
