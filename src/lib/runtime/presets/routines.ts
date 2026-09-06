@@ -40,6 +40,7 @@ const RELEVANT: Record<string, string[]> = {
   "D05-W05": ["welcomeFlowLength", "discountCeilingPct", "winbackWindowDays"],
   "D05-W06": ["winbackWindowDays", "sendCadencePerWeek", "discountCeilingPct"],
   "D05-W07": ["sendCadencePerWeek", "discountCeilingPct", "winbackWindowDays"],
+  "D05-W08": [],
   // D04 sales
   "D04-W01": ["leadScoreThreshold", "maxTouches", "followUpCadenceDays"],
   "D04-W02": ["maxTouches", "leadScoreThreshold", "followUpCadenceDays"],
@@ -51,8 +52,8 @@ export function relevantFields(routineId: string): string[] {
   const domain = domainOf(routineId);
   if (!domain) return [];
   const all = FIELDS_BY_DOMAIN[domain].map((f) => f.key);
-  const picked = RELEVANT[routineId]?.filter((k) => all.includes(k));
-  return picked && picked.length ? picked : all.slice(0, 6);
+  if (Object.hasOwn(RELEVANT, routineId)) return RELEVANT[routineId].filter((k) => all.includes(k));
+  return all.slice(0, 6);
 }
 
 // ---------- optional steps ----------

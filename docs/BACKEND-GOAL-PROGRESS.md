@@ -38,7 +38,36 @@ approval cannot be inferred. Delegated patches are isolated, bounded, tested and
 reviewed before integration. Publishing, customer campaigns, ad mutation and
 spend remain separately authorized actions.
 
-## Latest state — Batch 89, 6 September NZ
+## Latest state — Batch 90, 6 September NZ
+
+**Existing native email jobs are now mapped to executable Unc contracts without
+pretending that similar labels are equivalent.** Authenticated, read-only native
+inspection showed that Home1nvasion currently uses a supervised founder-led
+newsletter service, not the generic six-week campaign-calendar routine. Unc now
+has **D05-W08 Newsletter draft production**: one manual, source-grounded,
+draft-only artifact requiring the real brief, newsletter mode and approved
+business context. Past campaign and product data are optional evidence; the
+routine cannot create a provider draft, choose an audience, test-send, schedule
+or send.
+
+The executable catalog and generated n8n manifest now contain **36 routines**.
+Home1nvasion is recorded as `implemented_not_adopted`: the contract exists, but
+no client membership, profile projection, Slack route, routine switch or run was
+created. Deep Blue Health is recorded as `contract_mismatch`: its observed
+four-week calendar plus production brief is materially richer than D05-W07's
+current six-week contract and remains unenabled until that gap is versioned and
+tested. H1's daily source/learning review remains internal continuity
+infrastructure, not an eighth customer switch.
+
+The release candidate passes **3,237 tests / 243 files**, app and worker
+TypeScript, production build, lint with zero errors and diff checks. No provider
+request or outward action was made. [Adoption evidence and remaining acceptance](integration/CLIENT-ROUTINE-ADOPTION-2026-09-06.md).
+
+**Next vertical slice:** deploy this exact accepted source, independently verify
+the production catalog and health identity, then bind one approved real H1 brief
+to a source-grounded draft without activating Slack or provider delivery.
+
+## Previous state — Batch 89, 6 September NZ
 
 **The first existing-client source-backed runtime reader is released and proven
 in the compiled production worker.** Home1nvasion and Deep Blue Health now have

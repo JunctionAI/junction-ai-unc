@@ -3,7 +3,7 @@
    the email question; the recommendation by business type. Pure over the catalog. */
 
 import { describe, expect, it } from "vitest";
-import { channelReads, emailQuestionNeeded, emailToolFrom, excludedPlatforms, GENERIC_WAVE_ONE, knownPlatformSlugs, recommendationPool, recommendedRoutine, suggestPlatforms, waveOneRoutines } from "../channels";
+import { channelReads, emailQuestionNeeded, emailToolFrom, excludedPlatforms, knownPlatformSlugs, recommendationPool, recommendedRoutine, suggestPlatforms, waveOneRoutines } from "../channels";
 import { fitsBusiness, routineAvailability, STORE_ONLY_ROUTINES } from "@/lib/runtime/availability";
 import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
 import type { BusinessModel } from "@/lib/unc/businessType";
@@ -70,21 +70,19 @@ describe("recommendation by business type", () => {
     expect(recommendedRoutine("Email & SMS", [], { model: STORE })?.id).toBe("D05-W02");
     expect(recommendedRoutine("Email & SMS", [], { model: UNKNOWN })?.id).toBe("D05-W02"); // unknown hides nothing
   });
-  it("services / B2B / creator on an Email plan: never cart or winback — the generic wave-1 routines", () => {
+  it("services / B2B / creator on an Email plan: recommend input-led newsletter drafting without requiring an email provider", () => {
     for (const model of [SERVICES, B2B, CREATOR]) {
       const pool = recommendationPool("Email & SMS", { model, knownPlatforms: ["No email tool yet"] });
-      expect(pool.map((s) => s.id)).toEqual(GENERIC_WAVE_ONE);
+      expect(pool.map((s) => s.id)).toEqual(["D05-W08"]);
       expect(pool.some((s) => s.id in STORE_ONLY_ROUTINES)).toBe(false);
-      expect(recommendedRoutine("Email & SMS", [], { model, knownPlatforms: ["No email tool yet"] })?.id).toBe("D01-W01");
+      expect(recommendedRoutine("Email & SMS", [], { model, knownPlatforms: ["No email tool yet"] })?.id).toBe("D05-W08");
     }
-    // every Email wave-1 routine is built around orders — nothing in the channel fits a business with no store
-    expect(waveOneRoutines("Email & SMS", SERVICES)).toEqual([]);
-    expect(waveOneRoutines("Email & SMS", STORE).map((s) => s.id)).toEqual(["D05-W02", "D05-W07"]);
+    expect(waveOneRoutines("Email & SMS", SERVICES).map((s) => s.id)).toEqual(["D05-W08"]);
+    expect(waveOneRoutines("Email & SMS", STORE).map((s) => s.id)).toEqual(["D05-W02", "D05-W07", "D05-W08"]);
   });
   it("skips what is on and wraps; the generic pool follows the same rule", () => {
     expect(recommendedRoutine("Content", ["D01-W01"], { model: SERVICES })?.id).toBe("D01-W03");
-    expect(recommendedRoutine("Email & SMS", ["D01-W01", "D01-W03"], { model: SERVICES, knownPlatforms: ["No email tool yet"] })?.id).toBe("D04-W01");
-    expect(recommendedRoutine("Email & SMS", GENERIC_WAVE_ONE, { model: SERVICES, knownPlatforms: ["No email tool yet"] })?.id).toBe("D01-W01");
+    expect(recommendedRoutine("Email & SMS", ["D05-W08"], { model: SERVICES, knownPlatforms: ["No email tool yet"] })?.id).toBe("D05-W08");
   });
   it("Sales for a services firm: Lead research & scoring, then Supervised outbound, then Meeting brief", () => {
     expect(waveOneRoutines("Sales", SERVICES).map((s) => s.id)).toEqual(["D04-W01", "D04-W02", "D04-W03"]);

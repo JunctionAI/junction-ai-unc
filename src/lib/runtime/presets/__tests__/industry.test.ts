@@ -177,6 +177,7 @@ describe("routines — domains, relevant fields, optional steps, bindings", () =
       expect(n, id).toBeGreaterThanOrEqual(Math.min(3, FIELDS_BY_DOMAIN[domainOf(id)!].length)); // seo has two fields in all
       expect(n, id).toBeLessThanOrEqual(6);
     }
+    expect(relevantFields("D05-W08")).toEqual([]);
   });
 
   it("optional steps are the spec's optional reads, labelled for a toggle row", () => {

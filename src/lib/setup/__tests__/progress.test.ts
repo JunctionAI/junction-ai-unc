@@ -252,14 +252,14 @@ describe("setupProgress + agreePlan on the schema-checked fake", () => {
     expect(p.platforms.find((x) => x.platform === "hubspot")?.evidence).toBe("HubSpot forms or tracking on the site");
     expect(p.platforms.some((x) => x.platform === "shopify")).toBe(false);
     expect(p.emailQuestion).toBe(true);
-    // nothing in Email fits a business with no store (and no email tool yet) → the generic first routine
-    expect(p.recommended?.routineId).toBe("D01-W01");
+    // newsletter drafting fits without pretending the services business has a store or provider write access
+    expect(p.recommended?.routineId).toBe("D05-W08");
     expect(p.steps[1].status).toBe("Connect LinkedIn, select the right account, and verify its first read.");
-    // the founder answers "none yet": the question is gone, Klaviyo-reading routines stay out
+    // the founder answers "none yet": the question is gone and the input-led newsletter draft still fits
     db.rows("resource_profiles")[0].known_platforms = ["LinkedIn", "Email / SMS", "No email tool yet"];
     const q = await setupProgress(db, ACCT, NOW);
     expect(q.emailQuestion).toBe(false);
-    expect(q.recommended?.routineId).toBe("D01-W01");
+    expect(q.recommended?.routineId).toBe("D05-W08");
   });
 
   it("walks the whole spine on real rows: 5/5", async () => {

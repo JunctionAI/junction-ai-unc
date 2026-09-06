@@ -502,7 +502,7 @@ export default function Landing({ pricing }: { pricing: LocalePricing }) {
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 40px 80px" }}>
           <div style={label}>The realm of routines</div>
           <h3 style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.015em", margin: "10px 0 0" }}>
-            35 routines across five channels — one example each, the rest waiting inside.
+            36 routines across five channels — one example each, the rest waiting inside.
           </h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginTop: 24 }}>
             <RoutineCategoryCard
@@ -912,7 +912,7 @@ export default function Landing({ pricing }: { pricing: LocalePricing }) {
           >
             {[
               "Unc, working on your goal 24/7",
-              "All 35 routines, customised to you",
+              "All 36 routines, customised to you",
               "Human experts behind him, always",
               "Nothing runs without your okay — everything receipted",
             ].map((t) => (

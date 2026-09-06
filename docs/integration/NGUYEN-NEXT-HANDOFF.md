@@ -35,7 +35,7 @@ The run-scoped token is not a provider token and not a root signing key. Codex p
 
 ## 2. Routine IDs and an important integration correction
 
-The generated inventory `docs/integration/unc-routine-manifest.v1.json` comes from the actual executable Unc specs. It lists all 35 IDs, input reads/scopes, output-contract source and steps that run before the replaceable n8n step. It is regression-tested against the code.
+The generated inventory `docs/integration/unc-routine-manifest.v1.json` comes from the actual executable Unc specs. It lists all 36 IDs, input reads/scopes, output-contract source and steps that run before the replaceable n8n step. It is regression-tested against the code.
 
 | Existing Meta lane | Unc routine ID |
 |---|---|
@@ -57,7 +57,7 @@ The generated inventory `docs/integration/unc-routine-manifest.v1.json` comes fr
 | SERP position watch | `D03-W05` |
 | Referring-domain/backlink gap | **Not `D03-W06`.** That ID currently means competitor page/content gap. Codex will add a distinct versioned mapping; don't overwrite the existing meaning. |
 
-Content hooks and customer questions correspond to `D01-W02` and `D01-W03`. Email is `D05-W01`–`D05-W07` in the manifest; please identify exactly which five were proven. A Google Ads BOFU campaign plan does not yet have an agreed dedicated ID in this handoff; send its output semantics and Codex will map it explicitly.
+Content hooks and customer questions correspond to `D01-W02` and `D01-W03`. Email is `D05-W01`–`D05-W08` in the manifest; please identify exactly which five were proven. `D05-W08` is Unc's generic, draft-only newsletter-production contract and does not imply that an n8n lane is registered. A Google Ads BOFU campaign plan does not yet have an agreed dedicated ID in this handoff; send its output semantics and Codex will map it explicitly.
 
 **A webhook registration currently replaces the produce step, not the whole routine.** Some Meta routines have reads/checks/decisions before that step, using metrics not yet supplied by Unc. Therefore registration alone cannot prove integration. Codex owns preparing explicit shadow adapters so your proven decisioning can actually run while preserving tenant, switch, approval and no-write controls. Tell us which reads/decisions your lane owns; do not work around this by duplicating those decisions or inventing missing metrics.
 

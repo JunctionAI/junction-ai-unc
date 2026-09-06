@@ -70,7 +70,7 @@ describe("Sidebar", () => {
     const html = renderToStaticMarkup(createElement(Sidebar, { V: V(state()), account: null }));
     expect(html).toContain("5 connected · 1 needs attention · 10 available");
     expect(html).toContain(`data-testid="sidebar-routines-count"`);
-    expect(html).toContain(">35<");
+    expect(html).toContain(">36<");
     expect(html).toContain("Demonstration data.");
     expect(html).not.toContain(" on<");
   });
@@ -207,7 +207,7 @@ describe("CornerBuddy", () => {
     expect(home).toContain("3 routines on · 1 decision waiting · 2 drafts this week.");
     expect(home).not.toContain("Three taps");
     const routines = renderToStaticMarkup(createElement(CornerBuddy, { V: V(state({ view: "systems", buddyText: "Every routine you switch on makes the machine more OP" })) }));
-    expect(routines).toContain("3 of 35 routines on. Turn another on and I dry-run it now");
+    expect(routines).toContain("3 of 36 routines on. Turn another on and I dry-run it now");
     expect(routines).not.toContain("more OP");
     const connectors = renderToStaticMarkup(createElement(CornerBuddy, { V: V(state({ view: "connectors", buddyText: "Least privilege, always — I list every scope" })) }));
     expect(connectors).toContain("2 connected · Klaviyo needs attention. Each connection unlocks more of the library");

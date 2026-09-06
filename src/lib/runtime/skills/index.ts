@@ -1,4 +1,4 @@
-/* The built-in skill cards for all 35 routines, by routine id.
+/* The built-in skill cards for every catalog routine, by routine id.
 
    A ProduceNode is a replaceable seam: an account-registered n8n workflow may
    produce the same artifact contract, with this built-in skill as the honest
@@ -22,6 +22,7 @@ import { hookRotation } from "./hookRotation";
 import { keywordScan } from "./keywordScan";
 import { leadResearch } from "./leadResearch";
 import { meetingBrief } from "./meetingBrief";
+import { newsletterDraft } from "./newsletterDraft";
 import { onPageSeo } from "./onPageSeo";
 import { organicToPaid } from "./organicToPaid";
 import { outboundDrafts } from "./outboundDrafts";
@@ -77,6 +78,7 @@ export const SKILLS: Skill[] = [
   postPurchase,
   reviewTiming,
   campaignCalendar,
+  newsletterDraft,
 ];
 
 export const SKILL_BY_ID: Record<string, Skill> = Object.fromEntries(SKILLS.map((s) => [s.id, s]));

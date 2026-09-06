@@ -7109,6 +7109,147 @@
       "replacesWholeWorkflow": false,
       "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
       "actions": []
+    },
+    {
+      "routineId": "D05-W08",
+      "version": 1,
+      "name": "Newsletter draft production",
+      "outputKind": "email",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "a newsletter mode, the founder's real brief and enough approved business context to avoid invention",
+        "platforms": [],
+        "inputs": [
+          "newsletter_mode",
+          "newsletter_brief",
+          "about_the_business"
+        ],
+        "helpful": [
+          "klaviyo",
+          "shopify"
+        ]
+      },
+      "outputGuide": "{\"kind\":\"email\",\"title\":\"Newsletter draft: <topic>\",\"body\":\"the complete copy, build brief, unresolved facts, approval owner and PASS|PARTIAL|BLOCKED\",\"items\":[{\"title\":\"<subject>\",\"body\":\"<preview + complete email copy + build brief, markdown>\",\"meta\":{\"mode\":\"founder_letter\",\"subject\":\"...\",\"preview\":\"...\",\"cta_label\":null,\"destination_url\":null,\"provider_draft_id\":null}}],\"evidence\":[{\"source\":\"input:newsletter_brief|site_profile|memory|read:campaigns|read:products\",\"ref\":\"...\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 1,
+      "effectiveProduceMaxItems": 1,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
+      "reads": [
+        {
+          "nodeId": "read_campaigns",
+          "as": "campaigns",
+          "platform": "klaviyo",
+          "query": {
+            "resource": "campaigns",
+            "window": "90d",
+            "fields": [
+              "id",
+              "subject",
+              "send_time",
+              "revenue",
+              "unsubscribes"
+            ]
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_products",
+          "as": "products",
+          "platform": "shopify",
+          "query": {
+            "resource": "products",
+            "fields": [
+              "id",
+              "title",
+              "handle",
+              "status"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "klaviyo:campaigns",
+        "shopify:products"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_campaigns",
+          "kind": "read"
+        },
+        {
+          "id": "read_products",
+          "kind": "read"
+        }
+      ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "manual"
+        },
+        {
+          "kind": "read",
+          "id": "read_campaigns",
+          "as": "campaigns",
+          "source": "klaviyo",
+          "query": {
+            "resource": "campaigns",
+            "window": "90d",
+            "fields": [
+              "id",
+              "subject",
+              "send_time",
+              "revenue",
+              "unsubscribes"
+            ]
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_products",
+          "as": "products",
+          "source": "shopify",
+          "query": {
+            "resource": "products",
+            "fields": [
+              "id",
+              "title",
+              "handle",
+              "status"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "One newsletter draft and build brief grounded in the founder's supplied message. Provider draft creation, testing, scheduling and sending remain separate approvals.",
+          "after": "Review-ready newsletter draft in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Newsletter draft production: {{artifact.title}} handed over.",
+          "measurementWindowDays": 14
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
     }
   ]
 }

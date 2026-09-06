@@ -53,7 +53,7 @@ afterEach(() => {
 });
 
 describe("registry (lib)", () => {
-  it("source: own active row → global active row → built-in; rows for all 35", async () => {
+  it("source: own active row → global active row → built-in; one row per catalog routine", async () => {
     const rows = [
       { id: "g", accountId: null, routineId: "D01-W01", webhookUrl: "https://g.test", active: true },
       { id: "o", accountId: ACCT, routineId: "D01-W01", webhookUrl: "https://o.test", active: false },
@@ -64,7 +64,7 @@ describe("registry (lib)", () => {
     expect(skillSourceFor(rows, ACCT, "D01-W05")).toBe("builtin");
     expect(skillSourceFor(rows, ACCT, "D02-W04")).toBe("builtin");
     const all = skillRows(rows, ACCT);
-    expect(all).toHaveLength(35);
+    expect(all).toHaveLength(36);
     expect(all.find((r) => r.routineId === "D01-W01")).toMatchObject({ source: "n8n", builtIn: true, produces: true, workflow: { id: "g", global: true }, workflows: [{ id: "g" }, { id: "o" }] });
     expect(all.find((r) => r.routineId === "D02-W04")).toMatchObject({ source: "builtin", builtIn: true, produces: true, workflow: null, workflows: [] });
     expect(isAdminEmail("Tom@getjunction.ai", { UNC_ADMIN_EMAILS: "tom@getjunction.ai" })).toBe(true);
@@ -133,10 +133,10 @@ describe("registry (lib)", () => {
 });
 
 describe("/api/skills/n8n", () => {
-  it("GET: the 35 rows, who the caller is, the secret flag, the budget; demo mode → fallback; no session → 401", async () => {
+  it("GET: every routine, who the caller is, the secret flag, the budget; demo mode → fallback; no session → 401", async () => {
     await store.putN8nWorkflow({ id: "wf-x", accountId: ACCT, routineId: "D01-W01", webhookUrl: HOOK, active: true });
     const out = await (await GET(new Request("https://unc.test/api/skills/n8n", { method: "GET" }))).json();
-    expect(out.routines).toHaveLength(35);
+    expect(out.routines).toHaveLength(36);
     expect(out.routines.find((r: { routineId: string }) => r.routineId === "D01-W01")).toMatchObject({ source: "n8n", workflow: { id: "wf-x" } });
     expect(out).toMatchObject({ owner: true, admin: false, secretConfigured: true, dataBaseUrl: "https://unc.example.test", budget: { spentUsd: 0, capUsd: 15, ok: true } });
     expect(out.accounts).toBeUndefined();

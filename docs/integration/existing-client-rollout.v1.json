@@ -1,7 +1,7 @@
 {
   "schema": "unc.existing-client-rollout.v1",
-  "observedAt": "2026-09-06T01:00:38.000Z",
-  "status": "two_governed_stored_source_reads_verified_not_provider_or_runtime",
+  "observedAt": "2026-09-06T01:28:00.000Z",
+  "status": "two_governed_runtime_source_reads_verified_native_email_jobs_mapped_not_adopted",
   "ownerDirection": "Hyperagent is reference configuration/history/channel inventory, not target execution. Junction owns runtime identity, permissions, routing, stored data and approved structured routine execution; preserve the same client Slack channels through controlled cutover.",
   "sources": {
     "nativeRoster": "https://hyperagent.com/agents",
@@ -192,7 +192,23 @@
           "providerApiCall": false,
           "enabledRoutines": 0,
           "runs": 0
-        }
+        },
+        "routineMappings": [
+          {
+            "nativeCapability": "supervised_newsletter_production",
+            "uncRoutineId": "D05-W08",
+            "mapping": "implemented_not_adopted",
+            "activation": "off",
+            "boundary": "Draft artifact only. Native provider draft creation remains a separate approval-gated action contract."
+          },
+          {
+            "nativeCapability": "daily_source_and_approved_learning_review",
+            "uncRoutineId": null,
+            "mapping": "internal_continuity_job",
+            "activation": "native_only",
+            "boundary": "Source freshness and approved-learning review is not one of the seven customer-facing email switches."
+          }
+        ]
       },
       "next": "Preserve current service until controlled cutover; establish canonical Unc owner/account binding and implement the verified business routines through Junction. Do not change Ask first to Auto or use Hyperagent execution as the default backend."
     },
@@ -208,6 +224,38 @@
         "DBH Search"
       ],
       "routineInventoryComplete": false,
+      "nativeEmail": {
+        "id": "cmsy91p0d04mw07adgg777f3n",
+        "source": "https://hyperagent.com/agents/cmsy91p0d04mw07adgg777f3n",
+        "mode": "Ask first",
+        "liveMode": false,
+        "schedule": null,
+        "integrations": [
+          "DBH Contacts Read",
+          "DBH Email Campaigns Read",
+          "Slack"
+        ],
+        "nativeCapability": "four_week_campaign_calendar_and_production_brief",
+        "approvalOwners": [
+          "Tom",
+          "Roie"
+        ],
+        "routineMappings": [
+          {
+            "uncRoutineId": "D05-W07",
+            "mapping": "contract_mismatch",
+            "activation": "off",
+            "gaps": [
+              "four-week horizon instead of six",
+              "production-ready email copy",
+              "mobile module and asset brief",
+              "cohort evidence and confidence tier",
+              "Tom and Roie approval ownership",
+              "72-hour and seven-day review plan"
+            ]
+          }
+        ]
+      },
       "runtimeSource": {
         "contract": "junction.source.email-campaigns.v1",
         "grantId": "f53e3893-ffe9-46f6-bc6a-b50de0065f55",

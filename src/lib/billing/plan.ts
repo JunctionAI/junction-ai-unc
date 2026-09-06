@@ -15,7 +15,7 @@ export const PLAN_COPY = {
   trialBadge: "14-day free trial",
   checklist: [
     "Unc, working on your goal 24/7",
-    "All 35 routines, customised to you",
+    "All 36 routines, customised to you",
     "Human experts behind him, always",
     "Nothing runs without your okay — everything receipted",
   ],

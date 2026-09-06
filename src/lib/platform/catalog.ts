@@ -36,7 +36,7 @@ export const CATEGORIES: CategoryDef[] = [
   { id: "D02", name: "Paid ads", systems: ["Daily paid decisioning", "Creative testing sprints", "Hook rotation engine", "Ad fatigue watch", "Creator whitelisting", "Creative test planner", "Budget pacing guard", "Organic-to-paid promotion"] },
   { id: "D03", name: "SEO", systems: ["Keyword opportunity scan", "Content gap analysis", "AI search visibility", "On-page SEO fixes", "SERP position watch", "Competitor gap watch"] },
   { id: "D04", name: "Sales", systems: ["Lead research & scoring", "Supervised outbound drafts", "Meeting brief builder", "Follow-up cadence", "Win/loss capture", "Pipeline hygiene"] },
-  { id: "D05", name: "Email & SMS", systems: ["Welcome flow tuning", "Abandoned cart recovery", "Segmentation refresh", "Winback campaign prep", "Post-purchase education", "Review request timing", "Campaign calendar prep"] },
+  { id: "D05", name: "Email & SMS", systems: ["Welcome flow tuning", "Abandoned cart recovery", "Segmentation refresh", "Winback campaign prep", "Post-purchase education", "Review request timing", "Campaign calendar prep", "Newsletter draft production"] },
 ];
 
 export const BENEFITS: Record<string, string> = {
@@ -75,6 +75,7 @@ export const BENEFITS: Record<string, string> = {
   "Winback campaign prep": "Revive lapsed customers",
   "Review request timing": "More reviews, asked at the right moment",
   "Campaign calendar prep": "Campaigns planned ahead, not scrambled",
+  "Newsletter draft production": "Turn your real brief into a review-ready email",
 };
 
 export const CAT_TAGLINES: Record<string, string> = {
@@ -108,7 +109,7 @@ const PURPOSE_OVERRIDES: Record<string, string> = {
   "D03-W01": "Finds search demand you can win with content you already have authority for.",
 };
 
-/** All 35 routines — built exactly the way the prototype builds them. */
+/** All executable routines — generated from the category inventory. */
 export const ALL_SYSTEMS: RoutineDef[] = CATEGORIES.flatMap((c) =>
   c.systems.map((n, i) => ({ id: `${c.id}-W${String(i + 1).padStart(2, "0")}`, name: n, cat: c.name }))
 ).map((s, i) => {

@@ -152,6 +152,7 @@ export const KPI_CONTRACTS: Record<RoutineId, KpiContract> = {
   "D05-W05": runsKpi("post_purchase_drafts_per_month", "Post-purchase drafts", 1, 28, "drafts / 28d"),
   "D05-W06": runsKpi("review_timing_proposals_per_month", "Review-timing proposals", 1, 28, "proposals / 28d"),
   "D05-W07": runsKpi("calendars_per_month", "Campaign calendars delivered", 1, 28, "calendars / 28d"),
+  "D05-W08": runsKpi("newsletter_drafts_per_month", "Newsletter drafts delivered", 1, 28, "drafts / 28d"),
 };
 
 // ---------- hours saved per completed run ----------
@@ -170,6 +171,7 @@ const HOURS_OVERRIDES: Record<RoutineId, number> = {
   "D04-W03": 0.75, // a meeting brief per external meeting
   "D05-W04": 1.5, // winback campaign prepared end to end
   "D05-W07": 2.0, // a 90-day campaign calendar
+  "D05-W08": 1.5, // a complete founder-led newsletter draft and build brief
 };
 const CAT_BY_ID = new Map(ALL_SYSTEMS.map((s) => [s.id, s.cat]));
 export const HOURS_SAVED_PER_RUN: Record<RoutineId, number> = Object.fromEntries(ALL_SYSTEMS.map((s) => [s.id, HOURS_OVERRIDES[s.id] ?? HOURS_BY_CATEGORY[s.cat] ?? 0.5]));
@@ -697,6 +699,15 @@ const D05: RoutineSpec[] = [
     produce("D05-W07", 6),
     gate("{{artifact.title}}", { detail: "Sequenced from your goal, the plan and the anchors I know about (events, launches, seasonality when there is order history). Each week has a theme and a working subject.", after: "Calendar in your queue" }),
     receipt("Campaign calendar prep: {{artifact.title}} handed over.", 42),
+  ]),
+  // Newsletter draft production — wave 1, manual and draft-only
+  spec("D05-W08", 1, [
+    trigger(CADENCE.MANUAL),
+    optRead("campaigns", "klaviyo", "campaigns", { window: "90d", fields: ["id", "subject", "send_time", "revenue", "unsubscribes"] }),
+    optRead("products", "shopify", "products", { fields: ["id", "title", "handle", "status"], limit: 100 }),
+    produce("D05-W08", 1),
+    gate("{{artifact.title}}", { detail: "One newsletter draft and build brief grounded in the founder's supplied message. Provider draft creation, testing, scheduling and sending remain separate approvals.", after: "Review-ready newsletter draft in your queue" }),
+    receipt("Newsletter draft production: {{artifact.title}} handed over.", 14),
   ]),
 ];
 

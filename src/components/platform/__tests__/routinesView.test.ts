@@ -78,10 +78,10 @@ describe("RoutinesView — accounts mode reads the database, demo mode is the pr
     const html = renderRoutines(catsState, acctRun, none);
     const esc = (s: string) => s.replace(/&/g, "&amp;");
     expect(html).toContain(esc(ROUTINES_COPY.planStart("Email & SMS")));
-    expect(html).toContain("0 of 7 on");
+    expect(html).toContain("0 of 8 on");
     expect(html).toContain(ROUTINES_COPY.recommended);
     const on = renderRoutines(catsState, acctRun, live);
-    expect(on).toContain("1 of 7 on");
+    expect(on).toContain("1 of 8 on");
     expect(on).not.toContain(esc(ROUTINES_COPY.planStart("Email & SMS")));
   });
 

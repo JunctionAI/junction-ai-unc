@@ -118,7 +118,7 @@ describe("the spine through the routes", () => {
   it("enable validates the routine id", async () => {
     expect((await postEnable(post("/api/setup/enable", "{nope"))).status).toBe(400);
     expect((await postEnable(post("/api/setup/enable", { routineId: "nope" }))).status).toBe(400);
-    expect((await postEnable(post("/api/setup/enable", { routineId: "D05-W08" }))).status).toBe(400);
+    expect((await postEnable(post("/api/setup/enable", { routineId: "D05-W09" }))).status).toBe(400);
   });
 
   it("members may read routine state but cannot enable or toggle routines", async () => {

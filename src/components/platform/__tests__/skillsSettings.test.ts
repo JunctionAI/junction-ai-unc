@@ -31,7 +31,7 @@ function payload(over: Partial<SkillsPayload> = {}): SkillsPayload {
 const render = (p: SkillsPayload) => renderToStaticMarkup(createElement(SkillsSettings, { onClose: noop, initial: p }));
 
 describe("SkillsSettings", () => {
-  it("lists all 35 routines with their source, the workflows that apply, the budget line; owner sees the inputs", () => {
+  it("lists every routine with its source, the workflows that apply, the budget line; owner sees the inputs", () => {
     const html = render(payload());
     for (const s of ALL_SYSTEMS) expect(html).toContain(`data-testid="skill-${s.id}"`);
     expect(html).toContain('data-testid="skill-D01-W01" data-source="n8n"');

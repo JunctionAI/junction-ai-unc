@@ -60,7 +60,7 @@ describe("plan constants — match the landing page", () => {
     expect(PLAN_COPY.cancel).toBe("Cancel any time");
     expect(PLAN_COPY.checklist).toEqual([
       "Unc, working on your goal 24/7",
-      "All 35 routines, customised to you",
+      "All 36 routines, customised to you",
       "Human experts behind him, always",
       "Nothing runs without your okay — everything receipted",
     ]);

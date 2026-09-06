@@ -186,7 +186,7 @@ describe("Home in accounts mode — no demo constant can render", () => {
     expect(html).toContain("unc-self-review");
     expect(html).not.toContain(esc(HOME_COPY.firstDay));
     expect(html).toContain("automation-strip");
-    expect(html).toContain("1 of 35 routines on · 1 run this week · ~1.5 h saved this week");
+    expect(html).toContain("1 of 36 routines on · 1 run this week · ~1.5 h saved this week");
     // Agreement metadata in local state is not a persisted plan.
     expect(html).not.toContain("Weeks 1–5");
     expect(html).toContain(esc(HOME_COPY.noPlan));
@@ -241,7 +241,7 @@ describe("Home in accounts mode — no demo constant can render", () => {
     expect(html).not.toContain("Abandoned cart");
     expect(html).not.toContain("Winback");
     expect(html).not.toContain("Shopify");
-    expect(html).toContain("Founder content engine"); // the generic wave-1 pick, in "Setting up next"
+    expect(html).toContain("Newsletter draft production"); // the service-safe email pick, in "Setting up next"
     expect(html).toContain("Connect LinkedIn");
     const step = renderToStaticMarkup(createElement(ConnectDataStep, { V: dv(services, ACCOUNT), channel: "Email & SMS", onConnect: async () => ({ kind: "fallback" as const, reason: "x" }), onContinue: noop, onLater: noop, onTokenLink: noop }));
     expect(step).not.toContain("connect-card-shopify");

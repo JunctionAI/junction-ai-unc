@@ -23,9 +23,9 @@ describe("skill cards", () => {
     if (!c.ok) expect(c.needs[0].input).toBe("verified_daily_spend_projection");
   });
   it("one per catalog routine, each stating its kind, prompt, output shape, minimum and skill file", () => {
-    expect(SKILLS).toHaveLength(35);
+    expect(SKILLS).toHaveLength(36);
     expect(SKILLS.map((s) => s.id).sort()).toEqual(CATALOG_SPECS.map((s) => s.id).sort());
-    expect(new Set(SKILLS.map((s) => s.id)).size).toBe(35);
+    expect(new Set(SKILLS.map((s) => s.id)).size).toBe(36);
     expect(WAVE_1_IDS.every((id) => SKILL_BY_ID[id])).toBe(true);
     for (const s of SKILLS) {
       expect(s.routineId).toBe(s.id);
@@ -96,6 +96,13 @@ describe("a services business with only a site profile (no connectors)", () => {
   it("Campaign calendar produces from the profile (goal + plan enrich it)", () => {
     const c = SKILL_BY_ID["D05-W07"].check(sctx({ profile: SERVICES_PROFILE, goal: { title: "NZ$40,000 MRR", deadline: "2026-12-31", baseline: 28000, currency: "NZD" }, plan: [{ title: "Content first" }] }));
     expect(c).toEqual({ ok: true, using: ["site profile", "goal “NZ$40,000 MRR”", "the plan"] });
+  });
+
+  it("Newsletter production requires the mode and real brief, then uses approved business context", () => {
+    const missing = SKILL_BY_ID["D05-W08"].check(sctx({ profile: SERVICES_PROFILE }));
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.needs.map((n) => n.input)).toEqual(["newsletter_mode", "newsletter_brief"]);
+    expect(SKILL_BY_ID["D05-W08"].check(sctx({ profile: SERVICES_PROFILE, inputs: { newsletter_mode: "founder_letter", newsletter_brief: "We are opening Saturdays because runners asked. Reply to book." } }))).toEqual({ ok: true, using: ["site profile", "founder letter mode", "your newsletter brief"] });
   });
 
   it("Social repurposing asks for a post when no social read has rows", () => {

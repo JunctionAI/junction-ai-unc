@@ -14,7 +14,7 @@
 import { CONNECTOR_PLATFORMS } from "../db/mapping";
 import { ALL_SYSTEMS } from "../platform/catalog";
 import { scoreChannels, type ChannelKey, type Posture } from "../platform/plan";
-import { fitsBusiness } from "../runtime/availability";
+import { fitsBusiness, requiredPlatforms } from "../runtime/availability";
 import { CATALOG_SPECS } from "../runtime/catalog-specs";
 import type { Platform, RoutineSpec } from "../runtime/types";
 import type { BusinessModel, PlatformEvidence } from "../unc/businessType";
@@ -102,7 +102,7 @@ export const GENERIC_WAVE_ONE: string[] = ["D01-W01", "D01-W03", "D04-W01", "D04
 
 export interface RecommendOptions {
   model?: BusinessModel | null;
-  /** resource_profiles.known_platforms — "No email tool yet" / "Mailchimp" keep Klaviyo-reading routines out of the recommendation. */
+  /** resource_profiles.known_platforms — "No email tool yet" / "Mailchimp" keep routines that require Klaviyo out of the recommendation. */
   knownPlatforms?: Iterable<string>;
 }
 
@@ -113,12 +113,12 @@ export function excludedPlatforms(knownPlatforms: Iterable<string> = []): Platfo
 }
 
 /** The routines the guided step and Home's "Setting up next" draw from, in order: the phase-1
-    channel's wave-1 routines that fit the business and read nothing the founder said they lack;
+    channel's wave-1 routines that fit the business and require nothing the founder said they lack;
     when the channel has none (an Email plan for a business with no store; Paid ads, whose every
     routine changes live spend), the generic wave-1 routines that fit. */
 export function recommendationPool(channel: ChannelKey, opts: RecommendOptions = {}): RoutineSpec[] {
   const excluded = new Set(excludedPlatforms(opts.knownPlatforms ?? []));
-  const usable = (s: RoutineSpec) => !readPlatforms(s).some((p) => excluded.has(p));
+  const usable = (s: RoutineSpec) => !requiredPlatforms(s).some((p) => excluded.has(p));
   const own = waveOneRoutines(channel, opts.model).filter(usable);
   if (own.length) return own;
   return GENERIC_WAVE_ONE.map((id) => CATALOG_SPECS.find((s) => s.id === id)).filter((s): s is RoutineSpec => !!s && fitsBusiness(s, opts.model) && usable(s));

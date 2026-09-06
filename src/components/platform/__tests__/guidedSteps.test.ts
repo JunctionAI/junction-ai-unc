@@ -219,12 +219,12 @@ describe("FirstRoutineStep — rendered per state", () => {
     expect(render(initialState, "Sales")).toContain('data-routine="D04-W01"');
   });
 
-  it("a services firm on an Email plan: never a cart — Founder content engine, with why, and the copy says clients", () => {
+  it("a services firm on an Email plan: never a cart — newsletter drafting, with why, and the copy says clients", () => {
     const html = render({ ...initialState, scan: scanned(SERVICES_PROFILE), obPlatforms: ["LinkedIn", "No email tool yet"] }, "Email & SMS");
-    expect(html).toContain('data-routine="D01-W01"');
+    expect(html).toContain('data-routine="D05-W08"');
     expect(html).not.toContain("Abandoned cart");
     expect(html).not.toContain("Shopify");
-    expect(html).toContain("nothing in email &amp; sms fits your business yet, so this one first");
+    expect(html).toContain("Your plan starts with <strong>Email &amp; SMS</strong> — this one first");
     expect(html).toContain("I prepare the work for clients");
     // a creator: audience
     const creator = render({ ...initialState, scan: scanned({ ...SERVICES_PROFILE, businessType: "creator", sells: "mixed" }) }, "Content");

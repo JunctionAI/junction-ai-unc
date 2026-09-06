@@ -16,12 +16,13 @@ const LAUNCH_WAVE = [
   "Meeting brief builder",
   "Abandoned cart recovery",
   "Campaign calendar prep",
+  "Newsletter draft production",
 ];
 
 describe("catalog specs", () => {
-  it("covers every one of the 35 catalog routines exactly once, with matching names", () => {
-    expect(CATALOG_SPECS).toHaveLength(35);
-    expect(ALL_SYSTEMS).toHaveLength(35);
+  it("covers every catalog routine exactly once, with matching names", () => {
+    expect(CATALOG_SPECS).toHaveLength(36);
+    expect(ALL_SYSTEMS).toHaveLength(36);
     for (const sys of ALL_SYSTEMS) {
       const spec = CATALOG_SPEC_BY_ID[sys.id];
       expect(spec, `missing spec for ${sys.id}`).toBeDefined();

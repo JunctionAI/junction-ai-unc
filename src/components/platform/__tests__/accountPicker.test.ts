@@ -36,6 +36,7 @@ describe("client choice before hydration or billing", () => {
     expect(f.billing).not.toHaveBeenCalled();
   });
   it("renders an accessible client switcher with the actual selected member account", () => {
+    // eslint-disable-next-line react/no-children-prop -- createElement's required children prop is not inferred from its third argument here.
     const html = renderToStaticMarkup(createElement(AccountScopeProvider, { accountId: B, choices: f.choices, children: createElement(AccountSwitcher) }));
     expect(html).toContain('aria-label="Switch client"');
     expect(html).toContain(`value="${B}" selected=""`);

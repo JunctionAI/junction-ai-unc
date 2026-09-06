@@ -22,6 +22,7 @@ export const AGENT_JOBS: readonly AgentJob[] = [
   job("Email & SMS","D05-W05","Draft post-purchase education",["Teach buyers to get results"]),
   job("Email & SMS","D05-W03","Review customer segments",["Group customers by behaviour"]),
   job("Email & SMS","D05-W07","Plan next month’s campaigns"),
+  job("Email & SMS","D05-W08","Draft a newsletter from your brief",["Turn your brief into a newsletter"],"Draft and build brief only; no provider draft or send is created."),
   job("Sales","D04-W01","Find and score leads that fit",["Find leads that fit","Score them before you call"],"One routine handles both research and scoring; one switch, not two runs."),
   job("Sales","D04-W02","Write the first message"),
   pending("Sales","lead-calls","Call leads to book meetings","Automated calling is not implemented or approved."),
