@@ -24,12 +24,12 @@ import { NoCredentialsProvider } from "../../../worker/credentials";
 import { issueDataToken, RateLimiter, scopesForSpec } from "../dataToken";
 import type { ProxyDeps } from "../proxy";
 import type { N8nNode, RoutineSpec, RunResult } from "../../runtime/types";
-import type { PaidShadowContract } from "../paidShadowContract";
+import type { PaidShadowContract, PaidTrustedEvidence } from "../paidShadowContract";
 import type { RunRecord } from "../../runtime/store/interface";
 import type { CommandActor, RoutineCommand } from "../../commands/types";
 import { syntheticAdmission } from "./admissionFixture";
 import { account, ctxFor, dns, end, env, gadsArtifact, gadsContract, gadsReceipt, gadsRegistration, identityFor, metaArtifact, metaContract,
-  metaFor, metaReceipt, metaRegistration, now, runId, savedExecution, start } from "./paidFixture";
+  metaFor, metaReceipt, metaRegistration, now, runId, savedExecution, start, trusted, verifiedAt } from "./paidFixture";
 
 const mocked = vi.hoisted(() => ({ deps: null as unknown }));
 vi.mock("@/lib/n8n/routeDeps", () => ({ proxyDeps: () => mocked.deps }));
@@ -40,6 +40,8 @@ const payload = (c: PaidShadowContract = metaContract) => buildN8nPayload(node(c
 const metaPins = { workflowId: metaContract.workflowId, executionId: "12345", triggerNodeId: "incoming-meta", resultNodeId: "result-meta" };
 const reply = () => ({ artifact: metaArtifact(), executionReceipt: metaReceipt() });
 const item = (draft = metaArtifact()) => draft.items![0].meta!;
+const evidence = trusted();
+const validate = (draft: unknown, c: PaidShadowContract = metaContract, bundle: PaidTrustedEvidence | null = evidence) => paidShadowArtifact(draft, c, identityFor(c), bundle);
 
 describe("paid-ads shadow contract and spec", () => {
   it("builds a manual, draft-only, four-node spec for every AVGAR paid routine and grants no data scopes", () => {
@@ -73,12 +75,13 @@ describe("paid-ads shadow contract and spec", () => {
 
 describe("Meta artifact acceptance encodes the 50% cap rule", () => {
   it("accepts a translated HOLD verdict, keeps only checked fields and never a raw provider payload", () => {
-    const out = paidShadowArtifact(metaArtifact(), metaContract, identityFor(metaContract));
+    const out = validate(metaArtifact(), metaContract);
     expect(out.meta).toEqual({});
     expect(out.items![0].meta).toEqual({ routine: "D02-W01", decision_state: "HOLD", status: "observed", executed_action: "none",
       adset_id: "120252863530370580", adset_name: "AD_ORG01_PROLINE_ALIGNSTICKS_REEL", window: "last_7d", next_action: "REPAIR_MEASUREMENT",
       observed: { spend: 162.39, purchases: 1, cpa: 162.39, ctr: 2.556818181818182, frequency: 1.201018 },
-      cpa_cap: { value: 60, currency: "NZD", basis: "product_price_50pct", product_price: 120, product_ref: "shopify:variant:synthetic", comparable_value: 60 },
+      cpa_cap: { value: 60, currency: "NZD", basis: "product_price_50pct", product_price: 120, product_ref: "shopify:variant:synthetic",
+        price_evidence: { source: "shopify:products", sourceRevision: "rev-synthetic-2026-09-06", verifiedAt }, comparable_value: 60 },
       rollback_proposal: "Do not pause or scale; keep the current state until measurement is repaired." });
     expect(JSON.stringify(out)).not.toContain("never-store");
   });
@@ -103,38 +106,38 @@ describe("Meta artifact acceptance encodes the 50% cap rule", () => {
   ];
   it.each(metaCases)("rejects %s", (_label, mutate) => {
     const draft = metaArtifact(); mutate(draft);
-    expect(() => paidShadowArtifact(draft, metaContract, identityFor(metaContract))).toThrow();
+    expect(() => validate(draft, metaContract)).toThrow();
   });
   it("accepts SCALE and TURN_OFF only when the observed CPA sits on the right side of the cap", () => {
     const scale = metaArtifact(); item(scale).decision_state = "SCALE"; (item(scale).observed as Record<string, unknown>).cpa = 59.5;
-    expect(paidShadowArtifact(scale, metaContract, identityFor(metaContract)).items![0].meta!.decision_state).toBe("SCALE");
+    expect(validate(scale, metaContract).items![0].meta!.decision_state).toBe("SCALE");
     const off = metaArtifact(); item(off).decision_state = "TURN_OFF";
-    expect(paidShadowArtifact(off, metaContract, identityFor(metaContract)).items![0].meta!.decision_state).toBe("TURN_OFF");
+    expect(validate(off, metaContract).items![0].meta!.decision_state).toBe("TURN_OFF");
     const offUnder = metaArtifact(); item(offUnder).decision_state = "TURN_OFF"; (item(offUnder).observed as Record<string, unknown>).cpa = 30;
-    expect(() => paidShadowArtifact(offUnder, metaContract, identityFor(metaContract))).toThrow("over the cap");
+    expect(() => validate(offUnder, metaContract)).toThrow("over the cap");
   });
   it("validates the other Meta routines with their own vocabulary and item limits", () => {
     const fatigue = metaFor("D02-W04", "ad_fatigue"), pace = metaFor("D02-W07", "budget_pacing"), planner = metaFor("D02-W06", "creative_test_planner");
     const pause = metaArtifact(); Object.assign(item(pause), { routine: "D02-W04", decision_state: "PAUSE_PROPOSED", ad_id: "120252863530370580" });
-    expect(paidShadowArtifact(pause, fatigue, identityFor(fatigue)).items![0].meta).toMatchObject({ decision_state: "PAUSE_PROPOSED", ad_id: "120252863530370580" });
+    expect(validate(pause, fatigue).items![0].meta).toMatchObject({ decision_state: "PAUSE_PROPOSED", ad_id: "120252863530370580" });
     const within = metaArtifact(); Object.assign(item(within), { routine: "D02-W07", decision_state: "WITHIN_CAP", daily_budget_cap: { value: 3000, currency: "NZD" }, observed: { window_spend: 305.88 } }); delete item(within).cpa_cap;
-    expect(paidShadowArtifact(within, pace, identityFor(pace)).items![0].meta).toMatchObject({ daily_budget_cap: { value: 3000, currency: "NZD" }, observed: { window_spend: 305.88 } });
+    expect(validate(within, pace).items![0].meta).toMatchObject({ daily_budget_cap: { value: 3000, currency: "NZD" }, observed: { window_spend: 305.88 } });
     const foreignCap = metaArtifact(); Object.assign(item(foreignCap), { routine: "D02-W07", decision_state: "WITHIN_CAP", daily_budget_cap: { value: 3000, currency: "USD" } });
-    expect(() => paidShadowArtifact(foreignCap, pace, identityFor(pace))).toThrow("daily_budget_cap");
+    expect(() => validate(foreignCap, pace)).toThrow("daily_budget_cap");
     const blocked = metaArtifact(); Object.assign(item(blocked), { routine: "D02-W06", decision_state: "BLOCKED", status: "blocked", blocked_field: "experiment_ledger_connected", experiment_ledger_connected: false }); delete item(blocked).cpa_cap;
-    expect(paidShadowArtifact(blocked, planner, identityFor(planner)).items![0].meta).toMatchObject({ decision_state: "BLOCKED", experiment_ledger_connected: false });
+    expect(validate(blocked, planner).items![0].meta).toMatchObject({ decision_state: "BLOCKED", experiment_ledger_connected: false });
   });
 });
 
 describe("Google Ads BOFU plan acceptance", () => {
   it("accepts a PAUSED plan held on price and strips private notes", () => {
-    const out = paidShadowArtifact(gadsArtifact(), gadsContract, identityFor(gadsContract));
+    const out = validate(gadsArtifact(), gadsContract);
     expect(out.items![0].meta).toMatchObject({ routine: "D02-W09", decision_state: "PLAN_PROPOSED", campaign_status: "PAUSED", customer_id: "1797030595",
       market: "US", mutate_attempted: false, cpa_ceiling: null, cap_reason: "pending_product_price", login_customer_id: null, conversion_action: null,
       keywords: [{ keyword: "golf travel bag", match_type: "PHRASE", search_volume: 49500, cpc: 1.2, competition: "HIGH", intent: "transactional" }] });
     expect(JSON.stringify(out)).not.toContain("never-store");
-    const capped = gadsArtifact(); Object.assign(item(capped), { cpa_ceiling: { value: 47.5, currency: "NZD", basis: "product_price_50pct", product_price: 95 } }); delete item(capped).cap_reason;
-    expect(paidShadowArtifact(capped, gadsContract, identityFor(gadsContract)).items![0].meta!.cpa_ceiling).toEqual({ value: 47.5, currency: "NZD", basis: "product_price_50pct", product_price: 95, comparable_value: 47.5 });
+    const capped = gadsArtifact(); Object.assign(item(capped), { cpa_ceiling: { value: 47.5, currency: "NZD", basis: "product_price_50pct", product_price: 95, product_ref: "shopify:variant:travel-case" } }); delete item(capped).cap_reason;
+    expect(validate(capped, gadsContract).items![0].meta!.cpa_ceiling).toMatchObject({ value: 47.5, currency: "NZD", product_price: 95, product_ref: "shopify:variant:travel-case", comparable_value: 47.5, price_evidence: { sourceRevision: "rev-travel-case-2026-09-06" } });
   });
   const gadsCases: [string, (m: Record<string, unknown>) => void][] = [
     ["an active campaign", m => { m.campaign_status = "ENABLED"; }],
@@ -144,13 +147,13 @@ describe("Google Ads BOFU plan acceptance", () => {
     ["an attempted mutation", m => { m.mutate_attempted = true; }],
     ["a plan with no keyword lines", m => { m.keywords = []; }],
     ["a plan with neither ceiling nor hold reason", m => { delete m.cap_reason; }],
-    ["a ceiling in another currency", m => { m.cpa_ceiling = { value: 47.5, currency: "USD", basis: "product_price_50pct", product_price: 95 }; }],
+    ["a ceiling in another currency", m => { m.cpa_ceiling = { value: 47.5, currency: "USD", basis: "product_price_50pct", product_price: 95, product_ref: "shopify:variant:travel-case" }; }],
     ["an invalid match type", m => { (m.keywords as Record<string, unknown>[])[0].match_type = "MODIFIED_BROAD"; }],
     ["too many headlines", m => { m.headlines = Array.from({ length: 16 }, (_, i) => `Headline ${i}`); }],
   ];
   it.each(gadsCases)("rejects %s", (_label, mutate) => {
     const draft = gadsArtifact(); mutate(item(draft));
-    expect(() => paidShadowArtifact(draft, gadsContract, identityFor(gadsContract))).toThrow();
+    expect(() => validate(draft, gadsContract)).toThrow();
   });
 });
 
@@ -192,7 +195,7 @@ describe("receipts bind the lane's own provider evidence", () => {
 describe("bridge: AVGAR's contract, its own ledger and reader, nothing else", () => {
   function bridge(opts: { admission?: ShadowAdmission | null; env?: Record<string, string | undefined>; status?: number; body?: unknown; reader?: boolean } = {}) {
     const sent: unknown[] = []; let calls = 0;
-    const b = new HttpN8nBridge({ env: opts.env ?? env, now, lookup: dns,
+    const b = new HttpN8nBridge({ env: opts.env ?? env, now, lookup: dns, paidTrustedEvidence: async () => evidence,
       ...(opts.admission === null ? {} : { paidShadowAdmission: opts.admission ?? syntheticAdmission() }),
       ...(opts.reader === false ? {} : { readPaidShadowExecution: async ({ executionId }) => projectResultShadowExecution(savedExecution(metaContract, sent[0], opts.body ?? reply(), executionId), { ...metaPins, executionId }) }),
       fetch: async (_url, init) => { calls++; sent.push(JSON.parse(String(init.body))); return new Response(JSON.stringify(opts.body ?? reply()), { status: opts.status ?? 200 }); } });
@@ -231,7 +234,7 @@ describe("bridge: AVGAR's contract, its own ledger and reader, nothing else", ()
     const raw = reply(); raw.artifact.kind = "meta_decisions" as never;
     await expect(bridge({ body: raw }).b.call(node(), ctxFor(metaContract), metaRegistration)).rejects.toThrow();
     const empty = reply(); (empty.executionReceipt.provider as Record<string, unknown>).itemsCount = 0;
-    expect(() => protocolCandidate(empty.artifact, validatePaidShadowReceipt(empty.executionReceipt, metaContract, identityFor(metaContract), now()), metaContract, identityFor(metaContract), "a".repeat(64))).toThrow("empty Meta insights read");
+    expect(() => protocolCandidate(empty.artifact, validatePaidShadowReceipt(empty.executionReceipt, metaContract, identityFor(metaContract), now()), metaContract, identityFor(metaContract), "a".repeat(64), evidence)).toThrow("empty Meta insights read");
   });
   it("pins the execution reader per lane and never falls back to the keyword or calendar family", () => {
     expect(createShadowExecutionReader(env, metaContract.workflowId, { protocol: "meta" })).toBeTypeOf("function");
@@ -260,7 +263,7 @@ describe("engine: paid runs need their own reservation, claim and completion; di
     const claims: string[] = []; let dispatched = 0;
     const complete = vi.fn(async (run: RunRecord) => {
       expect(run.snapshot).toMatchObject({ awaiting: "paid_shadow", nextNodeIndex: 2 });
-      const draft = paidShadowArtifact(metaArtifact(), metaContract, { accountId: run.accountId, runId: run.id, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt });
+      const draft = paidShadowArtifact(metaArtifact(), metaContract, { accountId: run.accountId, runId: run.id, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt }, evidence);
       draft.meta = { executionReceipt: { revisionEvidence: "verified_execution_record" }, approval_status: "pending_approval", executed_action: "none" };
       return (await planPaidShadowCompletion(run, draft, { now })).result;
     });
@@ -331,46 +334,111 @@ describe("chat/Slack selection is the reviewed spec, the pinned receiver and AVG
 describe("corrections: unmapped price holds without a cap; source currency is preserved", () => {
   it("accepts HOLD with cap_reason pending_product_price and no cap, and refuses KEEP or any cap without a verified price", () => {
     const hold = metaArtifact(); delete item(hold).cpa_cap; Object.assign(item(hold), { cap_reason: "pending_product_price", next_action: "RESOLVE_PRODUCT_PRICE_MAPPING" });
-    expect(paidShadowArtifact(hold, metaContract, identityFor(metaContract)).items![0].meta).toMatchObject({ decision_state: "HOLD", cap_reason: "pending_product_price" });
-    expect(paidShadowArtifact(hold, metaContract, identityFor(metaContract)).items![0].meta).not.toHaveProperty("cpa_cap");
+    expect(validate(hold, metaContract).items![0].meta).toMatchObject({ decision_state: "HOLD", cap_reason: "pending_product_price" });
+    expect(validate(hold, metaContract).items![0].meta).not.toHaveProperty("cpa_cap");
     const keep = metaArtifact(); delete item(keep).cpa_cap; Object.assign(item(keep), { decision_state: "KEEP", observed: { spend: 90, purchases: 3, cpa: 30 } });
-    expect(() => paidShadowArtifact(keep, metaContract, identityFor(metaContract))).toThrow("KEEP is a cap-judged verdict");
+    expect(() => validate(keep, metaContract)).toThrow("KEEP is a cap-judged verdict");
     const invented = metaArtifact(); (item(invented).cpa_cap as Record<string, unknown>).product_price = null;
-    expect(() => paidShadowArtifact(invented, metaContract, identityFor(metaContract))).toThrow("verified product price");
+    expect(() => validate(invented, metaContract)).toThrow("verified product price");
     const guessed = metaArtifact(); Object.assign(item(guessed), { cpa_cap: { value: 60, currency: "NZD", basis: "preset_target_cpa", product_price: 120 } });
-    expect(() => paidShadowArtifact(guessed, metaContract, identityFor(metaContract))).toThrow("verified product price");
+    expect(() => validate(guessed, metaContract)).toThrow("verified product price");
   });
   it("keeps the product's own currency on the cap and demands a verified conversion into the account currency", () => {
-    const usdPrice = { value: 45, currency: "USD", basis: "product_price_50pct", product_price: 90 };
-    const fx = { from: "USD", to: "NZD", rate: 1.65, source: "rbnz-mid-2026-09-05", as_of: "2026-09-05T00:00:00.000Z", converted_value: 74.25 };
+    const usdPrice = { value: 45, currency: "USD", basis: "product_price_50pct", product_price: 90, product_ref: "shopify:variant:synthetic-usd" };
+    const fx = { from: "USD", to: "NZD", rate: 1.65, source: "rbnz-mid-2026-09-05", as_of: "2026-09-06T00:00:00.000Z", converted_value: 74.25 };
     const converted = metaArtifact(); Object.assign(item(converted), { cpa_cap: { ...usdPrice, conversion: fx } });
-    const out = paidShadowArtifact(converted, metaContract, identityFor(metaContract)).items![0].meta!;
-    expect(out.cpa_cap).toEqual({ ...usdPrice, conversion: fx, comparable_value: 74.25 });
+    const out = validate(converted, metaContract).items![0].meta!;
+    expect(out.cpa_cap).toEqual({ ...usdPrice, price_evidence: { source: "shopify:products", sourceRevision: "rev-synthetic-usd-2026-09-06", verifiedAt },
+      conversion: { ...fx, fx_evidence: { verifiedAt } }, comparable_value: 74.25 });
     const scale = metaArtifact(); Object.assign(item(scale), { decision_state: "SCALE", cpa_cap: { ...usdPrice, conversion: fx }, observed: { spend: 148, purchases: 2, cpa: 74 } });
-    expect(paidShadowArtifact(scale, metaContract, identityFor(metaContract)).items![0].meta!.decision_state).toBe("SCALE");
+    expect(validate(scale, metaContract).items![0].meta!.decision_state).toBe("SCALE");
     const overInNzd = metaArtifact(); Object.assign(item(overInNzd), { decision_state: "SCALE", cpa_cap: { ...usdPrice, conversion: fx }, observed: { spend: 150, purchases: 2, cpa: 75 } });
-    expect(() => paidShadowArtifact(overInNzd, metaContract, identityFor(metaContract))).toThrow("at or under the cap");
+    expect(() => validate(overInNzd, metaContract)).toThrow("at or under the cap");
     for (const bad of [{ ...fx, converted_value: 70 }, { ...fx, to: "AUD" }, { ...fx, rate: 0 }, { ...fx, source: "" }, { ...fx, as_of: "yesterday" }]) {
       const draft = metaArtifact(); Object.assign(item(draft), { cpa_cap: { ...usdPrice, conversion: bad } });
-      expect(() => paidShadowArtifact(draft, metaContract, identityFor(metaContract))).toThrow("verified conversion");
+      expect(() => validate(draft, metaContract)).toThrow(/verified conversion|trusted/);
     }
-    const needless = metaArtifact(); Object.assign(item(needless), { cpa_cap: { value: 60, currency: "NZD", basis: "product_price_50pct", product_price: 120, conversion: { ...fx, from: "NZD" } } });
-    expect(() => paidShadowArtifact(needless, metaContract, identityFor(metaContract))).toThrow("not needed");
+    const needless = metaArtifact(); Object.assign(item(needless), { cpa_cap: { value: 60, currency: "NZD", basis: "product_price_50pct", product_price: 120, product_ref: "shopify:variant:synthetic", conversion: { ...fx, from: "NZD" } } });
+    expect(() => validate(needless, metaContract)).toThrow("not needed");
   });
   it("does not force the Google Ads billing currency to equal the workspace currency", async () => {
     const usdBilling = { ...gadsContract, client: { ...gadsContract.client, currency: "USD" } };
     expect(paidShadowSchema.safeParse(usdBilling).success).toBe(true);
-    const ceilingInNzd = gadsArtifact(); Object.assign(item(ceilingInNzd), { cpa_ceiling: { value: 47.5, currency: "NZD", basis: "product_price_50pct", product_price: 95 } }); delete item(ceilingInNzd).cap_reason;
-    expect(() => paidShadowArtifact(ceilingInNzd, usdBilling, identityFor(usdBilling))).toThrow("verified conversion to USD");
-    Object.assign(item(ceilingInNzd).cpa_ceiling as Record<string, unknown>, { conversion: { from: "NZD", to: "USD", rate: 0.6, source: "rbnz-mid-2026-09-05", as_of: "2026-09-05T00:00:00.000Z", converted_value: 28.5 } });
-    expect(paidShadowArtifact(ceilingInNzd, usdBilling, identityFor(usdBilling)).items![0].meta!.cpa_ceiling).toMatchObject({ currency: "NZD", comparable_value: 28.5 });
+    const ceilingInNzd = gadsArtifact(); Object.assign(item(ceilingInNzd), { cpa_ceiling: { value: 47.5, currency: "NZD", basis: "product_price_50pct", product_price: 95, product_ref: "shopify:variant:travel-case" } }); delete item(ceilingInNzd).cap_reason;
+    expect(() => validate(ceilingInNzd, usdBilling)).toThrow("verified conversion to USD");
+    Object.assign(item(ceilingInNzd).cpa_ceiling as Record<string, unknown>, { conversion: { from: "NZD", to: "USD", rate: 0.6, source: "rbnz-mid-2026-09-05", as_of: "2026-09-06T00:00:00.000Z", converted_value: 28.5 } });
+    expect(validate(ceilingInNzd, usdBilling).items![0].meta!.cpa_ceiling).toMatchObject({ currency: "NZD", comparable_value: 28.5 });
     const sent: unknown[] = [];
-    const b = new HttpN8nBridge({ env, now, lookup: dns, paidShadowAdmission: syntheticAdmission(),
+    const b = new HttpN8nBridge({ env, now, lookup: dns, paidShadowAdmission: syntheticAdmission(), paidTrustedEvidence: async () => evidence,
       readPaidShadowExecution: async ({ executionId }) => projectResultShadowExecution(savedExecution(usdBilling, sent[0], { artifact: gadsArtifact(), executionReceipt: gadsReceipt(usdBilling) }, executionId), { workflowId: usdBilling.workflowId, executionId, triggerNodeId: "incoming-gads", resultNodeId: "result-gads" }),
       fetch: async (_url, init) => { sent.push(JSON.parse(String(init.body))); return new Response(JSON.stringify({ artifact: gadsArtifact(), executionReceipt: { ...gadsReceipt(usdBilling), executionId: "12346" } }), { status: 200 }); } });
     const out = await b.call(node(usdBilling), ctxFor(usdBilling), gadsRegistration);
     expect(out).toMatchObject({ kind: "artifact", artifact: { meta: { executionReceipt: { client: { currency: "USD" }, revisionEvidence: "verified_execution_record" } } } });
     expect((sent[0] as { account: { currency: string } }).account.currency).toBe("NZD");
+  });
+});
+
+describe("provenance: the artifact cannot certify its own price or FX evidence", () => {
+  const millionCap = { value: 500000, currency: "NZD", basis: "product_price_50pct", product_price: 1000000, product_ref: "shopify:variant:synthetic" };
+  const scaleOn = (cap: Record<string, unknown>) => { const d = metaArtifact(); Object.assign(item(d), { decision_state: "SCALE", cpa_cap: cap, observed: { spend: 200, purchases: 2, cpa: 100 } }); return d; };
+  it("attack 1: an invented 1,000,000 NZD price with a 500,000 cap and CPA 100 is refused, with or without a product_ref", () => {
+    expect(() => validate(scaleOn(millionCap))).toThrow("does not match the trusted price");
+    expect(() => validate(scaleOn({ ...millionCap, product_ref: undefined }))).toThrow("must cite the trusted product_ref");
+    expect(() => validate(scaleOn({ ...millionCap, product_ref: "shopify:variant:unknown" }))).toThrow("no trusted NZD price");
+    expect(() => validate(scaleOn({ ...millionCap, currency: "AUD", value: 500000 }))).toThrow("no trusted AUD price");
+    expect(() => validate(scaleOn(millionCap), metaContract, null)).toThrow("no trusted product price evidence");
+    expect(() => validate(scaleOn(millionCap), metaContract, { prices: "nope", fx: [] } as never)).toThrow("no trusted product price evidence");
+    const wrongMarket = metaFor("D02-W01", "daily_decisioning"); wrongMarket.client.market = "AU";
+    expect(() => validate(scaleOn({ ...millionCap, value: 60, product_price: 120 }), wrongMarket)).toThrow("market AU");
+    expect(() => validate(scaleOn({ ...millionCap, value: 60, product_price: 120, price_source_revision: "rev-forged" }))).toThrow("price_source_revision");
+  });
+  it("attack 2: an invented FX rate of 1000 from a made-up source dated 2099 is refused even when a trusted rate exists", () => {
+    const usd = { value: 45, currency: "USD", basis: "product_price_50pct", product_price: 90, product_ref: "shopify:variant:synthetic-usd" };
+    const forged = { from: "USD", to: "NZD", rate: 1000, source: "made-up", as_of: "2099-01-01T00:00:00.000Z", converted_value: 45000 };
+    const bad = metaArtifact(); Object.assign(item(bad), { decision_state: "SCALE", cpa_cap: { ...usd, conversion: forged }, observed: { spend: 200, purchases: 2, cpa: 100 } });
+    expect(() => validate(bad)).toThrow("does not match any trusted rate/source/time");
+    const real = { from: "USD", to: "NZD", rate: 1.65, source: "rbnz-mid-2026-09-05", as_of: "2026-09-06T00:00:00.000Z", converted_value: 74.25 };
+    for (const [label, fx] of [["rate", { ...real, rate: 1000, converted_value: 45000 }], ["source", { ...real, source: "made-up" }], ["time", { ...real, as_of: "2099-01-01T00:00:00.000Z" }]] as const) {
+      const d = metaArtifact(); Object.assign(item(d), { cpa_cap: { ...usd, conversion: fx } });
+      expect(() => validate(d), label).toThrow(/trusted/);
+    }
+    const future = trusted(); future.fx[0].asOf = "2099-01-01T00:00:00.000Z";
+    const futureDraft = metaArtifact(); Object.assign(item(futureDraft), { cpa_cap: { ...usd, conversion: { ...real, as_of: "2099-01-01T00:00:00.000Z" } } });
+    expect(() => validate(futureDraft, metaContract, future)).toThrow("stale or dated after this run");
+    const stale = trusted(); stale.fx[0].verifiedAt = "2026-09-01T00:00:00.000Z";
+    const staleDraft = metaArtifact(); Object.assign(item(staleDraft), { cpa_cap: { ...usd, conversion: real } });
+    expect(() => validate(staleDraft, metaContract, stale)).toThrow("stale or dated after this run");
+  });
+  it("stale or future price evidence refuses every cap-based verdict while holds still pass", () => {
+    const stale = trusted(); stale.prices[0].verifiedAt = "2026-09-04T00:00:00.000Z";
+    expect(() => validate(metaArtifact(), metaContract, stale)).toThrow("stale or dated after this run");
+    const future = trusted(); future.prices[0].verifiedAt = "2026-09-06T13:00:00.000Z";
+    expect(() => validate(metaArtifact(), metaContract, future)).toThrow("stale or dated after this run");
+    const hold = metaArtifact(); delete item(hold).cpa_cap; item(hold).cap_reason = "pending_product_price";
+    for (const bundle of [null, stale, future]) expect(validate(hold, metaContract, bundle).items![0].meta).toMatchObject({ decision_state: "HOLD", cap_reason: "pending_product_price" });
+    expect(() => validate(scaleOn({ ...millionCap, value: 60, product_price: 120 }), metaContract, null)).toThrow("no trusted product price evidence");
+  });
+  it("valid evidence: a cap matching the trusted price and rate is accepted and its provenance recorded", () => {
+    const valid = scaleOn({ value: 60, currency: "NZD", basis: "product_price_50pct", product_price: 120, product_ref: "shopify:variant:synthetic", price_source_revision: "rev-synthetic-2026-09-06" });
+    (item(valid).observed as Record<string, unknown>).cpa = 55;
+    const ok = validate(valid, metaContract).items![0].meta!;
+    expect(ok).toMatchObject({ decision_state: "SCALE", cpa_cap: { comparable_value: 60, price_evidence: { source: "shopify:products", sourceRevision: "rev-synthetic-2026-09-06", verifiedAt } } });
+    const wider = trusted(); wider.maxAgeSeconds = 7 * 86_400; wider.prices[0].verifiedAt = "2026-09-02T00:00:00.000Z";
+    expect(validate(metaArtifact(), metaContract, wider).items![0].meta!.cpa_cap).toMatchObject({ price_evidence: { verifiedAt: "2026-09-02T00:00:00.000Z" } });
+  });
+  it("bridge: a failing or absent evidence resolver still accepts a hold but refuses a cap-based verdict", async () => {
+    const hold = metaArtifact(); delete item(hold).cpa_cap; item(hold).cap_reason = "pending_product_price";
+    const make = (resolver: (() => Promise<PaidTrustedEvidence | null>) | undefined, artifact: ReturnType<typeof metaArtifact>) => {
+      const sent: unknown[] = [];
+      return new HttpN8nBridge({ env, now, lookup: dns, paidShadowAdmission: syntheticAdmission(), ...(resolver ? { paidTrustedEvidence: resolver } : {}),
+        readPaidShadowExecution: async ({ executionId }) => projectResultShadowExecution(savedExecution(metaContract, sent[0], { artifact, executionReceipt: metaReceipt() }, executionId), { ...metaPins, executionId }),
+        fetch: async (_url, init) => { sent.push(JSON.parse(String(init.body))); return new Response(JSON.stringify({ artifact, executionReceipt: metaReceipt() }), { status: 200 }); } });
+    };
+    expect(await make(async () => { throw new Error("source down"); }, hold).call(node(), ctxFor(metaContract), metaRegistration)).toMatchObject({ kind: "artifact" });
+    expect(await make(undefined, hold).call(node(), ctxFor(metaContract), metaRegistration)).toMatchObject({ kind: "artifact" });
+    await expect(make(undefined, metaArtifact()).call(node(), ctxFor(metaContract), metaRegistration)).rejects.toThrow("no trusted product price evidence");
+    await expect(make(async () => { throw new Error("source down"); }, metaArtifact()).call(node(), ctxFor(metaContract), metaRegistration)).rejects.toThrow("no trusted product price evidence");
+    expect(await make(async () => evidence, metaArtifact()).call(node(), ctxFor(metaContract), metaRegistration)).toMatchObject({ kind: "artifact", artifact: { items: [{ meta: { cpa_cap: { comparable_value: 60 } } }] } });
   });
 });
 

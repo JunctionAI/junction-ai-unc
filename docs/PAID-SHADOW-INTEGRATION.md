@@ -32,6 +32,34 @@ currency the cap must carry `conversion: { from, to: client.currency, rate, sour
 with `converted_value === round2(value × rate)`; Unc stores it and uses `comparable_value` (the cap in the
 account currency) for every CPA comparison. No conversion is performed or inferred by Unc.
 
+### Trusted evidence: the artifact cannot certify its own prices or rates
+
+Every cap must **match** server-supplied evidence, never merely be well-formed. The evidence type is
+`PaidTrustedEvidence` in `src/lib/n8n/paidShadowContract.ts`:
+
+```ts
+{ prices: [{ productRef, market, currency, price, source, sourceRevision, verifiedAt }],
+  fx:     [{ from, to, rate, source, asOf, verifiedAt }],
+  maxAgeSeconds?: number /* default 86 400, max 7 days */ }
+```
+
+Rules (all enforced in `paidShadowArtifact`): a cap must cite `product_ref`; that ref must exist in
+`prices` for the contract market and the cap's currency with the identical price; an optional
+`price_source_revision` must equal the trusted `sourceRevision`; a conversion must equal a trusted `fx`
+entry on from/to/source/asOf with the identical rate; price and FX `verifiedAt` must not be after the
+run start and not older than `maxAgeSeconds` before it; FX `asOf` must not be after the run start or older
+than `maxAgeSeconds`. Missing, malformed, mismatched, stale or future evidence refuses the cap, which refuses
+SCALE, TURN_OFF, PAUSE_PROPOSED and D02-W01 KEEP. Holds with `cap_reason: "pending_product_price"` still pass.
+The matched evidence is recorded on the stored cap as `price_evidence` / `conversion.fx_evidence`.
+
+**Caller changes required (Codex):**
+- Populate `ServiceDeps.paidTrustedEvidence: PaidEvidenceSource` — `(scope + contract) => Promise<PaidTrustedEvidence | null>` —
+  from governed reads (Shopify product/variant price per market via the existing dataset rails, a trusted FX source).
+  `buildAdapters` passes it to the bridge (`paidTrustedEvidence`) and to `completePaidShadowRun` (`opts.trustedEvidence`).
+  The resolver must be deterministic per run so completion re-validates against the same evidence; no new datastore is introduced here.
+- Any direct `paidShadowArtifact(...)` / `protocolCandidate(...)` caller now passes the evidence bundle (or `null`).
+- Nothing in this branch reads product or FX data; without a resolver the lane accepts holds only.
+
 A SCALE needs observed CPA ≤ comparable cap; TURN_OFF / PAUSE_PROPOSED need CPA > comparable cap (or spend ≥ cap
 with no purchases). **A missing product-price mapping is a HOLD** with `cap_reason: "pending_product_price"` and
 no cap at all — never a preset, converted, compare-at or store-wide number; a D02-W01 KEEP without a cap is

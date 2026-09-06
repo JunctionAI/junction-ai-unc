@@ -123,30 +123,105 @@ function forbidExecution(meta: Record<string, unknown>, where: string): void {
       meta.mutate_attempted === true || meta.meta_mutation_attempted === true) fail(`${where} is not a shadow recommendation`);
 }
 
-/** The cap rule as arithmetic: value must equal 50% of a positive verified price, both in the
- * product's own currency. When that currency is not the ad/billing account's currency the item
- * must carry a verified conversion into the account currency; nothing is converted here and no
- * account currency is forced to equal a workspace currency. `comparable_value` is the cap in the
+/** Server-supplied, independently sourced evidence a returned artifact must MATCH. The artifact
+ * cannot certify its own price or FX figures: every cap must equal a trusted product price and
+ * every conversion must equal a trusted rate. Codex populates this from governed reads
+ * (Shopify product/variant price per market, a trusted FX source); it is never read from the
+ * n8n reply, the model, chat text or the artifact itself. `null` = no trusted evidence for this
+ * run, so no cap-based recommendation can be accepted (HOLD / pending_product_price only). */
+export interface TrustedProductPrice {
+  /** Exact reference the artifact must cite as `product_ref`, e.g. "shopify:variant:1234". */
+  productRef: string;
+  market: PaidMarket;
+  currency: string;
+  price: number;
+  /** Where the price was read and its revision (e.g. dataset snapshot id / product updated_at). */
+  source: string;
+  sourceRevision: string;
+  /** When Unc verified it; must not be after the run started, nor older than maxAgeSeconds before it. */
+  verifiedAt: string;
+}
+export interface TrustedFxRate {
+  from: string;
+  to: string;
+  rate: number;
+  source: string;
+  /** The rate's own timestamp; the artifact's conversion must echo it exactly. */
+  asOf: string;
+  verifiedAt: string;
+}
+export interface PaidTrustedEvidence {
+  prices: TrustedProductPrice[];
+  fx: TrustedFxRate[];
+  /** Freshness window for price and FX evidence, measured back from the run start. Default 86 400 s. */
+  maxAgeSeconds?: number;
+}
+export const PAID_EVIDENCE_MAX_AGE_SECONDS = 86_400;
+export const PAID_EVIDENCE_CLOCK_SLACK_MS = 30_000;
+/** Per-run resolver Codex wires into the bridge and the completion adapter. Must be deterministic for a run. */
+export type PaidEvidenceSource = (input: { accountId: string; contextGeneration: number; runId: string; contract: PaidShadowContract }) => Promise<PaidTrustedEvidence | null>;
+
+const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
+function evidenceFresh(verifiedAt: unknown, runStartedAt: string, maxAgeSeconds: number): boolean {
+  const verified = Date.parse(String(verifiedAt)), started = Date.parse(runStartedAt);
+  return Number.isFinite(verified) && Number.isFinite(started) && verified <= started + PAID_EVIDENCE_CLOCK_SLACK_MS &&
+    started - verified <= maxAgeSeconds * 1000;
+}
+/** Structural check of the caller-supplied evidence; a malformed bundle counts as no evidence. */
+export function paidTrustedEvidenceProblem(value: unknown): string | null {
+  const e = object(value);
+  if (!e || !Array.isArray(e.prices) || !Array.isArray(e.fx) || e.prices.length > 200 || e.fx.length > 50 ||
+      (e.maxAgeSeconds !== undefined && !(num(e.maxAgeSeconds) && e.maxAgeSeconds > 0 && e.maxAgeSeconds <= 7 * 86_400))) return "evidence bundle malformed";
+  for (const p of e.prices.map(object)) {
+    if (!p || !text(p.productRef, 200) || !Object.hasOwn(PAID_MARKETS, String(p.market)) || !/^[A-Z]{3}$/.test(String(p.currency)) ||
+        !num(p.price) || p.price <= 0 || !text(p.source, 200) || !text(p.sourceRevision, 200) || !Number.isFinite(Date.parse(String(p.verifiedAt)))) return "price evidence malformed";
+  }
+  for (const f of e.fx.map(object)) {
+    if (!f || !/^[A-Z]{3}$/.test(String(f.from)) || !/^[A-Z]{3}$/.test(String(f.to)) || f.from === f.to || !num(f.rate) || f.rate <= 0 ||
+        !text(f.source, 200) || !Number.isFinite(Date.parse(String(f.asOf))) || !Number.isFinite(Date.parse(String(f.verifiedAt)))) return "fx evidence malformed";
+  }
+  return null;
+}
+
+/** The cap rule as arithmetic AND provenance: value must equal 50% of a trusted product price for
+ * this market, cited by product_ref, both in the product's own currency. A cap in another
+ * currency than the ad/billing account must carry a conversion equal to a trusted rate. Nothing
+ * in the artifact is believed on its own; missing, mismatched, stale or future evidence refuses
+ * the cap, which refuses every cap-based recommendation. `comparable_value` is the cap in the
  * account currency, the only number an observed CPA may be compared against. */
-function cleanCap(raw: unknown, contract: PaidShadowContract, where: string): Record<string, unknown> | null {
+function cleanCap(raw: unknown, contract: PaidShadowContract, where: string, trusted: PaidTrustedEvidence | null, runStartedAt: string): Record<string, unknown> | null {
   if (raw === undefined || raw === null) return null;
   const cap = object(raw);
   if (!cap || !num(cap.value) || !num(cap.product_price) || cap.product_price <= 0 || !/^[A-Z]{3}$/.test(String(cap.currency)) ||
       cap.basis !== "product_price_50pct" || round2(cap.value) !== round2(cap.product_price * CPA_CAP_PCT / 100))
     return fail(`${where} CPA cap is not 50% of a verified product price in the product's currency`);
+  if (!text(cap.product_ref, 200)) return fail(`${where} CPA cap must cite the trusted product_ref it was derived from`);
+  if (!trusted || paidTrustedEvidenceProblem(trusted)) return fail(`${where} no trusted product price evidence was supplied for this run; hold with cap_reason pending_product_price`);
+  const maxAge = trusted.maxAgeSeconds ?? PAID_EVIDENCE_MAX_AGE_SECONDS;
+  const price = trusted.prices.find(p => p.productRef === cap.product_ref && p.market === contract.client.market && p.currency === cap.currency);
+  if (!price) return fail(`${where} product_ref ${String(cap.product_ref)} has no trusted ${String(cap.currency)} price for market ${contract.client.market}`);
+  if (round2(price.price) !== round2(cap.product_price as number)) return fail(`${where} product_price does not match the trusted price for ${price.productRef}`);
+  if (cap.price_source_revision !== undefined && cap.price_source_revision !== price.sourceRevision) return fail(`${where} price_source_revision does not match trusted evidence`);
+  if (!evidenceFresh(price.verifiedAt, runStartedAt, maxAge)) return fail(`${where} trusted price evidence for ${price.productRef} is stale or dated after this run`);
   const out: Record<string, unknown> = { value: round2(cap.value), currency: cap.currency, basis: "product_price_50pct", product_price: round2(cap.product_price),
-    ...(text(cap.product_ref, 200) ? { product_ref: (cap.product_ref as string).slice(0, 200) } : {}) };
+    product_ref: price.productRef, price_evidence: { source: price.source, sourceRevision: price.sourceRevision, verifiedAt: price.verifiedAt } };
   if (cap.currency === contract.client.currency) {
     if (cap.conversion !== undefined && cap.conversion !== null) fail(`${where} CPA cap conversion is not needed in ${contract.client.currency}`);
     out.comparable_value = out.value;
     return out;
   }
   const fx = object(cap.conversion);
-  const asOf = Date.parse(String(fx?.as_of));
   if (!fx || fx.from !== cap.currency || fx.to !== contract.client.currency || !num(fx.rate) || fx.rate <= 0 || !text(fx.source, 200) ||
-      !Number.isFinite(asOf) || !num(fx.converted_value) || round2(fx.converted_value) !== round2((cap.value as number) * fx.rate))
+      !Number.isFinite(Date.parse(String(fx.as_of))) || !num(fx.converted_value) || round2(fx.converted_value) !== round2((cap.value as number) * fx.rate))
     return fail(`${where} CPA cap in ${String(cap.currency)} needs a verified conversion to ${contract.client.currency}`);
-  out.conversion = { from: fx.from, to: fx.to, rate: fx.rate, source: (fx.source as string).slice(0, 200), as_of: new Date(asOf).toISOString(), converted_value: round2(fx.converted_value) };
+  const rate = trusted.fx.find(r => r.from === fx.from && r.to === fx.to && r.source === fx.source && Date.parse(r.asOf) === Date.parse(String(fx.as_of)));
+  if (!rate) return fail(`${where} conversion ${String(fx.from)}→${String(fx.to)} does not match any trusted rate/source/time`);
+  if (round6(rate.rate) !== round6(fx.rate)) return fail(`${where} conversion rate does not match the trusted ${rate.source} rate`);
+  const fxAsOf = Date.parse(rate.asOf), started = Date.parse(runStartedAt);
+  if (fxAsOf > started + PAID_EVIDENCE_CLOCK_SLACK_MS || !evidenceFresh(rate.verifiedAt, runStartedAt, maxAge) || started - fxAsOf > maxAge * 1000)
+    return fail(`${where} trusted FX evidence is stale or dated after this run`);
+  out.conversion = { from: rate.from, to: rate.to, rate: rate.rate, source: rate.source, as_of: rate.asOf, converted_value: round2(fx.converted_value),
+    fx_evidence: { verifiedAt: rate.verifiedAt } };
   out.comparable_value = round2(fx.converted_value);
   return out;
 }
@@ -163,7 +238,7 @@ function cleanObserved(raw: unknown, where: string): Record<string, number | nul
   return out;
 }
 
-function cleanMetaItem(item: ArtifactItem, contract: MetaShadowContract, index: number): ArtifactItem {
+function cleanMetaItem(item: ArtifactItem, contract: MetaShadowContract, index: number, trusted: PaidTrustedEvidence | null, run: ShadowRunIdentity): ArtifactItem {
   const where = `item ${index + 1}`;
   const meta = object(item.meta) ?? fail(`${where} needs meta`);
   if (meta.routine !== undefined && meta.routine !== contract.routineId) fail(`${where} belongs to another routine`);
@@ -189,7 +264,7 @@ function cleanMetaItem(item: ArtifactItem, contract: MetaShadowContract, index: 
   }
   const observed = cleanObserved(meta.observed, where);
   if (observed) out.observed = observed;
-  const cap = cleanCap(meta.cpa_cap, contract, where);
+  const cap = cleanCap(meta.cpa_cap, contract, where, trusted, run.startedAt);
   if (cap) out.cpa_cap = cap;
   if (meta.rollback_proposal !== undefined) {
     if (!text(meta.rollback_proposal, 400)) fail(`${where} rollback_proposal must be short text`);
@@ -234,7 +309,7 @@ function cleanMetaItem(item: ArtifactItem, contract: MetaShadowContract, index: 
 }
 
 const MATCH_TYPES = new Set(["EXACT", "PHRASE", "BROAD"]);
-function cleanGadsItem(item: ArtifactItem, contract: GadsShadowContract, index: number): ArtifactItem {
+function cleanGadsItem(item: ArtifactItem, contract: GadsShadowContract, index: number, trusted: PaidTrustedEvidence | null, run: ShadowRunIdentity): ArtifactItem {
   const where = `item ${index + 1}`;
   const meta = object(item.meta) ?? fail(`${where} needs meta`);
   if (meta.routine !== undefined && meta.routine !== contract.routineId) fail(`${where} belongs to another routine`);
@@ -277,7 +352,7 @@ function cleanGadsItem(item: ArtifactItem, contract: GadsShadowContract, index: 
     if (!Array.isArray(meta[key]) || (meta[key] as unknown[]).length > max || (meta[key] as unknown[]).some(v => !text(v, each))) fail(`${where} ${key} exceed Google Ads limits`);
     out[key] = (meta[key] as string[]).map(v => v.slice(0, each));
   }
-  const cap = cleanCap(meta.cpa_ceiling ?? meta.cpa_cap, contract, where);
+  const cap = cleanCap(meta.cpa_ceiling ?? meta.cpa_cap, contract, where, trusted, run.startedAt);
   out.cpa_ceiling = cap;
   if (meta.cap_reason !== undefined) { if (!text(meta.cap_reason, 200)) fail(`${where} cap_reason must be short text`); out.cap_reason = meta.cap_reason; }
   if (state === "PLAN_PROPOSED") {
@@ -292,8 +367,10 @@ function cleanGadsItem(item: ArtifactItem, contract: GadsShadowContract, index: 
 }
 
 /** Structural validation is not usefulness acceptance. Only whitelisted, checked fields survive:
- * no raw provider payloads, notes or executed-change claims are checkpointed. */
-export function paidShadowArtifact(value: unknown, contract: PaidShadowContract, run: ShadowRunIdentity): ArtifactDraft {
+ * no raw provider payloads, notes or executed-change claims are checkpointed. `trusted` is the
+ * server-supplied evidence bundle (see PaidTrustedEvidence); pass null when none exists, which
+ * refuses every cap-based recommendation while still accepting holds. */
+export function paidShadowArtifact(value: unknown, contract: PaidShadowContract, run: ShadowRunIdentity, trusted: PaidTrustedEvidence | null): ArtifactDraft {
   assertPaidShadowRequest(contract, run);
   const maxItems = SKILL_BY_ID[contract.routineId]?.maxItems ?? 1;
   const parsed = validateArtifactObject(value, { kind: "generic", maxItems, allowedNumbers: null, requireItems: true });
@@ -302,7 +379,8 @@ export function paidShadowArtifact(value: unknown, contract: PaidShadowContract,
   const root = draft.meta ?? {};
   forbidExecution(root, "artifact");
   if (root.executed_action !== undefined && root.executed_action !== "none") fail("artifact claims an executed action");
-  const items = (draft.items ?? []).map((item, index) => contract.lane === "meta" ? cleanMetaItem(item, contract, index) : cleanGadsItem(item, contract, index));
+  const evidence = trusted && !paidTrustedEvidenceProblem(trusted) ? trusted : null;
+  const items = (draft.items ?? []).map((item, index) => contract.lane === "meta" ? cleanMetaItem(item, contract, index, evidence, run) : cleanGadsItem(item, contract, index, evidence, run));
   const out: ArtifactDraft = { ...draft, items, meta: {} };
   if (Buffer.byteLength(JSON.stringify(out), "utf8") > 256_000) fail("artifact is too large to checkpoint");
   return out;

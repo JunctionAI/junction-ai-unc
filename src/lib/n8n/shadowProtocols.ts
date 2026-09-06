@@ -5,7 +5,7 @@ import { assertCalendarShadowRequest, calendarShadowArtifact, calendarShadowProb
   validateCalendarShadowReceipt, verifyCalendarShadowExecution, CALENDAR_SHADOW_RECEIVER_URL,
   CALENDAR_SHADOW_CONTRACT, type CalendarShadowContract } from "./calendarShadowContract";
 import { assertPaidShadowRequest, paidShadowArtifact, paidShadowEnvPrefix, paidShadowProblem, paidShadowReceiver, paidShadowSchema,
-  validatePaidShadowReceipt, verifyPaidShadowExecution, PAID_SHADOW_CONTRACT, type PaidShadowContract } from "./paidShadowContract";
+  validatePaidShadowReceipt, verifyPaidShadowExecution, PAID_SHADOW_CONTRACT, type PaidShadowContract, type PaidTrustedEvidence } from "./paidShadowContract";
 import { shadowCandidate, type ShadowCandidate } from "./shadowCandidate";
 export type ShadowContract = KeywordShadowContract | CalendarShadowContract | PaidShadowContract;
 /** keyword and calendar are single-routine pilots; paid covers AVGAR's Meta lanes and the Google Ads plan. */
@@ -43,10 +43,12 @@ export function verifyProtocolExecution(value: unknown, seen: unknown, c: Shadow
   if (isPaidShadow(c)) return verifyPaidShadowExecution(value, seen, c, run, now, digest, resultDigest ?? "");
   return verifyShadowExecution(value, seen, c, run, now, digest);
 }
-export function protocolCandidate(value: unknown, receipt: Record<string, unknown>, c: ShadowContract, run: ShadowRunIdentity, resultDigest?: string): ShadowCandidate {
+/** `trusted` is the server-supplied paid-ads evidence bundle (prices/FX); ignored by other protocols. */
+export function protocolCandidate(value: unknown, receipt: Record<string, unknown>, c: ShadowContract, run: ShadowRunIdentity, resultDigest?: string,
+  trusted: PaidTrustedEvidence | null = null): ShadowCandidate {
   if (isKeywordShadow(c)) return shadowCandidate(value, receipt);
   if (!resultDigest || !/^[a-f0-9]{64}$/.test(resultDigest)) throw new Error(`${isPaidShadow(c) ? "paid-ads" : "calendar"} response fingerprint required`);
-  const artifact = isPaidShadow(c) ? paidShadowArtifact(value, c, run) : calendarShadowArtifact(value, c, run);
+  const artifact = isPaidShadow(c) ? paidShadowArtifact(value, c, run, trusted) : calendarShadowArtifact(value, c, run);
   const candidate = { artifact, executionReceipt: receipt, resultDigest };
   const provider = receipt.provider as Record<string, unknown> | undefined;
   if (isCalendarShadow(c) && provider?.itemsCount === 0 && candidate.artifact.items?.some(item => item.meta?.timing_basis === "observed_campaign_history"))

@@ -1,6 +1,6 @@
 /* Entirely synthetic identities, credentials and data for the paid-ads shadow lane.
    Nothing here calls Meta, Google Ads, DataForSEO or n8n; nothing is a live pin. */
-import type { GadsShadowContract, MetaShadowContract, PaidShadowContract } from "../paidShadowContract";
+import type { GadsShadowContract, MetaShadowContract, PaidShadowContract, PaidTrustedEvidence } from "../paidShadowContract";
 import { GADS_SHADOW_RECEIVER_URL, META_SHADOW_RECEIVER_URL } from "../paidShadowContract";
 import { AVGAR_PILOT_ACCOUNT } from "../shadowContract";
 import type { ArtifactDraft, RunContext } from "../../runtime/types";
@@ -88,3 +88,16 @@ export function savedExecution(c: PaidShadowContract, body: unknown, reply: unkn
     } } } };
 }
 export const dns = async () => [{ address: "93.184.216.34", family: 4 as const }];
+
+/** Independently supplied trusted evidence (what Codex's resolver would return for this run). */
+export const verifiedAt = "2026-09-06T11:00:00.000Z";
+export function trusted(): PaidTrustedEvidence {
+  return { prices: [
+    { productRef: "shopify:variant:synthetic", market: "NZ", currency: "NZD", price: 120, source: "shopify:products", sourceRevision: "rev-synthetic-2026-09-06", verifiedAt },
+    { productRef: "shopify:variant:synthetic-usd", market: "NZ", currency: "USD", price: 90, source: "shopify:products", sourceRevision: "rev-synthetic-usd-2026-09-06", verifiedAt },
+    { productRef: "shopify:variant:travel-case", market: "US", currency: "NZD", price: 95, source: "shopify:products", sourceRevision: "rev-travel-case-2026-09-06", verifiedAt },
+  ], fx: [
+    { from: "USD", to: "NZD", rate: 1.65, source: "rbnz-mid-2026-09-05", asOf: "2026-09-06T00:00:00.000Z", verifiedAt },
+    { from: "NZD", to: "USD", rate: 0.6, source: "rbnz-mid-2026-09-05", asOf: "2026-09-06T00:00:00.000Z", verifiedAt },
+  ] };
+}

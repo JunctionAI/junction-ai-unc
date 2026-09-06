@@ -21,7 +21,7 @@ import { checkWebhookTarget, type HostLookup } from "../../lib/n8n/urlSecurity";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
 import { KEYWORD_SHADOW_RECEIVER_URL } from "../../lib/n8n/shadowContract";
 import { CALENDAR_SHADOW_RECEIVER_URL } from "../../lib/n8n/calendarShadowContract";
-import { META_SHADOW_RECEIVER_URL, GADS_SHADOW_RECEIVER_URL } from "../../lib/n8n/paidShadowContract";
+import { META_SHADOW_RECEIVER_URL, GADS_SHADOW_RECEIVER_URL, type PaidEvidenceSource, type PaidTrustedEvidence } from "../../lib/n8n/paidShadowContract";
 import { assertProtocolRequest, validateProtocolReceipt, verifyProtocolExecution, protocolCandidate,
   isCalendarShadow, isKeywordShadow, isPaidShadow, protocolBindsResult, protocolEnvPrefix, protocolReaderKind, protocolReceiver,
   type ShadowContract } from "../../lib/n8n/shadowProtocols";
@@ -141,6 +141,9 @@ export interface HttpN8nBridgeOptions {
   paidShadowAdmission?: ShadowAdmission;
   paidShadowAdmissionFor?: (scope: { accountId: string; contextGeneration: number; runId: string }) => ShadowAdmission;
   readPaidShadowExecution?: ShadowExecutionReader;
+  /** Server-resolved trusted product prices / FX rates for a paid run (see PaidTrustedEvidence).
+   * Absent or null → no cap-based recommendation can be accepted; holds still pass. */
+  paidTrustedEvidence?: PaidEvidenceSource;
 }
 
 export class HttpN8nBridge implements N8nBridge {
@@ -203,6 +206,13 @@ export class HttpN8nBridge implements N8nBridge {
       if (!readExecution) throw new Error("independent n8n execution verification is not configured; shadow dispatch is disabled");
       receiverHeaders.authorization = `Bearer ${receiverToken}`;
     }
+    // Resolve trusted evidence BEFORE dispatch; it never comes from the reply. A resolver failure
+    // is "no evidence", which refuses caps but not holds — never a reason to re-dispatch.
+    let trusted: PaidTrustedEvidence | null = null;
+    if (paid && shadow && isPaidShadow(shadow) && this.opts.paidTrustedEvidence) {
+      try { trusted = await this.opts.paidTrustedEvidence({ ...scope, contract: shadow }); }
+      catch { this.opts.log?.warn("n8n.paid_evidence_unavailable", { runId: ctx.runId, routineId: ctx.routineId }); trusted = null; }
+    }
     const payload = buildN8nPayload(node, ctx, { secret, env: this.env, now: this.now });
     const body = JSON.stringify(payload);
     const ts = String(this.now().getTime());
@@ -250,7 +260,7 @@ export class HttpN8nBridge implements N8nBridge {
         if (!reported) throw new Error("Shadow artifact requires a validated reported execution receipt");
         const envelope = parsed as { artifact: unknown; executionReceipt: unknown };
         const resultDigest = protocolBindsResult(shadow) ? shadowRequestDigest({ artifact: envelope.artifact, executionReceipt: envelope.executionReceipt }) : undefined;
-        const candidate = protocolCandidate(out.artifact, reported, shadow, identity, resultDigest);
+        const candidate = protocolCandidate(out.artifact, reported, shadow, identity, resultDigest, trusted);
         // Persist the known execution before the next network wait. A crash here
         // must leave a named execution to inspect, not a reason to call n8n again.
         await admission!.observe(permitId!, String(reported.executionId), candidate);

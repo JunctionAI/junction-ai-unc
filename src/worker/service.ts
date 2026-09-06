@@ -37,6 +37,7 @@ import { completeCalendarShadowRun } from "./completeCalendarShadow";
 import { DbCalendarShadowAdmission } from "../lib/n8n/calendarAdmission";
 import { DbPaidShadowAdmission } from "../lib/n8n/paidAdmission";
 import { completePaidShadowRun } from "./completePaidShadow";
+import type { PaidEvidenceSource } from "../lib/n8n/paidShadowContract";
 import { createProducerClient, DbProducerContext, LlmProducer } from "./providers/producer";
 import type { ScheduleCandidate } from "./scheduler";
 import { defaultCredentialProvider, serviceDb } from "./wiring";
@@ -64,6 +65,9 @@ export class WorkerError extends Error {
 export interface ServiceDeps {
   store: Store;
   accounts: AccountsSource;
+  /** CALLER CHANGE (Codex): trusted product-price / FX evidence per paid-ads run, resolved from
+   * governed reads — never from the n8n reply. Undefined = no evidence = caps refused, holds pass. */
+  paidTrustedEvidence?: PaidEvidenceSource;
   /** Default: wiring.ts defaultCredentialProvider() — ConnectorCredentialProvider when the
       DB + secret store are configured, FixtureCredentialProvider otherwise. */
   credentials?: CredentialProvider;
@@ -108,7 +112,8 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
   const n8n = deps.n8n === undefined ? new HttpN8nBridge({ env: process.env, fetch: deps.fetch, now, log: deps.log,
     shadowAdmission: db ? new DbShadowAdmission(db) : undefined,
     calendarShadowAdmissionFor: db ? scope => new DbCalendarShadowAdmission(db, scope) : undefined,
-    paidShadowAdmissionFor: db ? scope => new DbPaidShadowAdmission(db, scope) : undefined }) : (deps.n8n ?? undefined);
+    paidShadowAdmissionFor: db ? scope => new DbPaidShadowAdmission(db, scope) : undefined,
+    paidTrustedEvidence: deps.paidTrustedEvidence }) : (deps.n8n ?? undefined);
   const presets = deps.presets === undefined ? presetSource(db) : deps.presets;
   const credentials = deps.credentials ?? defaultCredentialProvider(process.env, deps.log ? (line) => deps.log?.info("credentials", { line }) : undefined);
   const personalisation = new StorePersonalisation(deps.store, db, { now });
@@ -134,7 +139,7 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
     ...(db ? { completeCalendarShadow: (run: import("../lib/runtime/store/interface").RunRecord) =>
       completeCalendarShadowRun(db, { accountId: run.accountId, contextGeneration: run.contextGeneration ?? 0, runId: run.id }, { now }) } : {}),
     ...(db ? { completePaidShadow: (run: import("../lib/runtime/store/interface").RunRecord) =>
-      completePaidShadowRun(db, { accountId: run.accountId, contextGeneration: run.contextGeneration ?? 0, runId: run.id }, { now }) } : {}),
+      completePaidShadowRun(db, { accountId: run.accountId, contextGeneration: run.contextGeneration ?? 0, runId: run.id }, { now, trustedEvidence: deps.paidTrustedEvidence }) } : {}),
     ...(db ? { assertContext: (identity: import("../lib/runtime/contextFence").RuntimeContextIdentity) => assertRuntimeContext(db, identity) } : {}),
     ...(producer ? { producer } : {}),
     ...(n8n ? { n8n } : {}),

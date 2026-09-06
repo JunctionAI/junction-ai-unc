@@ -8,10 +8,12 @@ import { SupabaseStore } from "../lib/runtime/store/supabase";
 import { assertSameRuntimeContext } from "../lib/runtime/contextFence";
 import type { ArtifactDraft, RunResult } from "../lib/runtime/types";
 import { paidContractForRun, paidScope, type PaidScope } from "../lib/n8n/paidAdmission";
-import { paidShadowArtifact } from "../lib/n8n/paidShadowContract";
+import { paidShadowArtifact, type PaidEvidenceSource, type PaidTrustedEvidence } from "../lib/n8n/paidShadowContract";
 
+/** `opts.trustedEvidence` is the same per-run resolver the bridge used; completion re-validates
+ * the ledger's artifact against it, so a result never certifies its own prices or rates. */
 export async function completePaidShadowRun(db: DbClient, input: PaidScope,
-  opts: { now?: () => Date; idGen?: () => string } = {}): Promise<RunResult> {
+  opts: { now?: () => Date; idGen?: () => string; trustedEvidence?: PaidEvidenceSource } = {}): Promise<RunResult> {
   const scope = paidScope(input);
   await assertRuntimeContext(db, scope);
   const commit = (packet: unknown = null) => unwrap<RunResult | null>("paid.complete", db.rpc("commit_paid_shadow_completion",
@@ -28,8 +30,10 @@ export async function completePaidShadowRun(db: DbClient, input: PaidScope,
   if (ledger?.state !== "verified" || result?.kind !== "artifact" || !artifact ||
       (artifact.meta?.executionReceipt as Row | undefined)?.revisionEvidence !== "verified_execution_record")
     throw new Error("Verified paid-ads ledger result unavailable");
-  // Revalidate the business fields (cap arithmetic, no executed change) against the pinned contract.
-  paidShadowArtifact(artifact, contract, { accountId: scope.accountId, runId: scope.runId, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt });
+  // Revalidate the business fields (cap arithmetic AND provenance, no executed change) against the pinned contract.
+  let trusted: PaidTrustedEvidence | null = null;
+  try { trusted = await opts.trustedEvidence?.({ ...scope, contract }) ?? null; } catch { trusted = null; }
+  paidShadowArtifact(artifact, contract, { accountId: scope.accountId, runId: scope.runId, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt }, trusted);
   const packet = await planPaidShadowCompletion(run, artifact, opts);
   try { if (!await commit(packet)) throw new Error("Paid-ads completion was not persisted"); }
   catch (error) { const after = await commit(); if (after) return after; throw error; }
