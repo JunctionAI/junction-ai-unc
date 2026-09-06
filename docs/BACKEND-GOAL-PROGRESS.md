@@ -13,10 +13,35 @@ Tom's latest clarification extends acceptance to the real landing/client/ops scr
 - Confirmed business inputs: US, NZ and AU; CPA ceiling 50% of the relevant product price; discovery seed `golf travel bag`, separately per market. Product/currency binding and a scaling target are not inferred.
 - Account: `aa5cfc84-2569-4c99-9b40-67003ae55eda`. Existing Shopify/Meta credentials stay on that account; no transfer or reinstall.
 
+## Governing execution directive — 6 September 2026 NZ
+
+Tom's end-of-day outcome is one production system: the public launch, client
+workspace and operations workspace match the supplied direction and use the real
+backend; the currently agreed routines and known existing agents work through
+Junction with their correct client identity, data, permissions and existing
+channels; and onboarding a new isolated client does not require hand-editing
+business logic. Completion requires production customer-journey evidence, not a
+test count, configured credential or staged route.
+
+Work in complete vertical slices: client identity and access -> fresh source read
+-> plain-language app/Slack request -> eligible enabled routine -> persisted useful
+result and evidence -> originating client/thread -> reload, retry, recovery and
+switch-off. Use focused checks while editing and one combined release acceptance
+for each coherent slice. Reuse unchanged evidence. Do not repeat an unchanged
+external check or consume more provider work to diagnose a known missing grant.
+
+At the first reliable owner-only or third-party dependency, record the exact
+account, provider, missing consent/scope/input, requested human action and the
+independent work that can continue. Tom has authorized Codex-owned setup and
+credential provisioning within this goal, but owner consent and third-party
+approval cannot be inferred. Delegated patches are isolated, bounded, tested and
+reviewed before integration. Publishing, customer campaigns, ad mutation and
+spend remain separately authorized actions.
+
 ## Latest state — Batch 86, 6 September NZ
 
-**Client picker and page-bound request integration implemented; release verification
-in progress.** The previous turn was progress (Batch 85 source pushed). This batch
+**Client picker and page-bound request integration is released and production
+verified.** The previous turn was progress (Batch 85 source pushed). This batch
 finishes its browser consumers instead of repeating the source/identity audit.
 
 - `/app?account=...` resolves only the verified user's memberships under their
@@ -49,8 +74,14 @@ finishes its browser consumers instead of repeating the source/identity audit.
   been copied into owner access. No provider call, membership grant, workflow
   mutation, live charge, native listener change or Slack send occurred.
 
-Release outcome will be recorded below once independently verified. Until then,
-production remains Batch 83. Full B01–B24/all-client/all-screen scope stays active.
+Source `93bcc543db9b517ad4b281ce5a6de1f2de8bab53` is pushed and live as Vercel
+deployment `dpl_BXyudK5GDgY7mqzrgaBUpV3KwBSU`. Canonical health reports the
+matching `93bcc543db9b` source, healthy database and fresh compatible worker.
+Anonymous account-state access returns 401. Signed-in AVGAR production reload
+shows the eight saved results and the dated Shopify/Meta reads; foreign and
+duplicate account selections return the membership picker with AVGAR as the sole
+available workspace. The post-release error query returned no entries. Full
+B01–B24/all-client/all-screen scope stays active.
 
 ## Previous state — Batch 85, 6 September NZ
 
