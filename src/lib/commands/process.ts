@@ -5,6 +5,7 @@ import { eligible, workflowFingerprint, type DispatchDeps } from "./dispatch";
 import type { RoutineCommand, CommandStatus } from "./types";
 import { runtimeGeneration, RuntimeContextError } from "../runtime/contextFence";
 import { freezeCommandActor } from "./binding";
+import { savedResultReply } from "./resultReply";
 
 export interface ProcessorDeps extends DispatchDeps {
   execute(command: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null): Promise<RunResult>;
@@ -69,7 +70,10 @@ export async function processCommand(deps: ProcessorDeps, command: RoutineComman
     const result = await deps.execute(claimed, check.spec, check.workflow);
     await guard();
     if (result.runId !== claimed.id || result.mode !== "dry_run") throw new Error("Unexpected execution identity or mode");
-    await deps.queue.transition(claimed, "running", { ...commandResult(result), updatedAt: now() });
+    const next = commandResult(result);
+    if (next.status === "done") next.reply = await savedResultReply(deps.store, claimed, next.reply);
+    await guard();
+    await deps.queue.transition(claimed, "running", { ...next, updatedAt: now() });
   } catch {
     if (!await contextActive(guard)) return;
     await deps.queue.transition(claimed, "running", { status: started ? "uncertain" : "blocked", reply: started ? "I can’t confirm the execution outcome. I won’t automatically run it again; check its run in Unc first." : "I couldn’t verify the account, connections or budget. Nothing was started.", updatedAt: now() });
@@ -87,6 +91,8 @@ export async function reconcileCommand(deps: DispatchDeps, c: RoutineCommand): P
   if (run && (run.accountId !== c.actor.accountId || run.routineId !== c.routineId || runtimeGeneration(run.contextGeneration) !== c.contextGeneration)) return;
   if (run && run.status !== "running") {
     const next = commandResult(run);
+    if (next.status === "done") next.reply = await savedResultReply(deps.store, c, next.reply);
+    if (!await contextActive(guard)) return;
     await deps.queue.transition(c, c.status, { ...next, updatedAt: now.toISOString() });
   } else if (c.status === "running" && now.getTime() - new Date(c.updatedAt).getTime() > 10 * 60_000) {
     await deps.queue.transition(c, "running", { status: "uncertain", reply: "The worker was interrupted or is taking longer than expected. I won’t repeat this request automatically; check its run in Unc.", updatedAt: now.toISOString() });

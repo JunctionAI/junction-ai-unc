@@ -23,6 +23,10 @@ import { digest } from "../lib/commands/queue";
 import { workflowFingerprint } from "../lib/commands/releaseScope";
 import { keywordCommandRunOptions } from "../lib/n8n/keywordCommand";
 import { assertKeywordRuntimeAccess } from "./providers/keywordRuntime";
+import { enqueueSchedule, scheduleFromRow } from "../lib/commands/schedule";
+import { commandSelectionReleased } from "../lib/commands/releaseScope";
+import { effectiveSpec } from "../lib/runtime/versioning";
+import { CATALOG_SPEC_BY_ID } from "../lib/runtime/catalog-specs";
 
 export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapters, c: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null) {
   c = Object.freeze({ ...c, actor: freezeCommandActor(c.actor) });
@@ -96,6 +100,20 @@ export async function runCommandsTick(deps: ServiceDeps, adapters: Adapters, max
   if (!messagingDisabled(process.env) && Object.values(channels).some(adapter => adapter?.configured))
     await drainInboundEvents(db, (message) => handleInbound({ db, store: deps.store, accounts: deps.accounts, adapters: channels, now: deps.now ?? (() => new Date()) }, message), Math.floor(maxMs / 2));
   if (!commandsEnabled()) return;
+  if (process.env.UNC_ROUTINE_SCHEDULES_ENABLED === "true") {
+    const schedules = await unwrap<Row[]>("schedules.list", db.from("routine_schedules").select("*").eq("enabled", true));
+    for (const row of schedules) {
+      if (Date.now() - start >= maxMs) break;
+      const s = scheduleFromRow(row), catalog = CATALOG_SPEC_BY_ID[s.routineId];
+      if (!catalog) continue;
+      const state = await deps.store.getRoutineState(s.accountId, s.routineId);
+      if (!state?.enabled) continue;
+      const spec = effectiveSpec(state, catalog), workflow = await deps.store.findN8nWorkflow(s.accountId, s.routineId);
+      if (digest(spec) !== s.specHash || workflowFingerprint(workflow) !== s.workflowHash ||
+          !commandSelectionReleased({ ...s.actor, requestId: "schedule-check" }, spec, workflow)) continue;
+      await enqueueSchedule(db, s, (deps.now ?? (() => new Date()))());
+    }
+  }
   const queue = new DbCommandQueue(db);
   // Callbacks or founder input can change a previously waiting run between ticks.
   for (const status of ["running", "waiting", "uncertain"] as const) {

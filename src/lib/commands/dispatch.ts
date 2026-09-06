@@ -60,6 +60,15 @@ export async function dispatchMessage(deps: DispatchDeps, actor: CommandActor, t
   }
   const states = await deps.store.listRoutineStates(actor.accountId);
   const capabilities: Capability[] = CATALOG_SPECS.map((s) => ({ id: s.id, name: s.name, purpose: s.minimum?.summary ?? s.name, enabled: states.some((r) => r.routineId === s.id && r.enabled) }));
+  // Expose only reviewed keyword settings. Do not send raw specs, URLs, credential
+  // references or another tenant's profile to the classifier.
+  const keywordState = states.find(s => s.routineId === "D03-W01" && s.enabled);
+  if (keywordState) {
+    const spec = effectiveSpec(keywordState, CATALOG_SPEC_BY_ID["D03-W01"]);
+    const workflow = await deps.store.findN8nWorkflow(actor.accountId, spec.id);
+    const market = keywordCommandMarket(actor, spec, workflow);
+    if (market) capabilities.find(c => c.id === spec.id)!.savedInputs = { seedKeyword: "golf travel bag", market };
+  }
   await guard();
   const intent = await deps.interpret(text, capabilities);
   await guard();

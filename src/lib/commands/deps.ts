@@ -14,6 +14,12 @@ import { commandSelectionReleased } from "./releaseScope";
 export async function commandOwner(db: DbClient, actor: CommandActor): Promise<boolean> {
   const member = await unwrap<{ role: string } | null>("commands.owner", db.from("account_members").select("role").eq("account_id", actor.accountId).eq("user_id", actor.userId).maybeSingle());
   if (member?.role !== "owner") return false;
+  if (actor.requestId.startsWith("schedule:")) {
+    const current = await db.rpc("routine_scheduled_command_current", { p_request_id: actor.requestId,
+      p_account_id: actor.accountId, p_user_id: actor.userId });
+    if (current.error) throw new Error("Saved schedule authority unavailable");
+    if (current.data !== true) return false;
+  }
   if (actor.channel === "app") return !actor.linkId && !actor.channelBinding;
   let binding;
   try { binding = commandChannelBinding(actor); } catch { return false; }
