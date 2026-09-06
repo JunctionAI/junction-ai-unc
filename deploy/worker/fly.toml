@@ -38,6 +38,8 @@ primary_region = "syd"
   LIVE_MODE_ENABLED = "false"
   TNZ_SMS_ENABLED = "false"
   APPLE_MESSAGES_ENABLED = "false"
+  MISSION_CONTROL_SOURCE_URL = "https://ebcatvidixdjjwmmades.supabase.co/functions/v1/unc-source-read"
+  UNC_MISSION_CONTROL_SOURCE_ACCOUNTS = "1620999d-ee8e-4490-bfd6-b908a9fa86dc,4fae2ad8-194f-49c4-9954-39a6b6d35b14"
 
 [http_service]
   internal_port = 8080

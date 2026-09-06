@@ -111,7 +111,7 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
   const personalisation = new StorePersonalisation(deps.store, db, { now });
   const llmDecider = new LlmDecisionProvider(deps.llm ?? null, { log: deps.log, personalisation });
   return {
-    reader: accountDataReader(new WorkerConnectorReader({ credentials, now, log: deps.log, fetch: deps.fetch }), db, process.env, now),
+    reader: accountDataReader(new WorkerConnectorReader({ credentials, now, log: deps.log, fetch: deps.fetch }), db, process.env, now, { fetch: deps.fetch }),
     // Rule-bound routines (D02-W01) decide deterministically; the LLM only writes the line.
     decider: new RulesDecisionProvider(llmDecider, { presets, writer: deps.llm ?? null, log: deps.log ? (event, fields) => deps.log?.info(event, fields) : undefined }),
     executor: new ActionExecutor({

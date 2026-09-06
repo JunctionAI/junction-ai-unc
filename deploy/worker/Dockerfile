@@ -1,7 +1,7 @@
 # Unc worker — always-on DRY-RUN scheduler. Sketch for Fly.io (see fly.toml).
 # Builds the worker with tsc only (no Next build), runs it under node with the
-# health endpoint on :8080 for the Fly check. No secrets are baked in; the only
-# env var it honours is ANTHROPIC_API_KEY (optional — set with `fly secrets`).
+# health endpoint on :8080 for the Fly check. No secrets are baked in; provider,
+# model and internal-source credentials are supplied only through `fly secrets`.
 
 FROM node:22-slim AS build
 WORKDIR /app

@@ -4,6 +4,7 @@ import { getConnector } from "../connectors/store";
 import { claimLease, releaseLease } from "../connectors/lease";
 import { META_BUDGET_CONTRACT } from "./metaBudgets";
 import { KLAVIYO_CAMPAIGN_CONTRACT, campaignHistoryQueryProblem } from "./klaviyoCampaigns";
+import { MissionControlDatasetReader, missionControlSourceEnabled } from "../sources/missionControlDataset";
 import type { ConnectorReader, Platform, ReadQuery, ReadResult, RunContext } from "../runtime/types";
 
 export const DATASET_MAX_AGE_MS = 60 * 60_000;
@@ -125,9 +126,14 @@ export class StoredDatasetReader implements ConnectorReader {
   }
 }
 
-export function accountDataReader(direct: ConnectorReader, db: DbClient | null, env: Record<string, string | undefined>, now = () => new Date()): ConnectorReader {
+export function accountDataReader(direct: ConnectorReader, db: DbClient | null, env: Record<string, string | undefined>, now = () => new Date(), options: { fetch?: typeof fetch } = {}): ConnectorReader {
   const stored = db ? new StoredDatasetReader(new DbDatasetStore(db), now) : null;
+  const source = db ? new MissionControlDatasetReader(db, { env, now, fetch: options.fetch }) : null;
   return { read: (platform, query, ctx) => {
+    if (missionControlSourceEnabled(ctx.account.accountId, platform, query, env)) {
+      if (!source) throw new Error("stored source database is not configured");
+      return source.read(platform, query, ctx);
+    }
     if (!storedDataEnabled(ctx.account.accountId, platform, env, query)) return direct.read(platform, query, ctx);
     if (!stored) throw new Error("stored dataset database is not configured");
     return stored.read(platform, query, ctx);

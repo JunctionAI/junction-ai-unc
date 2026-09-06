@@ -34,6 +34,7 @@ import { ALL_SYSTEMS } from "../platform/catalog";
 import type { CredentialProvider } from "../../worker/credentials";
 import { WorkerConnectorReader } from "../../worker/providers/connectorReader";
 import { accountDataReader, storedDataEnabled } from "../data/datasets";
+import { missionControlSourceEnabled } from "../sources/missionControlDataset";
 import { DbProducerContext, EmptyProducerContext, PLAYBOOKS_PER_PRODUCE, renderProfile } from "../../worker/providers/producer";
 import type { Reader } from "../../worker/readers/types";
 import type { CredentialsKind } from "../../worker/wiring";
@@ -204,7 +205,8 @@ export async function readForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, { o
 
   try {
     await assertProxyRuntimeContext(deps, run);
-    const stored = storedDataEnabled(claims.accountId, platform, deps.dataEnv ?? {}, query);
+    const stored = storedDataEnabled(claims.accountId, platform, deps.dataEnv ?? {}, query)
+      || missionControlSourceEnabled(claims.accountId, platform, query, deps.dataEnv ?? {});
     const creds = stored ? null : await deps.credentials.get(claims.accountId, platform);
     if (!stored && !creds) {
       const secretStore = deps.credentialsKind === "none";
@@ -212,7 +214,7 @@ export async function readForToken(deps: ProxyDeps, auth: Extract<ProxyAuth, { o
       await receipt("notification", `Your n8n workflow asked ${platform} ${q.resource} — couldn’t ask: ${reason}.`, { rowCount: 0, provenance: "unavailable", reason });
       return { ok: false, code: secretStore ? "secret_store_unavailable" : "not_connected", reason, status: 200 };
     }
-    const reader = accountDataReader(new WorkerConnectorReader({ credentials: deps.credentials, readers: deps.readers, now, fetch: deps.fetch }), deps.db, deps.dataEnv ?? {}, now);
+    const reader = accountDataReader(new WorkerConnectorReader({ credentials: deps.credentials, readers: deps.readers, now, fetch: deps.fetch }), deps.db, deps.dataEnv ?? {}, now, { fetch: deps.fetch });
     await assertProxyRuntimeContext(deps, run);
     const res = await reader.read(platform, query, ctx);
     const receiptId = await receipt("read", `Read ${platform} ${q.resource}${q.window ? ` over ${q.window}` : ""} via n8n: ${res.rows.length} rows.`, { rowCount: res.rows.length, metrics: res.metrics, fetchedAt: res.fetchedAt, provenance: res.provenance ?? "ok", ...(res.dataset ? { dataset: res.dataset } : {}), ...(res.sourceNote ? { sourceNote: res.sourceNote } : {}) });

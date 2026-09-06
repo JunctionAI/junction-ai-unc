@@ -10,6 +10,8 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "account_model_prefs",
       "account_presets",
       "account_profiles",
+      "account_source_bindings",
+      "account_source_dataset_grants",
       "account_state_meta",
       "accounts",
       "action_ledger",
@@ -73,6 +75,8 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect([...s.ops_work_reads.columns]).toEqual(expect.arrayContaining(["user_id", "account_id", "run_id", "context_generation", "artifact_ids", "receipt_ids", "read_at"]));
     expect([...s.ops_account_access.columns]).toEqual(expect.arrayContaining(["work_read_granted_at", "work_read_granted_by", "work_read_reason"]));
     expect([...s.ops_account_access.columns]).toEqual(expect.arrayContaining(["granted_at", "granted_by", "reason", "revoked_at", "expires_at"]));
+    expect(s.account_source_bindings.uniques).toContainEqual(expect.objectContaining({ columns: ["source_system", "source_project", "source_kind", "source_key"] }));
+    expect([...s.account_source_dataset_grants.columns]).toEqual(expect.arrayContaining(["account_id", "context_generation", "binding_id", "platform", "dataset", "source_contract", "max_source_age_minutes", "revoked_at"]));
     expect(s.n8n_shadow_candidates.primaryKey).toEqual(["permit_id"]);
     expect(s.n8n_shadow_completions.primaryKey).toEqual(["permit_id"]);
     expect([...s.n8n_shadow_candidates.columns]).toEqual(expect.arrayContaining([
