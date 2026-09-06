@@ -99,9 +99,9 @@ describe("account-bound Agents API",()=>{
 });
 describe("supplied catalog reconciliation",()=>{
   it("maps every existing ID once, preserves supplied labels, and isolates five unimplemented additions",()=>{
-    const ids=AGENT_JOBS.flatMap(j=>j.routineId?[j.routineId]:[]);expect(ids.sort()).toEqual(ALL_SYSTEMS.map(s=>s.id).sort());expect(new Set(ids).size).toBe(36);
-    const design=AGENT_JOBS.filter(j=>!["google-bofu","backlink-gap"].includes(j.key)).flatMap(j=>j.designLabels);expect(design).toHaveLength(39);expect(new Set(design).size).toBe(39);
-    expect(AGENT_JOBS.filter(j=>j.routineId===null)).toHaveLength(5);
+    const ids=AGENT_JOBS.flatMap(j=>j.routineId?[j.routineId]:[]);expect(ids.sort()).toEqual(ALL_SYSTEMS.map(s=>s.id).sort());expect(new Set(ids).size).toBe(37);
+    const design=AGENT_JOBS.filter(j=>!["google-bofu","backlink-gap"].includes(j.key)).flatMap(j=>j.designLabels);expect(design).toHaveLength(40);expect(new Set(design).size).toBe(40);
+    expect(AGENT_JOBS.filter(j=>j.routineId===null)).toHaveLength(4);
     expect(AGENT_JOBS.find(j=>j.routineId==="D04-W01")?.designLabels).toHaveLength(2);
     expect(AGENT_JOBS.find(j=>j.routineId==="D03-W06")?.note).toContain("not referring-domain");
   });

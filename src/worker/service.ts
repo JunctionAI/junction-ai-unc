@@ -35,6 +35,8 @@ import { DbShadowAdmission } from "../lib/n8n/shadowAdmission";
 import { completeKeywordShadowRun } from "./completeKeywordShadow";
 import { completeCalendarShadowRun } from "./completeCalendarShadow";
 import { DbCalendarShadowAdmission } from "../lib/n8n/calendarAdmission";
+import { DbPaidShadowAdmission } from "../lib/n8n/paidAdmission";
+import { completePaidShadowRun } from "./completePaidShadow";
 import { createProducerClient, DbProducerContext, LlmProducer } from "./providers/producer";
 import type { ScheduleCandidate } from "./scheduler";
 import { defaultCredentialProvider, serviceDb } from "./wiring";
@@ -105,7 +107,8 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
   const producer = chosen === undefined ? new LlmProducer(createProducerClient(), { context: new DbProducerContext(db, deps.store, { now, log: deps.log }), log: deps.log, now }) : (chosen ?? undefined);
   const n8n = deps.n8n === undefined ? new HttpN8nBridge({ env: process.env, fetch: deps.fetch, now, log: deps.log,
     shadowAdmission: db ? new DbShadowAdmission(db) : undefined,
-    calendarShadowAdmissionFor: db ? scope => new DbCalendarShadowAdmission(db, scope) : undefined }) : (deps.n8n ?? undefined);
+    calendarShadowAdmissionFor: db ? scope => new DbCalendarShadowAdmission(db, scope) : undefined,
+    paidShadowAdmissionFor: db ? scope => new DbPaidShadowAdmission(db, scope) : undefined }) : (deps.n8n ?? undefined);
   const presets = deps.presets === undefined ? presetSource(db) : deps.presets;
   const credentials = deps.credentials ?? defaultCredentialProvider(process.env, deps.log ? (line) => deps.log?.info("credentials", { line }) : undefined);
   const personalisation = new StorePersonalisation(deps.store, db, { now });
@@ -130,6 +133,8 @@ export function buildAdapters(deps: ServiceDeps): BuiltAdapters {
       completeKeywordShadowRun(db, { accountId: run.accountId, contextGeneration: run.contextGeneration, runId: run.id }, { now }) } : {}),
     ...(db ? { completeCalendarShadow: (run: import("../lib/runtime/store/interface").RunRecord) =>
       completeCalendarShadowRun(db, { accountId: run.accountId, contextGeneration: run.contextGeneration ?? 0, runId: run.id }, { now }) } : {}),
+    ...(db ? { completePaidShadow: (run: import("../lib/runtime/store/interface").RunRecord) =>
+      completePaidShadowRun(db, { accountId: run.accountId, contextGeneration: run.contextGeneration ?? 0, runId: run.id }, { now }) } : {}),
     ...(db ? { assertContext: (identity: import("../lib/runtime/contextFence").RuntimeContextIdentity) => assertRuntimeContext(db, identity) } : {}),
     ...(producer ? { producer } : {}),
     ...(n8n ? { n8n } : {}),

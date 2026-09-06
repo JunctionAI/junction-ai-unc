@@ -130,6 +130,7 @@ export const KPI_CONTRACTS: Record<RoutineId, KpiContract> = {
   "D02-W06": runsKpi("test_plans_per_month", "Test plans delivered", 1, 28, "plans / 28d"),
   "D02-W07": kpi("daily_spend_vs_budget_pct", "Daily spend vs budget", 105, "lte", 1, "%", { kind: "read", platform: "meta_ads", resource: "insights", metric: "spend", per: "daily_budget_total", scale: 100, query: { filter: { level: "account" } } }),
   "D02-W08": runsKpi("organic_promotions_per_month", "Organic-to-paid candidates", 2, 28, "candidates / 28d"),
+  "D02-W09": runsKpi("bofu_campaign_plans_per_month", "BOFU campaign plans delivered", 1, 28, "plans / 28d"),
   // D03 SEO
   "D03-W01": runsKpi("keyword_briefs_per_week", "Keyword briefs delivered", 1, 7, "briefs / week"),
   "D03-W02": runsKpi("gap_reports_per_month", "Content-gap reports", 1, 28, "reports / 28d"),
@@ -172,6 +173,7 @@ const HOURS_OVERRIDES: Record<RoutineId, number> = {
   "D05-W04": 1.5, // winback campaign prepared end to end
   "D05-W07": 2.0, // a 90-day campaign calendar
   "D05-W08": 1.5, // a complete founder-led newsletter draft and build brief
+  "D02-W09": 2.0, // a keyword-grounded BOFU Search campaign plan, staged PAUSED
 };
 const CAT_BY_ID = new Map(ALL_SYSTEMS.map((s) => [s.id, s.cat]));
 export const HOURS_SAVED_PER_RUN: Record<RoutineId, number> = Object.fromEntries(ALL_SYSTEMS.map((s) => [s.id, HOURS_OVERRIDES[s.id] ?? HOURS_BY_CATEGORY[s.cat] ?? 0.5]));
@@ -438,6 +440,15 @@ const D02: RoutineSpec[] = [
       rollback: "everything is created PAUSED; switch it off in Ads Manager",
     }),
     receipt("Organic-to-paid proposal: {{decision.label}}.", 7),
+  ]),
+  // Google Ads BOFU campaign plan — wave 2, draft (a PAUSED-only plan; never a created campaign)
+  spec("D02-W09", 2, [
+    trigger(CADENCE.MANUAL),
+    optRead("campaigns", "google_ads", "campaigns", { window: "28d", fields: ["campaign_id", "name", "cost", "budget_amount", "status"], limit: 100 }),
+    optRead("terms", "google_ads", "search_terms", { window: "28d", fields: ["search_term", "clicks", "cost", "conversions"], limit: 200 }),
+    produce("D02-W09", 5),
+    gate("{{artifact.title}}", { detail: "A bottom-of-funnel Search plan built from real keyword demand for one market: ad groups, match types, negatives and PAUSED campaign settings. Creating or activating anything in Google Ads is a separate, founder-approved step.", after: "Campaign plan in your queue" }),
+    receipt("Google Ads BOFU campaign plan: {{artifact.title}} drafted.", 28),
   ]),
 ];
 

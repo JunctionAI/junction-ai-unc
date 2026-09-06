@@ -23,6 +23,10 @@ import { digest } from "../lib/commands/queue";
 import { workflowFingerprint } from "../lib/commands/releaseScope";
 import { keywordCommandRunOptions } from "../lib/n8n/keywordCommand";
 import { assertKeywordRuntimeAccess } from "./providers/keywordRuntime";
+import { paidCommandRunOptions } from "../lib/n8n/paidCommand";
+import { isPaidShadowSpec } from "../lib/n8n/paidShadowSpec";
+import { paidShadowSchema } from "../lib/n8n/paidShadowContract";
+import { assertPaidRuntimeAccess } from "./runPaidShadow";
 
 export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapters, c: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null) {
   c = Object.freeze({ ...c, actor: freezeCommandActor(c.actor) });
@@ -44,15 +48,21 @@ export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapter
     const value = Reflect.get(target, key);
     return typeof value === "function" ? value.bind(target) : value;
   } }) as Store;
+  const paid = isPaidShadowSpec(spec);
+  if ((spec.id === "D03-W01" || paid) && !deps.db) throw new Error("Shadow commands require durable database admission");
   const options = spec.id === "D03-W01"
     ? keywordCommandRunOptions(deps.db!, c, spec, workflow, deps.now)
+    : paid ? paidCommandRunOptions(deps.db!, c, spec, workflow, deps.now)
     : { mode: "dry_run" as const, runId: c.id };
-  if (spec.id === "D03-W01") {
-    if (!deps.db) throw new Error("Keyword commands require durable database admission");
-    assertKeywordRuntimeAccess();
+  if (spec.id === "D03-W01") assertKeywordRuntimeAccess();
+  if (paid) {
+    const node = spec.nodes[1];
+    const contract = paidShadowSchema.parse(node?.kind === "n8n" ? node.shadowContract : null);
+    assertPaidRuntimeAccess(process.env, contract.lane, contract.workflowId);
   }
+  // Shadow lanes take no free text: the pinned contract is the whole instruction.
   const result = await runRoutine(spec, { account: account.account, triggeredBy: "manual", vars: account.vars ?? {},
-    ...(spec.id === "D03-W01" ? {} : { inputs: { request: c.request } }) }, {
+    ...(spec.id === "D03-W01" || paid ? {} : { inputs: { request: c.request } }) }, {
     ...adapters, store: pinned,
     assertContext: async current => {
       assertSameRuntimeContext(identity, current);

@@ -21,8 +21,8 @@ const LAUNCH_WAVE = [
 
 describe("catalog specs", () => {
   it("covers every catalog routine exactly once, with matching names", () => {
-    expect(CATALOG_SPECS).toHaveLength(36);
-    expect(ALL_SYSTEMS).toHaveLength(36);
+    expect(CATALOG_SPECS).toHaveLength(37);
+    expect(ALL_SYSTEMS).toHaveLength(37);
     for (const sys of ALL_SYSTEMS) {
       const spec = CATALOG_SPEC_BY_ID[sys.id];
       expect(spec, `missing spec for ${sys.id}`).toBeDefined();

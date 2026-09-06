@@ -16,7 +16,7 @@ export class SpecValidationError extends Error {
   }
 }
 
-export const ROUTINE_ID_RE = /^D0[1-5]-W0[1-8]$/;
+export const ROUTINE_ID_RE = /^D0[1-5]-W0[1-9]$/;
 const CRON_RE = /^(\S+\s+){4}\S+$/;
 const EVENT_RE = /^event:[a-z0-9_]+:[a-z0-9_]+$/;
 

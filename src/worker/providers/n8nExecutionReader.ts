@@ -1,7 +1,7 @@
 /* Independent, GET-only execution reader. No workflow listing, retry, activation or mutation.
  * Pilot configuration is server-owned and off until real API acceptance is completed. */
 import { setTimeout as sleep } from "node:timers/promises";
-import { projectShadowExecution, projectCalendarShadowExecution } from "../../lib/n8n/executionEvidence";
+import { projectShadowExecution, projectResultShadowExecution } from "../../lib/n8n/executionEvidence";
 import { checkWebhookTarget, type HostLookup } from "../../lib/n8n/urlSecurity";
 import { pinnedWebhookFetch, type WebhookFetch } from "./pinnedWebhookFetch";
 
@@ -9,8 +9,9 @@ export const N8N_EXECUTION_API_BASE = "https://junctionai8.app.n8n.cloud/api/v1"
 export interface ShadowExecutionReadInput { workflowId: string; executionId: string; signal: AbortSignal }
 export type ShadowExecutionReader = (input: ShadowExecutionReadInput) => Promise<unknown>;
 export interface ExecutionReaderOptions {
-  /** Separate pins, never a fallback to the keyword workflow/trigger. */
-  protocol?: "keyword" | "calendar";
+  /** Separate pins, never a fallback to the keyword workflow/trigger. Paid lanes pin per
+   * workflow: meta (six AVGAR routines) and google_ads (D02-W09) each need their own family. */
+  protocol?: "keyword" | "calendar" | "meta" | "google_ads";
   fetch?: WebhookFetch;
   lookup?: HostLookup;
   /** Test seam. Production uses abortable, bounded delays between reads of the same execution. */
@@ -23,14 +24,17 @@ export function createShadowExecutionReader(
   env: Record<string, string | undefined>, workflowId: string, opts: ExecutionReaderOptions = {},
 ): ShadowExecutionReader | undefined {
   if (env.N8N_EXECUTION_READER_ENABLED !== "true" || env.N8N_EXECUTION_API_BASE_URL !== N8N_EXECUTION_API_BASE) return undefined;
-  const prefix = opts.protocol === "calendar" ? "N8N_CALENDAR_SHADOW" : "N8N_SHADOW";
+  const PREFIX = { keyword: "N8N_SHADOW", calendar: "N8N_CALENDAR_SHADOW", meta: "N8N_META_SHADOW", google_ads: "N8N_GADS_SHADOW" } as const;
+  const protocol = opts.protocol ?? "keyword", prefix = PREFIX[protocol];
   const key = env.N8N_EXECUTION_API_KEY ?? "", triggerNodeId = env[`${prefix}_TRIGGER_NODE_ID`] ?? "";
-  const resultNodeId = env.N8N_CALENDAR_SHADOW_RESULT_NODE_ID ?? "";
-  if (opts.protocol === "calendar" && (!/^[A-Za-z0-9_-]{1,128}$/.test(resultNodeId) || resultNodeId === triggerNodeId)) return undefined;
+  const bindsResult = protocol !== "keyword";
+  const resultNodeId = bindsResult ? env[`${prefix}_RESULT_NODE_ID`] ?? "" : "";
+  if (bindsResult && (!/^[A-Za-z0-9_-]{1,128}$/.test(resultNodeId) || resultNodeId === triggerNodeId)) return undefined;
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(workflowId) || env[`${prefix}_WORKFLOW_ID`] !== workflowId ||
       !/^[A-Za-z0-9_-]{1,128}$/.test(triggerNodeId) ||
       key.length < 24 || key.length > 8192 || /\s/.test(key) ||
-      key === env.N8N_SIGNING_SECRET || key === env.N8N_SHADOW_RECEIVER_TOKEN || key === env.N8N_CALENDAR_SHADOW_RECEIVER_TOKEN) return undefined;
+      key === env.N8N_SIGNING_SECRET || key === env.N8N_SHADOW_RECEIVER_TOKEN || key === env.N8N_CALENDAR_SHADOW_RECEIVER_TOKEN ||
+      key === env.N8N_META_SHADOW_RECEIVER_TOKEN || key === env.N8N_GADS_SHADOW_RECEIVER_TOKEN) return undefined;
   const transport = opts.fetch ?? pinnedWebhookFetch;
   const wait = opts.wait ?? (async (ms, signal) => { await sleep(ms, undefined, { signal }); });
   return async input => {
@@ -55,7 +59,7 @@ export function createShadowExecutionReader(
           const row = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
           if (!row || row.id !== input.executionId || row.workflowId !== workflowId) throw new Error("execution identity mismatch");
           retry = row.status === "new" || row.status === "running";
-          if (!retry) return opts.protocol === "calendar" ? projectCalendarShadowExecution(value, { ...input, triggerNodeId, resultNodeId })
+          if (!retry) return bindsResult ? projectResultShadowExecution(value, { ...input, triggerNodeId, resultNodeId })
             : projectShadowExecution(value, { ...input, triggerNodeId });
         } else if (!retry) throw new Error("execution read refused");
       } catch {

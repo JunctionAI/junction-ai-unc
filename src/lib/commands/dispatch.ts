@@ -11,6 +11,8 @@ import { assertSameRuntimeContext, runtimeGeneration } from "../runtime/contextF
 import { freezeCommandActor } from "./binding";
 import { workflowFingerprint } from "./releaseScope";
 import { keywordCommandMarket } from "../n8n/keywordCommand";
+import { paidCommandLane } from "../n8n/paidCommand";
+import { isPaidShadowSpec } from "../n8n/paidShadowSpec";
 export { workflowFingerprint } from "./releaseScope";
 
 export interface DispatchDeps {
@@ -35,6 +37,7 @@ export async function eligible(deps: DispatchDeps, actor: CommandActor, routineI
   const spec = effectiveSpec(state, catalog);
   const workflow = await deps.store.findN8nWorkflow(actor.accountId, routineId);
   if (routineId === "D03-W01" && !keywordCommandMarket(actor, spec, workflow)) return { ok: false, reply: "Keyword requests still need the customer authorization connection and reviewed market settings. Nothing was started." };
+  if (isPaidShadowSpec(spec) && !paidCommandLane(actor, spec, workflow)) return { ok: false, reply: `${catalog.name} still needs its reviewed paid-ads shadow configuration and registered workflow on this account and channel. Nothing was started.` };
   if (!deps.selectionReleased(actor, spec, workflow)) return { ok: false, reply: `${catalog.name} is not released for requests on this account and channel yet. Nothing was started.` };
   const [connected, business] = await Promise.all([deps.connected(actor.accountId), deps.business(actor.accountId)]);
   const availability = routineAvailability(spec, connected, business);

@@ -2,8 +2,8 @@ import { stableHash } from "../runtime/context";
 import { validateSpec } from "../runtime/validate";
 import { assertProxyRuntimeContext, authenticate, type ProxyDeps } from "./proxy";
 import { RuntimeContextError, runtimeGeneration } from "../runtime/contextFence";
-import { assertProtocolRequest, isCalendarShadow, projectProtocolContract } from "./shadowProtocols";
-import { CALENDAR_SHADOW_RECEIVER_URL } from "./calendarShadowContract";
+import { assertProtocolRequest, protocolReceiver, projectProtocolContract, shadowKind, type ShadowKind } from "./shadowProtocols";
+import { DbPaidShadowAdmission } from "./paidAdmission";
 import { DbShadowAdmission, shadowTokenDigest } from "./shadowAdmission";
 import { bearerToken } from "./dataToken";
 import { DbCalendarShadowAdmission } from "./calendarAdmission";
@@ -15,15 +15,22 @@ import { DbCalendarShadowAdmission } from "./calendarAdmission";
  * Call only an independently pinned Junction origin, with redirects disabled.
  */
 export async function shadowAuthority(deps: ProxyDeps, req: Request, receiverUrl: string | undefined): Promise<Response> {
-  return protocolAuthority(deps, req, receiverUrl, false);
+  return protocolAuthority(deps, req, receiverUrl, "keyword");
 }
 /** Separate entry point; no calendar allowance is inferred from a keyword ledger. */
 export async function calendarShadowAuthority(deps: ProxyDeps, req: Request, receiverUrl: string | undefined): Promise<Response> {
   if (req.method !== "POST") return Response.json({ ok: false, error: "calendar authority requires POST" },
     { status: 405, headers: { "allow": "POST", "cache-control": "no-store", "vary": "Authorization" } });
-  return protocolAuthority(deps, req, receiverUrl, true);
+  return protocolAuthority(deps, req, receiverUrl, "calendar");
 }
-async function protocolAuthority(deps: ProxyDeps, req: Request, receiverUrl: string | undefined, calendar: boolean): Promise<Response> {
+/** Paid-ads lanes (AVGAR Meta routines + Google Ads plan). The receiver pin is the lane's own
+ * URL from server configuration; the run's stored contract decides which lane applies. */
+export async function paidShadowAuthority(deps: ProxyDeps, req: Request, receiverUrls: { meta?: string; google_ads?: string }): Promise<Response> {
+  if (req.method !== "POST") return Response.json({ ok: false, error: "paid-ads authority requires POST" },
+    { status: 405, headers: { "allow": "POST", "cache-control": "no-store", "vary": "Authorization" } });
+  return protocolAuthority(deps, req, receiverUrls, "paid");
+}
+async function protocolAuthority(deps: ProxyDeps, req: Request, receiverPin: string | undefined | { meta?: string; google_ads?: string }, kind: ShadowKind): Promise<Response> {
   const headers = { "cache-control": "no-store", "vary": "Authorization" };
   const deny = (status: number, error: string) => Response.json({ ok: false, error }, { status, headers });
   const auth = await authenticate(deps, req);
@@ -40,9 +47,11 @@ async function protocolAuthority(deps: ProxyDeps, req: Request, receiverUrl: str
     return deny(403, "run is not an explicit manual keyword shadow routine");
   }
   const contract = node.shadowContract;
-  if (isCalendarShadow(contract) !== calendar) return deny(403, "shadow authority protocol mismatch");
-  if (calendar && (receiverUrl !== CALENDAR_SHADOW_RECEIVER_URL || run.snapshot?.awaiting !== "calendar_shadow"))
-    return deny(403, "calendar receiver or dispatch continuation is not pinned");
+  if (shadowKind(contract) !== kind) return deny(403, "shadow authority protocol mismatch");
+  const receiverUrl = typeof receiverPin === "string" || receiverPin === undefined ? receiverPin
+    : contract.contract === "unc.paid-ads-shadow.v1" ? receiverPin[contract.lane] : undefined;
+  if (kind !== "keyword" && (receiverUrl !== protocolReceiver(contract) || run.snapshot?.awaiting !== `${kind}_shadow`))
+    return deny(403, `${kind === "paid" ? "paid-ads" : "calendar"} receiver or dispatch continuation is not pinned`);
   try {
     assertProtocolRequest(contract, { accountId: run.accountId, runId: run.id, routineId: run.routineId, mode: run.mode, startedAt: run.startedAt });
   } catch {
@@ -73,9 +82,10 @@ async function protocolAuthority(deps: ProxyDeps, req: Request, receiverUrl: str
     return deny(error instanceof RuntimeContextError && error.code === "context_changed" ? 409 : 503,
       "The stored run's business context is stale, paused or unavailable");
   }
-  const admission = calendar ? deps.calendarShadowAdmission ?? (deps.db ? new DbCalendarShadowAdmission(deps.db, {
-    accountId: run.accountId, contextGeneration: runtimeGeneration(run.contextGeneration), runId: run.id,
-  }) : undefined) : deps.shadowAdmission ?? (deps.db ? new DbShadowAdmission(deps.db) : undefined);
+  const scope = { accountId: run.accountId, contextGeneration: runtimeGeneration(run.contextGeneration), runId: run.id };
+  const admission = kind === "calendar" ? deps.calendarShadowAdmission ?? (deps.db ? new DbCalendarShadowAdmission(deps.db, scope) : undefined)
+    : kind === "paid" ? deps.paidShadowAdmission ?? (deps.db ? new DbPaidShadowAdmission(deps.db, scope) : undefined)
+    : deps.shadowAdmission ?? (deps.db ? new DbShadowAdmission(deps.db) : undefined);
   if (!admission) return deny(503, "Durable shadow admission is unavailable");
   try {
     const allowed = await admission.authorize({ accountId: run.accountId, contextGeneration: runtimeGeneration(run.contextGeneration),

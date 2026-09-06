@@ -53,7 +53,7 @@ test.describe("Home", () => {
     await expect(page.getByText("At the bar ✓")).toBeVisible();
     await expect(page.getByText("Below the bar")).toHaveCount(2);
     await expect(page.getByText("Automation level")).toBeVisible();
-    await expect(page.getByText(/— \d+ of 36 routines running · saving you ~\d+ h\/week/)).toBeVisible();
+    await expect(page.getByText(/— \d+ of 37 routines running · saving you ~\d+ h\/week/)).toBeVisible();
     await expect(page.getByText("Setting up next")).toBeVisible();
     await expect(page.getByText("Completed today")).toBeVisible();
     await expect(page.getByText("Receipt R-4482")).toBeVisible();

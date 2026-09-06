@@ -16,9 +16,9 @@ test("single and combined selections persist across reload without any run reque
   await page.goto(url());const first=page.getByRole("switch",{name:"Draft posts in your voice",exact:true});
   await first.click();await expect(first).toBeChecked();await expect(first).toBeEnabled();
   await page.getByRole("switch",{name:"Plan next month’s campaigns",exact:true}).click();
-  await expect(page.getByText("2 of 36 catalog routines selected")).toBeVisible();await page.reload();await expect(first).toBeChecked();
+  await expect(page.getByText("2 of 37 catalog routines selected")).toBeVisible();await page.reload();await expect(first).toBeChecked();
   await first.click();await expect(first).not.toBeChecked();await expect(first).toBeEnabled();
-  await page.getByRole("switch",{name:"Plan next month’s campaigns",exact:true}).click();await expect(page.getByText("0 of 36 catalog routines selected")).toBeVisible();
+  await page.getByRole("switch",{name:"Plan next month’s campaigns",exact:true}).click();await expect(page.getByText("0 of 37 catalog routines selected")).toBeVisible();
   expect(posts).toHaveLength(4);expect(posts.every(p=>p.endsWith("/api/agents"))).toBe(true);
 });
 test("unsupported jobs, aliases and keyword block remain honest; filters and inspector target work",async({page})=>{
@@ -74,6 +74,6 @@ test("Connections uses real read evidence, hides prototype counts and clears acc
 });
 for(const width of [390,1280])test(`Agents fits ${width}px`,async({page})=>{
   const errors:string[]=[];page.on("pageerror",e=>errors.push(e.message));await page.setViewportSize({width,height:900});await page.goto(url());
-  await expect(page.getByText("0 of 36 catalog routines selected")).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);expect(errors).toEqual([]);
+  await expect(page.getByText("0 of 37 catalog routines selected")).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);expect(errors).toEqual([]);
   await page.screenshot({path:test.info().outputPath(`agents-${width}.png`),fullPage:false});
 });

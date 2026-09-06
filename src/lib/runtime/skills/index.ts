@@ -18,6 +18,7 @@ import { customerQuestions } from "./customerQuestions";
 import { dailyPaid } from "./dailyPaid";
 import { followUp } from "./followUp";
 import { founderContent } from "./founderContent";
+import { gadsBofuPlan } from "./gadsBofuPlan";
 import { hookRotation } from "./hookRotation";
 import { keywordScan } from "./keywordScan";
 import { leadResearch } from "./leadResearch";
@@ -59,6 +60,7 @@ export const SKILLS: Skill[] = [
   testPlanner,
   budgetPacing,
   organicToPaid,
+  gadsBofuPlan,
   keywordScan,
   contentGap,
   aiVisibility,

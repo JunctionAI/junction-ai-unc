@@ -10,7 +10,7 @@ describe("Nguyen handoff inventory", () => {
   it("keeps the committed routine mapping in sync with executable specs", () => {
     const file = path.resolve(__dirname, "../../../../docs/integration/unc-routine-manifest.v1.json");
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(integrationManifest());
-    expect(integrationManifest().routines).toHaveLength(36);
+    expect(integrationManifest().routines).toHaveLength(37);
   });
   it("exposes pre-produce decisions rather than promising a whole-workflow replacement", () => {
     const paid = integrationManifest().routines.find(r => r.routineId === "D02-W03")!;

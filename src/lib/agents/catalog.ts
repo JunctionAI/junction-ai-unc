@@ -14,7 +14,7 @@ export const AGENT_JOBS: readonly AgentJob[] = [
   job("Paid ads","D02-W08","Find organic-to-paid candidates",["Promote posts that already work"],"No promotion is applied."),
   pending("Paid ads","competitor-ads","Watch competitor ads","No implemented routine or approved data source yet."),
   job("Paid ads","D02-W05","Review creator whitelisting",["Brief creator ads"],"Requires approved creator rights; this is not the content-brief routine."),
-  pending("Paid ads","google-bofu","Plan Google Ads BOFU campaigns","Separate Nguyen contract and Unc routine mapping required; not a Meta routine."),
+  job("Paid ads","D02-W09","Plan Google Ads BOFU campaigns",["Plan Google Ads BOFU campaigns"],"A staged, PAUSED-only Search plan from keyword demand; no campaign is created or activated."),
   job("Email & SMS","D05-W02","Draft abandoned-cart recovery",["Win back abandoned carts"]),
   job("Email & SMS","D05-W01","Tune your welcome flow",["Turn first orders into second"],"Welcome-flow analysis is not proof of repeat purchases."),
   job("Email & SMS","D05-W04","Draft lapsed-customer campaigns",["Revive lapsed customers"]),

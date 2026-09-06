@@ -186,7 +186,7 @@ describe("Home in accounts mode — no demo constant can render", () => {
     expect(html).toContain("unc-self-review");
     expect(html).not.toContain(esc(HOME_COPY.firstDay));
     expect(html).toContain("automation-strip");
-    expect(html).toContain("1 of 36 routines on · 1 run this week · ~1.5 h saved this week");
+    expect(html).toContain("1 of 37 routines on · 1 run this week · ~1.5 h saved this week");
     // Agreement metadata in local state is not a persisted plan.
     expect(html).not.toContain("Weeks 1–5");
     expect(html).toContain(esc(HOME_COPY.noPlan));

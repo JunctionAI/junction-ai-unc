@@ -33,7 +33,7 @@ export interface ConnectorDef {
 
 export const CATEGORIES: CategoryDef[] = [
   { id: "D01", name: "Content", systems: ["Founder content engine", "Viral hook mining", "Customer-question mining", "UGC creator pipeline", "Social repurposing", "Winning elements library", "Trend watch", "Content performance learning"] },
-  { id: "D02", name: "Paid ads", systems: ["Daily paid decisioning", "Creative testing sprints", "Hook rotation engine", "Ad fatigue watch", "Creator whitelisting", "Creative test planner", "Budget pacing guard", "Organic-to-paid promotion"] },
+  { id: "D02", name: "Paid ads", systems: ["Daily paid decisioning", "Creative testing sprints", "Hook rotation engine", "Ad fatigue watch", "Creator whitelisting", "Creative test planner", "Budget pacing guard", "Organic-to-paid promotion", "Google Ads BOFU campaign plan"] },
   { id: "D03", name: "SEO", systems: ["Keyword opportunity scan", "Content gap analysis", "AI search visibility", "On-page SEO fixes", "SERP position watch", "Competitor gap watch"] },
   { id: "D04", name: "Sales", systems: ["Lead research & scoring", "Supervised outbound drafts", "Meeting brief builder", "Follow-up cadence", "Win/loss capture", "Pipeline hygiene"] },
   { id: "D05", name: "Email & SMS", systems: ["Welcome flow tuning", "Abandoned cart recovery", "Segmentation refresh", "Winback campaign prep", "Post-purchase education", "Review request timing", "Campaign calendar prep", "Newsletter draft production"] },
@@ -48,6 +48,7 @@ export const BENEFITS: Record<string, string> = {
   "Creative test planner": "Find winning ads faster",
   "Budget pacing guard": "Catch pacing before it crosses your cap",
   "Organic-to-paid promotion": "Turn proven posts into ads",
+  "Google Ads BOFU campaign plan": "A staged bottom-of-funnel Search plan from real keyword demand",
   "Keyword opportunity scan": "Find searches you can win",
   "Content gap analysis": "Know exactly what to write next",
   "On-page SEO fixes": "Fix what holds rankings back",

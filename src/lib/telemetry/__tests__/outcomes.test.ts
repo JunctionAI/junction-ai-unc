@@ -30,7 +30,7 @@ async function doneRun(store: MemoryStore, routineId: string, startedAt = "2026-
 describe("catalog KPI contracts + hours constants", () => {
   it("every routine carries a KPI contract and a conservative hours-saved constant", () => {
     const specs = Object.values(CATALOG_SPEC_BY_ID);
-    expect(specs).toHaveLength(36);
+    expect(specs).toHaveLength(37);
     for (const s of specs) {
       expect(s.kpi, s.id).toBeDefined();
       expect(s.kpi!.key).toMatch(/^[a-z0-9_]+$/);

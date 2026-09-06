@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { unwrap, type DbClient } from "../db/types";
 import type { N8nCallResult } from "../runtime/types";
-import { isCalendarShadow, type ShadowContract } from "./shadowProtocols";
+import { isKeywordShadow, type ShadowContract } from "./shadowProtocols";
 import type { ShadowCandidate } from "./shadowCandidate";
 
 export interface ShadowAdmissionIdentity {
@@ -21,14 +21,14 @@ export const shadowTokenDigest = (token: string) => createHash("sha256").update(
 export class DbShadowAdmission implements ShadowAdmission {
   constructor(private readonly db: DbClient) {}
   async claim(input: Parameters<ShadowAdmission["claim"]>[0]): Promise<string> {
-    if (isCalendarShadow(input.contract)) throw new Error("Keyword admission cannot authorize a calendar");
+    if (!isKeywordShadow(input.contract)) throw new Error("Keyword admission cannot authorize a calendar or paid-ads lane");
     // Store only fingerprints, never the bearer or raw provider response/request headers.
     const id = await unwrap<unknown>("shadow.claim", this.db.rpc("claim_keyword_shadow_dispatch", { input }));
     if (typeof id !== "string" || !id) throw new Error("No unused shadow permit; reconcile previous work before rerunning");
     return id;
   }
   async authorize(input: Parameters<ShadowAdmission["authorize"]>[0]): Promise<boolean> {
-    if (isCalendarShadow(input.contract)) return false;
+    if (!isKeywordShadow(input.contract)) return false;
     return (await unwrap<unknown>("shadow.authorize", this.db.rpc("consume_keyword_shadow_authority", { input }))) === true;
   }
   async observe(permitId: string, executionId: string, candidate: ShadowCandidate): Promise<void> {

@@ -19,7 +19,7 @@
         "area": "meta",
         "capability": "daily_decisioning",
         "routineId": "D02-W01",
-        "adapter": "n8n_owned_decision",
+        "adapter": "paid_shadow_contract",
         "requiredEvidence": [
           "adset_id",
           "reporting_window",
@@ -36,7 +36,7 @@
         "area": "meta",
         "capability": "creative_testing",
         "routineId": "D02-W02",
-        "adapter": "n8n_owned_decision",
+        "adapter": "paid_shadow_contract",
         "requiredEvidence": [
           "ad_ids",
           "creative_ids",
@@ -50,7 +50,7 @@
         "area": "meta",
         "capability": "hook_rotation",
         "routineId": "D02-W03",
-        "adapter": "n8n_owned_decision",
+        "adapter": "paid_shadow_contract",
         "requiredEvidence": [
           "ad_id",
           "frequency",
@@ -63,7 +63,7 @@
         "area": "meta",
         "capability": "ad_fatigue",
         "routineId": "D02-W04",
-        "adapter": "n8n_owned_decision",
+        "adapter": "paid_shadow_contract",
         "requiredEvidence": [
           "ad_id",
           "window",
@@ -79,7 +79,7 @@
         "area": "meta",
         "capability": "creative_test_planner",
         "routineId": "D02-W06",
-        "adapter": "produce_step_review",
+        "adapter": "paid_shadow_contract",
         "requiredEvidence": [
           "creative_observations",
           "measured_vs_hypothesized"
@@ -90,7 +90,7 @@
         "area": "meta",
         "capability": "budget_pacing",
         "routineId": "D02-W07",
-        "adapter": "n8n_owned_decision",
+        "adapter": "paid_shadow_contract",
         "requiredEvidence": [
           "account_or_adset_grain",
           "account_timezone",
@@ -268,7 +268,7 @@
         "area": "google_ads",
         "capability": "bofu_campaign_plan",
         "routineId": "D02-W09",
-        "adapter": "reserved_not_executable",
+        "adapter": "paid_shadow_contract",
         "requiredEvidence": [
           "google_ads_customer_id",
           "keyword_query",
@@ -279,7 +279,7 @@
           "historical_metrics_window",
           "proposed_groups_and_negatives"
         ],
-        "boundary": "Reserved Paid Ads ID distinct from Meta routines and SEO keywords. A plan is not a created or activated campaign. No catalog/endpoint/allowlist exists yet."
+        "boundary": "Catalog routine D02-W09 (draft-only, PAUSED plans). Served through unc.paid-ads-shadow.v1 lane google_ads; a plan is never a created or activated campaign. No registration, allowance or receiver secret exists yet."
       }
     ],
     "blockedInputs": [
@@ -3507,6 +3507,149 @@
           }
         }
       ]
+    },
+    {
+      "routineId": "D02-W09",
+      "version": 1,
+      "name": "Google Ads BOFU campaign plan",
+      "outputKind": "generic",
+      "outputContractSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].outputSpec)",
+      "minimum": {
+        "summary": "the seed keyword, the one market this plan is for, and enough approved business context",
+        "platforms": [],
+        "inputs": [
+          "campaign_seed_keyword",
+          "campaign_market"
+        ],
+        "helpful": [
+          "google_ads"
+        ]
+      },
+      "outputGuide": "{\"kind\":\"generic\",\"title\":\"BOFU Search plan — <market>: <seed keyword>\",\"body\":\"the observed demand this plan rests on, the ceiling rule, what is unknown, and PASS|PARTIAL|BLOCKED\",\"items\":[{\"title\":\"<ad group>\",\"body\":\"<keywords + match types, negatives, RSA copy, landing page, PAUSED settings, markdown>\",\"meta\":{\"campaign_status\":\"PAUSED\",\"market\":\"US\",\"ad_group\":\"…\",\"keywords\":[{\"keyword\":\"…\",\"match_type\":\"PHRASE\",\"search_volume\":null,\"cpc\":null,\"competition\":null,\"intent\":null}],\"negatives\":[],\"landing_url\":\"https://…\",\"headlines\":[],\"descriptions\":[],\"cpa_ceiling\":null,\"mutate_attempted\":false}}],\"evidence\":[{\"source\":\"input:campaign_seed_keyword|input:campaign_market|read:campaigns|read:terms|site_profile|memory\",\"ref\":\"…\"}]}",
+      "outputGuideIsSchema": false,
+      "maxItems": 5,
+      "effectiveProduceMaxItems": 5,
+      "semanticCheckSource": "src/lib/runtime/skills (SKILL_BY_ID[routineId].check + prompt)",
+      "reads": [
+        {
+          "nodeId": "read_campaigns",
+          "as": "campaigns",
+          "platform": "google_ads",
+          "query": {
+            "resource": "campaigns",
+            "window": "28d",
+            "fields": [
+              "campaign_id",
+              "name",
+              "cost",
+              "budget_amount",
+              "status"
+            ],
+            "limit": 100
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        },
+        {
+          "nodeId": "read_terms",
+          "as": "terms",
+          "platform": "google_ads",
+          "query": {
+            "resource": "search_terms",
+            "window": "28d",
+            "fields": [
+              "search_term",
+              "clicks",
+              "cost",
+              "conversions"
+            ],
+            "limit": 200
+          },
+          "optional": true,
+          "freshnessMinutes": null
+        }
+      ],
+      "scopes": [
+        "google_ads:campaigns",
+        "google_ads:search_terms"
+      ],
+      "stepsBeforeN8nReplacement": [
+        {
+          "id": "trigger",
+          "kind": "trigger"
+        },
+        {
+          "id": "read_campaigns",
+          "kind": "read"
+        },
+        {
+          "id": "read_terms",
+          "kind": "read"
+        }
+      ],
+      "preProducerDefinition": [
+        {
+          "kind": "trigger",
+          "id": "trigger",
+          "cadence": "manual"
+        },
+        {
+          "kind": "read",
+          "id": "read_campaigns",
+          "as": "campaigns",
+          "source": "google_ads",
+          "query": {
+            "resource": "campaigns",
+            "window": "28d",
+            "fields": [
+              "campaign_id",
+              "name",
+              "cost",
+              "budget_amount",
+              "status"
+            ],
+            "limit": 100
+          },
+          "optional": true
+        },
+        {
+          "kind": "read",
+          "id": "read_terms",
+          "as": "terms",
+          "source": "google_ads",
+          "query": {
+            "resource": "search_terms",
+            "window": "28d",
+            "fields": [
+              "search_term",
+              "clicks",
+              "cost",
+              "conversions"
+            ],
+            "limit": 200
+          },
+          "optional": true
+        }
+      ],
+      "postProducerDefinition": [
+        {
+          "kind": "gate",
+          "id": "gate",
+          "title": "{{artifact.title}}",
+          "expiryHours": 48,
+          "detail": "A bottom-of-funnel Search plan built from real keyword demand for one market: ad groups, match types, negatives and PAUSED campaign settings. Creating or activating anything in Google Ads is a separate, founder-approved step.",
+          "after": "Campaign plan in your queue"
+        },
+        {
+          "kind": "receipt",
+          "id": "receipt",
+          "summary": "Google Ads BOFU campaign plan: {{artifact.title}} drafted.",
+          "measurementWindowDays": 28
+        }
+      ],
+      "replacesWholeWorkflow": false,
+      "warning": "Registering a produce-step webhook does not bypass earlier reads/checks/decisions. An explicit shadow adapter is required when n8n owns those decisions.",
+      "actions": []
     },
     {
       "routineId": "D03-W01",

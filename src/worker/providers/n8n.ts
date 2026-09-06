@@ -21,8 +21,10 @@ import { checkWebhookTarget, type HostLookup } from "../../lib/n8n/urlSecurity";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
 import { KEYWORD_SHADOW_RECEIVER_URL } from "../../lib/n8n/shadowContract";
 import { CALENDAR_SHADOW_RECEIVER_URL } from "../../lib/n8n/calendarShadowContract";
+import { META_SHADOW_RECEIVER_URL, GADS_SHADOW_RECEIVER_URL } from "../../lib/n8n/paidShadowContract";
 import { assertProtocolRequest, validateProtocolReceipt, verifyProtocolExecution, protocolCandidate,
-  isCalendarShadow, protocolEnvPrefix, protocolReceiver, type ShadowContract } from "../../lib/n8n/shadowProtocols";
+  isCalendarShadow, isKeywordShadow, isPaidShadow, protocolBindsResult, protocolEnvPrefix, protocolReaderKind, protocolReceiver,
+  type ShadowContract } from "../../lib/n8n/shadowProtocols";
 import type { N8nBridge, N8nCallResult, N8nNode, N8nWorkflow, ProduceNeed, ProduceNode, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
 import { pinnedWebhookFetch, type WebhookFetch, type WebhookResponse } from "./pinnedWebhookFetch";
@@ -67,10 +69,10 @@ export interface PayloadOptions {
 
 export function buildN8nPayload(node: ProduceNode | N8nNode, ctx: RunContext, opts: PayloadOptions = {}): N8nPayload {
   const skillId = node.kind === "produce" ? (node.skill ?? ctx.routineId) : ctx.routineId;
-  // Calendar's provider is bound natively in n8n; its authority token must not
-  // inherit Shopify/customer-data scopes from the different built-in calendar.
-  const calendar = node.kind === "n8n" && node.shadowContract && isCalendarShadow(node.shadowContract);
-  const scopes = calendar ? [] : scopesForRoutine(ctx.routineId);
+  // Calendar and paid providers are bound natively in n8n; their authority tokens must
+  // not inherit Shopify/Meta/customer-data scopes from the different built-in routines.
+  const external = node.kind === "n8n" && !!node.shadowContract && !isKeywordShadow(node.shadowContract);
+  const scopes = external ? [] : scopesForRoutine(ctx.routineId);
   const minted = opts.secret ? issueDataToken(opts.secret, { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, scopes }, { now: opts.now }) : null;
   return {
     ...(node.kind === "n8n" && node.shadowContract ? { shadow: node.shadowContract } : {}),
@@ -135,6 +137,10 @@ export interface HttpN8nBridgeOptions {
   calendarShadowAdmission?: ShadowAdmission;
   calendarShadowAdmissionFor?: (scope: { accountId: string; contextGeneration: number; runId: string }) => ShadowAdmission;
   readCalendarShadowExecution?: ShadowExecutionReader;
+  /** Paid-ads lanes (AVGAR Meta + Google Ads plan): their own ledger and reader pins, never the keyword permit. */
+  paidShadowAdmission?: ShadowAdmission;
+  paidShadowAdmissionFor?: (scope: { accountId: string; contextGeneration: number; runId: string }) => ShadowAdmission;
+  readPaidShadowExecution?: ShadowExecutionReader;
 }
 
 export class HttpN8nBridge implements N8nBridge {
@@ -156,13 +162,17 @@ export class HttpN8nBridge implements N8nBridge {
   async call(node: ProduceNode | N8nNode, ctx: RunContext, workflow: N8nWorkflow | null): Promise<N8nCallResult> {
     const shadow = node.kind === "n8n" ? node.shadowContract : undefined;
     const calendar = shadow ? isCalendarShadow(shadow) : false;
-    const admission = calendar ? this.opts.calendarShadowAdmission ?? this.opts.calendarShadowAdmissionFor?.({
-      accountId: ctx.account.accountId, contextGeneration: runtimeGeneration(ctx.account.contextGeneration), runId: ctx.runId,
-    }) : this.opts.shadowAdmission;
+    const paid = shadow ? isPaidShadow(shadow) : false;
+    const scope = { accountId: ctx.account.accountId, contextGeneration: runtimeGeneration(ctx.account.contextGeneration), runId: ctx.runId };
+    // Each protocol has its own durable ledger. A missing ledger fails closed before any POST.
+    const admission = calendar ? this.opts.calendarShadowAdmission ?? this.opts.calendarShadowAdmissionFor?.(scope)
+      : paid ? this.opts.paidShadowAdmission ?? this.opts.paidShadowAdmissionFor?.(scope)
+      : this.opts.shadowAdmission;
     const identity = { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, mode: ctx.mode, startedAt: ctx.startedAt };
     if (shadow) {
       assertProtocolRequest(shadow, identity);
-      if (isCalendarShadow(shadow) && shadow.client.currency !== ctx.account.currency) throw new Error("calendar currency differs from the run account");
+      if ((isCalendarShadow(shadow) || isPaidShadow(shadow)) && shadow.client.currency !== ctx.account.currency)
+        throw new Error(`${isPaidShadow(shadow) ? "paid-ads" : "calendar"} currency differs from the run account`);
       if (!workflow || workflow.accountId !== shadow.accountId || workflow.routineId !== shadow.routineId || !workflow.active)
         throw new Error("shadow integration requires an active account-specific workflow registration");
     }
@@ -170,22 +180,22 @@ export class HttpN8nBridge implements N8nBridge {
     if (!url) throw new Error("no n8n webhook is registered for this routine");
     const target = await checkWebhookTarget(url, this.env, { maxLength: 2000, lookup: this.opts.lookup });
     if (!target.ok) throw new Error(`n8n webhook refused: ${target.reason}`);
-    if (!shadow && [KEYWORD_SHADOW_RECEIVER_URL, CALENDAR_SHADOW_RECEIVER_URL].includes(target.url.href))
+    if (!shadow && [KEYWORD_SHADOW_RECEIVER_URL, CALENDAR_SHADOW_RECEIVER_URL, META_SHADOW_RECEIVER_URL, GADS_SHADOW_RECEIVER_URL].includes(target.url.href))
       throw new Error("The shadow receiver requires its explicit shadow contract and permit");
     const secret = (this.env[N8N_SECRET_ENV] ?? "").trim();
     if (!secret) throw new Error(`${N8N_SECRET_ENV} is not set — refusing to call n8n unsigned`);
     const receiverHeaders: Record<string, string> = {};
-    const readExecution = shadow ? (calendar ? this.opts.readCalendarShadowExecution : this.opts.readShadowExecution) ?? createShadowExecutionReader(this.env, shadow.workflowId, {
-      fetch: this.opts.executionFetch, lookup: this.opts.lookup, protocol: calendar ? "calendar" : "keyword",
-    }) : undefined;
+    const readExecution = shadow ? (calendar ? this.opts.readCalendarShadowExecution : paid ? this.opts.readPaidShadowExecution : this.opts.readShadowExecution)
+      ?? createShadowExecutionReader(this.env, shadow.workflowId, { fetch: this.opts.executionFetch, lookup: this.opts.lookup, protocol: protocolReaderKind(shadow) })
+      : undefined;
     if (shadow) {
       // Separate receiver credential, pinned to this exact URL. Never send it to an
       // owner-edited/global webhook, and never share the root data-token signing key.
       const prefix = protocolEnvPrefix(shadow);
       const receiverUrl = (this.env[`${prefix}_RECEIVER_URL`] ?? "").trim();
       const receiverToken = (this.env[`${prefix}_RECEIVER_TOKEN`] ?? "").trim();
-      if (calendar && (receiverUrl !== protocolReceiver(shadow) || receiverToken === this.env.N8N_SHADOW_RECEIVER_TOKEN))
-        throw new Error("Calendar requires its own receiver URL and scoped credential");
+      if (protocolBindsResult(shadow) && (receiverUrl !== protocolReceiver(shadow) || receiverToken === this.env.N8N_SHADOW_RECEIVER_TOKEN))
+        throw new Error(`${calendar ? "Calendar" : "Paid-ads"} requires its own receiver URL and scoped credential`);
       if (receiverUrl !== target.url.toString()) throw new Error("shadow receiver URL is not pinned in server configuration");
       if (receiverToken.length < 24 || /\s/.test(receiverToken) || receiverToken === secret)
         throw new Error("shadow receiver requires a separate scoped authentication credential");
@@ -238,7 +248,7 @@ export class HttpN8nBridge implements N8nBridge {
       if (shadow && out.kind === "artifact") {
         if (!reported) throw new Error("Shadow artifact requires a validated reported execution receipt");
         const envelope = parsed as { artifact: unknown; executionReceipt: unknown };
-        const resultDigest = calendar ? shadowRequestDigest({ artifact: envelope.artifact, executionReceipt: envelope.executionReceipt }) : undefined;
+        const resultDigest = protocolBindsResult(shadow) ? shadowRequestDigest({ artifact: envelope.artifact, executionReceipt: envelope.executionReceipt }) : undefined;
         const candidate = protocolCandidate(out.artifact, reported, shadow, identity, resultDigest);
         // Persist the known execution before the next network wait. A crash here
         // must leave a named execution to inspect, not a reason to call n8n again.

@@ -63,6 +63,7 @@ export interface ProxyDeps {
   /** Test seam; real authority resolves its durable admission from the service DB. */
   shadowAdmission?: ShadowAdmission;
   calendarShadowAdmission?: ShadowAdmission;
+  paidShadowAdmission?: ShadowAdmission;
   /** Playbook recall; undefined = recallPlaybooks (env-gated), null = none. */
   playbooks?: ((query: string, domains: Skill["domain"][] | null, limit: number) => Promise<Playbook[]>) | null;
 }

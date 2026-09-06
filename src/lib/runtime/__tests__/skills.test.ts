@@ -23,9 +23,9 @@ describe("skill cards", () => {
     if (!c.ok) expect(c.needs[0].input).toBe("verified_daily_spend_projection");
   });
   it("one per catalog routine, each stating its kind, prompt, output shape, minimum and skill file", () => {
-    expect(SKILLS).toHaveLength(36);
+    expect(SKILLS).toHaveLength(37);
     expect(SKILLS.map((s) => s.id).sort()).toEqual(CATALOG_SPECS.map((s) => s.id).sort());
-    expect(new Set(SKILLS.map((s) => s.id)).size).toBe(36);
+    expect(new Set(SKILLS.map((s) => s.id)).size).toBe(37);
     expect(WAVE_1_IDS.every((id) => SKILL_BY_ID[id])).toBe(true);
     for (const s of SKILLS) {
       expect(s.routineId).toBe(s.id);

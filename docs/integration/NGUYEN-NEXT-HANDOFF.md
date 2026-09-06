@@ -1,5 +1,7 @@
 # Nguyen: next Unc integration delivery
 
+**Paid-ads lanes (6 September, Claude branch `claude/avgar-paid-lanes-20260906`):** the six Meta routines and the new `D02-W09` Google Ads BOFU plan now have a code-ready contract, `unc.paid-ads-shadow.v1` — request/reply shapes, the 50% cap arithmetic and everything still required before a real run are in [`docs/PAID-SHADOW-INTEGRATION.md`](../PAID-SHADOW-INTEGRATION.md). Not registered, migrated, deployed or run.
+
 **Current work order:** [Launch-first handoff](NGUYEN-LAUNCH-PRIORITIES-2026-09-05.md) incorporates Tom's latest five-area rollout and new frontend work. Use it for current assignments, mapping gaps and recommended deferrals. Historical requests below to republish/fix the origin or add missing worker signing are satisfied; do not repeat them. Keyword registration and supported execution-reader/receiver access remain pending.
 
 **Latest handoff, 5 September approximately 07:48 UTC:** origin correction received and independently visible. New frozen wrapper revision is `1bce8c54-637e-4770-af90-2da36f38369a`; [final pin and remaining Codex gates](D03-W01-FINAL-PIN-2026-09-05.md). The requests below to replace the placeholder are historical and satisfied. Do not republish again or use the superseded pin. Execution-reader access, receiver reconciliation, durable admission and registration are still Codex-owned; no authorised provider run yet.

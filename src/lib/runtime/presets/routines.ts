@@ -32,6 +32,7 @@ const RELEVANT: Record<string, string[]> = {
   "D02-W06": ["minSpendBeforeJudging", "targetCpa", "maxCpa", "holdDays"],
   "D02-W07": ["dailyBudgetCap", "scaleStepPct", "holdDays"],
   "D02-W08": ["targetCpa", "roasFloor", "dailyBudgetCap"],
+  "D02-W09": ["targetCpa", "maxCpa", "dailyBudgetCap"],
   // D05 email
   "D05-W01": ["welcomeFlowLength", "discountCeilingPct", "sendCadencePerWeek"],
   "D05-W02": ["discountCeilingPct", "sendCadencePerWeek", "welcomeFlowLength"],
