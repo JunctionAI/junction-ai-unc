@@ -54,3 +54,6 @@ next-env.d.ts
 
 # Generated distribution bundle; editable source and copy are tracked separately.
 /launch-materials/*.zip
+
+# Local operator draft evidence; never publish client material with source code.
+/artifacts/seo-pilot/

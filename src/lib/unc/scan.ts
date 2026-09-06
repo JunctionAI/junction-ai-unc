@@ -203,10 +203,14 @@ export interface FetchedPage {
 export interface SafeFetchPageDeps {
   lookup?: HostLookup;
   request?: PinnedPageFetch;
+  /** Bounded larger reads for script-heavy storefronts; default onboarding cap unchanged. */
+  maxBytes?: number;
 }
 
 /** Resolve, pin and fetch one page; every redirect is a new validated/pinned hop. */
 export async function safeFetchPage(startUrl: string, deps: SafeFetchPageDeps = {}): Promise<FetchedPage | null> {
+  const maxBytes = deps.maxBytes ?? PAGE_MAX_BYTES;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 1_000_000) return null;
   let current = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const check = await resolveSafeUrl(current, deps.lookup);
@@ -217,7 +221,7 @@ export async function safeFetchPage(startUrl: string, deps: SafeFetchPageDeps = 
       const res = await (deps.request ?? requestPinnedPage)(check.url, check.pin, {
         signal: ctrl.signal,
         headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5", "Accept-Language": "en", "Accept-Encoding": "identity" },
-        maxBytes: PAGE_MAX_BYTES,
+        maxBytes,
       });
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         const loc = res.headers.get("location");
@@ -265,6 +269,9 @@ export function htmlToText(url: string, html: string): PageText {
   const body = html
     .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<(script|style|noscript|svg|template|iframe|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    // A bounded HTTP response can end inside a script/style/head. Never turn its
+    // unfinished contents into business evidence after stripping the opening tag.
+    .replace(/<(script|style|noscript|svg|template|iframe|head)\b[^>]*>[\s\S]*$/gi, " ")
     .replace(/<(br|p|div|li|h[1-6]|tr|section|article|header|footer|nav|ul|ol|table)[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ");
   const clean = (s: string) => decodeEntities(s).replace(/[ \t\r\f\v]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();

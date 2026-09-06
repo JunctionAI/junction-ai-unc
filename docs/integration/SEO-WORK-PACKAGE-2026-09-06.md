@@ -72,3 +72,31 @@ work. The existing command result reply also gets conversational singular/plural
 These helpers are locally tested together using a fake Store; they are not yet connected to
 the live package controller, scheduler, review UI or Slack package notifications. The existing
 keyword command reply change also requires a worker deployment before users receive it.
+
+## September 6: real source and draft pilot
+
+- Fixed a real storefront-reader failure: 60 KB truncated AVGAR's HTML inside a reviews
+  script, and the extractor treated the unfinished script as page text. Unclosed script/head
+  content is now removed. SEO opts into a bounded 1 MB fetch, with the same DNS-pinned guard.
+- Added `seoSources.ts`: a maximum of six same-origin observed pages; main content instead
+  of navigation/country-selector noise. Not a complete crawl or proof of missing pages.
+- Added `seoDraft.ts`: bounded draft-only model call, existing-blog revision, existing-page
+  metadata proposals, internal links restricted to observed pages, source references, source
+  freshness, account/generation checks, current/proposed metadata. No publication code.
+- `scripts/seo-draft-pilot.mjs --run-once` is an explicit operator test, NOT a scheduled app
+  feature. It independently reads the saved keyword run and verified permit, validates the
+  stored execution receipt's market/domain/seed, then reads the public site and uses the
+  existing budgeted model router. Outputs stay local and gitignored.
+- Real keyword source: artifact ea33a35b-5c1f-4b70-8678-18e56ac86621, execution 100, US.
+- Real source read found the Uforia product page and an existing golf travel case guide.
+- Initial real draft was rejected on human review for overlapping intent and unsupported
+  comparison claims. Subsequent model response was retained; replay validated it without an
+  additional model call after whole-response JSON-fence handling was fixed.
+- Validated local result: one existing-guide revision and three metadata proposals. This is
+  a draft preview, not customer-ready copy: it still needs brand-voice editing and factual
+  review. Local artifact path: artifacts/seo-pilot/2026-09-06T04-10-10-598Z/REVIEW.md.
+
+Still NOT implemented: durable package job/controller, saved-schedule invocation of the
+package, in-app package review, Slack package notification, approval-bound CMS execution,
+and complete multi-market/multi-routine rollout. No live deployment or DB mutation in this
+pilot. Do not describe the whole SEO employee as working from these draft results.
