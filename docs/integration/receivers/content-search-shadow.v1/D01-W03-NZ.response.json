@@ -1,0 +1,78 @@
+{
+  "class": "simulated_frozen_example",
+  "notLiveProviderResult": true,
+  "artifact": {
+    "kind": "question_list",
+    "title": "2 search questions for golf travel bag",
+    "body": "Questions from DataForSEO People Also Ask for seed \"golf travel bag\". Frequency unmeasured. Search research, not from tickets or support.",
+    "items": [
+      {
+        "title": "What is the best golf travel bag in New Zealand?",
+        "body": "Question: What is the best golf travel bag in New Zealand?\nContent idea: AVGAR-relevant answer/comparison piece staged from this People Also Ask result only\nFormat: TBD (article/short/FAQ)\nStage: awareness/consideration hypothesis\nFrequency: null (unmeasured)",
+        "meta": {
+          "frequency": null,
+          "question_source_type": "search_paa",
+          "source": "search",
+          "stage": "hypothesis",
+          "rank": 1
+        }
+      },
+      {
+        "title": "Can I take a golf bag on a domestic NZ flight?",
+        "body": "Question: Can I take a golf bag on a domestic NZ flight?\nContent idea: AVGAR-relevant answer/comparison piece staged from this People Also Ask result only\nFormat: TBD (article/short/FAQ)\nStage: awareness/consideration hypothesis\nFrequency: null (unmeasured)",
+        "meta": {
+          "frequency": null,
+          "question_source_type": "search_paa",
+          "source": "search",
+          "stage": "hypothesis",
+          "rank": 2
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "source": "dataforseo_serp",
+        "ref": "dataforseo_serp_people_also_ask seed=golf travel bag location=2554 fetched_at=2026-09-06T12:00:02.000Z"
+      },
+      {
+        "source": "search_query",
+        "ref": "golf travel bag"
+      }
+    ]
+  },
+  "executionReceipt": {
+    "contract": "unc.content-search-shadow.v1",
+    "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+    "runId": "11111111-1111-4111-8111-00000000d302",
+    "routineId": "D01-W03",
+    "routineKey": "customer_questions",
+    "workflowId": "UNPUBLISHED-D01-CONTENT-WRAPPER",
+    "workflowVersion": null,
+    "revisionEvidence": "pending_unc_verification",
+    "executionId": "90032",
+    "mode": "dry_run",
+    "status": "succeeded",
+    "executedAction": "none",
+    "startedAt": "2026-09-06T12:00:00.000Z",
+    "finishedAt": "2026-09-06T12:00:02.000Z",
+    "client": {
+      "id": "avgar",
+      "primaryDomain": "avgarsport.com",
+      "seedKeyword": "golf travel bag",
+      "locationCode": 2554,
+      "languageCode": "en"
+    },
+    "provider": {
+      "name": "dataforseo",
+      "endpoint": "people_also_ask",
+      "statusCode": 20000,
+      "taskStatusCode": 20000,
+      "taskId": "frozen-paa-nz",
+      "itemsCount": 2,
+      "fetchedAt": "2026-09-06T12:00:02.000Z",
+      "seedKeyword": "golf travel bag",
+      "locationCode": 2554,
+      "languageCode": "en"
+    }
+  }
+}

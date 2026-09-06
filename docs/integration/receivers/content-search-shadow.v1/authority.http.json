@@ -1,0 +1,21 @@
+{
+  "class": "simulated_frozen_example",
+  "method": "POST",
+  "url": "https://junction-unc.vercel.app/api/n8n/content-shadow-authority",
+  "body": null,
+  "query": null,
+  "headers": {
+    "authorization": "Bearer unc_dt.FROZEN_EXAMPLE_NOT_A_LIVE_TOKEN_xxxxxxxxxx",
+    "accept": "application/json"
+  },
+  "redirects": "disabled",
+  "originPin": "https://junction-unc.vercel.app",
+  "neverUseIncomingDataBaseUrl": true,
+  "tokenUse": "one-use; replay is 409; lost response fails closed — do not mint a second provider call",
+  "timeoutMs": 60000,
+  "doNotCall": [
+    "GET https://junction-unc.vercel.app/api/n8n/shadow-authority",
+    "POST https://junction-unc.vercel.app/api/n8n/calendar-shadow-authority"
+  ],
+  "note": "Same POST for D01-W02 and D01-W03. The Bearer dataToken is run-scoped; do not send D01 IDs on the keyword GET path."
+}

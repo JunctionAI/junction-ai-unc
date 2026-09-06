@@ -1,0 +1,41 @@
+{
+  "class": "simulated_frozen_example",
+  "get": {
+    "method": "GET",
+    "url": "https://junction-unc.vercel.app/api/n8n/content-shadow-authority",
+    "status": 405,
+    "headers": {
+      "allow": "POST",
+      "cache-control": "no-store",
+      "vary": "Authorization"
+    },
+    "body": {
+      "ok": false,
+      "error": "Content authority requires POST"
+    }
+  },
+  "missingToken": {
+    "method": "POST",
+    "url": "https://junction-unc.vercel.app/api/n8n/content-shadow-authority",
+    "status": 401,
+    "body": {
+      "ok": false,
+      "error": "send the run's data token as Authorization: Bearer <token>"
+    }
+  },
+  "replay": {
+    "method": "POST",
+    "url": "https://junction-unc.vercel.app/api/n8n/content-shadow-authority",
+    "status": 409,
+    "body": {
+      "ok": false,
+      "error": "No unused shadow provider allowance; reconcile the existing dispatch"
+    }
+  },
+  "keywordPath": {
+    "method": "GET",
+    "url": "https://junction-unc.vercel.app/api/n8n/shadow-authority",
+    "status": "do_not_call",
+    "note": "Keyword-only GET. A Content dataToken here is protocol mismatch. Do not use for D01-W02/D01-W03."
+  }
+}

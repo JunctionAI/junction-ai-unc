@@ -1,0 +1,36 @@
+{
+  "keywordWrapper": {
+    "status": "published",
+    "workflowId": "XiXJKuph1fAeH9pe",
+    "receiverUrl": "https://junctionai8.app.n8n.cloud/webhook/unc/d03-w01/keyword-shadow",
+    "authority": "GET https://junction-unc.vercel.app/api/n8n/shadow-authority",
+    "note": "D03-W01 only. Do not send D01-W02/D01-W03 here. Live keyword schedule used execution #100."
+  },
+  "historicalContentTest": {
+    "status": "published_not_unc_receiver",
+    "workflowId": "lMXjTgd3Qh4vZaMp",
+    "revision": "c8d6955d-0033-47ce-9672-399f7f10118c",
+    "execution": "68",
+    "note": "Combined TEST workflow; seed was travel bag; kinds content_hooks/content_questions. Not this contract."
+  },
+  "keywordScheduleProof": {
+    "status": "published_keyword_only",
+    "scheduleId": "139a41a8-a81c-46dc-850f-1a80a4b9c37a",
+    "commandRunId": "635774fe-c6f0-5738-a826-bff419e474ad",
+    "n8nExecution": "100",
+    "note": "Shared saved-schedule path proved on D03-W01. Not a Content run. Do not reuse this schedule row for D01."
+  },
+  "hooksReceiver": {
+    "status": "proposed_unpublished",
+    "url": "https://junctionai8.app.n8n.cloud/webhook/unc/d01-w02/hooks-shadow",
+    "authority": "POST https://junction-unc.vercel.app/api/n8n/content-shadow-authority"
+  },
+  "questionsReceiver": {
+    "status": "proposed_unpublished",
+    "url": "https://junctionai8.app.n8n.cloud/webhook/unc/d01-w03/questions-shadow",
+    "authority": "POST https://junction-unc.vercel.app/api/n8n/content-shadow-authority"
+  },
+  "wrapperId": "UNPUBLISHED-D01-CONTENT-WRAPPER",
+  "wrapperRevision": "00000000-0000-4000-8000-c0a1e0000001",
+  "keywordHeaderAuthDoNotReuse": "Y9Xu3zApLSrcWu1e"
+}

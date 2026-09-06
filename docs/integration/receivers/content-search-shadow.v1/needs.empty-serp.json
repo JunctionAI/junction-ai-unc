@@ -1,0 +1,9 @@
+{
+  "class": "simulated_frozen_example",
+  "needs": [
+    {
+      "input": "search_results",
+      "why": "DataForSEO returned zero organic/PAA rows for golf travel bag at this location. Do not invent hooks or questions."
+    }
+  ]
+}

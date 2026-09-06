@@ -1,0 +1,95 @@
+{
+  "class": "simulated_frozen_example",
+  "notLiveProviderResult": true,
+  "artifact": {
+    "kind": "hook_list",
+    "title": "3 search hook hypotheses for golf travel bag",
+    "body": "Hooks are hypothesis reframes of DataForSEO SERP organic titles for seed \"golf travel bag\". Not measured creative performance. SERP snapshots are not GSC clicks or impressions.",
+    "items": [
+      {
+        "title": "Best Golf Travel Bags for US Flights",
+        "body": "Hook line: Best Golf Travel Bags for US Flights\nSkeleton: scroll-stopper reframe of a ranking SERP title for \"golf travel bag\"\nMechanic: short-form cut from organic title only\nWhy: ranking #1 organic title (example.com)\nHow to shoot: TBD founder/creator brief — not evidenced\nStatus: hypothesis",
+        "meta": {
+          "status": "hypothesis",
+          "source": "search",
+          "mechanic": "serp_title_reframe",
+          "domain": "example.com",
+          "rank": 1,
+          "views": null,
+          "measured": false
+        }
+      },
+      {
+        "title": "How to Pack a Golf Travel Bag",
+        "body": "Hook line: How to Pack a Golf Travel Bag\nSkeleton: scroll-stopper reframe of a ranking SERP title for \"golf travel bag\"\nMechanic: short-form cut from organic title only\nWhy: ranking #2 organic title (example.com)\nHow to shoot: TBD founder/creator brief — not evidenced\nStatus: hypothesis",
+        "meta": {
+          "status": "hypothesis",
+          "source": "search",
+          "mechanic": "serp_title_reframe",
+          "domain": "example.com",
+          "rank": 2,
+          "views": null,
+          "measured": false
+        }
+      },
+      {
+        "title": "Hard Case vs Soft Golf Travel Bag",
+        "body": "Hook line: Hard Case vs Soft Golf Travel Bag\nSkeleton: scroll-stopper reframe of a ranking SERP title for \"golf travel bag\"\nMechanic: short-form cut from organic title only\nWhy: ranking #3 organic title (example.com)\nHow to shoot: TBD founder/creator brief — not evidenced\nStatus: hypothesis",
+        "meta": {
+          "status": "hypothesis",
+          "source": "search",
+          "mechanic": "serp_title_reframe",
+          "domain": "example.com",
+          "rank": 3,
+          "views": null,
+          "measured": false
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "source": "dataforseo_serp",
+        "ref": "dataforseo_serp_organic seed=golf travel bag location=2840 fetched_at=2026-09-06T12:00:02.000Z"
+      },
+      {
+        "source": "search_query",
+        "ref": "golf travel bag"
+      }
+    ]
+  },
+  "executionReceipt": {
+    "contract": "unc.content-search-shadow.v1",
+    "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+    "runId": "11111111-1111-4111-8111-00000000d201",
+    "routineId": "D01-W02",
+    "routineKey": "viral_hooks",
+    "workflowId": "UNPUBLISHED-D01-CONTENT-WRAPPER",
+    "workflowVersion": null,
+    "revisionEvidence": "pending_unc_verification",
+    "executionId": "90021",
+    "mode": "dry_run",
+    "status": "succeeded",
+    "executedAction": "none",
+    "startedAt": "2026-09-06T12:00:00.000Z",
+    "finishedAt": "2026-09-06T12:00:02.000Z",
+    "client": {
+      "id": "avgar",
+      "primaryDomain": "avgarsport.com",
+      "seedKeyword": "golf travel bag",
+      "locationCode": 2840,
+      "languageCode": "en"
+    },
+    "provider": {
+      "name": "dataforseo",
+      "endpoint": "serp_organic",
+      "statusCode": 20000,
+      "taskStatusCode": 20000,
+      "taskId": "frozen-serp-organic-us",
+      "itemsCount": 3,
+      "fetchedAt": "2026-09-06T12:00:02.000Z",
+      "seedKeyword": "golf travel bag",
+      "locationCode": 2840,
+      "languageCode": "en"
+    }
+  }
+}

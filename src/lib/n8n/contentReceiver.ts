@@ -45,7 +45,7 @@ export function buildHooksArtifact(rows: ContentSerpOrganic[], contract: Content
   return {
     kind: "hook_list",
     title: `${items.length} search hook hypotheses for ${contract.client.seedKeyword}`,
-    body: `Hooks are hypothesis reframes of DataForSEO SERP organic titles for seed "${contract.client.seedKeyword}". Not measured creative performance. SERP snapshots are not GSC clicks/impressions or TikTok/Instagram views.`,
+    body: `Hooks are hypothesis reframes of DataForSEO SERP organic titles for seed "${contract.client.seedKeyword}". Not measured creative performance. SERP snapshots are not GSC clicks or impressions.`,
     items,
     evidence: [{ source: "dataforseo_serp", ref: `dataforseo_serp_organic seed=${contract.client.seedKeyword} location=${contract.client.locationCode} fetched_at=${fetchedAt}` },
       { source: "search_query", ref: contract.client.seedKeyword }],
@@ -63,7 +63,7 @@ export function buildQuestionsArtifact(rows: ContentPaaItem[], contract: Content
   return {
     kind: "question_list",
     title: `${items.length} search questions for ${contract.client.seedKeyword}`,
-    body: `Questions from DataForSEO People Also Ask for seed "${contract.client.seedKeyword}". Frequency unmeasured. Support/DM/review ticket source not connected. Search research, not first-party customer tickets.`,
+    body: `Questions from DataForSEO People Also Ask for seed "${contract.client.seedKeyword}". Frequency unmeasured. Search research, not from tickets or support.`,
     items,
     evidence: [{ source: "dataforseo_serp", ref: `dataforseo_serp_people_also_ask seed=${contract.client.seedKeyword} location=${contract.client.locationCode} fetched_at=${fetchedAt}` },
       { source: "search_query", ref: contract.client.seedKeyword }],

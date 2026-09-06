@@ -1,0 +1,82 @@
+{
+  "class": "simulated_frozen_example",
+  "notLiveProviderResult": true,
+  "artifact": {
+    "kind": "hook_list",
+    "title": "2 search hook hypotheses for golf travel bag",
+    "body": "Hooks are hypothesis reframes of DataForSEO SERP organic titles for seed \"golf travel bag\". Not measured creative performance. SERP snapshots are not GSC clicks or impressions.",
+    "items": [
+      {
+        "title": "Best golf travel bags in New Zealand",
+        "body": "Hook line: Best golf travel bags in New Zealand\nSkeleton: scroll-stopper reframe of a ranking SERP title for \"golf travel bag\"\nMechanic: short-form cut from organic title only\nWhy: ranking #1 organic title (example.com)\nHow to shoot: TBD founder/creator brief — not evidenced\nStatus: hypothesis",
+        "meta": {
+          "status": "hypothesis",
+          "source": "search",
+          "mechanic": "serp_title_reframe",
+          "domain": "example.com",
+          "rank": 1,
+          "views": null,
+          "measured": false
+        }
+      },
+      {
+        "title": "Taking a golf bag on a domestic NZ flight",
+        "body": "Hook line: Taking a golf bag on a domestic NZ flight\nSkeleton: scroll-stopper reframe of a ranking SERP title for \"golf travel bag\"\nMechanic: short-form cut from organic title only\nWhy: ranking #2 organic title (example.com)\nHow to shoot: TBD founder/creator brief — not evidenced\nStatus: hypothesis",
+        "meta": {
+          "status": "hypothesis",
+          "source": "search",
+          "mechanic": "serp_title_reframe",
+          "domain": "example.com",
+          "rank": 2,
+          "views": null,
+          "measured": false
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "source": "dataforseo_serp",
+        "ref": "dataforseo_serp_organic seed=golf travel bag location=2554 fetched_at=2026-09-06T12:00:02.000Z"
+      },
+      {
+        "source": "search_query",
+        "ref": "golf travel bag"
+      }
+    ]
+  },
+  "executionReceipt": {
+    "contract": "unc.content-search-shadow.v1",
+    "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+    "runId": "11111111-1111-4111-8111-00000000d202",
+    "routineId": "D01-W02",
+    "routineKey": "viral_hooks",
+    "workflowId": "UNPUBLISHED-D01-CONTENT-WRAPPER",
+    "workflowVersion": null,
+    "revisionEvidence": "pending_unc_verification",
+    "executionId": "90022",
+    "mode": "dry_run",
+    "status": "succeeded",
+    "executedAction": "none",
+    "startedAt": "2026-09-06T12:00:00.000Z",
+    "finishedAt": "2026-09-06T12:00:02.000Z",
+    "client": {
+      "id": "avgar",
+      "primaryDomain": "avgarsport.com",
+      "seedKeyword": "golf travel bag",
+      "locationCode": 2554,
+      "languageCode": "en"
+    },
+    "provider": {
+      "name": "dataforseo",
+      "endpoint": "serp_organic",
+      "statusCode": 20000,
+      "taskStatusCode": 20000,
+      "taskId": "frozen-serp-organic-nz",
+      "itemsCount": 2,
+      "fetchedAt": "2026-09-06T12:00:02.000Z",
+      "seedKeyword": "golf travel bag",
+      "locationCode": 2554,
+      "languageCode": "en"
+    }
+  }
+}

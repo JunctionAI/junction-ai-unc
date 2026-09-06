@@ -1,0 +1,61 @@
+{
+  "class": "simulated_frozen_example",
+  "notLiveUncRequest": true,
+  "notHistoricalExecution68": true,
+  "notKeywordExecution100": true,
+  "proposedReceiverUrl": "https://junctionai8.app.n8n.cloud/webhook/unc/d01-w02/hooks-shadow",
+  "publishedKeywordReceiverDoNotUse": "https://junctionai8.app.n8n.cloud/webhook/unc/d03-w01/keyword-shadow",
+  "headers": {
+    "content-type": "application/json",
+    "authorization": "Bearer <CONTENT_RECEIVER_HEADER_AUTH — unpublished; separate from keyword credential Y9Xu3zApLSrcWu1e>",
+    "x-unc-timestamp": "1788696000000",
+    "x-unc-signature": "sha256=<HMAC-SHA256(N8N_SIGNING_SECRET, timestamp + '.' + rawBody)>"
+  },
+  "body": {
+    "shadow": {
+      "contract": "unc.content-search-shadow.v1",
+      "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+      "workflowId": "UNPUBLISHED-D01-CONTENT-WRAPPER",
+      "workflowVersion": "00000000-0000-4000-8000-c0a1e0000001",
+      "routineId": "D01-W02",
+      "routineKey": "viral_hooks",
+      "client": {
+        "id": "avgar",
+        "primaryDomain": "avgarsport.com",
+        "seedKeyword": "golf travel bag",
+        "locationCode": 2554,
+        "languageCode": "en"
+      }
+    },
+    "accountId": "aa5cfc84-2569-4c99-9b40-67003ae55eda",
+    "runId": "11111111-1111-4111-8111-00000000d202",
+    "routineId": "D01-W02",
+    "skill": "D01-W02",
+    "kind": "hook_list",
+    "mode": "dry_run",
+    "startedAt": "2026-09-06T12:00:00.000Z",
+    "account": {
+      "currency": "NZD",
+      "budgetMonthly": 0
+    },
+    "inputs": {},
+    "vars": {},
+    "reads": {},
+    "callback": {
+      "path": "/api/routines/artifacts",
+      "signatureHeader": "x-unc-signature",
+      "timestampHeader": "x-unc-timestamp"
+    },
+    "dataToken": "unc_dt.FROZEN_EXAMPLE_NOT_A_LIVE_TOKEN_xxxxxxxxxx",
+    "dataBaseUrl": "https://junction-unc.vercel.app",
+    "data": {
+      "scopes": [],
+      "expiresAt": "2026-09-06T12:15:00.000Z",
+      "endpoints": {
+        "reads": "/api/n8n/reads",
+        "context": "/api/n8n/context",
+        "actions": "/api/n8n/actions"
+      }
+    }
+  }
+}
