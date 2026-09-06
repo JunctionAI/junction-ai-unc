@@ -38,7 +38,40 @@ approval cannot be inferred. Delegated patches are isolated, bounded, tested and
 reviewed before integration. Publishing, customer campaigns, ad mutation and
 spend remain separately authorized actions.
 
-## Latest state — Batch 90, 6 September NZ
+## Latest state — Batch 91, 6 September NZ
+
+Release recovery completed at 2026-09-06T02:14Z. Canonical
+`https://junction-unc.vercel.app/api/health` now reports `c09a2c6260ba`,
+database healthy and worker fresh, after candidate verification and explicit
+promotion of `dpl_FsqWtqXCHYfF5573tVQKiwAvz9GE`. The previous candidates had
+not moved the canonical alias; shell environment assignments had not supplied
+their runtime build markers. This release used explicit deployment env arguments
+and the existing project ID. The Vercel deployment skill informed this verified
+candidate/promotion sequence.
+
+Worker remains on `94f4ea7cb618f8e364db2ee57bf7b9bc42b251d8`, healthy,
+dry_run, zero runs started and live actions off. App-only health-marker logic and
+documentation are the subsequent diff; no extra worker rebuild was required.
+The operator-preview implementation passed 3,248 tests before release; the
+subsequent health change passed its seven focused tests and the remote build.
+
+Migration `20260906014500` is applied and recorded. Independent live ACL
+readback confirms preview RPC execution denied to anon/authenticated, allowed to
+service_role, and request-ledger RLS enabled. Canonical unauthenticated preview
+POST returns 401. H1 generation is 0 and its actual automation_paused value is
+false; earlier wording claiming H1 paused was incorrect. No pause value was
+changed. Tom's existing operator row now has work-read and a preview grant
+expiring 2026-09-07T01:58:10Z. Close the temporary preview grant after acceptance.
+
+H1 live draft acceptance remains incomplete: the preview currently has an API
+but no ops form, and the inspected browser showed login. Next: add the minimal
+usable ops preview control, use an available authenticated operator session, run
+the approved brief once, and independently inspect its persisted result. The
+accidentally created Vercel project `unc-deploy-94f4ea7` still needs scoped cleanup
+of its deployment and Git integration; it is not the production project.
+Full B01–B24 and launch acceptance remain open. Goal continuation resumed.
+
+## Previous state — Batch 90, 6 September NZ
 
 **Existing native email jobs are now mapped to executable Unc contracts without
 pretending that similar labels are equivalent.** Authenticated, read-only native
