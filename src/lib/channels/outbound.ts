@@ -15,7 +15,7 @@
 
 import { unwrap, type DbClient, type Row } from "../db/types";
 import { boundedSend, claimOutbound, enqueueOutbound, finishOutbound, projectOutbound, type DeliveryStatus, type ReplyContext } from "./outbox";
-import { messagingDisabled } from "./releaseGate";
+import { messagingDisabled, messagingOriginAllowed, messagingBindingAllowed } from "./releaseGate";
 import type { Channel, ChannelAdapter, ChannelLink, OutboundKind, OutboundPayload, QuietHours } from "./types";
 
 export type AdapterRegistry = Partial<Record<Channel, ChannelAdapter>>;
@@ -161,6 +161,10 @@ export async function sendOnLink(deps: OutboundDeps, link: ChannelLink, kind: Ou
   }
   const replyContext = opts.replyContext || deps.replyContext
     ? { ...deps.replyContext, ...opts.replyContext } as ReplyContext : undefined;
+  if (!messagingOriginAllowed(process.env, { channel: link.channel, scopeId: link.meta.team_id, externalId: link.externalId,
+    conversationId: replyContext?.conversationId, threadId: replyContext?.threadId })
+    || !messagingBindingAllowed(process.env, { accountId: link.accountId, userId: link.userId, contextGeneration: opts.contextGeneration }))
+    return { status: "skipped", reason: "messaging_disabled" };
   const queued = await enqueueOutbound(deps.db, link, kind, payload, { ...opts, replyContext });
   return deliverOutbound(deps, String(queued.id));
 }
@@ -171,6 +175,8 @@ export async function deliverOutbound(deps: OutboundDeps, outboundId: string): P
   await deps.guard?.();
   const original = await unwrap<Row | null>("channel.original", deps.db.from("outbound_messages").select("*").eq("id", outboundId).maybeSingle());
   if (!original?.binding) throw new Error("Original outbound operation missing");
+  if (!messagingOriginAllowed(process.env, original.binding as Row) || !messagingBindingAllowed(process.env, original.binding as Row))
+    return { status: "skipped", reason: "messaging_disabled" };
   const adapter = deps.adapters[original.channel as Channel];
   if (!adapter) return { status: "skipped", reason: "no_adapter" };
   if (!adapter.configured) return { status: "skipped", reason: "not_configured" };
@@ -183,6 +189,7 @@ export async function deliverOutbound(deps: OutboundDeps, outboundId: string): P
       if (!claim.link?.externalId) throw new Error("Missing claimed destination");
       const pinned = claim.link;
       const b = row.binding as Row;
+      if (!messagingOriginAllowed(process.env, b) || !messagingBindingAllowed(process.env, b)) throw new Error("Pilot expired or destination outside release");
       const slackOrigin = typeof b.conversationId === "string" && typeof b.threadId === "string"
         ? { conversationId: b.conversationId, threadId: b.threadId } : undefined;
       const result = await boundedSend(() => adapter.send(pinned.externalId!, row.payload as unknown as OutboundPayload, { link: pinned, template: claim.template, ...(slackOrigin ? { slackOrigin } : {}) }));

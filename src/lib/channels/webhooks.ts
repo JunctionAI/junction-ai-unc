@@ -11,7 +11,7 @@ import { telegramConfig, verifyTelegramWebhook, parseTelegramUpdate } from "./ad
 import { formToRecord, parseTwilioInbound, twilioConfig, verifyTwilioWebhook } from "./adapters/twilio";
 import { parseWhatsAppWebhook, verifyWhatsAppSubscription, verifyWhatsAppWebhook, whatsappConfig } from "./adapters/whatsapp";
 import type { Env, InboundEvent } from "./types";
-import { messagingDisabled } from "./releaseGate";
+import { messagingDisabled, messagingOriginAllowed } from "./releaseGate";
 
 export interface ReceiveDeps {
   env: Env;
@@ -80,7 +80,7 @@ export function receiveSlack(deps: ReceiveDeps, req: { signature: string | null;
   const parsed = parseSlackBody(req.rawBody, req.contentType);
   if (parsed.kind === "challenge") return { status: 200, body: { challenge: parsed.challenge }, events: [] };
   if (messagingDisabled(deps.env)) return bad(503, "messaging_disabled");
-  return { status: 200, body: { ok: true }, events: parsed.events };
+  return { status: 200, body: { ok: true }, events: parsed.events.filter(e => messagingOriginAllowed(deps.env, e, deps.now().getTime())) };
 }
 
 // ---------- Twilio (SMS) ----------

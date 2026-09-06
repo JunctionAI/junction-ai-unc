@@ -31,7 +31,7 @@ import { routeCommand } from "../commands/message";
 import { applyInboundControl, assertInboundBinding, readCapturedInbound, type CapturedInbound } from "./binding";
 import { contextMemoryDb } from "../db/contextGeneration";
 import { RuntimeContextError } from "../runtime/contextFence";
-import { messagingDisabled } from "./releaseGate";
+import { messagingDisabled, messagingOriginAllowed, messagingBindingAllowed } from "./releaseGate";
 
 export type Log = (event: string, fields: Record<string, unknown>) => void;
 
@@ -105,6 +105,8 @@ async function sayToUnknown(deps: InboundDeps, event: InboundEvent, text: string
 export async function handleInbound(deps: InboundDeps, input: CapturedInbound): Promise<InboundOutcome> {
   const captured = readCapturedInbound({ ...input });
   const event = captured.event;
+  if (!messagingOriginAllowed(process.env, event) || !messagingBindingAllowed(process.env, captured.binding.kind === "unlinked" ? {} : captured.binding))
+    throw new RuntimeContextError("automation_paused", "Message outside the released pilot.");
   if (messagingDisabled(process.env)) throw new RuntimeContextError("automation_paused", "External messaging is disabled.");
   const log = deps.log ?? (() => {});
   const now = deps.now();
@@ -127,6 +129,8 @@ export async function handleInbound(deps: InboundDeps, input: CapturedInbound): 
   if (binding.kind === "unlinked") throw new RuntimeContextError("context_unavailable", "Missing verified binding.");
   const { accountId, contextGeneration } = binding;
   const guard = async (allowPaused = false) => {
+    if (!messagingOriginAllowed(process.env, event) || !messagingBindingAllowed(process.env, binding))
+      throw new RuntimeContextError("automation_paused", "Message outside the released pilot.");
     if (messagingDisabled(process.env)) throw new RuntimeContextError("automation_paused", "External messaging is disabled.");
     await assertInboundBinding(deps.db, processing, { allowPaused });
   };

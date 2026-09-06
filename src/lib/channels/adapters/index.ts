@@ -29,6 +29,9 @@ export function buildAdapters(inputs: AdapterInputs): AdapterRegistry {
   if (messagingDisabled(env)) return {};
   const tokenFor = inputs.db ? slackTokenResolver(inputs.db, inputs.keyring ?? null) : async () => null;
   const db = inputs.db;
+  if (env.UNC_MESSAGING_PILOT_SCOPE !== undefined) return {
+    slack: new SlackAdapter(slackConfig(env), fetch, tokenFor),
+  };
   return {
     apple: new AppleAdapter(),
     telegram: new TelegramAdapter(telegramConfig(env), fetch),
