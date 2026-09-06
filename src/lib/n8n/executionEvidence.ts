@@ -72,7 +72,7 @@ export function projectShadowExecution(value: unknown, binding: ExecutionEvidenc
 
 /** Calendar has its own accepted result-builder pin. Match the received business
  * envelope against that execution's saved output, not merely its request/ID. */
-export function projectCalendarShadowExecution(value: unknown, binding: ExecutionEvidenceBinding & { resultNodeId: string }): ShadowExecutionObservation & { resultDigest: string } {
+export function projectPinnedResultExecution(value: unknown, binding: ExecutionEvidenceBinding & { resultNodeId: string }, code: string): ShadowExecutionObservation & { resultDigest: string } {
   const observed = projectShadowExecution(value, binding);
   const row = object(value)!, snapshot = object(row.workflowData)!;
   const nodes = Array.isArray(snapshot.nodes) ? snapshot.nodes.map(object) : [];
@@ -80,14 +80,20 @@ export function projectCalendarShadowExecution(value: unknown, binding: Executio
   const resultNode = matches.length === 1 ? matches[0] : null;
   if (!resultNode || resultNode.disabled === true || !text(resultNode.name, 200) ||
       binding.resultNodeId === binding.triggerNodeId || nodes.filter(n => n?.name === resultNode.name).length !== 1)
-    return fail("calendar_result_binding");
+    return fail(`${code}_result_binding`);
   const runs = object(object(object(row.data)?.resultData)?.runData)?.[resultNode.name];
-  if (!Array.isArray(runs) || runs.length !== 1) return fail("calendar_result_runs");
+  if (!Array.isArray(runs) || runs.length !== 1) return fail(`${code}_result_runs`);
   const task = object(runs[0]), main = object(task?.data)?.main;
   if (!task || task.error != null || task.executionStatus !== "success" ||
       !Array.isArray(main) || main.length !== 1 || !Array.isArray(main[0]) || main[0].length !== 1)
-    return fail("calendar_result_items");
+    return fail(`${code}_result_items`);
   const body = object(object(main[0][0])?.json);
-  if (!object(body?.artifact) || !object(body?.executionReceipt)) return fail("calendar_result_envelope");
+  if (!object(body?.artifact) || !object(body?.executionReceipt)) return fail(`${code}_result_envelope`);
   return { ...observed, resultDigest: shadowRequestDigest({ artifact: body!.artifact, executionReceipt: body!.executionReceipt }) };
+}
+export function projectCalendarShadowExecution(value: unknown, binding: ExecutionEvidenceBinding & { resultNodeId: string }): ShadowExecutionObservation & { resultDigest: string } {
+  return projectPinnedResultExecution(value, binding, "calendar");
+}
+export function projectContentShadowExecution(value: unknown, binding: ExecutionEvidenceBinding & { resultNodeId: string }): ShadowExecutionObservation & { resultDigest: string } {
+  return projectPinnedResultExecution(value, binding, "content");
 }

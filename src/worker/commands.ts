@@ -22,6 +22,7 @@ import { assertCommandSelection } from "../lib/commands/selectionGuard";
 import { digest } from "../lib/commands/queue";
 import { workflowFingerprint } from "../lib/commands/releaseScope";
 import { keywordCommandRunOptions } from "../lib/n8n/keywordCommand";
+import { contentCommandMarket, contentCommandRunOptions } from "../lib/n8n/contentCommand";
 import { assertKeywordRuntimeAccess } from "./providers/keywordRuntime";
 
 export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapters, c: RoutineCommand, spec: RoutineSpec, workflow: N8nWorkflow | null) {
@@ -44,13 +45,16 @@ export async function executeRoutineCommand(deps: ServiceDeps, adapters: Adapter
     const value = Reflect.get(target, key);
     return typeof value === "function" ? value.bind(target) : value;
   } }) as Store;
+  const content = (spec.id === "D01-W02" || spec.id === "D01-W03") && !!contentCommandMarket(c.actor, spec, workflow);
   const options = spec.id === "D03-W01"
     ? keywordCommandRunOptions(deps.db!, c, spec, workflow, deps.now)
+    : content ? contentCommandRunOptions(deps.db!, c, spec, workflow, deps.now)
     : { mode: "dry_run" as const, runId: c.id };
   if (spec.id === "D03-W01") {
     if (!deps.db) throw new Error("Keyword commands require durable database admission");
     assertKeywordRuntimeAccess();
   }
+  if (content && !deps.db) throw new Error("Content commands require durable database admission");
   const result = await runRoutine(spec, { account: account.account, triggeredBy: "manual", vars: account.vars ?? {},
     ...(spec.id === "D03-W01" ? {} : { inputs: { request: c.request } }) }, {
     ...adapters, store: pinned,

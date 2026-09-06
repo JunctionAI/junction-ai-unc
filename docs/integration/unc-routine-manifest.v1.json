@@ -167,27 +167,27 @@
         "area": "content",
         "capability": "viral_hooks",
         "routineId": "D01-W02",
-        "adapter": "source_semantics_change_required",
+        "adapter": "content_search_shadow",
         "requiredEvidence": [
           "search_query",
           "source_urls",
           "fetched_at",
           "observed_vs_hypothesis"
         ],
-        "boundary": "Search-derived hooks are hypotheses; do not claim TikTok/Instagram views or viral performance without those native observations."
+        "boundary": "Search-derived hooks are hypotheses; do not claim TikTok/Instagram views or viral performance without those native observations. Historical n8n exec #68 used seed travel bag and kind content_hooks — not a current AVGAR Unc run."
       },
       {
         "area": "content",
         "capability": "customer_questions",
         "routineId": "D01-W03",
-        "adapter": "source_semantics_change_required",
+        "adapter": "content_search_shadow",
         "requiredEvidence": [
           "search_query",
           "source_urls",
           "fetched_at",
           "question_source_type"
         ],
-        "boundary": "Search questions are market-research questions, not first-party customer tickets/reviews or measured frequency."
+        "boundary": "Search questions are market-research questions, not first-party customer tickets/reviews or measured frequency. Historical n8n exec #68 used seed travel bag and kind content_questions — not a current AVGAR Unc run."
       },
       {
         "area": "email",

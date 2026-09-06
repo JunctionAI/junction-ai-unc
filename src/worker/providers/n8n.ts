@@ -21,8 +21,9 @@ import { checkWebhookTarget, type HostLookup } from "../../lib/n8n/urlSecurity";
 import { SKILL_BY_ID } from "../../lib/runtime/skills";
 import { KEYWORD_SHADOW_RECEIVER_URL } from "../../lib/n8n/shadowContract";
 import { CALENDAR_SHADOW_RECEIVER_URL } from "../../lib/n8n/calendarShadowContract";
+import { CONTENT_HOOKS_RECEIVER_URL, CONTENT_QUESTIONS_RECEIVER_URL } from "../../lib/n8n/contentShadowContract";
 import { assertProtocolRequest, validateProtocolReceipt, verifyProtocolExecution, protocolCandidate,
-  isCalendarShadow, protocolEnvPrefix, protocolReceiver, type ShadowContract } from "../../lib/n8n/shadowProtocols";
+  isCalendarShadow, isContentShadow, protocolEnvPrefix, protocolReceiver, shadowProtocol, type ShadowContract } from "../../lib/n8n/shadowProtocols";
 import type { N8nBridge, N8nCallResult, N8nNode, N8nWorkflow, ProduceNeed, ProduceNode, RunContext } from "../../lib/runtime/types";
 import type { Logger } from "../log";
 import { pinnedWebhookFetch, type WebhookFetch, type WebhookResponse } from "./pinnedWebhookFetch";
@@ -69,8 +70,8 @@ export function buildN8nPayload(node: ProduceNode | N8nNode, ctx: RunContext, op
   const skillId = node.kind === "produce" ? (node.skill ?? ctx.routineId) : ctx.routineId;
   // Calendar's provider is bound natively in n8n; its authority token must not
   // inherit Shopify/customer-data scopes from the different built-in calendar.
-  const calendar = node.kind === "n8n" && node.shadowContract && isCalendarShadow(node.shadowContract);
-  const scopes = calendar ? [] : scopesForRoutine(ctx.routineId);
+  const nativeOwned = node.kind === "n8n" && node.shadowContract && (isCalendarShadow(node.shadowContract) || isContentShadow(node.shadowContract));
+  const scopes = nativeOwned ? [] : scopesForRoutine(ctx.routineId);
   const minted = opts.secret ? issueDataToken(opts.secret, { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, scopes }, { now: opts.now }) : null;
   return {
     ...(node.kind === "n8n" && node.shadowContract ? { shadow: node.shadowContract } : {}),
@@ -135,6 +136,9 @@ export interface HttpN8nBridgeOptions {
   calendarShadowAdmission?: ShadowAdmission;
   calendarShadowAdmissionFor?: (scope: { accountId: string; contextGeneration: number; runId: string }) => ShadowAdmission;
   readCalendarShadowExecution?: ShadowExecutionReader;
+  contentShadowAdmission?: ShadowAdmission;
+  contentShadowAdmissionFor?: (scope: { accountId: string; contextGeneration: number; runId: string }) => ShadowAdmission;
+  readContentShadowExecution?: ShadowExecutionReader;
 }
 
 export class HttpN8nBridge implements N8nBridge {
@@ -155,8 +159,12 @@ export class HttpN8nBridge implements N8nBridge {
 
   async call(node: ProduceNode | N8nNode, ctx: RunContext, workflow: N8nWorkflow | null): Promise<N8nCallResult> {
     const shadow = node.kind === "n8n" ? node.shadowContract : undefined;
-    const calendar = shadow ? isCalendarShadow(shadow) : false;
+    const protocol = shadow ? shadowProtocol(shadow) : null;
+    const calendar = protocol === "calendar";
+    const content = protocol === "content";
     const admission = calendar ? this.opts.calendarShadowAdmission ?? this.opts.calendarShadowAdmissionFor?.({
+      accountId: ctx.account.accountId, contextGeneration: runtimeGeneration(ctx.account.contextGeneration), runId: ctx.runId,
+    }) : content ? this.opts.contentShadowAdmission ?? this.opts.contentShadowAdmissionFor?.({
       accountId: ctx.account.accountId, contextGeneration: runtimeGeneration(ctx.account.contextGeneration), runId: ctx.runId,
     }) : this.opts.shadowAdmission;
     const identity = { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, mode: ctx.mode, startedAt: ctx.startedAt };
@@ -170,13 +178,14 @@ export class HttpN8nBridge implements N8nBridge {
     if (!url) throw new Error("no n8n webhook is registered for this routine");
     const target = await checkWebhookTarget(url, this.env, { maxLength: 2000, lookup: this.opts.lookup });
     if (!target.ok) throw new Error(`n8n webhook refused: ${target.reason}`);
-    if (!shadow && [KEYWORD_SHADOW_RECEIVER_URL, CALENDAR_SHADOW_RECEIVER_URL].includes(target.url.href))
+    if (!shadow && [KEYWORD_SHADOW_RECEIVER_URL, CALENDAR_SHADOW_RECEIVER_URL, CONTENT_HOOKS_RECEIVER_URL, CONTENT_QUESTIONS_RECEIVER_URL].includes(target.url.href))
       throw new Error("The shadow receiver requires its explicit shadow contract and permit");
     const secret = (this.env[N8N_SECRET_ENV] ?? "").trim();
     if (!secret) throw new Error(`${N8N_SECRET_ENV} is not set — refusing to call n8n unsigned`);
     const receiverHeaders: Record<string, string> = {};
-    const readExecution = shadow ? (calendar ? this.opts.readCalendarShadowExecution : this.opts.readShadowExecution) ?? createShadowExecutionReader(this.env, shadow.workflowId, {
-      fetch: this.opts.executionFetch, lookup: this.opts.lookup, protocol: calendar ? "calendar" : "keyword",
+    const readExecution = shadow ? (calendar ? this.opts.readCalendarShadowExecution : content ? this.opts.readContentShadowExecution : this.opts.readShadowExecution)
+      ?? createShadowExecutionReader(this.env, shadow.workflowId, {
+      fetch: this.opts.executionFetch, lookup: this.opts.lookup, protocol: protocol ?? "keyword",
     }) : undefined;
     if (shadow) {
       // Separate receiver credential, pinned to this exact URL. Never send it to an
@@ -186,6 +195,9 @@ export class HttpN8nBridge implements N8nBridge {
       const receiverToken = (this.env[`${prefix}_RECEIVER_TOKEN`] ?? "").trim();
       if (calendar && (receiverUrl !== protocolReceiver(shadow) || receiverToken === this.env.N8N_SHADOW_RECEIVER_TOKEN))
         throw new Error("Calendar requires its own receiver URL and scoped credential");
+      if (content && (receiverUrl !== protocolReceiver(shadow) || receiverToken === this.env.N8N_SHADOW_RECEIVER_TOKEN
+        || receiverToken === this.env.N8N_CALENDAR_SHADOW_RECEIVER_TOKEN))
+        throw new Error("Content requires its own receiver URL and scoped credential");
       if (receiverUrl !== target.url.toString()) throw new Error("shadow receiver URL is not pinned in server configuration");
       if (receiverToken.length < 24 || /\s/.test(receiverToken) || receiverToken === secret)
         throw new Error("shadow receiver requires a separate scoped authentication credential");
@@ -238,7 +250,7 @@ export class HttpN8nBridge implements N8nBridge {
       if (shadow && out.kind === "artifact") {
         if (!reported) throw new Error("Shadow artifact requires a validated reported execution receipt");
         const envelope = parsed as { artifact: unknown; executionReceipt: unknown };
-        const resultDigest = calendar ? shadowRequestDigest({ artifact: envelope.artifact, executionReceipt: envelope.executionReceipt }) : undefined;
+        const resultDigest = calendar || content ? shadowRequestDigest({ artifact: envelope.artifact, executionReceipt: envelope.executionReceipt }) : undefined;
         const candidate = protocolCandidate(out.artifact, reported, shadow, identity, resultDigest);
         // Persist the known execution before the next network wait. A crash here
         // must leave a named execution to inspect, not a reason to call n8n again.

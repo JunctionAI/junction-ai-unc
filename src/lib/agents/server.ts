@@ -7,6 +7,8 @@ import { routinesStateForAccount } from "@/lib/runtime/routinesState";
 import { AGENT_JOBS } from "@/lib/agents/catalog";
 import type { AgentsSnapshot } from "@/lib/agents/types";
 import { keywordCommandMarket } from "@/lib/n8n/keywordCommand";
+import { contentCommandMarket } from "@/lib/n8n/contentCommand";
+import { AVGAR_PILOT_ACCOUNT } from "@/lib/n8n/shadowContract";
 import { commandSelectionReleased } from "@/lib/commands/releaseScope";
 import { effectiveSpec } from "@/lib/runtime/versioning";
 import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
@@ -30,6 +32,11 @@ export async function agentSnapshot(req: Request) {
   ]);
   if (!member) return json({error:"Account access changed. Sign in again."},403);
   let keywordBlock = "Keyword requests need a reviewed account-specific market configuration.";
+  const contentBlocks = new Map<string, string>();
+  if (session.accountId === AVGAR_PILOT_ACCOUNT) {
+    contentBlocks.set("D01-W02", "Content search requests need the reviewed AVGAR hooks/questions configuration.");
+    contentBlocks.set("D01-W03", "Content search requests need the reviewed AVGAR hooks/questions configuration.");
+  }
   if (listing.routines.some(r => r.routineId === "D03-W01")) {
     const store = getStore();
     const [state, workflow] = await Promise.all([store.getRoutineState(session.accountId, "D03-W01"), store.findN8nWorkflow(session.accountId, "D03-W01")]);
@@ -40,12 +47,24 @@ export async function agentSnapshot(req: Request) {
         ? "" : "Keyword requests are not released for this account and market yet.";
     }
   }
+  if (session.accountId === AVGAR_PILOT_ACCOUNT) {
+    const store = getStore();
+    for (const routineId of ["D01-W02", "D01-W03"] as const) {
+      if (!listing.routines.some(r => r.routineId === routineId)) continue;
+      const [state, workflow] = await Promise.all([store.getRoutineState(session.accountId, routineId), store.findN8nWorkflow(session.accountId, routineId)]);
+      if (!state) continue;
+      const spec = effectiveSpec(state, CATALOG_SPEC_BY_ID[routineId]);
+      const actor = { accountId: session.accountId, userId: session.userId, contextGeneration: ctx.contextGeneration, channel: "app" as const, requestId: "selection-preview" };
+      if (contentCommandMarket(actor, spec, workflow))
+        contentBlocks.set(routineId, commandSelectionReleased(actor, spec, workflow) ? "" : "Content search requests are not released for this account yet.");
+    }
+  }
   await assertRuntimeContext(session.service,ctx,{allowPaused:true});
   const byId = new Map(states.map(s=>[s.routine_id,s]));
   if (listing.spec && listing.spec.version !== (byId.get(listing.spec.id)?.version ?? 1)) return json({error:"Routine configuration changed. Refresh to inspect it."},409);
   const data: AgentsSnapshot = {...listing,...ctx,actorId:session.userId,fetchedAt:new Date().toISOString(),role:member.role,paused:account.automation_paused,
     routines:listing.routines.map(r=>{const s=byId.get(r.routineId);return {...r,enabled:s?.enabled??false,version:s?.version??1,stateUpdatedAt:s?.updated_at??null,
-      selectionBlock:r.routineId==="D03-W01" ? keywordBlock || null : r.skillSource==="none" ? "No drafting implementation is registered." : !r.canEnable ? r.availabilityCopy : null};})};
+      selectionBlock:r.routineId==="D03-W01" ? keywordBlock || null : contentBlocks.get(r.routineId) ? contentBlocks.get(r.routineId)! : r.skillSource==="none" ? "No drafting implementation is registered." : !r.canEnable ? r.availabilityCopy : null};})};
   return {session,data};
 }
 export async function GET(req: Request) {
