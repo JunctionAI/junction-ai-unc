@@ -1,13 +1,14 @@
 {
   "schema": "unc.existing-client-rollout.v1",
-  "observedAt": "2026-09-05T21:57:00Z",
-  "status": "inventory_partial_not_runtime_registration",
+  "observedAt": "2026-09-06T00:31:58.670623Z",
+  "status": "verified_source_bindings_not_membership_or_runtime",
   "ownerDirection": "Hyperagent is reference configuration/history/channel inventory, not target execution. Junction owns runtime identity, permissions, routing, stored data and approved structured routine execution; preserve the same client Slack channels through controlled cutover.",
   "sources": {
     "nativeRoster": "https://hyperagent.com/agents",
     "priorAudit": "docs/integration/NATIVE-CLIENT-SYSTEMS-2026-09-06.md",
     "uncDatabaseReadAt": "2026-09-05T21:54:47.921082Z",
-    "h1WarehouseReadAt": "2026-09-05T21:54:58.597027Z"
+    "h1WarehouseReadAt": "2026-09-05T21:54:58.597027Z",
+    "uncSourceBindingReadAt": "2026-09-06T00:31:58.670623Z"
   },
   "authority": {
     "activate": false,
@@ -21,13 +22,21 @@
     "observedAt":"2026-09-05T23:32:17.726040Z",
     "sourceProject":"ebcatvidixdjjwmmades",
     "targetProject":"ycgayfsvcjpsnryrpukv",
-    "status":"read_only_evidence_not_grant_or_import",
+    "status":"five_exact_source_identities_bound_no_credentials_or_memberships_imported",
     "verifiedAgencyIdentity":{"email":"halltaylor.tom@gmail.com","sourceUserId":"deae6d15-6ea5-4af0-b943-d7373bad6899","targetUserId":"74802c60-149a-4405-b719-dc058d174072","sourceEmailConfirmed":true,"sourceRole":"junction_admin","roleNotEquivalentToTargetOwner":true},
     "sourceAccountCandidates":[
-      {"client":"Deep Blue Health","sourceAccountId":"82d2ebf1-33aa-42a9-8d6e-f4238a5c7ac6","sourceWebsite":"https://www.deepbluehealth.co.nz","targetAccountId":"4fae2ad8-194f-49c4-9954-39a6b6d35b14","targetWebsite":"https://deepbluehealth.co.nz","sourceAgencyMembershipActive":true,"targetLoginMembers":0,"mappingAccepted":false},
+      {"client":"Deep Blue Health","sourceAccountId":"82d2ebf1-33aa-42a9-8d6e-f4238a5c7ac6","sourceWebsite":"https://www.deepbluehealth.co.nz","targetAccountId":"4fae2ad8-194f-49c4-9954-39a6b6d35b14","targetWebsite":"https://deepbluehealth.co.nz","sourceAgencyMembershipActive":true,"targetLoginMembers":0,"mappingAccepted":true},
       {"client":"NZ Pure Health","sourceAccountId":"83465b57-e408-44af-a660-a1277fa4f708","sourceWebsite":"https://www.newzealandpurehealth.com","targetAccountId":null,"sourceAgencyMembershipActive":true,"mappingAccepted":false},
-      {"client":"Unity MMA","sourceAccountId":"fa43e65b-75e1-4ee5-9378-0d13e997e339","sourceWebsite":null,"targetAccountId":"083d6e9f-4697-4845-8869-952c0e1f9d83","sourceAgencyMembershipActive":false,"targetLoginMembers":0,"mappingAccepted":false}
+      {"client":"Unity MMA","sourceAccountId":"fa43e65b-75e1-4ee5-9378-0d13e997e339","sourceWebsite":null,"targetAccountId":"083d6e9f-4697-4845-8869-952c0e1f9d83","sourceAgencyMembershipActive":false,"targetLoginMembers":0,"mappingAccepted":true}
     ],
+    "acceptedSourceBindings":[
+      {"client":"AVGAR Sport","targetAccountId":"aa5cfc84-2569-4c99-9b40-67003ae55eda","sourceKind":"public.client_accounts","sourceKey":"9fa0ec20-b157-415a-989f-27362235c131","status":"verified"},
+      {"client":"Deep Blue Health","targetAccountId":"4fae2ad8-194f-49c4-9954-39a6b6d35b14","sourceKind":"public.client_accounts","sourceKey":"82d2ebf1-33aa-42a9-8d6e-f4238a5c7ac6","status":"verified"},
+      {"client":"Unity MMA","targetAccountId":"083d6e9f-4697-4845-8869-952c0e1f9d83","sourceKind":"public.client_accounts","sourceKey":"fa43e65b-75e1-4ee5-9378-0d13e997e339","status":"verified"},
+      {"client":"Home1nvasion","targetAccountId":"1620999d-ee8e-4490-bfd6-b908a9fa86dc","sourceKind":"junction.client_orgs","sourceKey":"h1","status":"verified"},
+      {"client":"Aerspan Airdomes","targetAccountId":"f206666f-ac52-4508-a508-3535a8f229a3","sourceKind":"junction.client_orgs","sourceKey":"domes","status":"verified"}
+    ],
+    "unresolvedSourceBindings":["Legacy Unc AVGAR a37ddf37-489c-491f-8d30-23a4f1f38fc4","Rory O'Keefe","NZ Pure Health","Ribbon Rose","Own Your Energy"],
     "registryConflicts":[
       "Mission Control has AVGAR a45db485-92a4-4eda-b1bf-dfab0506e836 at avgar.co.nz with shadow deployments and no memberships, separately from AVGAR Sport 9fa0ec20-b157-415a-989f-27362235c131 at avgarsport.com with agency memberships and no deployments",
       "H1 and Domes exist in junction.client_orgs but not the inspected public.client_accounts registry; H1 registered agent_ identifiers differ from current native cmsy identifiers",
@@ -38,13 +47,14 @@
       {"client":"Deep Blue Health","table":"dbh.email_campaigns","rows":195,"missingMetrics":0,"latestMetricsAt":"2026-09-05T18:42:53.175923Z","oldestMetricsAt":"2026-09-05T18:42:41.474112Z","registeredReadRole":null},
       {"client":"NZ Pure Health","table":"nzph.email_campaigns","rows":42,"missingMetrics":0,"latestMetricsAt":"2026-09-05T18:43:08.043447Z","oldestMetricsAt":"2026-09-05T18:43:06.093276Z","registeredReadRole":null}
     ],
-    "limits":["Warehouse timestamps do not prove provider grant validity, metric semantics, completeness, or future scheduler health","NULL read_role is missing registry evidence, not proof no database role exists","Do not copy auth user IDs across projects or convert agency admin into client owner","No source credentials, client rows, memberships, source jobs or grants changed"],
-    "implementationBlocker":"Several app session, billing, connector and facts paths independently choose first membership. Complete explicit per-request client selection and captured-context refusal before exposing multi-client access; a shared cookie alone risks cross-tab switching."
+    "limits":["A verified source identity does not prove provider grant validity, metric semantics, completeness, or future scheduler health","NULL read_role is missing registry evidence, not proof no database role exists","Do not copy auth user IDs across projects or convert agency admin into client owner","No source credentials, source client rows, memberships, source jobs or provider grants changed"],
+    "implementedControl":"Explicit per-request client selection and captured-context refusal are live. Canonical service-only source bindings now prevent one external source identity from being assigned to two Unc accounts and require separate operator source-binding authority.",
+    "nextBlocker":"Bind each accepted account to its reusable source read contract and routine registry, then prove fresh account-specific reads. Client login membership and external action authority remain separate decisions."
   },
   "sharedGaps": [
     "Earlier zero-Slack-link and one-account/DM-only routing gaps are superseded by Batches 75-82; one verified Junction Slack identity and explicit client-channel/thread routing now exist",
     "No active client channel or live same-thread delivery acceptance yet; staging is not activation",
-    "Five seeded non-AVGAR clients had zero login memberships at the recorded database snapshot; canonical client/owner mapping remains unaccepted",
+    "Five seeded non-AVGAR clients had zero login memberships at the recorded database snapshot; five source identities are now accepted, but client login ownership remains unassigned",
     "Native attachments do not prove access for Junction's approved routines",
     "Do not build a Hyperagent execution dependency; verify methods and replace runtime through Junction"
   ],

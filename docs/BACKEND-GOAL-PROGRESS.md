@@ -38,7 +38,37 @@ approval cannot be inferred. Delegated patches are isolated, bounded, tested and
 reviewed before integration. Publishing, customer campaigns, ad mutation and
 spend remain separately authorized actions.
 
-## Latest state — Batch 86, 6 September NZ
+## Latest state — Batch 87, 6 September NZ
+
+**Canonical account-to-source identity is implemented in production data and
+verified for five existing clients.** This closes the name-matching gap without
+claiming that a source ID is a credential, login membership or runnable routine.
+
+The service-only `account_source_bindings` registry now binds AVGAR Sport, Deep
+Blue Health, Unity MMA, Home1nvasion and Aerspan Airdomes to their exact existing
+Mission Control records. One source identity cannot belong to two Unc accounts.
+Writes require an authenticated server operator, active client read access,
+separate source-binding authority, exact context generation and compare-and-swap
+revision. Browser roles have no table or function access; no token or secret is
+stored in a binding.
+
+Independent production readback at `2026-09-06T00:31:58.670623Z` returned five
+verified rows, five distinct accounts and five distinct external identities. The
+legacy AVGAR account, Rory O'Keefe, NZPH, Ribbon Rose and Own Your Energy remain
+unbound rather than guessed. No client login membership, provider grant, source
+job, workflow, routine, Slack state or external action was changed.
+
+The isolated PostgreSQL verifier passes browser-role refusal, account generation,
+source uniqueness, revision races, revoked operators and function ACLs with zero
+provider calls. The operator HTTP contract adds exact-account reads and bounded,
+same-origin writes; its seven focused tests, app TypeScript and changed-file lint
+pass. [Contract and exact binding inventory](integration/ACCOUNT-SOURCE-BINDINGS-2026-09-06.md).
+
+**Next vertical slice:** deploy and signed-in verify the operator API, then use
+these stable identities to bind one fresh source read and eligible routine per
+client. Customer-facing membership and outward-action authority stay separate.
+
+## Previous state — Batch 86, 6 September NZ
 
 **Client picker and page-bound request integration is released and production
 verified.** The previous turn was progress (Batch 85 source pushed). This batch
