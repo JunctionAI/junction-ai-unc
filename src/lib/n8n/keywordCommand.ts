@@ -7,12 +7,21 @@ import type { N8nWorkflow, RoutineSpec } from "../runtime/types";
 import type { RunOptions } from "../runtime/engine";
 import { AVGAR_PILOT_ACCOUNT } from "./shadowContract";
 import { keywordShadowSpec } from "./keywordShadowSpec";
+import { commandChannelBinding } from "../commands/binding";
+import { messagingOriginAllowed, messagingBindingAllowed } from "../channels/releaseGate";
 import { KEYWORD_PILOT_MARKETS, KEYWORD_PILOT_PIN, keywordPilotContract, keywordPilotReservation, keywordPilotStartClaim, type KeywordPilotApproval } from "./keywordAdmission";
 
 /** No country, seed, owner, URL or allowance comes from model-generated arguments.
  * The routine's stored, reviewed spec chooses ONE market for this command. */
 export function keywordCommandMarket(actor: CommandActor, spec: RoutineSpec, workflow: N8nWorkflow | null): keyof typeof KEYWORD_PILOT_MARKETS | null {
-  if (actor.channel !== "app" || actor.accountId !== AVGAR_PILOT_ACCOUNT || actor.linkId || actor.channelBinding ||
+  let originAllowed = actor.channel === "app" && !actor.linkId && !actor.channelBinding;
+  if (actor.channel === "slack" && process.env.UNC_MESSAGING_PILOT_SCOPE !== undefined) {
+    try {
+      const binding = commandChannelBinding(actor);
+      originAllowed = !!binding && messagingOriginAllowed(process.env, binding) && messagingBindingAllowed(process.env, binding);
+    } catch { originAllowed = false; }
+  }
+  if (!originAllowed || actor.accountId !== AVGAR_PILOT_ACCOUNT ||
       !Number.isSafeInteger(actor.contextGeneration) || actor.contextGeneration! < 0 || spec.id !== "D03-W01" || spec.version !== 2 ||
       !workflow?.active || workflow.accountId !== actor.accountId || workflow.routineId !== spec.id || workflow.webhookUrl !== KEYWORD_PILOT_PIN.receiverUrl)
     return null;

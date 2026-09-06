@@ -28,6 +28,20 @@ function selected(market: KeywordPilotApproval["market"] = "US") {
   return { now, contract, spec, workflow, actor, command };
 }
 describe("customer keyword authority is derived from a captured command", () => {
+  it("admits the scoped Slack pilot and refuses another room or an expired release", () => {
+    const f = selected();
+    const actor = { ...f.actor, channel: "slack" as const, linkId: randomUUID(),
+      channelBinding: { bindingVersion: 0, externalId: "U0BLLM1NDNV", scopeId: "T0BMD3LMWUQ", conversationId: "C0BR8UNSR26", threadId: "1788663600.123456" } };
+    const scope = { accountId: actor.accountId, userId: actor.userId, contextGeneration: 1,
+      externalId: actor.channelBinding.externalId, scopeId: actor.channelBinding.scopeId,
+      conversationId: actor.channelBinding.conversationId, expiresAt: new Date(Date.now() + 600_000).toISOString() };
+    vi.stubEnv("UNC_MESSAGING_ENABLED", "true");
+    vi.stubEnv("UNC_MESSAGING_PILOT_SCOPE", JSON.stringify(scope));
+    expect(keywordCommandMarket(actor, f.spec, f.workflow)).toBe("US");
+    expect(keywordCommandMarket({ ...actor, channelBinding: { ...actor.channelBinding, conversationId: "COTHER" } }, f.spec, f.workflow)).toBeNull();
+    vi.stubEnv("UNC_MESSAGING_PILOT_SCOPE", JSON.stringify({ ...scope, expiresAt: new Date(0).toISOString() }));
+    expect(keywordCommandMarket(actor, f.spec, f.workflow)).toBeNull();
+  });
   it.each(["US", "NZ", "AU"] as const)("binds %s to the saved market and a fixed expiry", market => {
     const f = selected(market), approval = keywordCommandApproval(f.command, f.spec, f.workflow, f.now);
     expect(approval).toEqual({ authorizedBy: f.actor.userId, contextGeneration: 1, market, maxProviderCalls: 1,
