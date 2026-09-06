@@ -5,6 +5,7 @@ import { ALL_SYSTEMS } from "@/lib/platform/catalog";
 import { OPS_STAGES, opsNext, opsStage, opsTime, type OpsClient, type OpsRun, type OpsSnapshot, type OpsSourceBinding } from "@/lib/ops/types";
 import styles from "./ops.module.css";
 import OpsRunReview from "./OpsRunReview";
+import OpsDraftPreview from "./OpsDraftPreview";
 
 const names = new Map(ALL_SYSTEMS.map(r => [r.id, r.name]));
 type View = "clients" | "pipeline" | "runs" | `client/${string}` | `run/${string}/${string}`;
@@ -100,7 +101,7 @@ export default function OpsConsole() {
     <aside className={styles.sidebar} aria-label="Operator navigation">
       <Link href="/" className={styles.brand}>↗ Junction <small>OPS</small></Link>
       <nav>{[["clients", "Clients"], ["pipeline", "Setup pipeline"], ["runs", "Run monitor"]].map(([id, label]) => <a key={id} href={`#${id}`} aria-current={view === id || (id === "clients" && accountId) ? "page" : undefined}>{label}</a>)}</nav>
-      <div className={styles.sideFoot}><Link href="/app">My client workspace →</Link><form method="post" action="/auth/signout"><button>Sign out</button></form><p>Read-only operator access. No impersonation, publishing, customer messaging or ad changes.</p></div>
+      <div className={styles.sideFoot}><Link href="/app">My client workspace →</Link><form method="post" action="/auth/signout"><button>Sign out</button></form><p>Operator review and separately authorized draft previews. Publishing, customer messaging and ad changes remain disabled.</p></div>
     </aside>
     <main id="ops-main" tabIndex={-1} className={styles.main}>
       <div className={styles.notice}>Unc records only. Existing agents outside Unc still need independent reconciliation; this view does not call them or certify them live.</div>
@@ -125,6 +126,7 @@ export default function OpsConsole() {
         </>}
         {accountId && reviewingRun && data && detail && <OpsRunReview key={`${accountId}:${reviewingRun}:${revision}`} accountId={accountId} runId={reviewingRun} />}
         {accountId && !reviewingRun && data && client && detail && <>
+          <OpsDraftPreview key={`${accountId}:${client.contextGeneration}`} accountId={accountId} generation={client.contextGeneration} />
           <p className={styles.code}>{client.id} · generation {client.contextGeneration} · {client.currency}</p>
           <div className={styles.stats}>{count("Login members", client.memberCount)}{count("Verified source identities", sources?.filter(source => source.status === "verified").length, "Not provider access")}{count("Dated connector reads", client.datedReadCount, `of ${client.connectorCount} saved connector rows`)}{count("Routines enabled", client.enabledCount)}</div>
           <section className={styles.card}><h2>Setup checklist</h2><p className={styles.badge}>{opsStage(client)}{client.paused ? " · automation paused" : " · no account pause recorded"}</p><p>{opsNext(client)}</p><ul><li>Saved website: {client.website || "Not recorded"}</li><li>Login membership: {client.memberCount ? `${client.memberCount} saved member(s); role grants are separate from operator access.` : "No assigned login. Reconcile ownership before inviting."}</li><li>Callable registry: {client.registeredWorkflowCount} active row(s). Independent execution verification still required.</li><li>Existing-system mapping: {sources ? sources.some(source => source.status === "verified") ? `${sources.filter(source => source.status === "verified").length} exact source identity binding(s); provider grants and data freshness remain separate.` : "No verified binding. Do not merge or reconnect accounts from display names." : sourceError ? "Could not verify it; no missing or valid mapping is inferred." : "Checking exact identity."}</li><li>Customer acceptance: not inferred from these records.</li></ul></section>

@@ -38,7 +38,25 @@ approval cannot be inferred. Delegated patches are isolated, bounded, tested and
 reviewed before integration. Publishing, customer campaigns, ad mutation and
 spend remain separately authorized actions.
 
-## Latest state — Batch 91, 6 September NZ
+## Latest state — Batch 92, 6 September NZ
+
+Added a newsletter-preview form to the existing ops client detail. It collects
+format, business context, approved brief and source reference, and calls the
+existing D05-W08 preview route with the selected account/generation. Request ID
+is saved before submission (brief text is not stored in session storage), blocks
+double submission, survives reload and links to the original run review. An
+uncertain response does not offer a second execution. Separate server-side grant
+validation remains authoritative. No database or provider mutation was made in
+this batch.
+
+App TypeScript, focused ops lint, diff checks and 11 preview API/runtime tests
+pass. Four duplicate generated `.next/types/* 2.ts` files were moved to a
+temporary backup to resolve duplicate declarations; user source copies were
+preserved. This form is source-complete but not yet deployed or browser accepted.
+Next: deploy the app-only form in the existing project, then exercise the signed-in
+H1 brief and inspect durable output. Batch 91 remains the canonical live release.
+
+## Previous state — Batch 91, 6 September NZ
 
 Release recovery completed at 2026-09-06T02:14Z. Canonical
 `https://junction-unc.vercel.app/api/health` now reports `c09a2c6260ba`,
