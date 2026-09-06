@@ -39,10 +39,21 @@ Thread: https://junction-ai-workspace.slack.com/archives/C0BR8UNSR26/p1788663363
    origin=true, wrong room=false, anon execute=false, private schema usage=false.
    Supabase security advisors at error level: no issues.
 
-## Still to prove
+## Post-fix end-to-end PASS (exact command)
 
-- Post-fix Slack command produces a verified saved n8n execution and artifact.
-- Completion reply reaches the original thread with a useful result/link.
+- Slack command sent 03:06:58Z; saved command/run
+  57ad5dfd-e310-5323-af26-ede96f4dcca8 at 03:07:12Z.
+- n8n execution 99, permit status verified, routine run done, command done.
+- One artifact: 2d2a67bc-c6e3-4e64-974e-06fdd4c52de6,
+  `Keyword opportunity: golf travel bag [en/2840]`.
+- Completion visibly delivered at 03:07:50Z in the original Slack thread:
+  https://junction-ai-workspace.slack.com/archives/C0BR8UNSR26/p1788664070659769?thread_ts=1788663363.765019&cid=C0BR8UNSR26
+- No publishing/ad changes. Exact command execution is proven; natural-language
+  routing and useful inline findings are not yet proven.
+
+## Remaining
+
+- Completion reply currently confirms status only; add a useful result/link.
 - Natural-language request matches the reviewed saved inputs correctly.
 - Review expiry/old listener state before leaving this pilot unattended.
 
