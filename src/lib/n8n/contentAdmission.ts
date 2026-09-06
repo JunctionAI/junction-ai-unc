@@ -1,4 +1,6 @@
-/** Server-only Content admission. Tests stub the RPCs; live SQL is a Codex apply step. */
+/** Server-only Content admission. RPCs are defined in
+ * supabase/migrations/20260906030000_content_shadow_admission.sql.
+ * FakeSupabase tests remain simulated; real SQL is scripts/verify-content-shadow-admission.mjs. */
 import { isDeepStrictEqual } from "node:util";
 import { unwrap, type DbClient, type Row } from "../db/types";
 import type { RunOptions } from "../runtime/engine";

@@ -32,7 +32,7 @@ function selected(market: ContentApproval["market"] = "US", routineId: ContentAp
   return { now, contract, spec, workflow, actor, command, approval };
 }
 
-describe("AVGAR content command admission", () => {
+describe("AVGAR content command admission (simulated; FakeSupabase, no provider)", () => {
   it.each(["US", "NZ", "AU"] as const)("binds %s to the saved market and reviewed pin", market => {
     const f = selected(market);
     expect(contentCommandMarket(f.actor, f.spec, f.workflow)).toBe(market);

@@ -29,7 +29,7 @@ const payload = () => buildN8nPayload(node(), ctx, { env, secret: env.N8N_SIGNIN
 const pins = { workflowId: contract.workflowId, executionId: "12345", triggerNodeId: "incoming-content", resultNodeId: "result-content" };
 const reply = () => ({ artifact: hooksArtifact(), executionReceipt: receipt() });
 
-describe("AVGAR content search contract", () => {
+describe("AVGAR content search contract (simulated; no provider or PostgreSQL)", () => {
   it("replaces TikTok/Gorgias reads and does not inherit those scopes", () => {
     const spec = contentShadowSpec(contract, 2);
     expect(spec.nodes.map(n => n.kind)).toEqual(["trigger", "n8n", "gate", "receipt"]);
@@ -85,7 +85,7 @@ describe("AVGAR content search contract", () => {
   });
 });
 
-describe("independent content execution", () => {
+describe("independent content execution (simulated n8n record; no live API)", () => {
   it("requires separate content pins and never borrows keyword configuration", () => {
     expect(createShadowExecutionReader(env, contract.workflowId)).toBeUndefined();
     expect(createShadowExecutionReader(env, contract.workflowId, { protocol: "content" })).toBeTypeOf("function");
@@ -146,7 +146,7 @@ async function wiring() {
     digest: () => digest, checkpoint: () => checkpoint, run: () => runRoutine(spec, { account, triggeredBy: "manual" }, adapters, options) };
 }
 
-describe("content engine → admission → authority → verification → draft", () => {
+describe("content engine → admission → authority → verification → draft (simulated HTTP/ledger)", () => {
   it("produces a tenant/run-correlated hook_list through the real engine, with one POST and no actions", async () => {
     const f = await wiring(), read = vi.spyOn(f.adapters.reader, "read"), execute = vi.spyOn(f.adapters.executor, "execute");
     const result = await f.run();
