@@ -78,7 +78,7 @@ describe("Meta artifact acceptance encodes the 50% cap rule", () => {
     expect(out.items![0].meta).toEqual({ routine: "D02-W01", decision_state: "HOLD", status: "observed", executed_action: "none",
       adset_id: "120252863530370580", adset_name: "AD_ORG01_PROLINE_ALIGNSTICKS_REEL", window: "last_7d", next_action: "REPAIR_MEASUREMENT",
       observed: { spend: 162.39, purchases: 1, cpa: 162.39, ctr: 2.556818181818182, frequency: 1.201018 },
-      cpa_cap: { value: 60, currency: "NZD", basis: "product_price_50pct", product_price: 120, product_ref: "shopify:variant:synthetic" },
+      cpa_cap: { value: 60, currency: "NZD", basis: "product_price_50pct", product_price: 120, product_ref: "shopify:variant:synthetic", comparable_value: 60 },
       rollback_proposal: "Do not pause or scale; keep the current state until measurement is repaired." });
     expect(JSON.stringify(out)).not.toContain("never-store");
   });
@@ -89,7 +89,7 @@ describe("Meta artifact acceptance encodes the 50% cap rule", () => {
     ["an apply-ready claim", d => { item(d).apply_ready = true; }],
     ["an executed pause", d => { item(d).executed_action = "paused"; }],
     ["a cap that is not half the price", d => { (item(d).cpa_cap as Record<string, unknown>).value = 70; }],
-    ["a cap in another currency", d => { (item(d).cpa_cap as Record<string, unknown>).currency = "USD"; }],
+    ["a cap in another currency with no verified conversion", d => { (item(d).cpa_cap as Record<string, unknown>).currency = "USD"; }],
     ["a cap with an unverified price", d => { (item(d).cpa_cap as Record<string, unknown>).product_price = 0; }],
     ["a cap basis that is not the product price", d => { (item(d).cpa_cap as Record<string, unknown>).basis = "store_aov"; }],
     ["a hold for price that still states a cap", d => { item(d).cap_reason = "pending_product_price"; }],
@@ -134,7 +134,7 @@ describe("Google Ads BOFU plan acceptance", () => {
       keywords: [{ keyword: "golf travel bag", match_type: "PHRASE", search_volume: 49500, cpc: 1.2, competition: "HIGH", intent: "transactional" }] });
     expect(JSON.stringify(out)).not.toContain("never-store");
     const capped = gadsArtifact(); Object.assign(item(capped), { cpa_ceiling: { value: 47.5, currency: "NZD", basis: "product_price_50pct", product_price: 95 } }); delete item(capped).cap_reason;
-    expect(paidShadowArtifact(capped, gadsContract, identityFor(gadsContract)).items![0].meta!.cpa_ceiling).toEqual({ value: 47.5, currency: "NZD", basis: "product_price_50pct", product_price: 95 });
+    expect(paidShadowArtifact(capped, gadsContract, identityFor(gadsContract)).items![0].meta!.cpa_ceiling).toEqual({ value: 47.5, currency: "NZD", basis: "product_price_50pct", product_price: 95, comparable_value: 47.5 });
   });
   const gadsCases: [string, (m: Record<string, unknown>) => void][] = [
     ["an active campaign", m => { m.campaign_status = "ENABLED"; }],
@@ -213,8 +213,6 @@ describe("bridge: AVGAR's contract, its own ledger and reader, nothing else", ()
     const keywordLedger = bridge({ admission: new DbShadowAdmission({ from: () => { throw new Error("never"); }, rpc: async () => ({ data: null, error: null }) } as never) });
     await expect(keywordLedger.b.call(node(), ctxFor(metaContract), metaRegistration)).rejects.toThrow("cannot authorize");
     expect(keywordLedger.calls()).toBe(0);
-    const currency = bridge();
-    await expect(currency.b.call(node(), { ...ctxFor(metaContract), account: { ...account, currency: "USD" } }, metaRegistration)).rejects.toThrow("currency differs");
     const unpinned = bridge({ env: { ...env, N8N_META_SHADOW_RECEIVER_URL: undefined } });
     await expect(unpinned.b.call(node(), ctxFor(metaContract), metaRegistration)).rejects.toThrow("receiver");
     expect(unpinned.calls()).toBe(0);
@@ -327,6 +325,52 @@ describe("chat/Slack selection is the reviewed spec, the pinned receiver and AVG
     expect(() => paidCommandApproval({ ...command, status: "queued" }, spec, metaRegistration, now(), {})).toThrow("reviewed selection");
     expect(() => paidCommandApproval({ ...command, specHash: "0".repeat(64) }, spec, metaRegistration, now(), {})).toThrow("reviewed selection");
     expect(() => paidCommandApproval(command, spec, { ...metaRegistration, webhookUrl: GADS_SHADOW_RECEIVER_URL }, now(), {})).toThrow("reviewed selection");
+  });
+});
+
+describe("corrections: unmapped price holds without a cap; source currency is preserved", () => {
+  it("accepts HOLD with cap_reason pending_product_price and no cap, and refuses KEEP or any cap without a verified price", () => {
+    const hold = metaArtifact(); delete item(hold).cpa_cap; Object.assign(item(hold), { cap_reason: "pending_product_price", next_action: "RESOLVE_PRODUCT_PRICE_MAPPING" });
+    expect(paidShadowArtifact(hold, metaContract, identityFor(metaContract)).items![0].meta).toMatchObject({ decision_state: "HOLD", cap_reason: "pending_product_price" });
+    expect(paidShadowArtifact(hold, metaContract, identityFor(metaContract)).items![0].meta).not.toHaveProperty("cpa_cap");
+    const keep = metaArtifact(); delete item(keep).cpa_cap; Object.assign(item(keep), { decision_state: "KEEP", observed: { spend: 90, purchases: 3, cpa: 30 } });
+    expect(() => paidShadowArtifact(keep, metaContract, identityFor(metaContract))).toThrow("KEEP is a cap-judged verdict");
+    const invented = metaArtifact(); (item(invented).cpa_cap as Record<string, unknown>).product_price = null;
+    expect(() => paidShadowArtifact(invented, metaContract, identityFor(metaContract))).toThrow("verified product price");
+    const guessed = metaArtifact(); Object.assign(item(guessed), { cpa_cap: { value: 60, currency: "NZD", basis: "preset_target_cpa", product_price: 120 } });
+    expect(() => paidShadowArtifact(guessed, metaContract, identityFor(metaContract))).toThrow("verified product price");
+  });
+  it("keeps the product's own currency on the cap and demands a verified conversion into the account currency", () => {
+    const usdPrice = { value: 45, currency: "USD", basis: "product_price_50pct", product_price: 90 };
+    const fx = { from: "USD", to: "NZD", rate: 1.65, source: "rbnz-mid-2026-09-05", as_of: "2026-09-05T00:00:00.000Z", converted_value: 74.25 };
+    const converted = metaArtifact(); Object.assign(item(converted), { cpa_cap: { ...usdPrice, conversion: fx } });
+    const out = paidShadowArtifact(converted, metaContract, identityFor(metaContract)).items![0].meta!;
+    expect(out.cpa_cap).toEqual({ ...usdPrice, conversion: fx, comparable_value: 74.25 });
+    const scale = metaArtifact(); Object.assign(item(scale), { decision_state: "SCALE", cpa_cap: { ...usdPrice, conversion: fx }, observed: { spend: 148, purchases: 2, cpa: 74 } });
+    expect(paidShadowArtifact(scale, metaContract, identityFor(metaContract)).items![0].meta!.decision_state).toBe("SCALE");
+    const overInNzd = metaArtifact(); Object.assign(item(overInNzd), { decision_state: "SCALE", cpa_cap: { ...usdPrice, conversion: fx }, observed: { spend: 150, purchases: 2, cpa: 75 } });
+    expect(() => paidShadowArtifact(overInNzd, metaContract, identityFor(metaContract))).toThrow("at or under the cap");
+    for (const bad of [{ ...fx, converted_value: 70 }, { ...fx, to: "AUD" }, { ...fx, rate: 0 }, { ...fx, source: "" }, { ...fx, as_of: "yesterday" }]) {
+      const draft = metaArtifact(); Object.assign(item(draft), { cpa_cap: { ...usdPrice, conversion: bad } });
+      expect(() => paidShadowArtifact(draft, metaContract, identityFor(metaContract))).toThrow("verified conversion");
+    }
+    const needless = metaArtifact(); Object.assign(item(needless), { cpa_cap: { value: 60, currency: "NZD", basis: "product_price_50pct", product_price: 120, conversion: { ...fx, from: "NZD" } } });
+    expect(() => paidShadowArtifact(needless, metaContract, identityFor(metaContract))).toThrow("not needed");
+  });
+  it("does not force the Google Ads billing currency to equal the workspace currency", async () => {
+    const usdBilling = { ...gadsContract, client: { ...gadsContract.client, currency: "USD" } };
+    expect(paidShadowSchema.safeParse(usdBilling).success).toBe(true);
+    const ceilingInNzd = gadsArtifact(); Object.assign(item(ceilingInNzd), { cpa_ceiling: { value: 47.5, currency: "NZD", basis: "product_price_50pct", product_price: 95 } }); delete item(ceilingInNzd).cap_reason;
+    expect(() => paidShadowArtifact(ceilingInNzd, usdBilling, identityFor(usdBilling))).toThrow("verified conversion to USD");
+    Object.assign(item(ceilingInNzd).cpa_ceiling as Record<string, unknown>, { conversion: { from: "NZD", to: "USD", rate: 0.6, source: "rbnz-mid-2026-09-05", as_of: "2026-09-05T00:00:00.000Z", converted_value: 28.5 } });
+    expect(paidShadowArtifact(ceilingInNzd, usdBilling, identityFor(usdBilling)).items![0].meta!.cpa_ceiling).toMatchObject({ currency: "NZD", comparable_value: 28.5 });
+    const sent: unknown[] = [];
+    const b = new HttpN8nBridge({ env, now, lookup: dns, paidShadowAdmission: syntheticAdmission(),
+      readPaidShadowExecution: async ({ executionId }) => projectResultShadowExecution(savedExecution(usdBilling, sent[0], { artifact: gadsArtifact(), executionReceipt: gadsReceipt(usdBilling) }, executionId), { workflowId: usdBilling.workflowId, executionId, triggerNodeId: "incoming-gads", resultNodeId: "result-gads" }),
+      fetch: async (_url, init) => { sent.push(JSON.parse(String(init.body))); return new Response(JSON.stringify({ artifact: gadsArtifact(), executionReceipt: { ...gadsReceipt(usdBilling), executionId: "12346" } }), { status: 200 }); } });
+    const out = await b.call(node(usdBilling), ctxFor(usdBilling), gadsRegistration);
+    expect(out).toMatchObject({ kind: "artifact", artifact: { meta: { executionReceipt: { client: { currency: "USD" }, revisionEvidence: "verified_execution_record" } } } });
+    expect((sent[0] as { account: { currency: string } }).account.currency).toBe("NZD");
   });
 });
 

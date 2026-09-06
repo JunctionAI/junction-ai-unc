@@ -35,7 +35,7 @@ export async function runPaidShadow(input: PaidScope & { bindingId: string; appr
   const template = binding.spec_template as RoutineSpec;
   const node = template?.nodes?.[1];
   const contract = paidShadowSchema.parse(node?.kind === "n8n" ? node.shadowContract : null);
-  if (contract.accountId !== scope.accountId || contract.client.currency !== deps.account.currency || contract.lane !== input.approval.lane ||
+  if (contract.accountId !== scope.accountId || contract.lane !== input.approval.lane ||
       !isDeepStrictEqual(template, paidShadowSpec(contract, template.version)))
     throw new Error("Reviewed paid-ads binding specification changed");
   assertPaidRuntimeAccess(deps.env, contract.lane, contract.workflowId);

@@ -1,9 +1,12 @@
 /** Paid-ads shadow lane: AVGAR's six Meta routines and the Google Ads BOFU plan, served by
  * Nguyen's n8n workflows through their NATIVE provider credentials. Shadow recommendations
  * only — the built specs carry no execute node, the receipt must say executedAction "none",
- * and every stated CPA ceiling must be exactly 50% of a verified product price in the SAME
- * currency (Tom, 5 September 2026 — docs/integration/AVGAR-PILOT-POLICY.md). This contract
- * deliberately does not reuse the keyword pilot's provider semantics or credential pin. */
+ * and every stated CPA ceiling must be exactly 50% of a verified product price in the product's
+ * own currency (Tom, 5 September 2026 — docs/integration/AVGAR-PILOT-POLICY.md), converted to the
+ * ad/billing account currency only through a verified, declared conversion. `client.currency` is
+ * the SOURCE account currency (Meta ad account, Google Ads billing); it is never forced to equal
+ * the Unc workspace currency. This contract does not reuse the keyword pilot's provider
+ * semantics or credential pin. */
 import { z } from "zod";
 import { validateArtifactObject } from "../artifacts/validate";
 import { round2 } from "../actions/rules/meta";
@@ -120,15 +123,32 @@ function forbidExecution(meta: Record<string, unknown>, where: string): void {
       meta.mutate_attempted === true || meta.meta_mutation_attempted === true) fail(`${where} is not a shadow recommendation`);
 }
 
-/** The cap rule as arithmetic: value must equal 50% of a positive verified price in the contract currency. */
+/** The cap rule as arithmetic: value must equal 50% of a positive verified price, both in the
+ * product's own currency. When that currency is not the ad/billing account's currency the item
+ * must carry a verified conversion into the account currency; nothing is converted here and no
+ * account currency is forced to equal a workspace currency. `comparable_value` is the cap in the
+ * account currency, the only number an observed CPA may be compared against. */
 function cleanCap(raw: unknown, contract: PaidShadowContract, where: string): Record<string, unknown> | null {
   if (raw === undefined || raw === null) return null;
   const cap = object(raw);
-  if (!cap || !num(cap.value) || !num(cap.product_price) || cap.product_price <= 0 || cap.currency !== contract.client.currency ||
+  if (!cap || !num(cap.value) || !num(cap.product_price) || cap.product_price <= 0 || !/^[A-Z]{3}$/.test(String(cap.currency)) ||
       cap.basis !== "product_price_50pct" || round2(cap.value) !== round2(cap.product_price * CPA_CAP_PCT / 100))
-    return fail(`${where} CPA cap is not 50% of a verified product price in ${contract.client.currency}`);
-  return { value: round2(cap.value), currency: cap.currency, basis: "product_price_50pct", product_price: round2(cap.product_price),
+    return fail(`${where} CPA cap is not 50% of a verified product price in the product's currency`);
+  const out: Record<string, unknown> = { value: round2(cap.value), currency: cap.currency, basis: "product_price_50pct", product_price: round2(cap.product_price),
     ...(text(cap.product_ref, 200) ? { product_ref: (cap.product_ref as string).slice(0, 200) } : {}) };
+  if (cap.currency === contract.client.currency) {
+    if (cap.conversion !== undefined && cap.conversion !== null) fail(`${where} CPA cap conversion is not needed in ${contract.client.currency}`);
+    out.comparable_value = out.value;
+    return out;
+  }
+  const fx = object(cap.conversion);
+  const asOf = Date.parse(String(fx?.as_of));
+  if (!fx || fx.from !== cap.currency || fx.to !== contract.client.currency || !num(fx.rate) || fx.rate <= 0 || !text(fx.source, 200) ||
+      !Number.isFinite(asOf) || !num(fx.converted_value) || round2(fx.converted_value) !== round2((cap.value as number) * fx.rate))
+    return fail(`${where} CPA cap in ${String(cap.currency)} needs a verified conversion to ${contract.client.currency}`);
+  out.conversion = { from: fx.from, to: fx.to, rate: fx.rate, source: (fx.source as string).slice(0, 200), as_of: new Date(asOf).toISOString(), converted_value: round2(fx.converted_value) };
+  out.comparable_value = round2(fx.converted_value);
+  return out;
 }
 
 function cleanObserved(raw: unknown, where: string): Record<string, number | null> | undefined {
@@ -153,6 +173,9 @@ function cleanMetaItem(item: ArtifactItem, contract: MetaShadowContract, index: 
   if (typeof state !== "string" || !PAID_DECISION_STATES[contract.routineId].includes(state)) fail(`${where} decision_state is not one of ${PAID_DECISION_STATES[contract.routineId].join("|")}`);
   if (!["hypothesis", "observed", "blocked"].includes(String(meta.status))) fail(`${where} status must be hypothesis, observed or blocked`);
   if (meta.currency !== undefined && meta.currency !== contract.client.currency) fail(`${where} currency differs from the ad account`);
+  // A cap-judged verdict without a mapped price is a HOLD (cap_reason pending_product_price), never an invented cap.
+  if (contract.routineId === "D02-W01" && state === "KEEP" && (meta.cpa_cap === undefined || meta.cpa_cap === null))
+    fail(`${where} KEEP is a cap-judged verdict; hold with cap_reason pending_product_price when no verified price is mapped`);
   const out: Record<string, unknown> = { routine: contract.routineId, decision_state: state, status: meta.status, executed_action: "none" };
   for (const key of ENTITY_KEYS) {
     if (meta[key] === undefined || meta[key] === null) continue;
@@ -201,8 +224,9 @@ function cleanMetaItem(item: ArtifactItem, contract: MetaShadowContract, index: 
   if (["SCALE", "TURN_OFF", "PAUSE_PROPOSED"].includes(state)) {
     if (!cap) fail(`${where} ${state} needs the CPA cap it was judged against`);
     const cpa = observed?.cpa, spend = observed?.spend, purchases = observed?.purchases;
-    if (state === "SCALE" && !(num(cpa) && cpa <= (cap.value as number))) fail(`${where} SCALE requires an observed CPA at or under the cap`);
-    if (state !== "SCALE" && !((num(cpa) && cpa > (cap.value as number)) || (purchases === 0 && num(spend) && spend >= (cap.value as number))))
+    const line = cap.comparable_value as number;
+    if (state === "SCALE" && !(num(cpa) && cpa <= line)) fail(`${where} SCALE requires an observed CPA at or under the cap`);
+    if (state !== "SCALE" && !((num(cpa) && cpa > line) || (purchases === 0 && num(spend) && spend >= line)))
       fail(`${where} ${state} requires an observed CPA over the cap, or spend past the cap with no purchases`);
   }
   if (meta.cap_reason === "pending_product_price" && cap) fail(`${where} cannot both hold for a price and state a cap`);

@@ -171,8 +171,9 @@ export class HttpN8nBridge implements N8nBridge {
     const identity = { accountId: ctx.account.accountId, runId: ctx.runId, routineId: ctx.routineId, mode: ctx.mode, startedAt: ctx.startedAt };
     if (shadow) {
       assertProtocolRequest(shadow, identity);
-      if ((isCalendarShadow(shadow) || isPaidShadow(shadow)) && shadow.client.currency !== ctx.account.currency)
-        throw new Error(`${isPaidShadow(shadow) ? "paid-ads" : "calendar"} currency differs from the run account`);
+      // Calendar proposals are priced in the workspace currency. Paid lanes keep the SOURCE
+      // account currency (Meta ad account / Google Ads billing) and are not forced to match it.
+      if (isCalendarShadow(shadow) && shadow.client.currency !== ctx.account.currency) throw new Error("calendar currency differs from the run account");
       if (!workflow || workflow.accountId !== shadow.accountId || workflow.routineId !== shadow.routineId || !workflow.active)
         throw new Error("shadow integration requires an active account-specific workflow registration");
     }

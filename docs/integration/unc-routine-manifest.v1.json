@@ -279,7 +279,7 @@
           "historical_metrics_window",
           "proposed_groups_and_negatives"
         ],
-        "boundary": "Catalog routine D02-W09 (draft-only, PAUSED plans). Served through unc.paid-ads-shadow.v1 lane google_ads; a plan is never a created or activated campaign. No registration, allowance or receiver secret exists yet."
+        "boundary": "PROPOSED catalog routine D02-W09 pending Codex mapping review (draft-only, PAUSED plans). Served through unc.paid-ads-shadow.v1 lane google_ads; a plan is never a created or activated campaign. No registration, allowance or receiver secret exists yet."
       }
     ],
     "blockedInputs": [
