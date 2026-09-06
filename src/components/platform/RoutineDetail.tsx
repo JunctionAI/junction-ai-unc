@@ -15,6 +15,7 @@ import { artifactHeaders } from "@/lib/artifacts/client";
 import RoutineInspector, { type ParamsView } from "./RoutineInspector";
 import KeywordConfigurationPanel from "./KeywordConfigurationPanel";
 import KeywordRunPanel from "./KeywordRunPanel";
+import RoutineSchedulePanel from "./RoutineSchedulePanel";
 import CalendarPreferencesPanel from "./CalendarPreferencesPanel";
 import type { KeywordRequestSelection } from "@/lib/n8n/keywordRequestClient";
 import { agoLabel, runStatusLabel, type RoutinesLive } from "./useRoutinesState";
@@ -292,6 +293,7 @@ export default function RoutineDetail({ V, run, live = null, inspectorInitial }:
         </div>
         {/* Accounts mode: the one-screen "Adjust this routine" panel (industry presets + optional steps → routine_params + a draft version). */}
         {accounts && routineId === "D03-W01" && <KeywordConfigurationPanel key={`${V.accountId}:${V.contextGeneration}:${detail?.actorId}`} context={{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration,actorId:detail?.actorId}} onSaved={refresh} />}
+        {accounts && routineId === "D03-W01" && V.accountId && <RoutineSchedulePanel key={`schedule:${V.accountId}:${V.contextGeneration}`} accountId={V.accountId} contextGeneration={V.contextGeneration}/>}
         {accounts && routineId === "D05-W07" && <CalendarPreferencesPanel context={{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration,actorId:detail?.actorId}} />}
         {accounts && routineId && routineId !== "D03-W01" && <RoutineInspector key={`${V.accountId}:${V.contextGeneration}:${routineId}:${detail?.actorId}`} routineId={routineId} currency={run.account.currency} initial={inspectorInitial} onSaved={refresh} context={{accountId:V.accountId ?? "",contextGeneration:V.contextGeneration,actorId:detail?.actorId}} blockReason={eligibility?.role==="owner" && !eligibility.paused && !trailErr ? null : block ?? "Account eligibility unavailable."} runBlockReason={block} />}
         {!accounts && (

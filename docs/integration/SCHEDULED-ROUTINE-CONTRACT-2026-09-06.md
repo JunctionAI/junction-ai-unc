@@ -38,9 +38,22 @@ schedule off, old revision refusal and public-role denial. These are not live
 provider evidence. Run `node scripts/verify-routine-schedules.mjs <isolated-deps>`
 after compiling the worker; the script refuses non-isolated dependency paths.
 
+## Live one-off acceptance
+
+At 2026-09-06 03:30 UTC the saved one-off schedule
+139a41a8-a81c-46dc-850f-1a80a4b9c37a fired through the normal worker timer.
+Command/run 635774fe-c6f0-5738-a826-bff419e474ad completed; n8n execution 100
+was independently verified. Slack readback confirmed the summary, actual keyword
+candidate and account workspace link in the original SEO thread. Subsequent DB
+read showed exactly one claim and one provider permit. No Slack run command was
+sent. The schedule's on_date restricts it to today; no ongoing schedule approved.
+
+Worker release: 5639e1be77af8856b3167bb6968068648d430e13,
+image digest e400fa478024f3d9b893a4ff2ce1a347714d9dfd47619518c6c24445f1bcba05.
+Database security advisors passed. App schedule controls are staged separately.
+
 ## Still required
 
-Live one-off timer -> keyword provider -> saved result -> original Slack thread;
-customer-facing authenticated schedule editor/save flow; independent language
+Customer-facing authenticated schedule editor/save flow live UI verification; independent language
 classification test; production ad-action workflows remain a separate capability.
 No ongoing schedule was selected by Tom; he requested a one-off test now.
