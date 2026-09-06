@@ -29,7 +29,10 @@ export function workerMaxAgeMs(env: Record<string, string | undefined>): number 
 }
 
 export function buildSha(env: Record<string, string | undefined>): string | null {
-  for (const candidate of [env.VERCEL_GIT_COMMIT_SHA, env.UNC_BUILD_SHA]) {
+  // UNC_BUILD_SHA is the immutable image/source marker supplied by our release
+  // pipeline. Prefer it when present; Vercel's Git metadata can point at the
+  // connected branch rather than the exact source uploaded for a controlled release.
+  for (const candidate of [env.UNC_BUILD_SHA, env.VERCEL_GIT_COMMIT_SHA]) {
     const value = (candidate ?? "").trim();
     if (/^[0-9a-f]{7,64}$/i.test(value)) return value.slice(0, 12).toLowerCase();
   }
