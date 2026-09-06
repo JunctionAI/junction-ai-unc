@@ -11,6 +11,7 @@ export const newsletterDraft: Skill = {
   inputs: [
     "newsletter mode: founder_letter or visual_drop",
     "the founder's brief: what happened, why now and the one next action",
+    "the exact approved brief/thread reference",
     "site profile and approved business memories",
     "past campaigns (Klaviyo, when connected)",
     "products (Shopify, when connected)",
@@ -37,9 +38,10 @@ export const newsletterDraft: Skill = {
 - Subject <= 45 characters. Preview extends rather than repeats it. Use one primary CTA or reply invitation. Keep a founder letter personal and visually simple; keep a visual drop concise and product-first.
 - Body includes the complete ready-to-review copy followed by a compact build brief: mode, section order, CTA, verified link or placeholder, asset/alt-text needs, unresolved facts and approval owner. Do not claim a Klaviyo draft exists.
 - Past campaign rows may inform mechanics and fatigue only. Recency is not performance; missing metrics are unknown, never zero. Never copy another campaign's expression.
+- When newsletter_source_ref is present, include it unchanged in evidence. It identifies the approved brief; it is not a destination URL and does not authorize a provider write.
 - meta: { mode: "founder_letter" | "visual_drop", subject: "...", preview: "...", cta_label: "..." | null, destination_url: "..." | null, provider_draft_id: null }.
 - End the artifact body with PASS, PARTIAL or BLOCKED for draft readiness and the smallest next decision.`,
-  outputSpec: `{"kind":"email","title":"Newsletter draft: <topic>","body":"the complete copy, build brief, unresolved facts, approval owner and PASS|PARTIAL|BLOCKED","items":[{"title":"<subject>","body":"<preview + complete email copy + build brief, markdown>","meta":{"mode":"founder_letter","subject":"...","preview":"...","cta_label":null,"destination_url":null,"provider_draft_id":null}}],"evidence":[{"source":"input:newsletter_brief|site_profile|memory|read:campaigns|read:products","ref":"..."}]}`,
+  outputSpec: `{"kind":"email","title":"Newsletter draft: <topic>","body":"the complete copy, build brief, unresolved facts, approval owner and PASS|PARTIAL|BLOCKED","items":[{"title":"<subject>","body":"<preview + complete email copy + build brief, markdown>","meta":{"mode":"founder_letter","subject":"...","preview":"...","cta_label":null,"destination_url":null,"provider_draft_id":null}}],"evidence":[{"source":"input:newsletter_brief|input:newsletter_source_ref|site_profile|memory|read:campaigns|read:products","ref":"..."}]}`,
   check(ctx) {
     const needs = [];
     const mode = ctx.inputs.newsletter_mode?.trim();
@@ -51,6 +53,7 @@ export const newsletterDraft: Skill = {
     const using = [...business.using];
     if (ctx.inputs.about_the_business?.trim()) using.push("your note about the business");
     using.push(`${mode === "founder_letter" ? "founder letter" : "visual drop"} mode`, "your newsletter brief");
+    if (ctx.inputs.newsletter_source_ref?.trim()) using.push("the approved brief reference");
     if (rows(ctx, "campaigns").length) using.push("past campaigns");
     if (rows(ctx, "products").length) using.push("verified products");
     return { ok: true, using };

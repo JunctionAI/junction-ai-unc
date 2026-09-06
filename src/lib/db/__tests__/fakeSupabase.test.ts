@@ -50,6 +50,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "n8n_workflows",
       "oauth_states",
       "ops_account_access",
+      "ops_draft_preview_requests",
       "ops_work_reads",
       "outbound_messages",
       "plans",
@@ -74,6 +75,9 @@ describe("the fake is schema-checked against supabase/migrations", () => {
     expect(s.ops_work_reads.primaryKey).toEqual(["id"]);
     expect([...s.ops_work_reads.columns]).toEqual(expect.arrayContaining(["user_id", "account_id", "run_id", "context_generation", "artifact_ids", "receipt_ids", "read_at"]));
     expect([...s.ops_account_access.columns]).toEqual(expect.arrayContaining(["work_read_granted_at", "work_read_granted_by", "work_read_reason"]));
+    expect([...s.ops_account_access.columns]).toEqual(expect.arrayContaining(["draft_preview_granted_at", "draft_preview_granted_by", "draft_preview_reason", "draft_preview_expires_at"]));
+    expect(s.ops_draft_preview_requests.primaryKey).toEqual(["request_id"]);
+    expect([...s.ops_draft_preview_requests.columns]).toEqual(expect.arrayContaining(["user_id", "account_id", "context_generation", "routine_id", "spec_hash", "inputs_hash", "requested_at"]));
     expect([...s.ops_account_access.columns]).toEqual(expect.arrayContaining(["granted_at", "granted_by", "reason", "revoked_at", "expires_at"]));
     expect(s.account_source_bindings.uniques).toContainEqual(expect.objectContaining({ columns: ["source_system", "source_project", "source_kind", "source_key"] }));
     expect([...s.account_source_dataset_grants.columns]).toEqual(expect.arrayContaining(["account_id", "context_generation", "binding_id", "platform", "dataset", "source_contract", "max_source_age_minutes", "revoked_at"]));

@@ -7129,7 +7129,7 @@
           "shopify"
         ]
       },
-      "outputGuide": "{\"kind\":\"email\",\"title\":\"Newsletter draft: <topic>\",\"body\":\"the complete copy, build brief, unresolved facts, approval owner and PASS|PARTIAL|BLOCKED\",\"items\":[{\"title\":\"<subject>\",\"body\":\"<preview + complete email copy + build brief, markdown>\",\"meta\":{\"mode\":\"founder_letter\",\"subject\":\"...\",\"preview\":\"...\",\"cta_label\":null,\"destination_url\":null,\"provider_draft_id\":null}}],\"evidence\":[{\"source\":\"input:newsletter_brief|site_profile|memory|read:campaigns|read:products\",\"ref\":\"...\"}]}",
+      "outputGuide": "{\"kind\":\"email\",\"title\":\"Newsletter draft: <topic>\",\"body\":\"the complete copy, build brief, unresolved facts, approval owner and PASS|PARTIAL|BLOCKED\",\"items\":[{\"title\":\"<subject>\",\"body\":\"<preview + complete email copy + build brief, markdown>\",\"meta\":{\"mode\":\"founder_letter\",\"subject\":\"...\",\"preview\":\"...\",\"cta_label\":null,\"destination_url\":null,\"provider_draft_id\":null}}],\"evidence\":[{\"source\":\"input:newsletter_brief|input:newsletter_source_ref|site_profile|memory|read:campaigns|read:products\",\"ref\":\"...\"}]}",
       "outputGuideIsSchema": false,
       "maxItems": 1,
       "effectiveProduceMaxItems": 1,
