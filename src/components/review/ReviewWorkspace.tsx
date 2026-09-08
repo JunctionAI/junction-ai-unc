@@ -1,11 +1,13 @@
 "use client";
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import {createAccountFetch} from "@/lib/db/accountRequest";
 import {artifactHeaders} from "@/lib/artifacts/client";
 import {imageAnchor,reviewMediaUrl,reviewPresentationSchema,type ReviewPresentation} from "@/lib/artifacts/reviewPresentation";
 import type {ReviewComment} from "@/lib/artifacts/reviewContract";
 import styles from "./review.module.css";
+const ReviewHistory=dynamic(()=>import("./ReviewHistory"));
 
 export default function ReviewWorkspace({accountId,generation,outputId}:{accountId:string;generation:number;outputId:string}){
  const request=useMemo(()=>createAccountFetch(accountId),[accountId]);
@@ -46,9 +48,10 @@ export default function ReviewWorkspace({accountId,generation,outputId}:{account
   <p>Version {review?.output.revision??"—"} · Add your taste. Nothing is sent by commenting.</p>
   {error&&<p role="alert" className={styles.alert}>{error}</p>}{notice&&<p role="status" className={styles.notice}>{notice}</p>}
   {!review&&!error&&<p role="status">Loading your work…</p>}
+  {review&&<ReviewHistory key={`${accountId}:${generation}:${outputId}:${review.output.revision}`} current={review}/>}
   {review&&<div className={styles.layout}><section className={styles.artwork} aria-label="Output preview">
     {content?.imagePath&&<button type="button" disabled={!visualComments} aria-label="Place a comment pin on this image. Keyboard activation selects the centre." className={styles.image} onClick={e=>{setAnchor(e.detail===0?{kind:"visual",x:0.5,y:0.5}:imageAnchor(e.clientX,e.clientY,e.currentTarget.getBoundingClientRect()));}}>
-      <Image src={reviewMediaUrl(content.imagePath,review)} alt={content.title??"Creative preview"} width={1200} height={1600} unoptimized style={{width:"100%",height:"auto"}}/>
+      <Image src={reviewMediaUrl(content.imagePath,review)} alt={content.title??"Creative preview"} width={1200} height={1600} loading="eager" unoptimized style={{width:"100%",height:"auto"}}/>
       {anchor.kind==="visual"&&<span className={styles.pin} style={{left:`${anchor.x*100}%`,top:`${anchor.y*100}%`}}>1</span>}
     </button>}
     {content?.videoPath&&<><video ref={video} src={reviewMediaUrl(content.videoPath,review)} controls preload="metadata"/>{review.output.kind==="video"&&<button onClick={()=>setAnchor({kind:"video",seconds:video.current?.currentTime??0})}>Comment at this timestamp</button>}</>}

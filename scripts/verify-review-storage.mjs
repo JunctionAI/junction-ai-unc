@@ -83,6 +83,12 @@ try {
   assert.equal(history.versions[1].content.body,original.body);assert.equal(history.nextCursor,null);checks++;
   const older=(await db.query(historySql,[a,1,u,o,1])).rows[0].result;
   assert.deepEqual(older.versions.map(v=>v.revision),[0]);checks++;
+  const versionSql='select read_review_version($1,$2,$3,$4,$5) as result';
+  const historical=(await db.query(versionSql,[a,1,u,o,0])).rows[0].result;
+  assert.equal(historical.output.revision,1);assert.equal(historical.version.revision,0);
+  assert.equal(historical.version.content.body,original.body);checks++;
+  assert.equal((await db.query(versionSql,[a,1,u,o,2])).rows[0].result,null);checks++;
+  await refuses(versionSql,[a,1,b,o,0]);await refuses(versionSql,[b,1,u,o,0]);await refuses(versionSql,[a,2,u,o,0]);
   assert.deepEqual((await db.query(historySql,[a,1,u,o,0])).rows[0].result.versions,[]);checks++;
   await refuses(historySql,[b,1,u,o,null]);await refuses(historySql,[a,2,u,o,null]);
   await refuses(historySql,[a,1,b,o,null]);await refuses(historySql,[a,1,u,o,-1]);
@@ -115,6 +121,7 @@ try {
     await refuses(claimSql,claimArgs);await refuses(completeSql,[...claimArgs,newContent]);
     await refuses(failSql,nextClaim);
     await refuses(historySql,[a,1,u,o,null]);
+    await refuses(versionSql,[a,1,u,o,0]);
   }
   await db.exec('reset role');
   const tables=await db.query("select relname,relrowsecurity from pg_class where relname in ('review_outputs','review_comments','review_output_versions','review_revision_jobs')");

@@ -48,10 +48,10 @@ export async function reviewMedia(request:Request,mediaId:string,deps:Dependenci
     const identity=await deps.bind(new Request(request,{headers:scoped}));
     if(identity instanceof Response)return fail(identity.status===200?503:identity.status);
     if(identity.accountId!==account||identity.contextGeneration!==generation)return fail(403);
-    const {data,error}=await identity.db.rpc("read_review_output",{acct:account,generation,actor:identity.userId,output:outputId});
+    const {data,error}=await identity.db.rpc("read_review_version",{acct:account,generation,actor:identity.userId,output:outputId,selected_revision:revision});
     if(error)return fail(error.code==="42501"?403:error.code==="40001"?409:503);
     const parsed=z.object({
-      output:z.object({id:z.literal(outputId),account_id:z.literal(account),context_generation:z.literal(generation),revision:z.literal(revision)}),
+      output:z.object({id:z.literal(outputId),account_id:z.literal(account),context_generation:z.literal(generation),revision:z.number().int().min(revision)}),
       version:z.object({revision:z.literal(revision),content:z.object({media:z.record(z.string(),reviewMediaDescriptor)})}),
     }).safeParse(data);
     if(!parsed.success)return fail(404);

@@ -23,3 +23,20 @@ begin
 end $$;
 revoke all on function public.read_review_history(uuid,bigint,uuid,uuid,bigint) from public,anon,authenticated;
 grant execute on function public.read_review_history(uuid,bigint,uuid,uuid,bigint) to service_role;
+
+-- Historical bytes remain private and bound to the current account generation.
+create function public.read_review_version(acct uuid,generation bigint,actor uuid,output uuid,selected_revision bigint)
+returns jsonb language plpgsql security invoker set search_path='' as $$
+declare current_review jsonb; selected_version jsonb;
+begin
+  current_review:=public.read_review_output(acct,generation,actor,output);
+  if current_review is null then return null; end if;
+  if selected_revision is null or selected_revision<0 or selected_revision>(current_review->'output'->>'revision')::bigint
+    then return null; end if;
+  select to_jsonb(v) into selected_version from public.review_output_versions v
+    where output_id=output and account_id=acct and revision=selected_revision;
+  if selected_version is null then return null; end if;
+  return jsonb_build_object('output',current_review->'output','version',selected_version);
+end $$;
+revoke all on function public.read_review_version(uuid,bigint,uuid,uuid,bigint) from public,anon,authenticated;
+grant execute on function public.read_review_version(uuid,bigint,uuid,uuid,bigint) to service_role;
