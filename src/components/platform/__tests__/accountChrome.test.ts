@@ -7,7 +7,7 @@
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { derive } from "@/lib/platform/derive";
 import { initialState, type PlatformState } from "@/lib/platform/state";
 import { __setAccountFactsForTests, type AccountFacts, type AccountFactsState } from "@/lib/unc/accountFacts";
@@ -62,7 +62,8 @@ const persistence: Persistence = { mode: "account", accountId: "acct-1", role: "
 const state = (over: Partial<PlatformState> = {}): PlatformState => ({ ...initialState, onboarded: true, view: "today", ...over });
 const V = (S: PlatformState) => derive(S, noop);
 
-afterEach(() => __setAccountFactsForTests(null));
+beforeEach(() => {vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(NOW);});
+afterEach(() => {__setAccountFactsForTests(null);vi.useRealTimers();});
 
 describe("Sidebar", () => {
   it("demo mode: the catalog count, the demo connector line, 'Demonstration data'", () => {

@@ -28,6 +28,8 @@ const USER = "00000000-0000-4000-8000-00000000u5e1";
 const RUN = "00000000-0000-4000-8000-00000000f001";
 
 beforeEach(() => {
+  vi.useFakeTimers({toFake:["Date"]});
+  vi.setSystemTime(new Date("2026-09-02T09:00:00.000Z"));
   setFakeEnv();
   clearLlmEnv(); // no provider keys → the deterministic review (the dev shell may carry real keys)
   serviceRole = true;
@@ -46,6 +48,7 @@ beforeEach(() => {
   setStoreForTests(new SupabaseStore(db));
 });
 afterEach(() => {
+  vi.useRealTimers();
   restoreEnv();
   restoreLlmEnv();
   setProviderFactoryForTests(undefined);
