@@ -1,4 +1,4 @@
-# Review action execution — staged, disabled
+# Review action execution — database installed, executor disabled
 
 Approval alone is not execution. `runReviewAction` consumes an exact proposal only through a trusted, account/action/destination-bound adapter. No HTTP endpoint, scheduled consumer or real provider adapter is enabled by this module.
 
@@ -17,10 +17,10 @@ Result recording remains possible after a context change or pause because it rec
 
 ## Remaining release gates
 
-- Migration is local/staged, not installed on Supabase. Run full-schema rollback and independent concurrency tests, inspect advisors, then reconcile migration history before installation.
+- Migration installed as `20260908165411_review_action_execution` after full-schema rollback and five independent-session PostgreSQL concurrency checks. Readback confirms no execution rows, no anon/member read, no claim-token update grant, and the test account paused with zero cap. Advisors add only one expected service-only table INFO; warning counts unchanged.
 - Read-only execution status is implemented in the staged RPC/API/UI, including dispatching/uncertain states; deployed/browser verification remains. No provider payload or claim token is exposed. Missing status from an older response disables decisions rather than assuming no execution.
 - Implement concrete provider adapter with isolated sandbox/draft destination, schema/credential/asset checks and bounded deadlines. Never substitute a live client for missing sandbox access.
 - Verify real provider readback, no duplicate mutation, stale/disabled refusal and reconciliation before enabling a consumer.
 - Per-agent automatic approval is not implemented by this path: it currently requires the existing owner approval record.
 
-Tests use PostgreSQL WASM for actual SQL/role behaviour and simulated adapters for TypeScript control flow. They are not proof of a live provider action or concurrent independent database sessions. Supabase guidance informed invoker functions and explicit service-only grants: https://supabase.com/docs/guides/database/functions .
+Tests use PostgreSQL WASM for SQL/role behaviour, independent PostgreSQL 17.10 sessions for races, and simulated adapters for TypeScript control flow. They are not proof of a live provider action. Supabase guidance informed invoker functions and explicit service-only grants: https://supabase.com/docs/guides/database/functions .

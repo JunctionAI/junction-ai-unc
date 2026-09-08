@@ -1,4 +1,4 @@
--- Staged only. No scheduler, HTTP executor, credentials or provider writes enabled.
+-- Installed as 20260908165411. No scheduler, HTTP executor, credentials or provider writes enabled.
 create table public.review_action_executions (
  proposal_id uuid primary key references public.review_action_approvals(id),
  account_id uuid not null references public.accounts(id),
