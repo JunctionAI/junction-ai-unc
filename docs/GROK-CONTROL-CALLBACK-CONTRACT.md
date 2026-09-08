@@ -8,6 +8,14 @@ The live database guard requires an explicit captured generation for run-less re
 
 **Remaining blocker:** account pause blocks all receipt inserts, including a Grok disable request. Earlier simulated coverage incorrectly claimed it worked. No webhook is sent when persistence is refused. This requires a dedicated control-plane persistence path that can record stopping while business execution remains paused; do not unpause the account or weaken generic runtime guards to bypass it. Native test runtime is still inaccessible while the Mac is locked. No live webhook/callback proof was obtained here.
 
+### Dedicated stop-path implementation (staged)
+
+The above persistence blocker is fixed in code by `grok_control_records`, an append-only service-only configuration table, separate from business receipts. Request/result storage now uses that table. Its insert guard locks account and saved routine state, validates generation/identity/exact saved timestamp and acknowledgement binding, refuses enabling paused accounts, and permits stopping while paused. It does not update routine settings or lift pause. The shared runtime guard is unchanged.
+
+Migration `20260908170923_grok_control_records` is NOT installed; deploy only after installation and release checks. Existing receipt records are not migrated or reinterpreted; current live controller binding/legacy pending events must be inspected before cutover. No real confirmed callback was previously established.
+
+`scripts/verify-grok-control-storage.mjs`: ten checks pass with actual transport and PostgreSQL WASM persistence, one simulated webhook, zero external calls. It covers stop while paused, persisted acknowledgement, duplicate/no resend, generation mismatch and grants. Real Supabase rollback test also saved request/result while paused and left the table absent, account paused, routine count zero. Unit suite 23 tests, typecheck and lint pass. Native webhook proof, atomic switch/outbox coupling and one-scheduler registration remain required.
+
 ## Deployment evidence — September 8
 
 - Clean deployment snapshot excluded unrelated untracked files and the unused pilot route. Remote build completed in 45 seconds; TypeScript passed.

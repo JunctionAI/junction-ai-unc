@@ -54,8 +54,9 @@ function timestampKey(value: string) {
 }
 const REQUEST = "grok_control_request";
 const RESULT = "grok_control_result";
+const RECORDS = "grok_control_records";
 async function requestRow(db: DbClient, id: string) {
-  const r = await db.from("receipts").select("id,account_id,context_generation,payload").eq("id", id).eq("platform", REQUEST).maybeSingle();
+  const r = await db.from(RECORDS).select("id,account_id,context_generation,payload").eq("id", id).eq("platform", REQUEST).maybeSingle();
   if (r.error) throw new Error("Control storage unavailable");
   return r.data as { id: string; account_id: string; context_generation:number; payload: { change: unknown } } | null;
 }
@@ -65,7 +66,7 @@ export function resultId(changeId: string) {
   return `${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
 }
 async function resultRow(db: DbClient, change: GrokChange) {
-  const r = await db.from("receipts").select("payload").eq("id", resultId(change.changeId))
+  const r = await db.from(RECORDS).select("payload").eq("id", resultId(change.changeId))
     .eq("account_id", change.accountId).eq("context_generation",change.contextGeneration).eq("platform", RESULT).maybeSingle();
   if (r.error) throw new Error("Control storage unavailable");
   return r.data as { payload: { ack: unknown } } | null;
@@ -95,7 +96,7 @@ export async function dispatchGrokChange(db: DbClient, input: GrokChange, config
   if (!await currentChange(db, change)) throw new Error("Saved settings changed");
   // Insert before network. Concurrent duplicate callers cannot dispatch twice.
   // A crash afterwards is deliberately ambiguous, not permission to resend.
-  const inserted = await db.from("receipts").insert({ id: change.changeId, account_id: change.accountId, context_generation:change.contextGeneration,
+  const inserted = await db.from(RECORDS).insert({ id: change.changeId, account_id: change.accountId, context_generation:change.contextGeneration,
     kind: "notification", platform: REQUEST, description: "Agent configuration requested; not yet confirmed.", payload: { change } });
   if (inserted.error?.code === "23505") {
     const prior = await requestRow(db, change.changeId);
@@ -145,7 +146,7 @@ export async function receiveGrokAck(request: Request, changeId: string, deps: {
           ack.schedule.time !== change.schedule.time || ack.schedule.timezone !== change.schedule.timezone)) ||
         (ack.status !== "applied" && !ack.blocker)) return json({ error: "Acknowledgement does not match the requested change" }, 409);
     if (!validTime(change, deps.now?.() ?? Date.now()) || !await currentChange(db, change)) return json({ error: "Settings superseded this change" }, 409);
-    const insert = await db.from("receipts").insert({ id: resultId(changeId), account_id: change.accountId, context_generation:change.contextGeneration,
+    const insert = await db.from(RECORDS).insert({ id: resultId(changeId), account_id: change.accountId, context_generation:change.contextGeneration,
       kind: "notification", platform: RESULT, description: "Agent-reported configuration result.",
       payload: { ack, requestId: changeId, evidence: "agent_reported" } });
     if (insert.error?.code === "23505") {

@@ -14,9 +14,12 @@ function fixture() {
   const rows: Record<string, Row[]> = { receipts: [], accounts: [{ id: change.accountId, context_generation: 1, automation_paused: false }],
     routine_states: [{ account_id: change.accountId, routine_id: change.routineId, enabled: true, updated_at: change.stateUpdatedAt }] };
   const db = { from(table: string) {
+    if(table==='grok_control_records')table='receipts'; // fixture alias, not the production table
     return { insert: async (r: Row) => {
       const account=rows.accounts.find(a=>a.id===r.account_id);
-      if(account?.automation_paused)return {data:null,error:{code:'55000'}};
+      const payload=r.payload as {change?:{enabled:boolean};requestId?:string};
+      const requested=payload.change??(rows.receipts.find(x=>x.id===payload.requestId)?.payload as {change?:{enabled:boolean}})?.change;
+      if(account?.automation_paused&&requested?.enabled)return {data:null,error:{code:'55000'}};
       if((r.context_generation??0)!==account?.context_generation)return {data:null,error:{code:'40001'}};
       if (rows[table].some(x => x.id === r.id)) return { data: null, error: { code: "23505" } };
       rows[table].push(r); return { data: null, error: null };
@@ -115,10 +118,12 @@ describe("Grok control transport — simulated persistence and network", () => {
     await expect(f.send(c)).rejects.toThrow("Saved settings changed");
     expect(f.fetcher).not.toHaveBeenCalled();
   });
-  it("does not dispatch a pause request when the database refuses paused-account storage", async () => {
+  it("records a stop request and acknowledgement while business automation stays paused", async () => {
     const f = fixture(); f.rows.accounts[0].automation_paused = true; f.rows.routine_states[0].enabled = false;
-    await expect(f.send({ ...change, enabled: false })).rejects.toThrow("Control storage unavailable");
-    expect(f.fetcher).not.toHaveBeenCalled();expect(f.rows.receipts).toHaveLength(0);
+    const stopped={...change,enabled:false};
+    expect(await f.send(stopped)).toEqual({status:'accepted'});
+    expect((await f.receive({...ack,enabled:false},callbackToken(stopped,secret))).status).toBe(201);
+    expect(f.rows.accounts[0].automation_paused).toBe(true);
   });
   it("does not expose another account's status", async () => {
     const f = fixture(); await f.send(); expect(await readGrokChange(f.db, change.changeId, change.changeId, now)).toBeNull();
