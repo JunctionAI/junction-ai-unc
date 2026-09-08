@@ -21,11 +21,11 @@ export function reviewIntakeToken(input:ReviewIntakeGrant,secret:string){
  return createHmac('sha256',secret).update(`junction.review-output.v1:${JSON.stringify(reviewIntakeGrantSchema.parse(input))}`).digest('base64url');
 }
 export async function readReviewIntakeGrant(db:DbClient,id:string){
- const r=await db.from('receipts').select('account_id,payload').eq('id',id).eq('platform',PLATFORM).maybeSingle();
+ const r=await db.from('receipts').select('account_id,run_id,context_generation,payload').eq('id',id).eq('platform',PLATFORM).maybeSingle();
  if(r.error)throw new Error('Intake grant unavailable');
- const row=r.data as {account_id:string;payload:{grant:unknown}}|null;
+ const row=r.data as {account_id:string;run_id:string;context_generation:number;payload:{grant:unknown}}|null;
  const parsed=reviewIntakeGrantSchema.safeParse(row?.payload?.grant);
- return parsed.success&&parsed.data.id===id&&parsed.data.output.ref.accountId===row?.account_id?parsed.data:null;
+ return parsed.success&&parsed.data.id===id&&parsed.data.output.ref.accountId===row?.account_id&&parsed.data.sourceRunId===row?.run_id&&parsed.data.contextGeneration===row?.context_generation?parsed.data:null;
 }
 /** Trusted dispatcher only: it must resolve the client/runtime binding itself.
  * Persist before dispatch; this does not call Grok or enable a routine. */
@@ -33,7 +33,7 @@ export async function issueReviewIntakeGrant(db:DbClient,input:ReviewIntakeGrant
  const grant=reviewIntakeGrantSchema.parse(input);
  if(!validTime(grant,now))throw new Error('Invalid intake expiry');
  const token=reviewIntakeToken(grant,secret);
- const r=await db.from('receipts').insert({id:grant.id,account_id:grant.output.ref.accountId,kind:'notification',platform:PLATFORM,
+ const r=await db.from('receipts').insert({id:grant.id,account_id:grant.output.ref.accountId,run_id:grant.sourceRunId,context_generation:grant.contextGeneration,kind:'notification',platform:PLATFORM,
   description:'Finished output requested; no execution authority.',payload:{grant}});
  if(r.error?.code==='23505'){
   const prior=await readReviewIntakeGrant(db,grant.id);
@@ -47,6 +47,7 @@ type Dependencies={
  storage:{isPrivate:()=>Promise<boolean>;read:(path:string,maxBytes:number)=>Promise<Uint8Array|null>};
  register:(g:ReviewIntakeGrant,content:z.infer<typeof reviewContentSchema>)=>ReturnType<typeof registerReviewOutput>;
  now?:()=>number;
+ timeoutMs?:number;
 };
 const reply=(status:number,body:unknown)=>Response.json(body,{status,headers:{'cache-control':'no-store',vary:'Authorization'}});
 async function body(request:Request){
@@ -61,6 +62,15 @@ async function body(request:Request){
 /** Accepts finished drafts only. It cannot publish, approve, send, schedule or
  * create a source run. Media must already exist at its exact private immutable key. */
 export async function receiveReviewOutput(request:Request,grantId:string,deps:Dependencies){
+ const controller=new AbortController();
+ const timeoutMs=Math.min(45000,Math.max(1,deps.timeoutMs??45000));
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ try{return await Promise.race([
+  receiveWithinDeadline(request,grantId,deps,controller.signal),
+  new Promise<Response>(resolve=>{timer=setTimeout(()=>{controller.abort();resolve(reply(503,{error:'Output intake timed out; reconcile before retrying generation'}));},timeoutMs);}),
+ ]);}finally{if(timer)clearTimeout(timer);}
+}
+async function receiveWithinDeadline(request:Request,grantId:string,deps:Dependencies,signal:AbortSignal){
  if(!deps.enabled)return reply(503,{error:'Output intake not released'});
  const auth=request.headers.get('authorization')??'';
  if(!z.uuid().safeParse(grantId).success||!/^Bearer [A-Za-z0-9_-]{43}$/.test(auth))return reply(401,{error:'Unauthorized'});
@@ -68,6 +78,7 @@ export async function receiveReviewOutput(request:Request,grantId:string,deps:De
   const raw=await deps.resolve(grantId),parsed=reviewIntakeGrantSchema.safeParse(raw);
   if(!parsed.success||parsed.data.id!==grantId)return reply(401,{error:'Unauthorized'});
   const grant=parsed.data,expected=`Bearer ${reviewIntakeToken(grant,deps.secret)}`;
+  if(signal.aborted)throw new Error('Intake deadline exceeded');
   if(!timingSafeEqual(Buffer.from(auth),Buffer.from(expected)))return reply(401,{error:'Unauthorized'});
   if(!deps.released(grant.output.ref.accountId))return reply(503,{error:'Output intake not released'});
   const now=()=>deps.now?.()??Date.now();
@@ -78,6 +89,7 @@ export async function receiveReviewOutput(request:Request,grantId:string,deps:De
   if((kind==='image'||kind==='email')&&!content.media?.image||kind==='video'&&(!content.media?.video||grant.output.durationSeconds===null)||
     ['sms','article','outreach','brief','decision'].includes(kind)&&!content.body)return reply(400,{error:'Required finished content missing'});
   await deps.checkContext(grant);
+  if(signal.aborted)throw new Error('Intake deadline exceeded');
   if(content.media?.image||content.media?.video){
    if(!await deps.storage.isPrivate())return reply(503,{error:'Private media unavailable'});
    for(const slot of ['image','video'] as const){const media=content.media?.[slot];if(!media)continue;
@@ -87,6 +99,7 @@ export async function receiveReviewOutput(request:Request,grantId:string,deps:De
    }
   }
   await deps.checkContext(grant);
+  if(signal.aborted)throw new Error('Intake deadline exceeded');
   if(!validTime(grant,now()))return reply(410,{error:'Output intake expired'});
   const receipt=await deps.register(grant,content);
   return reply(receipt.duplicate?200:201,{saved:true,...receipt,executed:false});
