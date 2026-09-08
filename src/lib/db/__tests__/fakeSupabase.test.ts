@@ -34,6 +34,9 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "connectors",
       "daily_briefs",
       "goals",
+      "grok_control_records",
+      "grok_routine_settings",
+      "grok_settings_outbox",
       "intake_events",
       "intake_keys",
       "kpi_snapshots",
@@ -58,6 +61,8 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "receipts",
       "resource_profiles",
       "review_action_approvals",
+      "review_action_executions",
+      "review_action_reconciliations",
       "review_comments",
       "review_output_versions",
       "review_outputs",
@@ -78,6 +83,10 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "waitlist",
       "worker_heartbeats",
     ]);
+    expect(s.grok_routine_settings.primaryKey).toEqual(["account_id","routine_id"]);
+    expect(s.grok_settings_outbox.uniques).toContainEqual(expect.objectContaining({columns:["account_id","routine_id","revision"]}));
+    expect(s.grok_control_records.primaryKey).toEqual(["id"]);
+    expect(s.routine_runs.columns.has("scheduling_owner")).toBe(true);
     // 0014 launch hardening
     expect(s.manual_routine_cancellations.primaryKey).toEqual(["account_id","context_generation","actor_id","request_id"]);
     expect(s.ops_account_access.primaryKey).toEqual(["user_id", "account_id"]);

@@ -81,6 +81,25 @@ POST `/api/external-agents/control/<changeId>` is callback-authenticated. GET at
 7. Verify cancellation/reconciliation for in-flight settings and cross-client credential isolation before live account activation.
 
 The old one-off read pilot remains unused. This is a direct event + callback design, not a new agent execution engine or provider integration.
+# Full suite and independent database concurrency — 2026-09-09
+
+All 3,546 unit tests pass across 276 files after updating the explicit migration
+table inventory for the five new review/control tables. No assertion was removed;
+Grok settings primary/unique keys and the run-owner column are also checked.
+
+`scripts/verify-grok-concurrency.mjs` passed five tests using independent PostgreSQL
+backends 54139/54140 and actual migration SQL on a minimal parent schema:
+legacy run versus binding cutover; different changes contending for one revision;
+identical request replay; pause versus enable; duplicate transport claims. Blocking
+was observed via `pg_blocking_pids`, not inferred from Promise ordering. Zero cloud
+or provider calls. Temporary cluster stopped after testing.
+
+Hosted preflight: 8 accounts, 3 enabled legacy routine rows, zero unsettled runs;
+Grok settings/outbox tables still absent. Security advisor baseline remains 38
+service-table RLS info findings plus existing warnings (extension 1, anonymous
+definer functions 2, authenticated definer functions 2, password protection 1).
+This was read-only. Pending migration is not installed; no client state changed.
+
 # Browser control check — local fixture only
 
 The actual `AgentsView` was exercised in the in-app browser using the isolated
