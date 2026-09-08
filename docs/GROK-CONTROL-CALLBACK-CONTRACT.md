@@ -1,6 +1,16 @@
 # Junction Grok control callback — implementation handoff
 
-Status: local sender, callback route and account-scoped status reader implemented. Unit tests use simulated network/storage. NOT deployed, NOT connected to customer switches, NOT a completed live callback proof.
+Status: sender, callback route and account-scoped status reader implemented. Callback deployed to production on September 8 at commit `b33e085`, deployment `dpl_64SjUzZPH7FLiLBX55caX2GBPwPn`. NOT connected to customer switches and NOT a completed live Grok callback proof.
+
+## Deployment evidence — September 8
+
+- Clean deployment snapshot excluded unrelated untracked files and the unused pilot route. Remote build completed in 45 seconds; TypeScript passed.
+- Production callback signing secret provisioned server-side; callback release flag enabled. No client bindings, schedules or ad settings changed.
+- POST without authorization to `https://junction-unc.vercel.app/api/external-agents/control/00000000-0000-4000-8000-000000000001` returns HTTP 401.
+- Account status GET without a session returns HTTP 401.
+- Deployed health check reported database healthy and an active worker with no last error. Its build SHA environment value is stale; use the deployment ID and sourceCommit metadata, not that health SHA, to identify this release.
+- Three focused local test files passed, 42 tests total (simulated storage/network); local TypeScript passed.
+- Live controller callback test could not start: native computer-use tool reported the Mac locked and unable to unlock automatically. User must unlock it. This is separate from the remaining software release gates below.
 
 ## What changes
 
