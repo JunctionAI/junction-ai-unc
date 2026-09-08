@@ -11,6 +11,7 @@ import { openPortal } from "@/lib/billing/clientActions";
 import type { WorkspaceSnapshot } from "@/lib/workspace/read";
 import DraftCard from "./DraftCard";
 import WorkspaceHistory from "./WorkspaceHistory";
+import ReviewInbox from '../review/ReviewInbox';
 import { useWorkspace } from "./useWorkspace";
 import styles from "./client-workspace.module.css";
 
@@ -104,6 +105,7 @@ function BoundWorkspace({ S, V, account, send, legacy, onModels, onSkills, onCon
         <header className={styles.heading}><h1>{titles[tab]}</h1><div><span>{data ? `Checked ${workspaceTime(data.fetchedAt)}` : "Reading saved work"}</span><button onClick={work.refresh} disabled={work.loading}>{work.loading ? "Refreshing…" : "Refresh"}</button></div></header>
         {work.error && <div className={styles.error} role="alert">{work.error}</div>}
         {!data && work.loading && <div className={styles.skeleton} role="status">Loading this account’s saved work…</div>}
+        {(tab === 'today' || tab === 'inbox') && account.accountId && <ReviewInbox key={`${account.accountId}:${S.contextGeneration ?? 0}`} accountId={account.accountId} generation={S.contextGeneration ?? 0} />}
         {tab === "today" && <>
           <section className={styles.stats} aria-label="Recorded work summary">{[
             ["Needs review", data?.counts.needsReview], ["Completed · last 24h", data?.counts.completed24h], ["Routines enabled", data?.counts.routinesOn], ["Runs needing attention", data?.counts.needsAttention],

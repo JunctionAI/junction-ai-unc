@@ -27,6 +27,7 @@ try {
   await db.exec(await readFile(new URL('../supabase/migrations/20260908154544_review_action_approvals.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260908154740_review_service_grants.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260908160142_review_text_queue.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260908162902_review_inbox.sql',import.meta.url),'utf8'));
   checks++;
   await db.exec('set role service_role');
   const registerSql='select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9) as result';
@@ -177,6 +178,16 @@ try {
   await db.query('update accounts set automation_paused=false,monthly_llm_cap_usd=0 where id=$1',[a]);assert.equal((await db.query(queueSql,[a])).rows.length,0);checks++;
   await db.query('update accounts set monthly_llm_cap_usd=1 where id=$1',[a]);
   await db.query(claimSql,[a,1,textJob,c]);assert.equal((await db.query(queueSql,[a])).rows.length,0);checks++;
+  const inboxSql='select read_review_inbox($1,$2,$3,$4,$5) as result';
+  for(let i=1;i<=11;i++)await db.query(registerSql,[a,1,a,a,`10000000-0000-4000-8000-${String(i).padStart(12,'0')}`,'brief',[],null,JSON.stringify({title:`Inbox ${i}`,body:'x'.repeat(300)})]);
+  await db.exec("reset role;update review_outputs set created_at='2099-01-01T00:00:00Z' where id::text like '10000000-%';set role service_role");
+  const firstPage=(await db.query(inboxSql,[a,1,u,null,null])).rows[0].result;
+  assert.equal(firstPage.items.length,10);assert.ok(firstPage.nextCursor);checks++;
+  assert.equal(firstPage.items[0].id,'10000000-0000-4000-8000-000000000011');assert.equal(firstPage.items[0].excerpt.length,240);checks++;
+  const secondPage=(await db.query(inboxSql,[a,1,u,firstPage.nextCursor.createdAt,firstPage.nextCursor.id])).rows[0].result;
+  assert.equal(secondPage.items[0].id,'10000000-0000-4000-8000-000000000001');assert.ok(secondPage.items.every(x=>!firstPage.items.some(y=>y.id===x.id)));checks++;
+  await refuses(inboxSql,[a,1,b,null,null]);await refuses(inboxSql,[a,2,u,null,null]);await refuses(inboxSql,[b,1,u,null,null]);await refuses(inboxSql,[a,1,u,null,o]);
+  for(const role of ['anon','authenticated']){await db.exec(`reset role;set role ${role}`);await refuses(inboxSql,[a,1,u,null,null]);}
   await db.exec('reset role');
   const tables=await db.query("select relname,relrowsecurity from pg_class where relname in ('review_outputs','review_comments','review_output_versions','review_revision_jobs')");
   assert.equal(tables.rows.length,4);assert.ok(tables.rows.every(r=>r.relrowsecurity));checks++;
