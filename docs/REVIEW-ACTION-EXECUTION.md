@@ -18,7 +18,7 @@ Result recording remains possible after a context change or pause because it rec
 ## Remaining release gates
 
 - Migration is local/staged, not installed on Supabase. Run full-schema rollback and independent concurrency tests, inspect advisors, then reconcile migration history before installation.
-- Add read-only execution status to the review API/UI, including dispatching/uncertain states.
+- Read-only execution status is implemented in the staged RPC/API/UI, including dispatching/uncertain states; deployed/browser verification remains. No provider payload or claim token is exposed. Missing status from an older response disables decisions rather than assuming no execution.
 - Implement concrete provider adapter with isolated sandbox/draft destination, schema/credential/asset checks and bounded deadlines. Never substitute a live client for missing sandbox access.
 - Verify real provider readback, no duplicate mutation, stale/disabled refusal and reconciliation before enabling a consumer.
 - Per-agent automatic approval is not implemented by this path: it currently requires the existing owner approval record.

@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import {createAccountFetch} from "@/lib/db/accountRequest";
 import {artifactHeaders} from "@/lib/artifacts/client";
-import {reviewActionsSchema} from "@/lib/artifacts/reviewActions";
+import {reviewActionsSchema,reviewActionState} from "@/lib/artifacts/reviewActions";
 import type {ReviewPresentation} from "@/lib/artifacts/reviewPresentation";
 import type {z} from "zod";
 import styles from "./review.module.css";
@@ -30,7 +30,7 @@ export default function ReviewActions({current}:{current:ReviewPresentation}){
     if(!response.ok)throw new Error(response.status===409?"This action changed or expired. Refresh before deciding.":"Decision not confirmed. Refresh to check before retrying.");
     const saved=(await response.json()).saved;
     if(saved?.proposalId!==proposalId||saved.revision!==revision||saved.status!==decision||saved.executed!==false)throw new Error("Decision receipt could not be verified.");
-    if(!c.signal.aborted)setNotice(decision==="approved"?"Approval recorded for this version and destination. Nothing has executed; execution integration is not released yet.":"Action held. Nothing executed.");
+    if(!c.signal.aborted)setNotice(decision==="approved"?"Approval recorded for this version and destination. Check the execution status below for the outcome.":"Action held before dispatch.");
    }
    await load(c.signal);
   }catch(e){if(!c.signal.aborted)setError(e instanceof Error?e.message:"Decision unavailable.");}
@@ -42,12 +42,13 @@ export default function ReviewActions({current}:{current:ReviewPresentation}){
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status" className={styles.notice}>{notice}</p>}
   {data?.actions.length===0&&<p>No actions have been prepared for approval.</p>}
   {data&&!data.canDecide&&<p>Only your account owner can approve or hold actions.</p>}
-  {data?.actions.map(a=><article key={a.id} className={styles.comment}><h3>{labels[a.action]} · version {a.revision}</h3>
-   <p>{a.description}</p><p>Destination: {a.targetId}</p><p>Status: {a.effectiveStatus} · expires {a.expiresAt}</p>
-   {data.canDecide&&a.revision===revision&&a.effectiveStatus==="pending"&&<div className={styles.historyChoices}>
+  {data?.actions.map(a=>{const state=reviewActionState(a);return <article key={a.id} className={styles.comment}><h3>{labels[a.action]} · version {a.revision}</h3>
+   <p>{a.description}</p><p>Destination: {a.targetId}</p><p>{state.message}</p><p className={styles.small}>Approval: {a.effectiveStatus} · expires {a.expiresAt}</p>
+   {a.execution&&<p className={styles.small}>Started: {a.execution.startedAt}{a.execution.completedAt?` · Result recorded: ${a.execution.completedAt}`:""}</p>}
+   {data.canDecide&&a.revision===revision&&state.canApprove&&<div className={styles.historyChoices}>
     <button disabled={busy} onClick={()=>act(a.id,"approved")}>Approve this action</button><button disabled={busy} onClick={()=>act(a.id,"held")}>Hold</button>
    </div>}
-   {data.canDecide&&a.revision===revision&&a.effectiveStatus==="approved"&&<button disabled={busy} onClick={()=>act(a.id,"held")}>Withdraw approval</button>}
-  </article>)}
+   {data.canDecide&&a.revision===revision&&state.canWithdraw&&<button disabled={busy} onClick={()=>act(a.id,"held")}>Withdraw approval</button>}
+  </article>;})}
  </section>;
 }

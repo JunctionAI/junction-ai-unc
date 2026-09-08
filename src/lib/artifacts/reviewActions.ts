@@ -5,8 +5,22 @@ export const reviewActionsSchema=z.object({
  output:z.object({id:z.uuid(),account_id:z.uuid(),context_generation:z.number().int().nonnegative(),revision:z.number().int().nonnegative()}),
  canDecide:z.boolean(),actions:z.array(z.object({id:z.uuid(),revision:z.number().int().nonnegative(),
  action:z.enum(["prepare_provider_draft","send","publish","change_ads"]),targetId:z.string().min(1).max(200),description:z.string().min(1).max(4000),
- expiresAt:z.string(),status:z.enum(["pending","approved","held"]),effectiveStatus:z.enum(["pending","approved","held","expired","superseded"])})).max(50),
+ expiresAt:z.string(),status:z.enum(["pending","approved","held"]),effectiveStatus:z.enum(["pending","approved","held","expired","superseded"]),
+ execution:z.object({status:z.enum(["dispatching","succeeded","failed","uncertain"]),startedAt:z.string(),completedAt:z.string().nullable()}).strict().nullable().optional(),
+ })).max(50),
 });
+type ReviewAction=z.infer<typeof reviewActionsSchema>["actions"][number];
+export function reviewActionState(action:ReviewAction){
+ if(action.execution===undefined)return {message:"Execution status is unavailable. Refresh before deciding.",canApprove:false,canWithdraw:false};
+ const execution=action.execution?.status;
+ if(execution){
+  const message={dispatching:"Execution started. Completion is not confirmed yet.",succeeded:"Completed — provider result verified.",
+   failed:"Stopped before the provider action. Ask your team to review the blocker.",uncertain:"Outcome needs checking. Do not repeat this action; your team must reconcile it."}[execution];
+  return {message,canApprove:false,canWithdraw:false};
+ }
+ const message={pending:"Waiting for approval.",approved:"Approved — no execution has been recorded.",held:"On hold.",expired:"Approval expired.",superseded:"Applies to an older version."}[action.effectiveStatus];
+ return {message,canApprove:action.effectiveStatus==="pending",canWithdraw:action.effectiveStatus==="approved"};
+}
 export class ReviewActionError extends Error {constructor(readonly status:number){super(status===409?"This action changed or expired. Refresh before deciding.":status===403?"Only the account owner can decide this action.":"Action request was not confirmed.");}}
 function rpcError(code?:string):never{throw new ReviewActionError(code==="42501"?403:code==="40001"?409:503);}
 export async function readReviewActions(identity:ReviewIdentity,outputId:string){
@@ -15,6 +29,7 @@ export async function readReviewActions(identity:ReviewIdentity,outputId:string)
  const value=reviewActionsSchema.parse(result.data);
  if(value.output.id!==outputId||value.output.account_id!==identity.accountId||value.output.context_generation!==identity.contextGeneration)throw new ReviewActionError(503);
  if(value.actions.some(a=>a.revision>value.output.revision||(a.revision!==value.output.revision&&a.effectiveStatus!=="superseded")))throw new ReviewActionError(503);
+ if(value.actions.some(a=>a.execution&&(a.status!=="approved"||((a.execution.status==="dispatching")!==(a.execution.completedAt===null)))))throw new ReviewActionError(503);
  return value;
 }
 export async function decideReviewAction(identity:ReviewIdentity,outputId:string,input:unknown){

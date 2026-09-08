@@ -241,3 +241,9 @@ This is not authenticated remote UI, Grok callback, Slack delivery, media revisi
 ### Approval execution boundary — staged, no provider actions
 
 Added `review_action_execution` migration and `runReviewAction` adapter orchestration. One transaction-bound claim per proposal; exact version/account/context/target validation; current owner and pause checks; no retry ticket; post-claim hold cannot falsely cancel dispatch; independent provider readback required before success; uncertain results cannot trigger a repeat write. See REVIEW-ACTION-EXECUTION.md for remaining UI, adapter, reconciliation and migration release gates. Actual local PostgreSQL verifier passes 140 checks (was 118). Provider tests remain simulated; no live mutation, installed migration, scheduler or endpoint was enabled.
+
+### Execution status and full-schema rollback check
+
+Review actions now show execution separately from approval. No withdrawal/approval controls after a dispatch claim, and an uncertain result explicitly warns against repeat execution. An older response without execution status disables controls. The read RPC exposes only status/timestamps, not provider payloads, receipts or claim tokens. Local SQL verifier: 142 checks, including readback and non-exposure.
+
+Real Supabase transaction installed the staged migration temporarily, created a synthetic proposal on the existing internal output, checked paused refusal, claimed once, refused duplicate/hold, recorded uncertainty and verified the customer read model and grants. Entire transaction rolled back. Independent final read: execution table absent, test account paused=true/cap=0. No provider call or committed client/account change. This establishes real-schema compatibility, not independent-session concurrency or deployed browser proof. Migration and UI remain staged pending those release gates.

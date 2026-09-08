@@ -83,3 +83,23 @@ begin
 end $$;
 revoke all on function public.record_review_action_result(uuid,bigint,uuid,uuid,text,jsonb) from public,anon,authenticated;
 grant execute on function public.record_review_action_result(uuid,bigint,uuid,uuid,text,jsonb) to service_role;
+
+create or replace function public.read_review_actions(acct uuid,generation bigint,actor uuid,output uuid)
+returns jsonb language plpgsql security invoker set search_path='' as $$
+declare current_review jsonb; actions jsonb; can_decide boolean;
+begin
+ current_review:=public.read_review_output(acct,generation,actor,output);
+ if current_review is null then return null; end if;
+ select role='owner' into can_decide from public.account_members where account_id=acct and user_id=actor;
+ select coalesce(jsonb_agg(jsonb_build_object('id',p.id,'revision',p.output_revision,'action',p.action,
+   'targetId',p.target_id,'description',p.description,'expiresAt',p.expires_at,'status',p.status,
+   'effectiveStatus',case when p.output_revision<>(current_review->'output'->>'revision')::bigint then 'superseded'
+     when p.expires_at<=now() then 'expired' else p.status end,
+   'execution',case when e.proposal_id is null then null else jsonb_build_object('status',e.status,'startedAt',e.created_at,'completedAt',e.completed_at) end
+   ) order by p.created_at desc,p.id),'[]'::jsonb)
+ into actions from (select * from public.review_action_approvals where account_id=acct and output_id=output order by created_at desc,id limit 50) p
+ left join public.review_action_executions e on e.proposal_id=p.id and e.account_id=acct and e.context_generation=generation;
+ return jsonb_build_object('output',current_review->'output','canDecide',can_decide,'actions',actions);
+end $$;
+revoke all on function public.read_review_actions(uuid,bigint,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.read_review_actions(uuid,bigint,uuid,uuid) to service_role;

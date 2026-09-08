@@ -209,6 +209,9 @@ try {
   await db.exec("reset role;update review_outputs set revision=0 where id='"+textOutput+"';set role service_role");
   const ticket=(await db.query(actionClaimSql,actionClaimArgs)).rows[0].result;
   assert.equal(ticket.targetId,'test-only');assert.equal(ticket.revision,0);assert.deepEqual(ticket.payload,{draft:'test'});checks++;
+  const dispatchView=(await db.query(actionsSql,[a,1,u,textOutput])).rows[0].result.actions[0];
+  assert.equal(dispatchView.execution.status,'dispatching');assert.equal(dispatchView.execution.completedAt,null);
+  assert.equal(dispatchView.execution.claim_token,undefined);assert.equal(dispatchView.action_payload,undefined);checks++;
   assert.equal((await db.query(actionClaimSql,actionClaimArgs)).rows[0].result,null);checks++;
   assert.equal((await db.query(actionClaimSql,[a,1,executionProposal,c])).rows[0].result,null);checks++;
   await refuses(decisionSql,[a,1,u,textOutput,0,executionProposal,'held']);
@@ -219,6 +222,8 @@ try {
   await db.query('update accounts set automation_paused=true where id=$1',[a]);
   assert.equal((await db.query(recordSql,[...actionClaimArgs,'uncertain',evidence])).rows[0].result.duplicate,false);checks++;
   assert.equal((await db.query(recordSql,[...actionClaimArgs,'uncertain',evidence])).rows[0].result.duplicate,true);checks++;
+  const resultView=(await db.query(actionsSql,[a,1,u,textOutput])).rows[0].result.actions[0];
+  assert.equal(resultView.execution.status,'uncertain');assert.ok(resultView.execution.completedAt);assert.equal(resultView.execution.receipt,undefined);checks++;
   await refuses(recordSql,[...actionClaimArgs,'succeeded',evidence]);
   for(const role of ['anon','authenticated']){
     await db.exec(`reset role;set role ${role}`);
