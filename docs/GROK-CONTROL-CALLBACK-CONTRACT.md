@@ -81,3 +81,28 @@ POST `/api/external-agents/control/<changeId>` is callback-authenticated. GET at
 7. Verify cancellation/reconciliation for in-flight settings and cross-client credential isolation before live account activation.
 
 The old one-off read pilot remains unused. This is a direct event + callback design, not a new agent execution engine or provider integration.
+# Configuration preflight addition — 2026-09-09
+
+The sender now includes `authority: {url, authorization, method: "GET"}` alongside
+the callback. Before applying the exact native configuration, the controller must
+GET that supplied HTTPS endpoint using its scoped bearer token. Only a 200 body
+with `authorized: true`, `scope: "routine_configuration_only"` and the exact
+requested change permits proceeding. Non-200, unavailable, expired, superseded or
+already-acknowledged changes must not be applied. Never log the token.
+
+This read checks the stored account/generation, current switch timestamp and
+enabled state, account pause, expiry and absence of an acknowledgement. It writes
+nothing and grants no authority to send, publish, spend or execute provider actions.
+A paused account may still authorize disabling a routine. Responses are no-store.
+
+This is a preflight, NOT a distributed lock or a permanent scheduling lease.
+The callback still checks current settings independently. A setting may change
+between preflight and native application; reconciliation and scheduler ownership
+remain necessary. The controller must retain change-ID idempotency locally; this
+read endpoint alone does not prevent concurrent native application.
+
+Implementation verification: 31 simulated transport tests pass, including eight
+new preflight cases. Native controller adoption and live proof remain unverified.
+No production deployment, native routine changes or provider calls in this slice.
+Atomic desired-state/outbox creation and exclusive scheduler ownership are still
+open; this endpoint does not claim to complete either.

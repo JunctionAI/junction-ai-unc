@@ -109,6 +109,8 @@ export async function dispatchGrokChange(db: DbClient, input: GrokChange, config
     const response = await fetcher(target, { method: "POST", redirect: "error", signal: AbortSignal.timeout(10000),
       headers: { authorization: `Bearer ${config.webhookKey}`, "content-type": "application/json" },
       body: JSON.stringify({ contract: "junction.grok-control.v1", change,
+        authority: { url: new URL(`/api/external-agents/control/${change.changeId}/authority`, origin).href,
+          authorization: `Bearer ${token}`, method: "GET" },
         callback: { url: new URL(`/api/external-agents/control/${change.changeId}`, origin).href,
           authorization: `Bearer ${token}`, method: "POST" } }) });
     // Do not surface arbitrary provider bodies or claim that accepted means applied.
@@ -118,6 +120,30 @@ export async function dispatchGrokChange(db: DbClient, input: GrokChange, config
 
 const json = (value: unknown, status = 200) => Response.json(value, { status,
   headers: { "cache-control": "no-store", vary: "Authorization" } });
+
+/** Recheck immediately before changing native configuration. Not provider-action authority
+ * or an atomic lock across the remote operation; the callback rechecks again. */
+export async function receiveGrokAuthority(request: Request, changeId: string, deps: {
+  db: () => DbClient; secret: string; enabled: boolean; now?: () => number;
+}) {
+  if (!deps.enabled) return json({ error: "Control callback not released" }, 503);
+  const supplied = request.headers.get("authorization") ?? "";
+  if (!/^Bearer [A-Za-z0-9_-]{43}$/.test(supplied) || !z.uuid().safeParse(changeId).success)
+    return json({ error: "Unauthorized" }, 401);
+  try {
+    const db = deps.db(), row = await requestRow(db, changeId);
+    const parsed = changeSchema.safeParse(row?.payload.change);
+    if (!parsed.success || row?.account_id !== parsed.data.accountId ||
+        row.context_generation !== parsed.data.contextGeneration ||
+        !matchesToken(supplied, `Bearer ${callbackToken(parsed.data, deps.secret)}`))
+      return json({ error: "Unauthorized" }, 401);
+    const change = parsed.data;
+    if (!validTime(change, deps.now?.() ?? Date.now())) return json({ error: "Change expired" }, 410);
+    if (!await currentChange(db, change)) return json({ error: "Settings superseded this change" }, 409);
+    if (await resultRow(db, change)) return json({ error: "Change already acknowledged; do not reapply" }, 409);
+    return json({ authorized: true, scope: "routine_configuration_only", change });
+  } catch { return json({ error: "Control storage unavailable" }, 503); }
+}
 async function readBody(request: Request) {
   if (!request.headers.get("content-type")?.startsWith("application/json")) throw new Error("JSON required");
   const reader = request.body?.getReader(); if (!reader) throw new Error("Body required");

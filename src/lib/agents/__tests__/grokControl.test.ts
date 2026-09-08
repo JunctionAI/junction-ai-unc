@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DbClient, Row } from "../../db/types";
-import { callbackToken, controlView, dispatchGrokChange, readGrokChange, receiveGrokAck, type GrokChange, type GrokAck } from "../grokControl";
+import { callbackToken, controlView, dispatchGrokChange, readGrokChange, receiveGrokAck, receiveGrokAuthority, type GrokChange, type GrokAck } from "../grokControl";
 
 const now = Date.parse("2026-09-08T07:10:00Z");
 const secret = "test-only-signing-secret-012345678901234567890";
@@ -36,6 +36,58 @@ function fixture() {
   return { db, rows, fetcher, send, receive };
 }
 describe("Grok control transport — simulated persistence and network", () => {
+  const authority = (f: ReturnType<typeof fixture>, c = change, at = now, token = callbackToken(c, secret)) =>
+    receiveGrokAuthority(new Request("https://junction.example/authority", {
+      headers: { authorization: `Bearer ${token}` },
+    }), c.changeId, { db: () => f.db, secret, enabled: true, now: () => at });
+  it("offers a read-only configuration preflight, not provider permission", async () => {
+    const f = fixture(); await f.send();
+    const result = await authority(f);
+    expect(result.status).toBe(200);
+    expect(result.headers.get("cache-control")).toBe("no-store");
+    expect(await result.json()).toEqual({ authorized: true, scope: "routine_configuration_only", change });
+    expect(f.rows.receipts).toHaveLength(1);
+    expect(f.fetcher).toHaveBeenCalledOnce();
+    const [, init] = f.fetcher.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(JSON.parse(String(init.body)).authority).toEqual({
+      url: `https://junction.example/api/external-agents/control/${change.changeId}/authority`,
+      authorization: `Bearer ${callbackToken(change, secret)}`, method: "GET",
+    });
+  });
+  it.each(["pause", "generation", "setting", "ack"])("refuses preflight after %s changes", async kind => {
+    const f = fixture(); await f.send();
+    if (kind === "pause") f.rows.accounts[0].automation_paused = true;
+    if (kind === "generation") f.rows.accounts[0].context_generation = 2;
+    if (kind === "setting") f.rows.routine_states[0].enabled = false;
+    if (kind === "ack") await f.receive();
+    expect((await authority(f)).status).toBe(409);
+  });
+  it("refuses missing, forged, expired and wrong-account preflight", async () => {
+    const f = fixture();
+    expect((await authority(f)).status).toBe(401);
+    await f.send();
+    expect((await authority(f, change, now, "x".repeat(43))).status).toBe(401);
+    expect((await authority(f, change, Date.parse(change.expiresAt))).status).toBe(410);
+    f.rows.receipts[0].account_id = change.changeId;
+    expect((await authority(f)).status).toBe(401);
+  });
+  it("allows a stop preflight while the account is paused", async () => {
+    const f = fixture(); f.rows.accounts[0].automation_paused = true;
+    f.rows.routine_states[0].enabled = false;
+    const stop = { ...change, enabled: false };
+    await f.send(stop);
+    expect((await authority(f, stop)).status).toBe(200);
+  });
+  it("fails closed when disabled or storage unavailable", async () => {
+    const request = new Request("https://junction.example/authority", {
+      headers: { authorization: `Bearer ${callbackToken(change, secret)}` },
+    });
+    for (const enabled of [false, true]) {
+      expect((await receiveGrokAuthority(request, change.changeId, {
+        db: () => { throw new Error("unavailable"); }, secret, enabled,
+      })).status).toBe(503);
+    }
+  });
   it('supports generation zero and explicitly captures it on both receipts',async()=>{
     const f=fixture();f.rows.accounts[0].context_generation=0;
     const zero={...change,contextGeneration:0};
