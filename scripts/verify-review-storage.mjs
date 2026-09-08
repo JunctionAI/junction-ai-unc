@@ -29,6 +29,7 @@ try {
   await db.exec(await readFile(new URL('../supabase/migrations/20260908160142_review_text_queue.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260908162902_review_inbox.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260908165411_review_action_execution.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260908165650_review_action_reconciliation.sql',import.meta.url),'utf8'));
   checks++;
   await db.exec('set role service_role');
   const registerSql='select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9) as result';
@@ -225,10 +226,24 @@ try {
   const resultView=(await db.query(actionsSql,[a,1,u,textOutput])).rows[0].result.actions[0];
   assert.equal(resultView.execution.status,'uncertain');assert.ok(resultView.execution.completedAt);assert.equal(resultView.execution.receipt,undefined);checks++;
   await refuses(recordSql,[...actionClaimArgs,'succeeded',evidence]);
+  const reconcileSql='select reconcile_review_action_success($1,$2,$3,$4) result';
+  const readAttemptSql='select read_review_action_attempt($1,$2,$3) result';
+  const readback=JSON.stringify({providerId:'synthetic-only',exactPayloadVerified:true});
+  assert.equal((await db.query(readAttemptSql,[b,1,executionProposal])).rows[0].result,null);checks++;
+  await refuses(reconcileSql,[b,1,executionProposal,readback]);await refuses(reconcileSql,[a,2,executionProposal,readback]);
+  await refuses(reconcileSql,[a,1,executionProposal,'{}']);
+  assert.equal((await db.query(reconcileSql,[a,1,executionProposal,readback])).rows[0].result.duplicate,false);checks++;
+  assert.equal((await db.query(reconcileSql,[a,1,executionProposal,readback])).rows[0].result.duplicate,true);checks++;
+  await refuses(reconcileSql,[a,1,executionProposal,JSON.stringify({other:'conflict'})]);
+  const reconciled=(await db.query(readAttemptSql,[a,1,executionProposal])).rows[0].result;
+  assert.equal(reconciled.status,'succeeded');assert.deepEqual(reconciled.receipt,JSON.parse(evidence));checks++;
+  await refuses('update review_action_reconciliations set evidence=\'{}\'::jsonb');
+  await refuses('delete from review_action_reconciliations');
   for(const role of ['anon','authenticated']){
     await db.exec(`reset role;set role ${role}`);
     await refuses(actionClaimSql,actionClaimArgs);await refuses(recordSql,[...actionClaimArgs,'uncertain',evidence]);
     await refuses('select * from review_action_executions');
+    await refuses(readAttemptSql,[a,1,executionProposal]);await refuses(reconcileSql,[a,1,executionProposal,readback]);
   }
   await db.exec('reset role');
   const tables=await db.query("select relname,relrowsecurity from pg_class where relname in ('review_outputs','review_comments','review_output_versions','review_revision_jobs')");

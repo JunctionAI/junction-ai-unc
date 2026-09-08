@@ -13,7 +13,9 @@ Approval alone is not execution. `runReviewAction` consumes an exact proposal on
 
 Claim is the dispatch boundary: a later hold cannot promise cancellation. The database rejects that decision change once claimed. This does not undo an action. The customer UI must display the execution state and disable misleading cancellation controls before release.
 
-Result recording remains possible after a context change or pause because it records an existing attempt, not new authority. Repeated identical receipts are accepted; conflicting receipts are refused. Uncertain rows cannot be dispatched again. A separate read-only reconciliation path with evidence is still required to resolve them.
+Result recording remains possible after a context change or pause because it records an existing attempt, not new authority. Repeated identical receipts are accepted; conflicting receipts are refused. Uncertain rows cannot be dispatched again.
+
+Read-only reconciliation is implemented in `reviewReconciliation.ts` and the staged reconciliation migration. It verifies account/action/destination, makes one read-only provider check and records only positively confirmed success. Empty, missing or delayed results stay uncertain. The original attempt receipt is preserved; a separate append-only reconciliation row stores proof. There is no mutation callback, re-dispatch ticket, polling loop or automatic retry in the reconciler. Real provider adapters still must implement exact-resource/payload verification and read deadlines.
 
 ## Remaining release gates
 
@@ -21,6 +23,7 @@ Result recording remains possible after a context change or pause because it rec
 - Read-only execution status is implemented in the staged RPC/API/UI, including dispatching/uncertain states; deployed/browser verification remains. No provider payload or claim token is exposed. Missing status from an older response disables decisions rather than assuming no execution.
 - Implement concrete provider adapter with isolated sandbox/draft destination, schema/credential/asset checks and bounded deadlines. Never substitute a live client for missing sandbox access.
 - Verify real provider readback, no duplicate mutation, stale/disabled refusal and reconciliation before enabling a consumer.
+- Install the reconciliation migration after its release checks; it currently passes local SQL and real-schema rollback verification only.
 - Per-agent automatic approval is not implemented by this path: it currently requires the existing owner approval record.
 
 Tests use PostgreSQL WASM for SQL/role behaviour, independent PostgreSQL 17.10 sessions for races, and simulated adapters for TypeScript control flow. They are not proof of a live provider action. Supabase guidance informed invoker functions and explicit service-only grants: https://supabase.com/docs/guides/database/functions .
