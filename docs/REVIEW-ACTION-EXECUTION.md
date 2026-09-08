@@ -23,7 +23,7 @@ Read-only reconciliation is implemented in `reviewReconciliation.ts` and the sta
 - Read-only execution status is implemented in the staged RPC/API/UI, including dispatching/uncertain states; deployed/browser verification remains. No provider payload or claim token is exposed. Missing status from an older response disables decisions rather than assuming no execution.
 - Implement concrete provider adapter with isolated sandbox/draft destination, schema/credential/asset checks and bounded deadlines. Never substitute a live client for missing sandbox access.
 - Verify real provider readback, no duplicate mutation, stale/disabled refusal and reconciliation before enabling a consumer.
-- Install the reconciliation migration after its release checks; it currently passes local SQL and real-schema rollback verification only.
+- Reconciliation migration installed as `20260908170103` after real-schema rollback and independent-session tests. No provider/runtime consumer is enabled. Readback: zero executions/reconciliations, no public reads or service-role evidence updates; security warning counts unchanged.
 - Per-agent automatic approval is not implemented by this path: it currently requires the existing owner approval record.
 
 Tests use PostgreSQL WASM for SQL/role behaviour, independent PostgreSQL 17.10 sessions for races, and simulated adapters for TypeScript control flow. They are not proof of a live provider action. Supabase guidance informed invoker functions and explicit service-only grants: https://supabase.com/docs/guides/database/functions .

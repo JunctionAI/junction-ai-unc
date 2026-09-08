@@ -1,4 +1,4 @@
--- Read-only provider reconciliation; no new execution tickets or retries.
+-- Installed as 20260908170103. Read-only provider reconciliation; no new execution tickets or retries.
 create table public.review_action_reconciliations (
  proposal_id uuid primary key references public.review_action_executions(proposal_id),
  evidence jsonb not null check(jsonb_typeof(evidence)='object' and octet_length(evidence::text)<=20000),

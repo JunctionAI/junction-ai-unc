@@ -7,6 +7,7 @@ import type {ReviewPresentation} from "@/lib/artifacts/reviewPresentation";
 import type {z} from "zod";
 import styles from "./review.module.css";
 const labels={prepare_provider_draft:"Prepare a provider draft",send:"Send",publish:"Publish",change_ads:"Change ads"};
+function displayTime(value:string){const date=new Date(value);return Number.isNaN(date.valueOf())?"Time unavailable":date.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});}
 export default function ReviewActions({current}:{current:ReviewPresentation}){
  const {account_id:accountId,id:outputId,context_generation:generation,revision}=current.output;
  const request=useMemo(()=>createAccountFetch(accountId),[accountId]);
@@ -43,8 +44,8 @@ export default function ReviewActions({current}:{current:ReviewPresentation}){
   {data?.actions.length===0&&<p>No actions have been prepared for approval.</p>}
   {data&&!data.canDecide&&<p>Only your account owner can approve or hold actions.</p>}
   {data?.actions.map(a=>{const state=reviewActionState(a);return <article key={a.id} className={styles.comment}><h3>{labels[a.action]} · version {a.revision}</h3>
-   <p>{a.description}</p><p>Destination: {a.targetId}</p><p>{state.message}</p><p className={styles.small}>Approval: {a.effectiveStatus} · expires {a.expiresAt}</p>
-   {a.execution&&<p className={styles.small}>Started: {a.execution.startedAt}{a.execution.completedAt?` · Result recorded: ${a.execution.completedAt}`:""}</p>}
+   <p>{a.description}</p><p>Destination: {a.targetId}</p><p>{state.message}</p><p className={styles.small}>Approval: {a.effectiveStatus} · expires {displayTime(a.expiresAt)}</p>
+   {a.execution&&<p className={styles.small}>Started: {displayTime(a.execution.startedAt)}{a.execution.completedAt?` · Result recorded: ${displayTime(a.execution.completedAt)}`:""}</p>}
    {data.canDecide&&a.revision===revision&&state.canApprove&&<div className={styles.historyChoices}>
     <button disabled={busy} onClick={()=>act(a.id,"approved")}>Approve this action</button><button disabled={busy} onClick={()=>act(a.id,"held")}>Hold</button>
    </div>}

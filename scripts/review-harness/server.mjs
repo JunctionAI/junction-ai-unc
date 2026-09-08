@@ -23,6 +23,7 @@ await db.exec(await readFile(new URL('../../supabase/migrations/20260908154525_r
 await db.exec(await readFile(new URL('../../supabase/migrations/20260908154544_review_action_approvals.sql',import.meta.url),'utf8'));
 await db.exec(await readFile(new URL('../../supabase/migrations/20260908154740_review_service_grants.sql',import.meta.url),'utf8'));
 await db.exec(await readFile(new URL('../../supabase/migrations/20260908162902_review_inbox.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../../supabase/migrations/20260908165411_review_action_execution.sql',import.meta.url),'utf8'));
 await db.exec('set role service_role');
 const content={title:'Your next round starts here',imagePath:`/api/review/media/${o}_image`,media:{image:{format:'png',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}}};
 await db.query('select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9)',[a,1,a,a,o,'email',['hero'],null,JSON.stringify(content)]);
@@ -30,6 +31,15 @@ await db.query('select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9)',[a,1,
 await db.query('insert into review_output_versions(output_id,account_id,revision,content) values($1,$2,1,$3)',[o,a,JSON.stringify({...content,title:'Your next round, refined',body:'LOCAL TEST: revised copy fixture, not provider-generated.'})]);
 await db.query('update review_outputs set revision=1 where id=$1',[o]);
 await db.query('select propose_review_action($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[a,1,o,1,'00000000-0000-4000-8000-000000000009','prepare_provider_draft','LOCAL TEST — no provider connection','Record approval for the local draft fixture. No provider will be called.','{}',new Date(Date.now()+3600000).toISOString()]);
+// Optional execution-state fixture uses real SQL claims/records, never a provider.
+if(process.env.REVIEW_TEST_EXECUTION_STATUS){
+ const state=process.env.REVIEW_TEST_EXECUTION_STATUS;
+ if(!['dispatching','uncertain','succeeded','failed'].includes(state))throw new Error('Invalid fixture state');
+ const proposal='00000000-0000-4000-8000-000000000009',token='00000000-0000-4000-8000-000000000010';
+ await db.query("select decide_review_action($1,1,$2,$3,1,$4,'approved')",[a,u,o,proposal]);
+ await db.query('select claim_review_action($1,1,$2,$3)',[a,proposal,token]);
+ if(state!=='dispatching')await db.query('select record_review_action_result($1,1,$2,$3,$4,$5)',[a,proposal,token,state,JSON.stringify({source:'synthetic local fixture; no provider called'})]);
+}
 const rpc=async(name,args)=>{
  const keys={read_review_inbox:['acct','generation','actor','before_at','before_id'],read_review_actions:['acct','generation','actor','output'],decide_review_action:['acct','generation','actor','output','expected_revision','proposal','decision'],read_review_output:['acct','generation','actor','output'],read_review_history:['acct','generation','actor','output','before_revision'],read_review_version:['acct','generation','actor','output','selected_revision'],add_review_comment:['acct','generation','actor','artifact','output','expected_revision','comment','anchor_value','note_value','intent_value']}[name];
  if(!keys)throw new Error('RPC outside harness scope');

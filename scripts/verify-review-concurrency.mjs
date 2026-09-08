@@ -26,7 +26,7 @@ try{
  grant usage on schema public to service_role;
  grant select,update on accounts,account_members,routine_runs,artifacts to service_role;`);
  const files=['20260908151115_review_outputs.sql','20260908154525_review_history.sql','20260908154544_review_action_approvals.sql',
- '20260908154740_review_service_grants.sql','20260908165411_review_action_execution.sql'];
+ '20260908154740_review_service_grants.sql','20260908165411_review_action_execution.sql','20260908170103_review_action_reconciliation.sql'];
  let source='';for(const file of files){const sql=await readFile(new URL('../supabase/migrations/'+file,import.meta.url),'utf8');await admin.query(sql);source+=sql;}
  await a.query('set role service_role');await b.query('set role service_role');
  const pidA=(await a.query('select pg_backend_pid() pid')).rows[0].pid,pidB=(await b.query('select pg_backend_pid() pid')).rows[0].pid;
@@ -67,6 +67,20 @@ try{
  f=await fixture();await a.query('begin');await a.query('update review_outputs set revision=1 where id=$1',[f.output]);
  result=await commitBlocked(settle(claim(b,f)));assert.equal(result.error?.code,'40001');
  checks.push('revision changes while claim waits: stale approval refused');
+ const reconcile=(c,f,evidence)=>c.query('select reconcile_review_action_success($1,1,$2,$3) result',[acct,f.proposal,evidence]);
+ f=await fixture();const ticket=(await claim(a,f)).rows[0].result;
+ await a.query("select record_review_action_result($1,1,$2,$3,'uncertain','{\"reason\":\"synthetic timeout\"}'::jsonb)",[acct,f.proposal,ticket.token]);
+ await a.query('begin');await reconcile(a,f,{providerId:'synthetic-result'});
+ result=await commitBlocked(settle(reconcile(b,f,{providerId:'synthetic-result'})));
+ assert.equal(result.result.rows[0].result.duplicate,true);
+ assert.equal((await claim(b,f)).rows[0].result,null);
+ checks.push('concurrent identical reconciliation is idempotent and cannot redispatch');
+ f=await fixture();await claim(a,f);await a.query('begin');await reconcile(a,f,{providerId:'first-result'});
+ result=await commitBlocked(settle(reconcile(b,f,{providerId:'conflicting-result'})));
+ assert.equal(result.error?.code,'40001');
+ const proof=(await admin.query('select evidence from review_action_reconciliations where proposal_id=$1',[f.proposal])).rows[0].evidence;
+ assert.deepEqual(proof,{providerId:'first-result'});
+ checks.push('conflicting concurrent reconciliation cannot overwrite evidence');
  f=await fixture();await a.query('begin');await a.query('update accounts set automation_paused=true where id=$1',[acct]);
  result=await commitBlocked(settle(claim(b,f)));assert.equal(result.error?.code,'40001');
  checks.push('account pause commits while claim waits: dispatch refused');
