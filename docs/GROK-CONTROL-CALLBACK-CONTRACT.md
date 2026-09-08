@@ -81,6 +81,23 @@ POST `/api/external-agents/control/<changeId>` is callback-authenticated. GET at
 7. Verify cancellation/reconciliation for in-flight settings and cross-client credential isolation before live account activation.
 
 The old one-off read pilot remains unused. This is a direct event + callback design, not a new agent execution engine or provider integration.
+# Isolated settings deployment — source e36453f
+
+READY: https://junction-r1nk5y4vo-tom-junctionmedis-projects.vercel.app
+Deployment `dpl_EhMA2pXfUWyNeDcFLrZZnN27eje3`, clean export
+`/tmp/junction-settings-release.q6JVV1`, built successfully in approximately one
+minute with Next 16.3.4. Used `--prod --skip-domain`; canonical customer domain was
+not promoted. Vercel's project auto-alias was updated by the deploy command.
+
+Review and external settings enabled only for Junction test account
+55a377a5-c12e-4de6-a085-0d9a50ccd488. Review intake and Grok queue explicitly off.
+No bindings are registered. Shared Fly worker was not redeployed or reconfigured.
+
+HTTP proof: health 200, database healthy, existing worker fresh (ticks 3662,
+lastError null); anonymous Agents 401; anonymous authority preflight 401. Health's
+configured build.sha remains stale and is not the source-commit receipt. These
+checks are not authenticated settings use, native execution or five-agent proof.
+
 # Hosted migration installed — 20260908175112
 
 The settings/outbox migration is now installed in `ycgayfsvcjpsnryrpukv`; its local
