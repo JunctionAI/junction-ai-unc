@@ -225,3 +225,15 @@ Installed `20260908162902_review_inbox` after full-schema rollback verification.
 Extended the isolated local harness to show the actual ReviewInbox component with account-scoped requests and real local PostgreSQL inbox/media reads. Desktop showed the latest fixture and loaded thumbnail. Found/fixed an unreadably narrow full-email thumbnail: email cards now crop the top at useful width; the full asset remains in the review screen. Fixed inbox version numbering to match the review page and eagerly load only the first thumbnail.
 
 At 390×844, document width=390 (no horizontal overflow), image loaded, email crop=cover; screenshot inspected. Desktop and mobile Open & review link reached “Your next round, refined” at the correct account/output and matching version. No browser console errors. A temporary browser connection timeout recovered after reconnect/reset; responsive override reset and test tab/server closed. Typecheck and changed-component lint pass. This verifies real components/local SQL with simulated identity and demo media, not deployed login, remote inbox API or Grok. Frontend deployment remains next.
+
+### Inbox release — isolated, READY
+
+- URL: https://junction-9jssicy0n-tom-junctionmedis-projects.vercel.app
+- Deployment: `dpl_3QNTRD3aV77doJ3J4h9fXEW9uwTn`
+- Target: production environment with `--skip-domain`; internal test allowlist only.
+- Source: clean Git archive of `1c61103`, excluding unrelated untracked files.
+- Framework: Next.js 16.3.4; build completed in 47 seconds; status READY.
+
+The saved-work inbox and finished-output route code are deployed. Intake remains explicitly disabled; the queue worker was not replaced or enabled. Health HTTP 200 with healthy database and fresh worker/no error. Unauthenticated inbox and output reads return 401; disabled intake returns 503 without accepting content. The 15-minute error-log scan returned no logs. Monitoring/drains remain unverified. The health endpoint still reports an older configured build SHA, so it is not source-revision evidence.
+
+This is not authenticated remote UI, Grok callback, Slack delivery, media revision or external execution proof. Those gates remain open. The deployment skill informed clean-artifact isolation and post-deploy verification; no client routines or campaign operations changed.
