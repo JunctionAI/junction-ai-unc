@@ -18,6 +18,14 @@ Subsequent installation: live legacy control receipt count was zero. Installed a
 
 `scripts/verify-grok-control-storage.mjs`: ten checks pass with actual transport and PostgreSQL WASM persistence, one simulated webhook, zero external calls. It covers stop while paused, persisted acknowledgement, duplicate/no resend, generation mismatch and grants. Real Supabase rollback test also saved request/result while paused and left the table absent, account paused, routine count zero. Unit suite 23 tests, typecheck and lint pass. Native webhook proof, atomic switch/outbox coupling and one-scheduler registration remain required.
 
+### Deployed signed HTTP proof — internal fixture only
+
+Release https://junction-i6b2djib1-tom-junctionmedis-projects.vercel.app uses source `0c8abce` and a deployment-only signing key. Canonical production key was not rotated. Production env download returned an empty local secret despite the deployed route being enabled; do not treat that retrieval limitation as proof of invalid runtime configuration. A launcher path-encoding error was corrected before the successful test; that failed launch created no database records.
+
+`scripts/verify-grok-callback-live.mjs` passed: invalid token401, signed blocked result201, exact replay200, conflicting replay409, independent database readback. Request `425a1a25-e4e3-49ee-9430-d250f8f57350`, result `3231e1be-1b0d-45da-a6a8-d51592849589`. Worker label is explicitly `http-fixture-not-grok`; acknowledgement is synthetic blocked/runtime_error, NOT a claimed native confirmation.
+
+The internal account now retains one disabled D02-W01 fixture row and two control records; paused=true, cap=0, contextGeneration=0, provider executions=0. Fixed IDs make the test refuse rerun; reconcile rather than rerunning or overwriting fixture state. No Grok webhook, model or provider was invoked. Native callback, customer switch/outbox and schedule-owner proof remain required.
+
 ## Deployment evidence — September 8
 
 - Clean deployment snapshot excluded unrelated untracked files and the unused pilot route. Remote build completed in 45 seconds; TypeScript passed.
