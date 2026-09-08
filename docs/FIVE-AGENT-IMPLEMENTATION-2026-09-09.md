@@ -187,3 +187,9 @@ The existing worker loop now has an opt-in review queue, disabled unless `JUNCTI
 Staged migration `20260908155205_review_text_queue.sql` provides service-only discovery with current context, account pause/budget, author membership and content eligibility checks. It is NOT installed remotely. Seven queue unit tests pass, and changed-file lint passes. This is not evidence of an automatic live worker run.
 
 Read-only Fly inspection found the shared `unc-worker` still on build `f7cbcadd0b6bf792a474682f5c6cbf0713b13ee8`, with dry-run/messaging-disabled configuration and existing client-linked source settings. No worker replacement, secret update or queue activation was performed. Before deployment, reconcile the large intervening worker diff or isolate the test consumer so unrelated client scheduling is not changed. The internal test account remains paused with cap zero; the earlier real revision proof was operator-triggered, not daemon-triggered.
+
+### Queue database installation — verified
+
+Installed as `20260908160142_review_text_queue` after a real-schema transactional rollback test successfully executed discovery under service_role. Local filename and verifier reconciled to installed migration history. Readback: anon execute=false, authenticated execute=false, service_role execute=true, eligible test jobs=0. Test account remained paused. No worker deployment or queue enablement occurred.
+
+Security advisors retain the baseline counts: 35 service-only RLS/no-policy INFO, one extension/public warning, two anon and two authenticated security-definer warnings, one leaked-password protection warning. No new warning from this migration. The Supabase skill informed invoker semantics, explicit role grants and real-schema verification; [function security guidance](https://supabase.com/docs/guides/database/functions). The remaining queue gate is a narrowly scoped live consumer test, not more SQL scaffolding.
