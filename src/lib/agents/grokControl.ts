@@ -5,7 +5,7 @@ import type { DbClient, Row } from "../db/types";
 
 export const changeSchema = z.object({
   changeId: z.uuid(), accountId: z.uuid(), routineId: z.string().regex(/^D0[1-5]-W0[1-9]$/),
-  contextGeneration: z.number().int().positive(), workerId: z.string().min(1).max(120),
+  contextGeneration: z.number().int().nonnegative(), workerId: z.string().min(1).max(120),
   stateUpdatedAt: z.iso.datetime({ offset: true }), enabled: z.boolean(),
   schedule: z.object({ time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), timezone: z.string().min(1).max(80).refine(value => {
     try { new Intl.DateTimeFormat("en", { timeZone: value }); return true; } catch { return false; }
@@ -55,9 +55,9 @@ function timestampKey(value: string) {
 const REQUEST = "grok_control_request";
 const RESULT = "grok_control_result";
 async function requestRow(db: DbClient, id: string) {
-  const r = await db.from("receipts").select("id,account_id,payload").eq("id", id).eq("platform", REQUEST).maybeSingle();
+  const r = await db.from("receipts").select("id,account_id,context_generation,payload").eq("id", id).eq("platform", REQUEST).maybeSingle();
   if (r.error) throw new Error("Control storage unavailable");
-  return r.data as { id: string; account_id: string; payload: { change: unknown } } | null;
+  return r.data as { id: string; account_id: string; context_generation:number; payload: { change: unknown } } | null;
 }
 // Stable separate UUID for the one immutable acknowledgement of a change.
 export function resultId(changeId: string) {
@@ -66,7 +66,7 @@ export function resultId(changeId: string) {
 }
 async function resultRow(db: DbClient, change: GrokChange) {
   const r = await db.from("receipts").select("payload").eq("id", resultId(change.changeId))
-    .eq("account_id", change.accountId).eq("platform", RESULT).maybeSingle();
+    .eq("account_id", change.accountId).eq("context_generation",change.contextGeneration).eq("platform", RESULT).maybeSingle();
   if (r.error) throw new Error("Control storage unavailable");
   return r.data as { payload: { ack: unknown } } | null;
 }
@@ -95,12 +95,12 @@ export async function dispatchGrokChange(db: DbClient, input: GrokChange, config
   if (!await currentChange(db, change)) throw new Error("Saved settings changed");
   // Insert before network. Concurrent duplicate callers cannot dispatch twice.
   // A crash afterwards is deliberately ambiguous, not permission to resend.
-  const inserted = await db.from("receipts").insert({ id: change.changeId, account_id: change.accountId,
+  const inserted = await db.from("receipts").insert({ id: change.changeId, account_id: change.accountId, context_generation:change.contextGeneration,
     kind: "notification", platform: REQUEST, description: "Agent configuration requested; not yet confirmed.", payload: { change } });
   if (inserted.error?.code === "23505") {
     const prior = await requestRow(db, change.changeId);
     const parsed = changeSchema.safeParse(prior?.payload.change);
-    if (!parsed.success || JSON.stringify(parsed.data) !== JSON.stringify(change)) throw new Error("Conflicting change ID");
+    if (!parsed.success || prior?.context_generation!==change.contextGeneration || JSON.stringify(parsed.data) !== JSON.stringify(change)) throw new Error("Conflicting change ID");
     return { status: "already_requested" as const };
   }
   if (inserted.error) throw new Error("Control storage unavailable");
@@ -134,7 +134,7 @@ export async function receiveGrokAck(request: Request, changeId: string, deps: {
   try {
     const db = deps.db(), row = await requestRow(db, changeId);
     const parsed = changeSchema.safeParse(row?.payload.change);
-    if (!parsed.success || row?.account_id !== parsed.data.accountId ||
+    if (!parsed.success || row?.account_id !== parsed.data.accountId || row?.context_generation!==parsed.data.contextGeneration ||
       !matchesToken(supplied, `Bearer ${callbackToken(parsed.data, deps.secret)}`)) return json({ error: "Unauthorized" }, 401);
     const change = parsed.data;
     if (!validTime(change, deps.now?.() ?? Date.now())) return json({ error: "Change expired" }, 410);
@@ -145,7 +145,7 @@ export async function receiveGrokAck(request: Request, changeId: string, deps: {
           ack.schedule.time !== change.schedule.time || ack.schedule.timezone !== change.schedule.timezone)) ||
         (ack.status !== "applied" && !ack.blocker)) return json({ error: "Acknowledgement does not match the requested change" }, 409);
     if (!validTime(change, deps.now?.() ?? Date.now()) || !await currentChange(db, change)) return json({ error: "Settings superseded this change" }, 409);
-    const insert = await db.from("receipts").insert({ id: resultId(changeId), account_id: change.accountId,
+    const insert = await db.from("receipts").insert({ id: resultId(changeId), account_id: change.accountId, context_generation:change.contextGeneration,
       kind: "notification", platform: RESULT, description: "Agent-reported configuration result.",
       payload: { ack, requestId: changeId, evidence: "agent_reported" } });
     if (insert.error?.code === "23505") {
@@ -162,7 +162,7 @@ export async function readGrokChange(db: DbClient, changeId: string, accountId: 
   const row = await requestRow(db, changeId);
   if (!row || row.account_id !== accountId) return null;
   const change = changeSchema.parse(row.payload.change);
-  if (change.accountId !== accountId) return null;
+  if (change.accountId !== accountId || row.context_generation!==change.contextGeneration) return null;
   if (!await currentChange(db, change)) return { changeId, status: "superseded", message: "Settings changed after this request.", teamActionRequired: false };
   const stored = await resultRow(db, change);
   const ack = stored ? ackSchema.parse(stored.payload.ack) : null;

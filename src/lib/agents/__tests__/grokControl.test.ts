@@ -15,6 +15,9 @@ function fixture() {
     routine_states: [{ account_id: change.accountId, routine_id: change.routineId, enabled: true, updated_at: change.stateUpdatedAt }] };
   const db = { from(table: string) {
     return { insert: async (r: Row) => {
+      const account=rows.accounts.find(a=>a.id===r.account_id);
+      if(account?.automation_paused)return {data:null,error:{code:'55000'}};
+      if((r.context_generation??0)!==account?.context_generation)return {data:null,error:{code:'40001'}};
       if (rows[table].some(x => x.id === r.id)) return { data: null, error: { code: "23505" } };
       rows[table].push(r); return { data: null, error: null };
     }, select: () => { const filters: [string, unknown][] = []; const q = {
@@ -30,6 +33,18 @@ function fixture() {
   return { db, rows, fetcher, send, receive };
 }
 describe("Grok control transport — simulated persistence and network", () => {
+  it('supports generation zero and explicitly captures it on both receipts',async()=>{
+    const f=fixture();f.rows.accounts[0].context_generation=0;
+    const zero={...change,contextGeneration:0};
+    expect(await f.send(zero)).toEqual({status:'accepted'});
+    expect((await f.receive(ack,callbackToken(zero,secret))).status).toBe(201);
+    expect(f.rows.receipts.map(r=>r.context_generation)).toEqual([0,0]);
+  });
+  it('binds stored receipt generation independently of the payload',async()=>{
+    const f=fixture();await f.send();f.rows.receipts[0].context_generation=0;
+    expect((await f.receive()).status).toBe(401);
+    expect(await readGrokChange(f.db,change.changeId,change.accountId,now)).toBeNull();
+  });
   it("saves the request before sending and never records secrets", async () => {
     const f = fixture();
     f.fetcher.mockImplementation(async () => { expect(f.rows.receipts).toHaveLength(1); return Response.json({ success: true }); });
@@ -100,9 +115,10 @@ describe("Grok control transport — simulated persistence and network", () => {
     await expect(f.send(c)).rejects.toThrow("Saved settings changed");
     expect(f.fetcher).not.toHaveBeenCalled();
   });
-  it("permits pause requests while account automation is paused", async () => {
+  it("does not dispatch a pause request when the database refuses paused-account storage", async () => {
     const f = fixture(); f.rows.accounts[0].automation_paused = true; f.rows.routine_states[0].enabled = false;
-    expect(await f.send({ ...change, enabled: false })).toEqual({ status: "accepted" });
+    await expect(f.send({ ...change, enabled: false })).rejects.toThrow("Control storage unavailable");
+    expect(f.fetcher).not.toHaveBeenCalled();expect(f.rows.receipts).toHaveLength(0);
   });
   it("does not expose another account's status", async () => {
     const f = fixture(); await f.send(); expect(await readGrokChange(f.db, change.changeId, change.changeId, now)).toBeNull();

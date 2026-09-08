@@ -2,6 +2,12 @@
 
 Status: sender, callback route and account-scoped status reader implemented. Callback deployed to production on September 8 at commit `b33e085`, deployment `dpl_64SjUzZPH7FLiLBX55caX2GBPwPn`. NOT connected to customer switches and NOT a completed live Grok callback proof.
 
+## September 9 transport correction (not deployed)
+
+The live database guard requires an explicit captured generation for run-less receipts. Sender/result writes omitted that field, so generation >0 failed persistence; the input schema also incorrectly rejected the valid generation 0 test account. Corrected both writes and bound receipt reads to their stored generation. The mock now emulates the live guard instead of accepting impossible writes. 23 targeted tests pass, with TypeScript/lint checks; real Supabase rollback test confirmed omitted generation refusal and explicit generation 0/1 persistence. The transaction restored generation=0, paused=true, cap=0.
+
+**Remaining blocker:** account pause blocks all receipt inserts, including a Grok disable request. Earlier simulated coverage incorrectly claimed it worked. No webhook is sent when persistence is refused. This requires a dedicated control-plane persistence path that can record stopping while business execution remains paused; do not unpause the account or weaken generic runtime guards to bypass it. Native test runtime is still inaccessible while the Mac is locked. No live webhook/callback proof was obtained here.
+
 ## Deployment evidence — September 8
 
 - Clean deployment snapshot excluded unrelated untracked files and the unused pilot route. Remote build completed in 45 seconds; TypeScript passed.
