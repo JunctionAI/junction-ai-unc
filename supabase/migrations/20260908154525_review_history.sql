@@ -1,4 +1,4 @@
--- Read-only, keyset-paginated history. No approval, restore or execution side effects.
+-- Applied as 20260908154525. Read-only, keyset-paginated history.
 create function public.read_review_history(acct uuid,generation bigint,actor uuid,output uuid,before_revision bigint default null)
 returns jsonb language plpgsql security invoker set search_path='' as $$
 declare current_review jsonb; versions jsonb; next_cursor bigint;

@@ -1,4 +1,4 @@
--- Action approval is not execution. Existing routine approval/resume APIs are not used.
+-- Applied as 20260908154544. Action approval is not execution.
 create table public.review_action_approvals (
  id uuid primary key,
  account_id uuid not null,

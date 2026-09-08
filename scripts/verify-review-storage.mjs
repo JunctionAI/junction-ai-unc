@@ -12,6 +12,7 @@ let checks=0;
 async function refuses(sql,params=[]){let rejected=false;try{await db.query(sql,params);}catch{rejected=true;}assert.ok(rejected);checks++;}
 try {
   await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+    alter default privileges in schema public grant all on tables to service_role;
     create table accounts(id uuid primary key,context_generation bigint,automation_paused boolean not null default false);
     create table account_members(account_id uuid,user_id uuid,role text);
     create table routine_runs(id uuid primary key,account_id uuid,context_generation bigint);
@@ -22,8 +23,9 @@ try {
     insert into routine_runs values('${a}','${a}',1);
     insert into artifacts values('${a}','${a}','${a}');`);
   await db.exec(await readFile(new URL('../supabase/migrations/20260908151115_review_outputs.sql',import.meta.url),'utf8'));
-  await db.exec(await readFile(new URL('../supabase/migrations/20260908152507_review_history.sql',import.meta.url),'utf8'));
-  await db.exec(await readFile(new URL('../supabase/migrations/20260908153321_review_action_approvals.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260908154525_review_history.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260908154544_review_action_approvals.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260908154740_review_service_grants.sql',import.meta.url),'utf8'));
   checks++;
   await db.exec('set role service_role');
   const registerSql='select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9) as result';
