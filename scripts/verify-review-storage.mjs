@@ -23,6 +23,7 @@ try {
     insert into artifacts values('${a}','${a}','${a}');`);
   await db.exec(await readFile(new URL('../supabase/migrations/20260908151115_review_outputs.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260908152507_review_history.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260908153321_review_action_approvals.sql',import.meta.url),'utf8'));
   checks++;
   await db.exec('set role service_role');
   const registerSql='select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9) as result';
@@ -106,9 +107,44 @@ try {
   await db.query('update accounts set automation_paused=false where id=$1',[a]);
   assert.equal((await db.query(claimSql,nextClaim)).rows[0].result,null);checks++;
   assert.equal((await db.query(readSql,[a,1,u,o])).rows[0].result.output.revision,1);checks++;
-  // Seed extra immutable versions solely to exercise keyset pagination.
+  const proposalSql='select propose_review_action($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) as result';
+  const proposal='00000000-0000-4000-8000-000000000007',pendingProposal='00000000-0000-4000-8000-000000000008';
+  const expiry=new Date(Date.now()+3600000).toISOString();
+  const proposalArgs=[a,1,o,1,proposal,'prepare_provider_draft','test-target','Prepare this exact test draft',JSON.stringify({draft:'fixture only'}),expiry];
+  assert.equal((await db.query(proposalSql,proposalArgs)).rows[0].result.duplicate,false);checks++;
+  assert.equal((await db.query(proposalSql,proposalArgs)).rows[0].result.duplicate,true);checks++;
+  await refuses(proposalSql,proposalArgs.map((v,i)=>i===6?'other-target':v));
+  await refuses(proposalSql,proposalArgs.map((v,i)=>i===3?0:v));
+  const decisionSql='select decide_review_action($1,$2,$3,$4,$5,$6,$7) as result';
+  const decisionArgs=[a,1,u,o,1,proposal,'approved'];
+  await refuses(decisionSql,[a,1,b,o,1,proposal,'approved']);
+  await db.query('update account_members set role=\'member\' where account_id=$1',[a]);
+  await refuses(decisionSql,decisionArgs);
+  await db.query('update account_members set role=\'owner\' where account_id=$1',[a]);
+  const decision=(await db.query(decisionSql,decisionArgs)).rows[0].result;
+  assert.equal(decision.status,'approved');assert.equal(decision.executed,false);checks++;
+  assert.equal((await db.query(decisionSql,decisionArgs)).rows[0].result.duplicate,true);checks++;
+  assert.equal((await db.query(decisionSql,[...decisionArgs.slice(0,6),'held'])).rows[0].result.status,'held');checks++;
+  await refuses(decisionSql,decisionArgs);
+  await refuses('update review_action_approvals set action_payload=\'{}\'::jsonb where id=$1',[proposal]);
+  await db.query(proposalSql,proposalArgs.map((v,i)=>i===4?pendingProposal:v));
+  const actionsSql='select read_review_actions($1,$2,$3,$4) as result';
+  const actions=(await db.query(actionsSql,[a,1,u,o])).rows[0].result;
+  assert.equal(actions.canDecide,true);assert.equal(actions.actions.length,2);checks++;
+  assert.ok(actions.actions.every(v=>!('action_payload' in v)));checks++;
+  await refuses(actionsSql,[b,1,u,o]);
+  const expiredProposal='00000000-0000-4000-8000-000000000009';
+  await refuses(proposalSql,proposalArgs.map((v,i)=>i===4?expiredProposal:i===9?'2000-01-01T00:00:00Z':v));
+  await db.query(proposalSql,proposalArgs.map((v,i)=>i===4?expiredProposal:v));
+  // Test administrator ages this one isolated fixture; service role cannot change expiry.
+  await db.exec('reset role');await db.query('update review_action_approvals set expires_at=now()-interval \'1 second\' where id=$1',[expiredProposal]);await db.exec('set role service_role');
+  await refuses(decisionSql,[a,1,u,o,1,expiredProposal,'approved']);
+  assert.equal((await db.query(actionsSql,[a,1,u,o])).rows[0].result.actions.find(v=>v.id===expiredProposal).effectiveStatus,'expired');checks++;
+  // Seed extra immutable versions solely to exercise keyset pagination and stale consent.
   await db.query('insert into review_output_versions(output_id,account_id,revision,content) select $1,$2,n,\'{}\'::jsonb from generate_series(2,12) n',[o,a]);
   await db.query('update review_outputs set revision=12 where id=$1',[o]);
+  await refuses(decisionSql,[a,1,u,o,1,pendingProposal,'approved']);
+  assert.ok((await db.query(actionsSql,[a,1,u,o])).rows[0].result.actions.every(v=>v.effectiveStatus==='superseded'));checks++;
   const page=(await db.query(historySql,[a,1,u,o,null])).rows[0].result;
   assert.deepEqual(page.versions.map(v=>v.revision),[12,11,10,9,8,7,6,5,4,3]);assert.equal(page.nextCursor,3);checks++;
   const lastPage=(await db.query(historySql,[a,1,u,o,page.nextCursor])).rows[0].result;
@@ -122,6 +158,7 @@ try {
     await refuses(failSql,nextClaim);
     await refuses(historySql,[a,1,u,o,null]);
     await refuses(versionSql,[a,1,u,o,0]);
+    await refuses(proposalSql,proposalArgs);await refuses(decisionSql,decisionArgs);await refuses(actionsSql,[a,1,u,o]);
   }
   await db.exec('reset role');
   const tables=await db.query("select relname,relrowsecurity from pg_class where relname in ('review_outputs','review_comments','review_output_versions','review_revision_jobs')");

@@ -57,6 +57,7 @@ describe("the fake is schema-checked against supabase/migrations", () => {
       "playbooks",
       "receipts",
       "resource_profiles",
+      "review_action_approvals",
       "review_comments",
       "review_output_versions",
       "review_outputs",

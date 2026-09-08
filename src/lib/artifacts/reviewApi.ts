@@ -3,6 +3,7 @@ import type { DbClient } from "../db/types";
 import { reviewCommentSchema } from "./reviewContract";
 import { saveReviewComment } from "./reviewStore";
 import { readReviewHistory } from "./reviewHistory";
+import {readReviewActions,decideReviewAction,reviewActionDecision,ReviewActionError} from "./reviewActions";
 
 export type ReviewIdentity = {accountId:string;userId:string;contextGeneration:number;db:DbClient};
 type Dependencies = { enabled:boolean; bind:(request:Request)=>Promise<ReviewIdentity|Response> };
@@ -25,6 +26,11 @@ export async function reviewApi(request:Request,outputId:string,deps:Dependencie
     if(identity instanceof Response){identity.headers.set("cache-control","private, no-store");return identity;}
     if(request.method==="GET"){
       const params=new URL(request.url).searchParams;
+      if(params.has("actions")){
+        if(params.getAll("actions").length!==1||params.get("actions")!=="1"||params.has("history")||params.has("beforeRevision"))return json({error:"Invalid action request"},400);
+        const actions=await readReviewActions(identity,outputId);
+        return actions?json({actions}):json({error:"Review not found"},404);
+      }
       if(params.has("history")||params.has("beforeRevision")){
         const cursor=params.get("beforeRevision");
         if(params.getAll("history").length!==1||params.get("history")!=="1"||params.getAll("beforeRevision").length>1||
@@ -42,12 +48,20 @@ export async function reviewApi(request:Request,outputId:string,deps:Dependencie
         return json({error:"Could not verify review context"},503);
       return json({review:result.data});
     }
+    let body:unknown;
+    try{body=await boundedJson(request);}catch{return json({error:"Invalid review request"},400);}
+    if(typeof body==="object"&&body!==null&&"operation" in body){
+      const parsed=reviewActionDecision.safeParse(body);
+      if(!parsed.success)return json({error:"Invalid action decision"},400);
+      return json({saved:await decideReviewAction(identity,outputId,parsed.data)});
+    }
     let input:z.infer<typeof reviewCommentSchema>;
-    try{input=reviewCommentSchema.parse(await boundedJson(request));}catch{return json({error:"Invalid review comment"},400);}
+    try{input=reviewCommentSchema.parse(body);}catch{return json({error:"Invalid review comment"},400);}
     if(input.output.outputId!==outputId||input.output.accountId!==identity.accountId)return json({error:"Review not found"},404);
     const saved=await saveReviewComment(identity.db,identity,input);
     return json({saved,status:saved.jobId?"revision_queued":"preference_confirmation_required"},saved.duplicate?200:201);
   }catch(error){
+    if(error instanceof ReviewActionError)return json({error:error.message},error.status);
     return json({error:error instanceof Error&&error.message==="Output changed; reload before commenting"?error.message:"Could not complete review request"},
       error instanceof Error&&error.message==="Output changed; reload before commenting"?409:503);
   }

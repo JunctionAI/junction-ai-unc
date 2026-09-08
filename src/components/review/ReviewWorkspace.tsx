@@ -8,6 +8,7 @@ import {imageAnchor,reviewMediaUrl,reviewPresentationSchema,type ReviewPresentat
 import type {ReviewComment} from "@/lib/artifacts/reviewContract";
 import styles from "./review.module.css";
 const ReviewHistory=dynamic(()=>import("./ReviewHistory"));
+const ReviewActions=dynamic(()=>import("./ReviewActions"));
 
 export default function ReviewWorkspace({accountId,generation,outputId}:{accountId:string;generation:number;outputId:string}){
  const request=useMemo(()=>createAccountFetch(accountId),[accountId]);
@@ -49,6 +50,7 @@ export default function ReviewWorkspace({accountId,generation,outputId}:{account
   {error&&<p role="alert" className={styles.alert}>{error}</p>}{notice&&<p role="status" className={styles.notice}>{notice}</p>}
   {!review&&!error&&<p role="status">Loading your work…</p>}
   {review&&<ReviewHistory key={`${accountId}:${generation}:${outputId}:${review.output.revision}`} current={review}/>}
+  {review&&<ReviewActions key={`actions:${accountId}:${generation}:${outputId}:${review.output.revision}`} current={review}/>}
   {review&&<div className={styles.layout}><section className={styles.artwork} aria-label="Output preview">
     {content?.imagePath&&<button type="button" disabled={!visualComments} aria-label="Place a comment pin on this image. Keyboard activation selects the centre." className={styles.image} onClick={e=>{setAnchor(e.detail===0?{kind:"visual",x:0.5,y:0.5}:imageAnchor(e.clientX,e.clientY,e.currentTarget.getBoundingClientRect()));}}>
       <Image src={reviewMediaUrl(content.imagePath,review)} alt={content.title??"Creative preview"} width={1200} height={1600} loading="eager" unoptimized style={{width:"100%",height:"auto"}}/>
@@ -63,7 +65,7 @@ export default function ReviewWorkspace({accountId,generation,outputId}:{account
     <label>Your feedback<textarea value={note} onChange={e=>setNote(e.target.value)} maxLength={4000} placeholder="Make the headline more editorial…"/></label>
     <label>Apply this to<select value={intent} onChange={e=>setIntent(e.target.value as ReviewComment["intent"])}><option value="change_output">Change this output</option><option value="suggest_brand_preference">Suggest a brand preference</option></select></label>
     <button className={styles.primary} disabled={busy||!note.trim()} onClick={submit}>{busy?"Saving…":"Save feedback"}</button>
-    <p className={styles.small}>Publishing and approval controls are not released on this screen yet.</p>
+    <p className={styles.small}>Action approvals are separate from feedback. Provider execution is not released on this screen yet.</p>
     <h3>Revision jobs</h3>{review.jobs.length?review.jobs.map(j=><p key={j.id}>Version {j.base_revision} → {j.status}</p>):<p>No revisions requested.</p>}
     <h3>Comments</h3>{review.comments.map(c=><article key={c.id} className={styles.comment}><small>Version {c.output_revision} · {c.intent==="change_output"?"One-off edit":"Preference suggestion"}</small><p>{c.note}</p></article>)}
   </aside></div>}
