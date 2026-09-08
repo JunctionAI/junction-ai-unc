@@ -28,6 +28,7 @@ try {
   await db.exec(await readFile(new URL('../supabase/migrations/20260908154740_review_service_grants.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260908160142_review_text_queue.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260908162902_review_inbox.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260908164437_review_action_execution.sql',import.meta.url),'utf8'));
   checks++;
   await db.exec('set role service_role');
   const registerSql='select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9) as result';
@@ -188,6 +189,42 @@ try {
   assert.equal(secondPage.items[0].id,'10000000-0000-4000-8000-000000000001');assert.ok(secondPage.items.every(x=>!firstPage.items.some(y=>y.id===x.id)));checks++;
   await refuses(inboxSql,[a,1,b,null,null]);await refuses(inboxSql,[a,2,u,null,null]);await refuses(inboxSql,[b,1,u,null,null]);await refuses(inboxSql,[a,1,u,null,o]);
   for(const role of ['anon','authenticated']){await db.exec(`reset role;set role ${role}`);await refuses(inboxSql,[a,1,u,null,null]);}
+  await db.exec('reset role;set role service_role');
+  const executionProposal='00000000-0000-4000-8000-00000000000c';
+  const actionClaimSql='select claim_review_action($1,$2,$3,$4) as result';
+  const actionClaimArgs=[a,1,executionProposal,c2];
+  const recordSql='select record_review_action_result($1,$2,$3,$4,$5,$6) as result';
+  await db.query(proposalSql,[a,1,textOutput,0,executionProposal,'prepare_provider_draft','test-only','Synthetic draft',JSON.stringify({draft:'test'}),expiry]);
+  await refuses(actionClaimSql,actionClaimArgs); // no approval
+  await db.query(decisionSql,[a,1,u,textOutput,0,executionProposal,'approved']);
+  await refuses(actionClaimSql,[b,1,executionProposal,c2]);
+  await refuses(actionClaimSql,[a,2,executionProposal,c2]);
+  await db.query('update accounts set automation_paused=true where id=$1',[a]);
+  await refuses(actionClaimSql,actionClaimArgs);
+  await db.query('update accounts set automation_paused=false where id=$1',[a]);
+  await db.exec("reset role;update account_members set role='member';set role service_role");
+  await refuses(actionClaimSql,actionClaimArgs);
+  await db.exec("reset role;update account_members set role='owner';update review_outputs set revision=1 where id='"+textOutput+"';set role service_role");
+  await refuses(actionClaimSql,actionClaimArgs);
+  await db.exec("reset role;update review_outputs set revision=0 where id='"+textOutput+"';set role service_role");
+  const ticket=(await db.query(actionClaimSql,actionClaimArgs)).rows[0].result;
+  assert.equal(ticket.targetId,'test-only');assert.equal(ticket.revision,0);assert.deepEqual(ticket.payload,{draft:'test'});checks++;
+  assert.equal((await db.query(actionClaimSql,actionClaimArgs)).rows[0].result,null);checks++;
+  assert.equal((await db.query(actionClaimSql,[a,1,executionProposal,c])).rows[0].result,null);checks++;
+  await refuses(decisionSql,[a,1,u,textOutput,0,executionProposal,'held']);
+  await refuses('update review_action_executions set claim_token=$1',[c]);
+  const evidence=JSON.stringify({provider:'fixture',readback:'synthetic only'});
+  await refuses(recordSql,[a,1,executionProposal,c,'succeeded',evidence]);
+  await refuses(recordSql,[b,1,executionProposal,c2,'succeeded',evidence]);
+  await db.query('update accounts set automation_paused=true where id=$1',[a]);
+  assert.equal((await db.query(recordSql,[...actionClaimArgs,'uncertain',evidence])).rows[0].result.duplicate,false);checks++;
+  assert.equal((await db.query(recordSql,[...actionClaimArgs,'uncertain',evidence])).rows[0].result.duplicate,true);checks++;
+  await refuses(recordSql,[...actionClaimArgs,'succeeded',evidence]);
+  for(const role of ['anon','authenticated']){
+    await db.exec(`reset role;set role ${role}`);
+    await refuses(actionClaimSql,actionClaimArgs);await refuses(recordSql,[...actionClaimArgs,'uncertain',evidence]);
+    await refuses('select * from review_action_executions');
+  }
   await db.exec('reset role');
   const tables=await db.query("select relname,relrowsecurity from pg_class where relname in ('review_outputs','review_comments','review_output_versions','review_revision_jobs')");
   assert.equal(tables.rows.length,4);assert.ok(tables.rows.every(r=>r.relrowsecurity));checks++;
