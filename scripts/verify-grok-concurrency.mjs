@@ -25,7 +25,7 @@ try{
  create table routine_runs(id uuid default gen_random_uuid(),account_id uuid,routine_id text,status text);
  grant usage on schema public to service_role;
  grant select,insert,update on accounts,account_members,routine_states,routine_runs to service_role;`);
- for(const file of ['20260908171415_grok_control_records.sql','20260908173120_grok_settings_outbox.sql'])
+ for(const file of ['20260908171415_grok_control_records.sql','20260908175112_grok_settings_outbox.sql'])
   await admin.query(await readFile(new URL('../supabase/migrations/'+file,import.meta.url),'utf8'));
  await a.query('set role service_role');await b.query('set role service_role');
  const pidA=(await a.query('select pg_backend_pid() pid')).rows[0].pid,pidB=(await b.query('select pg_backend_pid() pid')).rows[0].pid;

@@ -16,7 +16,7 @@ try {
  create table routine_runs(id uuid primary key default gen_random_uuid(),account_id uuid,routine_id text,status text);
  grant select,insert,update on accounts,account_members,routine_states,routine_runs to service_role;`);
  await db.exec(await readFile(new URL('../supabase/migrations/20260908171415_grok_control_records.sql', import.meta.url), 'utf8'));
- await db.exec(await readFile(new URL('../supabase/migrations/20260908173120_grok_settings_outbox.sql', import.meta.url), 'utf8'));
+ await db.exec(await readFile(new URL('../supabase/migrations/20260908175112_grok_settings_outbox.sql', import.meta.url), 'utf8'));
  await db.query('insert into accounts values($1,0,true),($2,0,true)', [account,other]);
  await db.query("insert into account_members values($1,$2,'owner')", [account,actor]);
  await db.query("insert into routine_states(account_id,routine_id,enabled) values($1,'D02-W01',false)", [account]);

@@ -1,4 +1,4 @@
--- Pending local verification/release. No bindings are seeded by this migration.
+-- Installed as 20260908175112. No bindings are seeded by this migration.
 create table public.grok_routine_settings (
  account_id uuid not null references public.accounts(id),
  routine_id text not null check(routine_id ~ '^D0[1-5]-W0[1-9]$'),

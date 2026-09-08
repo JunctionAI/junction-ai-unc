@@ -81,6 +81,25 @@ POST `/api/external-agents/control/<changeId>` is callback-authenticated. GET at
 7. Verify cancellation/reconciliation for in-flight settings and cross-client credential isolation before live account activation.
 
 The old one-off read pilot remains unused. This is a direct event + callback design, not a new agent execution engine or provider integration.
+# Hosted migration installed — 20260908175112
+
+The settings/outbox migration is now installed in `ycgayfsvcjpsnryrpukv`; its local
+filename and verifier references match the installed version. This supersedes
+older LOCAL ONLY / migration pending statements below, not native proof gaps.
+No bindings or queue jobs were seeded. Existing enabled routines remain three.
+
+A service-role transaction on the paused Junction test account inserted a synthetic
+disabled binding, saved settings through the actual RPC, asserted one outbox row
+and unchanged legacy enabled state, then rolled back. Readback: zero bindings,
+zero queued jobs, three enabled legacy routines. The first rollback test's attempted
+legacy enable was stopped by the existing pause guard (55000); the corrected
+transaction made no enable attempt. No provider/network action was invoked.
+
+Anonymous and authenticated direct reads remain denied; outbox updates are denied
+to service_role. Advisor warnings are unchanged. RLS-without-policy INFO count is
+40, up from 38 for the two intentionally service-only tables. Local SQL verifier
+still passes all 26 checks after migration filename reconciliation.
+
 # Full suite and independent database concurrency — 2026-09-09
 
 All 3,546 unit tests pass across 276 files after updating the explicit migration

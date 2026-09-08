@@ -16,7 +16,7 @@ try{
  create table account_members(account_id uuid,user_id uuid,role text);
  grant select,update on accounts,routine_states to service_role;`);
  await db.exec(await readFile(new URL('../supabase/migrations/20260908171415_grok_control_records.sql',import.meta.url),'utf8'));
- await db.exec(await readFile(new URL('../supabase/migrations/20260908173120_grok_settings_outbox.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../supabase/migrations/20260908175112_grok_settings_outbox.sql',import.meta.url),'utf8'));
  const account=randomUUID(),changedAt=new Date().toISOString();
  await db.query('insert into accounts values($1,0,true)',[account]);
  await db.query("insert into routine_states values($1,'D02-W01',false,$2)",[account,changedAt]);
