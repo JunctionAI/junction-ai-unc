@@ -81,6 +81,40 @@ POST `/api/external-agents/control/<changeId>` is callback-authenticated. GET at
 7. Verify cancellation/reconciliation for in-flight settings and cross-client credential isolation before live account activation.
 
 The old one-off read pilot remains unused. This is a direct event + callback design, not a new agent execution engine or provider integration.
+# Atomic settings/outbox implementation — pending release
+
+Migration `20260908173120_grok_settings_outbox.sql` is LOCAL ONLY. Install it before
+deploying the updated transport, which now reads `grok_routine_settings` and fails
+closed if that storage is unavailable. No client bindings are seeded.
+
+- `grok_routine_settings` stores the external owner, generation, disabled-by-default
+  desired state, local schedule/timezone and monotonic revision. Registration needs
+  a paused account, disabled legacy switch and no running/waiting legacy runs.
+- `set_grok_agent_settings` verifies owner membership and current generation, uses
+  revision compare-and-swap, and saves both desired settings and an immutable
+  `grok_settings_outbox` change in one transaction. Failed insertion rolls back the
+  settings change. Identical request IDs replay; conflicting reuse fails.
+- The legacy `routine_states` flag stays false. Database triggers reject attempts
+  to enable it or create default-Junction runs for an externally owned routine.
+  Explicit external run records must identify `scheduling_owner='grok'`; existing
+  code does not yet produce those records. Unbound routines retain their old owner.
+- `dispatchQueuedGrokChange` consumes the exact tenant-scoped stored change using
+  the existing insert-before-send transport claim. A crash after claiming is still
+  ambiguous: reconcile rather than resend. Desired settings are not applied proof.
+- Binding identity cannot be updated/deleted with service-role table grants;
+  runtime replacement/revocation requires an explicit future cutover procedure.
+
+Verification: 26 actual local PostgreSQL-WASM checks (including rollback, owner and
+generation refusal, retry, legacy ownership fences, and grants), 10 SQL-backed
+transport checks, 33 simulated transport tests, app type check and targeted lint.
+These are not separate-backend race tests, native schedule proof or hosted tests.
+
+Still to wire before release: settings API/UI with desired/applied states, bounded
+outbox consumer with registered secret resolution, real native binding and its
+single-scheduler cutover proof, plus runtime replacement/revocation. The current
+customer switch endpoint still calls the old `set_agent_switch`; it has NOT been
+silently routed into this unfinished release. No cloud migration or deployment.
+
 # Configuration preflight addition — 2026-09-09
 
 The sender now includes `authority: {url, authorization, method: "GET"}` alongside

@@ -72,15 +72,34 @@ async function resultRow(db: DbClient, change: GrokChange) {
   return r.data as { payload: { ack: unknown } } | null;
 }
 export async function currentChange(db: DbClient, change: GrokChange): Promise<boolean> {
-  const [a,s] = await Promise.all([
+  const [a,s,g] = await Promise.all([
     db.from("accounts").select("context_generation,automation_paused").eq("id", change.accountId).maybeSingle(),
     db.from("routine_states").select("enabled,updated_at").eq("account_id", change.accountId).eq("routine_id", change.routineId).maybeSingle(),
+    db.from("grok_routine_settings").select("enabled,updated_at,context_generation,worker_id,schedule_time,timezone")
+      .eq("account_id", change.accountId).eq("routine_id", change.routineId).maybeSingle(),
   ]);
-  if (a.error || s.error) throw new Error("Control storage unavailable");
-  const account = a.data as Row | null, state = s.data as Row | null;
+  if (a.error || s.error || g.error) throw new Error("Control storage unavailable");
+  const account = a.data as Row | null, binding = g.data as Row | null, state = (binding ?? s.data) as Row | null;
+  if (binding && (binding.context_generation !== change.contextGeneration || binding.worker_id !== change.workerId ||
+      String(binding.schedule_time).slice(0,5) !== change.schedule.time || binding.timezone !== change.schedule.timezone)) return false;
   return !!account && !!state && account.context_generation === change.contextGeneration &&
     (!change.enabled || account.automation_paused === false) && state.enabled === change.enabled &&
     timestampKey(String(state.updated_at)) === timestampKey(change.stateUpdatedAt);
+}
+
+/** Consume an atomically saved request; never reconstruct desired state from a browser payload.
+ * A duplicate/ambiguous transport claim is reconciled, not automatically resent. */
+export async function dispatchQueuedGrokChange(db: DbClient, accountId: string, changeId: string,
+  config: Parameters<typeof dispatchGrokChange>[2], fetcher: typeof fetch = fetch, now = Date.now()) {
+  const result = await db.from("grok_settings_outbox").select("account_id,context_generation,change")
+    .eq("id", changeId).eq("account_id", accountId).maybeSingle();
+  if (result.error) throw new Error("Control storage unavailable");
+  const row = result.data as Row | null;
+  const parsed = changeSchema.safeParse(row?.change);
+  if (!parsed.success || parsed.data.changeId !== changeId || parsed.data.accountId !== accountId ||
+      row?.account_id !== accountId || row.context_generation !== parsed.data.contextGeneration)
+    throw new Error("Queued change unavailable");
+  return dispatchGrokChange(db, parsed.data, config, fetcher, now);
 }
 
 /** Called only by a server-authorized, registered sender. Never pass browser-supplied URLs. */

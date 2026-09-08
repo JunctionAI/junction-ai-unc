@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DbClient, Row } from "../../db/types";
-import { callbackToken, controlView, dispatchGrokChange, readGrokChange, receiveGrokAck, receiveGrokAuthority, type GrokChange, type GrokAck } from "../grokControl";
+import { callbackToken, controlView, dispatchGrokChange, dispatchQueuedGrokChange, readGrokChange, receiveGrokAck, receiveGrokAuthority, type GrokChange, type GrokAck } from "../grokControl";
 
 const now = Date.parse("2026-09-08T07:10:00Z");
 const secret = "test-only-signing-secret-012345678901234567890";
@@ -11,7 +11,7 @@ const ack: GrokAck = { changeId: change.changeId, workerId: change.workerId, sta
 const config = { webhookUrl: "https://api2.cursor.sh/test-only", webhookKey: "test-only-webhook-key",
   callbackOrigin: "https://junction.example", signingSecret: secret };
 function fixture() {
-  const rows: Record<string, Row[]> = { receipts: [], accounts: [{ id: change.accountId, context_generation: 1, automation_paused: false }],
+  const rows: Record<string, Row[]> = { grok_settings_outbox: [], grok_routine_settings: [], receipts: [], accounts: [{ id: change.accountId, context_generation: 1, automation_paused: false }],
     routine_states: [{ account_id: change.accountId, routine_id: change.routineId, enabled: true, updated_at: change.stateUpdatedAt }] };
   const db = { from(table: string) {
     if(table==='grok_control_records')table='receipts'; // fixture alias, not the production table
@@ -36,6 +36,28 @@ function fixture() {
   return { db, rows, fetcher, send, receive };
 }
 describe("Grok control transport — simulated persistence and network", () => {
+  it("dispatches only the queued account-scoped payload and does not resend", async () => {
+    const f=fixture();
+    f.rows.grok_settings_outbox.push({id:change.changeId,account_id:change.accountId,context_generation:1,change});
+    const dispatch=(account=change.accountId)=>dispatchQueuedGrokChange(f.db,account,change.changeId,config,f.fetcher as typeof fetch,now);
+    await expect(dispatch(change.changeId)).rejects.toThrow('Queued change unavailable');
+    expect(f.fetcher).not.toHaveBeenCalled();
+    expect(await dispatch()).toEqual({status:'accepted'});
+    expect(await dispatch()).toEqual({status:'already_requested'});
+    expect(f.fetcher).toHaveBeenCalledOnce();
+    f.rows.grok_settings_outbox[0].context_generation=2;
+    await expect(dispatch()).rejects.toThrow('Queued change unavailable');
+  });
+  it("uses Grok desired settings while the legacy routine remains disabled", async () => {
+    const f=fixture();f.rows.routine_states[0].enabled=false;
+    f.rows.grok_routine_settings.push({account_id:change.accountId,routine_id:change.routineId,
+      context_generation:1,worker_id:change.workerId,enabled:true,updated_at:change.stateUpdatedAt,
+      schedule_time:'00:15:00',timezone:change.schedule.timezone});
+    expect(await f.send()).toEqual({status:'accepted'});
+    expect((await f.receive()).status).toBe(201);
+    f.rows.grok_routine_settings[0].worker_id='different-worker';
+    expect(await readGrokChange(f.db,change.changeId,change.accountId,now)).toMatchObject({status:'superseded'});
+  });
   const authority = (f: ReturnType<typeof fixture>, c = change, at = now, token = callbackToken(c, secret)) =>
     receiveGrokAuthority(new Request("https://junction.example/authority", {
       headers: { authorization: `Bearer ${token}` },

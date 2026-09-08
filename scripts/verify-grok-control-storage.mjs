@@ -12,13 +12,16 @@ try{
  alter default privileges in schema public grant all on tables to service_role;
  create table accounts(id uuid primary key,context_generation bigint,automation_paused boolean);
  create table routine_states(account_id uuid,routine_id text,enabled boolean,updated_at timestamptz);
+ create table routine_runs(account_id uuid,routine_id text,status text);
+ create table account_members(account_id uuid,user_id uuid,role text);
  grant select,update on accounts,routine_states to service_role;`);
  await db.exec(await readFile(new URL('../supabase/migrations/20260908171415_grok_control_records.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../supabase/migrations/20260908173120_grok_settings_outbox.sql',import.meta.url),'utf8'));
  const account=randomUUID(),changedAt=new Date().toISOString();
  await db.query('insert into accounts values($1,0,true)',[account]);
  await db.query("insert into routine_states values($1,'D02-W01',false,$2)",[account,changedAt]);
  await db.exec('set role service_role');
- const tables=['grok_control_records','accounts','routine_states'];
+ const tables=['grok_control_records','accounts','routine_states','grok_routine_settings'];
  const adapter={from(table){assert.ok(tables.includes(table));return {
   async insert(row){try{const keys=Object.keys(row);assert.ok(keys.every(k=>/^[a-z_]+$/.test(k)));await db.query(`insert into ${table}(${keys.join(',')}) values(${keys.map((_,i)=>'$'+(i+1)).join(',')})`,Object.values(row));return {data:null,error:null};}catch(error){return {data:null,error:{code:error.code}};}},
   select(){const filters=[];const q={eq(k,v){assert.match(k,/^[a-z_]+$/);filters.push([k,v]);return q;},async maybeSingle(){try{const r=await db.query(`select * from ${table} where ${filters.map(([k],i)=>k+'=$'+(i+1)).join(' and ')}`,filters.map(([,v])=>v));const row=r.rows[0]?JSON.parse(JSON.stringify(r.rows[0])):null;if(row?.context_generation!==undefined)row.context_generation=Number(row.context_generation);return {data:row,error:null};}catch(error){return {data:null,error:{code:error.code}};}}};return q;},
