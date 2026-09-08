@@ -22,6 +22,7 @@ try {
     insert into routine_runs values('${a}','${a}',1);
     insert into artifacts values('${a}','${a}','${a}');`);
   await db.exec(await readFile(new URL('../supabase/migrations/20260908151115_review_outputs.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260908152507_review_history.sql',import.meta.url),'utf8'));
   checks++;
   await db.exec('set role service_role');
   const registerSql='select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9) as result';
@@ -76,6 +77,15 @@ try {
   assert.equal(revised.output.revision,1);assert.equal(revised.version.content.body,'Meet your next travel companion.');checks++;
   const original=(await db.query('select content from review_output_versions where output_id=$1 and revision=0',[o])).rows[0].content;
   assert.equal(original.body,'Ready for your next golf trip?');checks++;
+  const historySql='select read_review_history($1,$2,$3,$4,$5) as result';
+  const history=(await db.query(historySql,[a,1,u,o,null])).rows[0].result;
+  assert.deepEqual(history.versions.map(v=>v.revision),[1,0]);
+  assert.equal(history.versions[1].content.body,original.body);assert.equal(history.nextCursor,null);checks++;
+  const older=(await db.query(historySql,[a,1,u,o,1])).rows[0].result;
+  assert.deepEqual(older.versions.map(v=>v.revision),[0]);checks++;
+  assert.deepEqual((await db.query(historySql,[a,1,u,o,0])).rows[0].result.versions,[]);checks++;
+  await refuses(historySql,[b,1,u,o,null]);await refuses(historySql,[a,2,u,o,null]);
+  await refuses(historySql,[a,1,b,o,null]);await refuses(historySql,[a,1,u,o,-1]);
   assert.equal((await db.query(registerSql,registerArgs)).rows[0].result.duplicate,true);checks++;
   assert.equal((await db.query(readSql,[a,1,u,o])).rows[0].result.output.revision,1);checks++;
   const failSql='select fail_review_revision($1,$2,$3,$4) as result';
@@ -90,6 +100,13 @@ try {
   await db.query('update accounts set automation_paused=false where id=$1',[a]);
   assert.equal((await db.query(claimSql,nextClaim)).rows[0].result,null);checks++;
   assert.equal((await db.query(readSql,[a,1,u,o])).rows[0].result.output.revision,1);checks++;
+  // Seed extra immutable versions solely to exercise keyset pagination.
+  await db.query('insert into review_output_versions(output_id,account_id,revision,content) select $1,$2,n,\'{}\'::jsonb from generate_series(2,12) n',[o,a]);
+  await db.query('update review_outputs set revision=12 where id=$1',[o]);
+  const page=(await db.query(historySql,[a,1,u,o,null])).rows[0].result;
+  assert.deepEqual(page.versions.map(v=>v.revision),[12,11,10,9,8,7,6,5,4,3]);assert.equal(page.nextCursor,3);checks++;
+  const lastPage=(await db.query(historySql,[a,1,u,o,page.nextCursor])).rows[0].result;
+  assert.deepEqual(lastPage.versions.map(v=>v.revision),[2,1,0]);assert.equal(lastPage.nextCursor,null);checks++;
   for(const role of ['anon','authenticated']){
     await db.exec(`reset role; set role ${role}`);
     await refuses('select * from review_comments'); await refuses(sql,args);
@@ -97,6 +114,7 @@ try {
     await refuses(registerSql,registerArgs);
     await refuses(claimSql,claimArgs);await refuses(completeSql,[...claimArgs,newContent]);
     await refuses(failSql,nextClaim);
+    await refuses(historySql,[a,1,u,o,null]);
   }
   await db.exec('reset role');
   const tables=await db.query("select relname,relrowsecurity from pg_class where relname in ('review_outputs','review_comments','review_output_versions','review_revision_jobs')");
