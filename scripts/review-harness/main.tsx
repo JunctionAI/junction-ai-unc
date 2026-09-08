@@ -1,4 +1,5 @@
 import React from 'react';
+import '../../src/app/globals.css';
 import {createRoot} from 'react-dom/client';
 import ReviewWorkspace from '../../src/components/review/ReviewWorkspace';
 import ReviewInbox from '../../src/components/review/ReviewInbox';

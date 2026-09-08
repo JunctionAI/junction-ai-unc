@@ -81,6 +81,23 @@ POST `/api/external-agents/control/<changeId>` is callback-authenticated. GET at
 7. Verify cancellation/reconciliation for in-flight settings and cross-client credential isolation before live account activation.
 
 The old one-off read pilot remains unused. This is a direct event + callback design, not a new agent execution engine or provider integration.
+# Mobile control check and authentication handoff
+
+Actual AgentsView UI with fixture API tested at 390x844 and 320x740 in the in-app
+browser. Document width exactly matched both viewport widths. Saved 09:45 and
+refresh retained it; state remained Requested off / waiting for confirmation.
+The harness now imports the app's global styles: without them its initial width
+was 394px at 390px and lacked the real box-sizing rule. This was a harness fix,
+not a change to production layout. Font loading/design parity was not certified.
+Viewport reset, local server stopped and test tab closed afterward.
+
+Authenticated deployed testing is blocked: both in-app browser and Chrome reached
+the sign-in page for the isolated deployment. Database membership confirms the
+Junction test account owner is tom@getjunction.ai. User was asked to sign in and
+unlock the Mac for native Grok work. No login email, auth bypass or native/client
+action was performed. This supersedes earlier mobile-control-check pending notes,
+not the full mobile onboarding/review/provider acceptance requirements.
+
 # Isolated settings deployment — source e36453f
 
 READY: https://junction-r1nk5y4vo-tom-junctionmedis-projects.vercel.app
