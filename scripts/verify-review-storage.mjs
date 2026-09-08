@@ -13,7 +13,7 @@ async function refuses(sql,params=[]){let rejected=false;try{await db.query(sql,
 try {
   await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
     alter default privileges in schema public grant all on tables to service_role;
-    create table accounts(id uuid primary key,context_generation bigint,automation_paused boolean not null default false);
+    create table accounts(id uuid primary key,context_generation bigint,automation_paused boolean not null default false,monthly_llm_cap_usd numeric default 1);
     create table account_members(account_id uuid,user_id uuid,role text);
     create table routine_runs(id uuid primary key,account_id uuid,context_generation bigint);
     create table artifacts(id uuid primary key,account_id uuid,run_id uuid);
@@ -26,6 +26,7 @@ try {
   await db.exec(await readFile(new URL('../supabase/migrations/20260908154525_review_history.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260908154544_review_action_approvals.sql',import.meta.url),'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260908154740_review_service_grants.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260908155205_review_text_queue.sql',import.meta.url),'utf8'));
   checks++;
   await db.exec('set role service_role');
   const registerSql='select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9) as result';
@@ -161,7 +162,21 @@ try {
     await refuses(historySql,[a,1,u,o,null]);
     await refuses(versionSql,[a,1,u,o,0]);
     await refuses(proposalSql,proposalArgs);await refuses(decisionSql,decisionArgs);await refuses(actionsSql,[a,1,u,o]);
+    await refuses('select * from pending_review_text_job($1)',[a]);
   }
+  await db.exec('reset role');
+  await db.exec('set role service_role');
+  const queueSql='select * from pending_review_text_job($1)';
+  assert.equal((await db.query(queueSql,[a])).rows.length,0);checks++; // email jobs are not text jobs
+  const textOutput='00000000-0000-4000-8000-00000000000a',textComment='00000000-0000-4000-8000-00000000000b';
+  await db.query(registerSql,[a,1,a,a,textOutput,'brief',[],null,JSON.stringify({title:'Text test',body:'Original'})]);
+  const textJob=(await db.query(sql,[a,1,u,a,textOutput,0,textComment,JSON.stringify({kind:'whole'}),'Shorter','change_output'])).rows[0].result.jobId;
+  assert.equal((await db.query(queueSql,[a])).rows[0].id,textJob);checks++;
+  assert.equal((await db.query(queueSql,[b])).rows.length,0);checks++;
+  await db.query('update accounts set automation_paused=true where id=$1',[a]);assert.equal((await db.query(queueSql,[a])).rows.length,0);checks++;
+  await db.query('update accounts set automation_paused=false,monthly_llm_cap_usd=0 where id=$1',[a]);assert.equal((await db.query(queueSql,[a])).rows.length,0);checks++;
+  await db.query('update accounts set monthly_llm_cap_usd=1 where id=$1',[a]);
+  await db.query(claimSql,[a,1,textJob,c]);assert.equal((await db.query(queueSql,[a])).rows.length,0);checks++;
   await db.exec('reset role');
   const tables=await db.query("select relname,relrowsecurity from pg_class where relname in ('review_outputs','review_comments','review_output_versions','review_revision_jobs')");
   assert.equal(tables.rows.length,4);assert.ok(tables.rows.every(r=>r.relrowsecurity));checks++;

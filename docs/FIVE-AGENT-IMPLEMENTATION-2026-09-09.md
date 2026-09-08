@@ -179,3 +179,11 @@ Deployment `dpl_6PV5uQ2GUPpsVs6sc4VcN6qUwNCu`, commit `9d1d81a`, at https://junc
 Post-deploy: health HTTP 200, database healthy, worker fresh/no error; unauthenticated history/actions both HTTP 401. Error-log scan for 15 minutes returned no logs. Monitoring/drain configuration not established by this check. Health build SHA remains stale; deployment source metadata identifies the release. Authenticated browser review is still unverified pending sign-in; login return URL allowlisting for this unique deployment has not been independently verified. No provider execution or client rollout enabled.
 
 After migration reconciliation, 18 targeted test files / 125 tests passed; prior complete suite was 270 files / 3464 tests passing. Supabase final advisor warnings are unchanged from the documented baseline. The main canonical domain was not promoted by this release.
+
+### Automatic text-revision queue — implemented, not released
+
+The existing worker loop now has an opt-in review queue, disabled unless `JUNCTION_REVIEW_TEXT_QUEUE_ENABLED=true` and the existing review release flags allow exact account IDs. It discovers at most one eligible job per account, checks the budget, and processes at most one job per tick through the already-tested text revision path. Atomic SQL claim remains the authority; failed or uncertain jobs are not automatically retried. Idle ticks make no model calls. Image/video/email revisions are excluded, not silently converted to text.
+
+Staged migration `20260908155205_review_text_queue.sql` provides service-only discovery with current context, account pause/budget, author membership and content eligibility checks. It is NOT installed remotely. Seven queue unit tests pass, and changed-file lint passes. This is not evidence of an automatic live worker run.
+
+Read-only Fly inspection found the shared `unc-worker` still on build `f7cbcadd0b6bf792a474682f5c6cbf0713b13ee8`, with dry-run/messaging-disabled configuration and existing client-linked source settings. No worker replacement, secret update or queue activation was performed. Before deployment, reconcile the large intervening worker diff or isolate the test consumer so unrelated client scheduling is not changed. The internal test account remains paused with cap zero; the earlier real revision proof was operator-triggered, not daemon-triggered.

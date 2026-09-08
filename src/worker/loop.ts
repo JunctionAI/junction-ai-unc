@@ -41,6 +41,7 @@ import type { SelfReviewLlm } from "../lib/telemetry/selfReview";
 import { readTimezone, type BriefLlm } from "../lib/brain/brief";
 import { runCommandsTick } from "./commands";
 import { runSeoPackagesTick } from "./seoPackages";
+import { runReviewQueueTick } from "./reviewQueue";
 
 export interface WorkerOptions {
   /** Seconds between ticks. Default 60. */
@@ -169,6 +170,11 @@ export class Worker {
         if(this.deps.db && Date.now()-t0<this.tickBudgetMs) await runSeoPackagesTick(this.deps.db);
     } catch {
       this.log.warn("commands.tick_failed", { reason: "command queue unavailable; queued work was not acknowledged as complete" });
+    }
+    if(!this.stopping&&this.deps.db&&Date.now()-t0<this.tickBudgetMs){
+      try{const review=await runReviewQueueTick(this.deps.db);
+        if(review.status==='processed')this.log.info('review.revision_finished',{accountId:review.accountId,jobId:review.jobId,outcome:review.outcome.status});
+      }catch{this.log.warn('review.queue_failed',{reason:'Review queue unavailable; no completion assumed'});}
     }
     try {
       const accounts = await this.deps.accounts.listAccounts();
