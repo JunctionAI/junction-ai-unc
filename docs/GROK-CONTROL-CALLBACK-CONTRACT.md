@@ -81,6 +81,24 @@ POST `/api/external-agents/control/<changeId>` is callback-authenticated. GET at
 7. Verify cancellation/reconciliation for in-flight settings and cross-client credential isolation before live account activation.
 
 The old one-off read pilot remains unused. This is a direct event + callback design, not a new agent execution engine or provider integration.
+# Browser control check — local fixture only
+
+The actual `AgentsView` was exercised in the in-app browser using the isolated
+`/agents` review-harness page. Its API is an explicitly simulated fixture, not the
+production Agents route, SQL transaction, native runtime or real authentication.
+
+Observed: switch on → Requested on / waiting confirmation; save 09:30 and
+Australia/Sydney → refresh retains both; switch off → Requested off / waiting
+confirmation. Neither pending state was labelled active or confirmed stopped.
+The native time input's automated fill did not update React state; a labelled,
+validated 24-hour HH:MM text entry replaced it and passed save/refresh testing.
+The initial onInput attempt did not prove persistence and was superseded.
+
+52 focused tests, type check and lint pass after the change. The harness process
+and test tab were closed. Mobile viewport/layout testing is still outstanding;
+this check does not establish visual parity with the supplied design or native
+Grok delivery. No hosted migration, deployment or provider call occurred.
+
 # Queue delivery worker — implemented, disabled, undeployed
 
 `src/worker/grokControlQueue.ts` is wired into the existing worker loop. It requires

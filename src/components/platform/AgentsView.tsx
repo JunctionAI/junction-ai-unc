@@ -91,7 +91,7 @@ function ExternalSchedule({routine,disabled,onSave}:{routine:AgentRoutine;disabl
   const [time,setTime]=useState(routine.external!.schedule.time);
   const [timezone,setTimezone]=useState(routine.external!.schedule.timezone);
   return <form onSubmit={e=>{e.preventDefault();if(!disabled)onSave({time,timezone});}} aria-label={`${routine.routineId} schedule`}>
-    <label>Daily at <input type="time" required value={time} disabled={disabled} onChange={e=>setTime(e.target.value)}/></label>
+    <label>Daily at (24-hour HH:MM) <input type="text" required pattern="([01][0-9]|2[0-3]):[0-5][0-9]" maxLength={5} placeholder="08:00" value={time} disabled={disabled} onChange={e=>setTime(e.target.value)}/></label>
     <label>Timezone <input required value={timezone} disabled={disabled} onChange={e=>setTimezone(e.target.value)} placeholder="Pacific/Auckland"/></label>
     <button disabled={disabled||time===routine.external!.schedule.time&&timezone===routine.external!.schedule.timezone}>Save schedule</button>
   </form>;

@@ -4,6 +4,7 @@ import {createServer} from 'vite';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
+import {agentsFixture} from './agents-fixture.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const {PGlite}=await import(pathToFileURL(process.env.REVIEW_PGLITE_MODULE).href);
 const bytes=await readFile(process.env.REVIEW_TEST_IMAGE);
@@ -56,7 +57,8 @@ async function handle(req,res,next){
   const request=new Request(`http://127.0.0.1:4317${req.url}`,{method:req.method,headers:req.headers,...(req.method==='POST'?{body:Buffer.concat(parts)}:{})});
   let response;
   const output=/^\/api\/review\/outputs\/([^/?]+)(?:\?|$)/.exec(req.url),media=/^\/api\/review\/media\/([^/?]+)/.exec(req.url);
-  if(req.url.startsWith('/api/review/inbox')){const identity=await bind(request);if(identity instanceof Response)response=identity;else{const {readReviewInbox}=await server.ssrLoadModule('/@fs/'+root+'src/lib/artifacts/reviewInbox.ts');response=Response.json({available:true,...await readReviewInbox(identity,null)});}}
+  if(req.url==='/api/agents')response=await agentsFixture(request);
+  else if(req.url.startsWith('/api/review/inbox')){const identity=await bind(request);if(identity instanceof Response)response=identity;else{const {readReviewInbox}=await server.ssrLoadModule('/@fs/'+root+'src/lib/artifacts/reviewInbox.ts');response=Response.json({available:true,...await readReviewInbox(identity,null)});}}
   else if(output){const {reviewApi}=await server.ssrLoadModule('/@fs/'+root+'src/lib/artifacts/reviewApi.ts');response=await reviewApi(request,output[1],{enabled:true,bind});}
   else if(media){const {reviewMedia}=await server.ssrLoadModule('/@fs/'+root+'src/lib/artifacts/reviewMedia.ts');response=await reviewMedia(request,media[1],{enabled:true,bind,download:async(path)=>[0,1].some(r=>path===`${a}/1/${o}/${r}/image.png`)?new Blob([bytes]):null});}
   else response=new Response(null,{status:404});
