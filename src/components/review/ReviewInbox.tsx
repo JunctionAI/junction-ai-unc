@@ -36,10 +36,10 @@ export default function ReviewInbox({accountId,generation}:{accountId:string;gen
   {error&&<p role="alert">{error}</p>}
   {!data&&loading&&<p role="status">Loading this account’s saved outputs…</p>}
   {data?.items.length===0&&!loading&&<p>No finished outputs have been saved in this business context yet.</p>}
-  <div className={styles.grid}>{data?.items.map(item=>{
+  <div className={styles.grid}>{data?.items.map((item,index)=>{
    const query=`account=${accountId}&generation=${generation}&revision=${item.revision}`;
-   return <article key={item.id}><small>{item.kind} · version {item.revision+1}</small><h3>{item.title}</h3>
-    {item.image?<Image unoptimized src={`/api/review/media/${item.id}_image?${query}`} alt={item.title} width={640} height={400}/>:item.video?<p className={styles.video}>Video ready to preview</p>:null}
+   return <article key={item.id}><small>{item.kind} · version {item.revision}</small><h3>{item.title}</h3>
+    {item.image?<Image unoptimized loading={index===0?'eager':'lazy'} data-email={item.kind==='email'} src={`/api/review/media/${item.id}_image?${query}`} alt={item.title} width={640} height={400}/>:item.video?<p className={styles.video}>Video ready to preview</p>:null}
     {item.excerpt&&<p>{item.excerpt}</p>}
     <Link href={`/app/review/${item.id}?account=${accountId}`}>Open &amp; review →</Link>
    </article>;

@@ -22,6 +22,7 @@ await db.exec(await readFile(new URL('../../supabase/migrations/20260908151115_r
 await db.exec(await readFile(new URL('../../supabase/migrations/20260908154525_review_history.sql',import.meta.url),'utf8'));
 await db.exec(await readFile(new URL('../../supabase/migrations/20260908154544_review_action_approvals.sql',import.meta.url),'utf8'));
 await db.exec(await readFile(new URL('../../supabase/migrations/20260908154740_review_service_grants.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../../supabase/migrations/20260908162902_review_inbox.sql',import.meta.url),'utf8'));
 await db.exec('set role service_role');
 const content={title:'Your next round starts here',imagePath:`/api/review/media/${o}_image`,media:{image:{format:'png',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}}};
 await db.query('select register_review_output($1,$2,$3,$4,$5,$6,$7,$8,$9)',[a,1,a,a,o,'email',['hero'],null,JSON.stringify(content)]);
@@ -30,7 +31,7 @@ await db.query('insert into review_output_versions(output_id,account_id,revision
 await db.query('update review_outputs set revision=1 where id=$1',[o]);
 await db.query('select propose_review_action($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[a,1,o,1,'00000000-0000-4000-8000-000000000009','prepare_provider_draft','LOCAL TEST — no provider connection','Record approval for the local draft fixture. No provider will be called.','{}',new Date(Date.now()+3600000).toISOString()]);
 const rpc=async(name,args)=>{
- const keys={read_review_actions:['acct','generation','actor','output'],decide_review_action:['acct','generation','actor','output','expected_revision','proposal','decision'],read_review_output:['acct','generation','actor','output'],read_review_history:['acct','generation','actor','output','before_revision'],read_review_version:['acct','generation','actor','output','selected_revision'],add_review_comment:['acct','generation','actor','artifact','output','expected_revision','comment','anchor_value','note_value','intent_value']}[name];
+ const keys={read_review_inbox:['acct','generation','actor','before_at','before_id'],read_review_actions:['acct','generation','actor','output'],decide_review_action:['acct','generation','actor','output','expected_revision','proposal','decision'],read_review_output:['acct','generation','actor','output'],read_review_history:['acct','generation','actor','output','before_revision'],read_review_version:['acct','generation','actor','output','selected_revision'],add_review_comment:['acct','generation','actor','artifact','output','expected_revision','comment','anchor_value','note_value','intent_value']}[name];
  if(!keys)throw new Error('RPC outside harness scope');
  try{const values=keys.map(k=>args[k]!==null&&typeof args[k]==='object'?JSON.stringify(args[k]):args[k]);
  const result=await db.query(`select ${name}(${keys.map((_,i)=>`$${i+1}`).join(',')}) as result`,values);return {data:result.rows[0].result,error:null};
@@ -45,7 +46,8 @@ async function handle(req,res,next){
   const request=new Request(`http://127.0.0.1:4317${req.url}`,{method:req.method,headers:req.headers,...(req.method==='POST'?{body:Buffer.concat(parts)}:{})});
   let response;
   const output=/^\/api\/review\/outputs\/([^/?]+)(?:\?|$)/.exec(req.url),media=/^\/api\/review\/media\/([^/?]+)/.exec(req.url);
-  if(output){const {reviewApi}=await server.ssrLoadModule('/@fs/'+root+'src/lib/artifacts/reviewApi.ts');response=await reviewApi(request,output[1],{enabled:true,bind});}
+  if(req.url.startsWith('/api/review/inbox')){const identity=await bind(request);if(identity instanceof Response)response=identity;else{const {readReviewInbox}=await server.ssrLoadModule('/@fs/'+root+'src/lib/artifacts/reviewInbox.ts');response=Response.json({available:true,...await readReviewInbox(identity,null)});}}
+  else if(output){const {reviewApi}=await server.ssrLoadModule('/@fs/'+root+'src/lib/artifacts/reviewApi.ts');response=await reviewApi(request,output[1],{enabled:true,bind});}
   else if(media){const {reviewMedia}=await server.ssrLoadModule('/@fs/'+root+'src/lib/artifacts/reviewMedia.ts');response=await reviewMedia(request,media[1],{enabled:true,bind,download:async(path)=>[0,1].some(r=>path===`${a}/1/${o}/${r}/image.png`)?new Blob([bytes]):null});}
   else response=new Response(null,{status:404});
   res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
