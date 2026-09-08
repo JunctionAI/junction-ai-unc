@@ -14,6 +14,8 @@ The above persistence blocker is fixed in code by `grok_control_records`, an app
 
 Migration `20260908170923_grok_control_records` is NOT installed; deploy only after installation and release checks. Existing receipt records are not migrated or reinterpreted; current live controller binding/legacy pending events must be inspected before cutover. No real confirmed callback was previously established.
 
+Subsequent installation: live legacy control receipt count was zero. Installed as `20260908171415_grok_control_records`; local filename reconciled. Readback records=0, anon read=false, member insert=false, service update=false. Advisor warning counts unchanged; one expected service-only RLS INFO added. No switch, schedule, native routine or client binding changed. Sender/callback application code still requires isolated deployment and real callback testing.
+
 `scripts/verify-grok-control-storage.mjs`: ten checks pass with actual transport and PostgreSQL WASM persistence, one simulated webhook, zero external calls. It covers stop while paused, persisted acknowledgement, duplicate/no resend, generation mismatch and grants. Real Supabase rollback test also saved request/result while paused and left the table absent, account paused, routine count zero. Unit suite 23 tests, typecheck and lint pass. Native webhook proof, atomic switch/outbox coupling and one-scheduler registration remain required.
 
 ## Deployment evidence — September 8

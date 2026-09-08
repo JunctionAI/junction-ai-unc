@@ -1,4 +1,4 @@
--- Configuration records are not business-execution receipts. In particular,
+-- Installed as 20260908171415. Configuration records are not business-execution receipts. In particular,
 -- pausing business automation must not prevent recording a stop request.
 create table public.grok_control_records (
  id uuid primary key,
