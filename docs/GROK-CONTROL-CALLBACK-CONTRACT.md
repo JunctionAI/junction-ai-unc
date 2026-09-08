@@ -81,6 +81,41 @@ POST `/api/external-agents/control/<changeId>` is callback-authenticated. GET at
 7. Verify cancellation/reconciliation for in-flight settings and cross-client credential isolation before live account activation.
 
 The old one-off read pilot remains unused. This is a direct event + callback design, not a new agent execution engine or provider integration.
+# Queue delivery worker — implemented, disabled, undeployed
+
+`src/worker/grokControlQueue.ts` is wired into the existing worker loop. It requires
+all three flags: `JUNCTION_GROK_QUEUE_ENABLED`, `JUNCTION_GROK_SETTINGS_ENABLED`,
+and `JUNCTION_GROK_CONTROL_ENABLED` set to `true`. It also requires the account
+allowlist and a server-only `JUNCTION_GROK_QUEUE_REGISTRATIONS` JSON array:
+
+```json
+[{"accountId":"<verified test account UUID>","contextGeneration":0,
+  "workerId":"<verified native worker ID>","routineIds":["D02-W01"],
+  "webhookUrl":"https://api2.cursor.sh/<copied routine webhook path>",
+  "webhookKeyEnv":"JUNCTION_GROK_WEBHOOK_TEST",
+  "callbackOrigin":"https://<isolated test deployment>"}]
+```
+
+Resolve the key in the named secret environment variable; never put it in this
+document or client responses. The existing signing secret is required as well.
+Every registration is validated before any send. Maximum 10 registrations/40 total
+routine scopes; duplicate ownership refuses the whole configuration. The worker
+reads only each routine's latest revision, skips expired/superseded/claimed changes,
+and attempts at most one webhook per tick. It makes no model calls. An existing
+transport claim, including a timed-out attempt, is never automatically resent.
+
+315 worker tests pass (27 files), including 9 new simulated queue tests. App and
+worker type checks and targeted lint pass. The SQL transaction tests remain
+separate; no claim of full native delivery follows from these tests.
+
+NOT deployed or enabled. Do not replace the currently active shared Fly worker to
+test this queue: it has unrelated live client consumers enabled. Use an isolated
+test runner or separately configured deployment. Required next proof: install the
+pending schema after migration review, browser-test customer controls, register
+the dedicated native test runtime, and verify switch → native routine → callback.
+Native runtime access was last blocked by the locked Mac; no repeated unlock
+attempt was made during this implementation.
+
 # Customer settings wiring — pending release
 
 The Agents API and controls now support registered external routines when BOTH

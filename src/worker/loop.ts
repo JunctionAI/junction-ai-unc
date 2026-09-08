@@ -42,6 +42,7 @@ import { readTimezone, type BriefLlm } from "../lib/brain/brief";
 import { runCommandsTick } from "./commands";
 import { runSeoPackagesTick } from "./seoPackages";
 import { runReviewQueueTick } from "./reviewQueue";
+import { runGrokControlQueueTick } from "./grokControlQueue";
 
 export interface WorkerOptions {
   /** Seconds between ticks. Default 60. */
@@ -170,6 +171,12 @@ export class Worker {
         if(this.deps.db && Date.now()-t0<this.tickBudgetMs) await runSeoPackagesTick(this.deps.db);
     } catch {
       this.log.warn("commands.tick_failed", { reason: "command queue unavailable; queued work was not acknowledged as complete" });
+    }
+    if(!this.stopping&&this.deps.db&&Date.now()-t0<this.tickBudgetMs){
+      try{const control=await runGrokControlQueueTick(this.deps.db);
+        if(control.status==='attempted')this.log.info('grok.control_attempted',control);
+        else if(control.status==='misconfigured')this.log.warn('grok.control_unconfigured',{reason:'Queue registration unavailable'});
+      }catch{this.log.warn('grok.control_failed',{reason:'Queue delivery unavailable; no completion assumed'});}
     }
     if(!this.stopping&&this.deps.db&&Date.now()-t0<this.tickBudgetMs){
       try{const review=await runReviewQueueTick(this.deps.db);
