@@ -25,5 +25,10 @@
 .actions button { background:transparent; color:var(--cyan-link); border:0; padding:5px 0; }
 .content .notice { padding:12px 15px; border-radius:9px; background:var(--amber-wash); color:var(--amber-text); }
 .foot { margin-top:26px; }
+.job:has(.externalActions) { flex-wrap:wrap; }
+.externalActions { width:240px; max-width:100%; text-align:left; }
+.externalActions form,.externalActions label { display:grid; gap:6px; }
+.externalActions input { width:100%; min-width:0; padding:8px; border:1px solid var(--card-border); border-radius:6px; }
 @media(max-width:700px) { .content { padding:28px 18px 60px; }.job { gap:10px; padding:16px 12px; }.actions { max-width:65px; }.areaHeading { padding:16px 12px; } }
 @media(prefers-reduced-motion:reduce) { .toggle span { transition:none; } }
+@media(max-width:700px) { .externalActions { width:100%; max-width:calc(100% - 50px); margin-left:50px; } }

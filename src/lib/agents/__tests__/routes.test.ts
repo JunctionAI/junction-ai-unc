@@ -28,6 +28,29 @@ beforeEach(()=>{
   listing.mockReset();listing.mockResolvedValue({routines:[{routineId:"D01-W01",enabled:false,version:1,canEnable:true,skillSource:"builtin",availabilityCopy:"drafts only"}],connected:[],business:{},recommendedFirst:[],planChannel:null});
 });
 describe("account-bound Agents API",()=>{
+  it("keeps external settings behind an account-specific release",async()=>{
+    db.seed('grok_routine_settings',[{account_id:A,routine_id:change.routineId,context_generation:1,enabled:false,revision:0,updated_at:new Date().toISOString(),schedule_time:'08:00:00',timezone:'UTC'}]);
+    expect((await (await GET(request())).json()).routines[0].external).toBeUndefined();
+    vi.stubEnv('JUNCTION_GROK_SETTINGS_ENABLED','true');vi.stubEnv('JUNCTION_GROK_SETTINGS_ACCOUNT_IDS',A);
+    const r=(await (await GET(request())).json()).routines[0];
+    expect(r.external).toMatchObject({revision:0,status:'off',schedule:{time:'08:00',timezone:'UTC'}});
+    const rpc=vi.spyOn(db,'rpc');
+    expect((await POST(request(change))).status).toBe(409);expect(rpc).not.toHaveBeenCalled();
+  });
+  it("queues external settings with owner identity and reports queued, not active",async()=>{
+    vi.stubEnv('JUNCTION_GROK_SETTINGS_ENABLED','true');vi.stubEnv('JUNCTION_GROK_SETTINGS_ACCOUNT_IDS',A);
+    const at=new Date().toISOString(),id='00000000-0000-4000-8000-000000000010';
+    db.seed('grok_routine_settings',[{account_id:A,routine_id:change.routineId,context_generation:1,enabled:false,revision:0,updated_at:at,schedule_time:'08:00:00',timezone:'UTC'}]);
+    const rpc=vi.spyOn(db,'rpc').mockImplementation(async()=>{
+      await db.from('grok_routine_settings').update({revision:1,enabled:true}).eq('account_id',A);
+      db.seed('grok_settings_outbox',[{id,account_id:A,routine_id:change.routineId,context_generation:1,revision:1,change:{changeId:id,accountId:A,routineId:change.routineId,contextGeneration:1,workerId:'test-worker',enabled:true,stateUpdatedAt:at,schedule:{time:'08:00',timezone:'UTC'},expiresAt:new Date(Date.now()+3600000).toISOString()}}]);
+      return {data:{revision:1},error:null};
+    });
+    const result=await POST(request({...change,external:{changeId:id,revision:0,schedule:{time:'08:00',timezone:'UTC'}}}));
+    expect(result.status).toBe(200);
+    expect((await result.json()).saved).toMatchObject({enabled:true,external:{status:'queued',revision:1}});
+    expect(rpc).toHaveBeenCalledExactlyOnceWith('set_grok_agent_settings',expect.objectContaining({p_account:A,p_actor:U,p_change_id:id,p_expected_revision:0}));
+  });
   it("uses one contract on every legacy switch URL and refuses old revision-less writes",async()=>{
     expect(legacyGet).toBe(GET);expect(legacyPost).toBe(POST);expect(setupPost).toBe(POST);
     for(const handler of [legacyPost,setupPost])expect((await handler(request({routineId:"D01-W01",enabled:true}))).status).toBe(400);

@@ -15,7 +15,8 @@ export async function readAgents(ctx: AgentContext, fetcher: typeof fetch = fetc
 }
 export async function saveAgentPreference(ctx: AgentContext, routine: AgentRoutine, enabled: boolean, fetcher: typeof fetch = fetch, signal?: AbortSignal) {
   const res=await fetcher("/api/agents",{method:"POST",signal,headers:{"content-type":"application/json",...artifactHeaders(ctx.accountId,ctx.contextGeneration)},
-    body:JSON.stringify({routineId:routine.routineId,enabled,stateUpdatedAt:routine.stateUpdatedAt,version:routine.version})});
+    body:JSON.stringify({routineId:routine.routineId,enabled,stateUpdatedAt:routine.stateUpdatedAt,version:routine.version,
+      ...(routine.external?{external:{changeId:crypto.randomUUID(),revision:routine.external.revision,schedule:routine.external.schedule}}:{})})});
   const b=await res.json(); const s=b.saved;
   if (!res.ok || !s || s.accountId!==ctx.accountId || s.contextGeneration!==ctx.contextGeneration || s.routineId!==routine.routineId || s.enabled!==enabled || !Number.isSafeInteger(s.version) || !s.stateUpdatedAt || !Number.isFinite(Date.parse(s.stateUpdatedAt)))
     throw new Error("Save not confirmed. Refresh to check the saved switch; don’t automatically retry.");

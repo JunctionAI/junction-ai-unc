@@ -10,6 +10,7 @@ import { keywordCommandMarket } from "@/lib/n8n/keywordCommand";
 import { commandSelectionReleased } from "@/lib/commands/releaseScope";
 import { effectiveSpec } from "@/lib/runtime/versioning";
 import { CATALOG_SPEC_BY_ID } from "@/lib/runtime/catalog-specs";
+import { externalSettingInput, grokSettingsReleased, readExternalSettings } from "./grokSettings";
 
 const json = (body: unknown, status=200) => Response.json(body,{status,headers:{"cache-control":"private, no-store"}});
 const failure = () => json({error:"Couldn’t verify the saved agent settings. Refresh before trying again."},503);
@@ -42,9 +43,12 @@ export async function agentSnapshot(req: Request) {
   }
   await assertRuntimeContext(session.service,ctx,{allowPaused:true});
   const byId = new Map(states.map(s=>[s.routine_id,s]));
+  const external = new Map((grokSettingsReleased(session.accountId)
+    ? await readExternalSettings(session.service,session.accountId,ctx.contextGeneration) : []).map(s=>[s.routineId,s]));
+  await assertRuntimeContext(session.service,ctx,{allowPaused:true});
   if (listing.spec && listing.spec.version !== (byId.get(listing.spec.id)?.version ?? 1)) return json({error:"Routine configuration changed. Refresh to inspect it."},409);
   const data: AgentsSnapshot = {...listing,...ctx,actorId:session.userId,fetchedAt:new Date().toISOString(),role:member.role,paused:account.automation_paused,
-    routines:listing.routines.map(r=>{const s=byId.get(r.routineId);return {...r,enabled:s?.enabled??false,version:s?.version??1,stateUpdatedAt:s?.updated_at??null,
+    routines:listing.routines.map(r=>{const s=byId.get(r.routineId),g=external.get(r.routineId);if(g)return {...r,...g,version:s?.version??1,selectionBlock:null};return {...r,enabled:s?.enabled??false,version:s?.version??1,stateUpdatedAt:s?.updated_at??null,
       selectionBlock:r.routineId==="D03-W01" ? keywordBlock || null : r.skillSource==="none" ? "No drafting implementation is registered." : !r.canEnable ? r.availabilityCopy : null};})};
   return {session,data};
 }
@@ -55,7 +59,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const b=await req.json().catch(()=>null);
-    if (!b || typeof b!=="object" || Array.isArray(b) || Object.keys(b).some(k=>!["routineId","enabled","stateUpdatedAt","version"].includes(k)) ||
+    if (!b || typeof b!=="object" || Array.isArray(b) || Object.keys(b).some(k=>!["routineId","enabled","stateUpdatedAt","version","external"].includes(k)) ||
+      (b.external!==undefined&&!externalSettingInput.safeParse(b.external).success) ||
       typeof b.enabled!=="boolean" || !Number.isSafeInteger(b.version) || b.version<1 ||
       !(b.stateUpdatedAt===null || typeof b.stateUpdatedAt==="string" && Number.isFinite(Date.parse(b.stateUpdatedAt))) ||
       !AGENT_JOBS.some(j=>j.routineId && j.routineId===b.routineId)) return json({error:"Invalid agent setting."},400);
@@ -64,6 +69,20 @@ export async function POST(req: Request) {
     const r=data.routines.find(r=>r.routineId===b.routineId);
     if (!r) return json({error:"Routine unavailable."},404);
     if (b.enabled && (data.paused || r.selectionBlock)) return json({error:data.paused ? "Automation is paused for setup verification." : r.selectionBlock},409);
+    if(r.external){
+      const input=externalSettingInput.safeParse(b.external);
+      if(!input.success)return json({error:"Refresh to use the external agent settings."},409);
+      const {data:saved,error}=await session.service.rpc("set_grok_agent_settings",{
+        p_account:data.accountId,p_actor:session.userId,p_generation:data.contextGeneration,p_routine:r.routineId,
+        p_enabled:b.enabled,p_time:input.data.schedule.time,p_timezone:input.data.schedule.timezone,
+        p_expected_revision:input.data.revision,p_change_id:input.data.changeId});
+      if(error)return json({error:"Could not confirm agent settings. Refresh before another change."},error.code==="42501"?403:error.code==="40001"?409:503);
+      if(!saved)return failure();
+      const refreshed=(await readExternalSettings(session.service,data.accountId,data.contextGeneration)).find(s=>s.routineId===r.routineId);
+      if(!refreshed)return failure();
+      return json({saved:{accountId:data.accountId,contextGeneration:data.contextGeneration,...refreshed,version:r.version}});
+    }
+    if(b.external!==undefined)return json({error:"External agent is not registered for this routine."},409);
     const {data:saved,error}=await session.service.rpc("set_agent_switch",{p_account:data.accountId,p_actor:session.userId,p_generation:data.contextGeneration,
       p_routine:b.routineId,p_enabled:b.enabled,p_expected_updated_at:b.stateUpdatedAt,p_expected_version:b.version});
     if (error) return json({error:"Settings or account access changed. Refresh to check the saved switch."},error.code==="42501" ? 403 : error.code==="40001" ? 409 : 503);

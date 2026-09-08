@@ -34,21 +34,23 @@ export default function AgentsView({accountId,contextGeneration,onInspect,onSave
     return()=>{cancelled=true;clearTimeout(timer);c.abort();};
   },[accountId,contextGeneration,tick]);
   useEffect(()=>{const visible=()=>{if(document.visibilityState==="visible"&&!saving.current)refresh();};document.addEventListener("visibilitychange",visible);return()=>document.removeEventListener("visibilitychange",visible);},[refresh]);
-  async function change(r:AgentRoutine) {
+  async function change(r:AgentRoutine, schedule?:{time:string;timezone:string}) {
     if(saving.current || loading || !data || data.role!=="owner" || !r.enabled && (data.paused||r.selectionBlock))return;
     saving.current=true;setBusy(r.routineId);setNotice(null);
+    const enabled=schedule?r.enabled:!r.enabled;
     const c=new AbortController();const timer=setTimeout(()=>c.abort(),20_000);
     try {
       const res=await fetch("/api/agents",{method:"POST",headers:{"content-type":"application/json",...artifactHeaders(accountId,contextGeneration)},
-        body:JSON.stringify({routineId:r.routineId,enabled:!r.enabled,stateUpdatedAt:r.stateUpdatedAt,version:r.version}),signal:c.signal});
+        body:JSON.stringify({routineId:r.routineId,enabled,stateUpdatedAt:r.stateUpdatedAt,version:r.version,
+          ...(r.external?{external:{changeId:crypto.randomUUID(),revision:r.external.revision,schedule:schedule??r.external.schedule}}:{})}),signal:c.signal});
       const b=await res.json(); if(!mounted.current)return;
       const saved=b.saved;
-      if(!res.ok || !saved || saved.accountId!==accountId || saved.contextGeneration!==contextGeneration || saved.routineId!==r.routineId || saved.enabled!==!r.enabled || !Number.isSafeInteger(saved.version) || typeof saved.stateUpdatedAt!=="string") {
+      if(!res.ok || !saved || saved.accountId!==accountId || saved.contextGeneration!==contextGeneration || saved.routineId!==r.routineId || saved.enabled!==enabled || !Number.isSafeInteger(saved.version) || typeof saved.stateUpdatedAt!=="string") {
         setNotice("Save not confirmed. Checking the stored switch before another change.");
       } else {
         setData(d=>d?{...d,routines:d.routines.map(x=>x.routineId===r.routineId?{...x,...saved}:x)}:null);
         onSaved?.(r.routineId,saved.enabled);
-        setNotice(saved.enabled?"Routine selected. No run was started; inspect it to request a shadow run.":"Routine switched off. Work already in flight still needs its own execution check.");
+        setNotice(saved.external?saved.external.message:saved.enabled?"Routine selected. No run was started; inspect it to request a shadow run.":"Routine switched off. Work already in flight still needs its own execution check.");
       }
     } catch {if(mounted.current)setNotice("Save outcome is uncertain. Checking the stored switch; this request will not be retried automatically.");}
     finally {clearTimeout(timer);saving.current=false;if(mounted.current){setBusy(null);refresh();}}
@@ -57,7 +59,7 @@ export default function AgentsView({accountId,contextGeneration,onInspect,onSave
   const visible=AGENT_JOBS.filter(j=>(area==="All"||j.area===area)&&`${j.label} ${j.routineId??""} ${j.designLabels.join(" ")}`.toLowerCase().includes(search.toLowerCase()));
   return <div className={styles.content}>
     <header className={styles.heading}><h1>Agents</h1><button onClick={refresh} disabled={loading||!!busy}>{loading?"Refreshing…":"Refresh"}</button></header>
-    <p>Choose the work you want help with. Each switch saves one routine; it does not start a run, create a schedule or authorize publishing.</p>
+    <p>Choose the work you want help with. Connected-agent switches request a setting or schedule change; confirmation appears separately. Other routines save a selection only. Switching on never grants publishing permission.</p>
     {error&&<p role="alert" className={styles.notice}>{error}</p>}
     {!data&&loading&&<p role="status">Reading this account’s saved routines…</p>}
     {data?.paused&&<p className={styles.notice}>Automation is paused for setup verification. New selections are disabled; existing selections can still be switched off.</p>}
@@ -72,11 +74,25 @@ export default function AgentsView({accountId,contextGeneration,onInspect,onSave
         {jobs.map(j=>{const r=j.routineId?byId.get(j.routineId):undefined;const blocked=!r||!r.enabled&&(!!data?.paused||!!r.selectionBlock);return <article key={j.key} className={styles.job} data-testid={`agent-${j.key}`}>
           <button className={styles.toggle} role="switch" aria-label={j.label} aria-checked={!!r?.enabled} disabled={!data||loading||!!busy||data.role!=="owner"||blocked} onClick={()=>r&&void change(r)}><span/></button>
           <div className={styles.description}><h3>{j.label}</h3>{j.note&&<p>{j.note}</p>}{r?<><small>{r.routineId} · v{r.version} · {r.availabilityCopy}</small>{r.selectionBlock&&<p>{r.selectionBlock}</p>}{r.betterWithCopy&&<p>{r.betterWithCopy}</p>}<p>{r.lastRun?`Last saved run: ${r.lastRun.status.replaceAll("_"," ")} · ${new Date(r.lastRun.at).toISOString().slice(0,16).replace("T"," ")} UTC` : "No saved run in this business context."}</p></>:<small>{j.routineId?"Runtime listing unavailable":"Not available — no executable routine mapping"}</small>}</div>
-          <div className={styles.actions}><span>{busy&&busy===j.routineId?"Saving…":r?(r.enabled?"Selected":"Off"):"Unavailable"}</span>{r&&<button onClick={()=>onInspect(r.routineId)}>Inspect →</button>}</div>
+          <div className={`${styles.actions} ${r?.external?styles.externalActions:""}`}><span>{busy&&busy===j.routineId?"Saving…":r?.external?(r.enabled?"Requested on":"Requested off"):r?(r.enabled?"Selected":"Off"):"Unavailable"}</span>
+            {r?.external&&<><p role="status">{r.external.message}</p><ExternalSchedule key={`${accountId}:${r.routineId}:${r.external.revision}`} routine={r}
+              disabled={loading||!!busy||data?.role!=="owner"||!!data?.paused}
+              onSave={schedule=>void change(r,schedule)}/></>}
+            {r&&<button onClick={()=>onInspect(r.routineId)}>Inspect →</button>}</div>
         </article>;})}
       </section>;
     })}
     {!visible.length&&<p>No matching routine.</p>}
     <p className={styles.foot}>Availability is a requirements check, not a successful execution receipt. Schedules and actual provider outputs are verified separately. Google Ads planning and backlink gap remain distinct from the existing Meta and competitor-page routines.</p>
   </div>;
+}
+
+function ExternalSchedule({routine,disabled,onSave}:{routine:AgentRoutine;disabled:boolean;onSave:(schedule:{time:string;timezone:string})=>void}) {
+  const [time,setTime]=useState(routine.external!.schedule.time);
+  const [timezone,setTimezone]=useState(routine.external!.schedule.timezone);
+  return <form onSubmit={e=>{e.preventDefault();if(!disabled)onSave({time,timezone});}} aria-label={`${routine.routineId} schedule`}>
+    <label>Daily at <input type="time" required value={time} disabled={disabled} onChange={e=>setTime(e.target.value)}/></label>
+    <label>Timezone <input required value={timezone} disabled={disabled} onChange={e=>setTimezone(e.target.value)} placeholder="Pacific/Auckland"/></label>
+    <button disabled={disabled||time===routine.external!.schedule.time&&timezone===routine.external!.schedule.timezone}>Save schedule</button>
+  </form>;
 }

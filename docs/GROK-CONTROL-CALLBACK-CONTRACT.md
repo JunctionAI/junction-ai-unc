@@ -81,6 +81,23 @@ POST `/api/external-agents/control/<changeId>` is callback-authenticated. GET at
 7. Verify cancellation/reconciliation for in-flight settings and cross-client credential isolation before live account activation.
 
 The old one-off read pilot remains unused. This is a direct event + callback design, not a new agent execution engine or provider integration.
+# Customer settings wiring — pending release
+
+The Agents API and controls now support registered external routines when BOTH
+`JUNCTION_GROK_SETTINGS_ENABLED=true` and the exact account ID appears in
+`JUNCTION_GROK_SETTINGS_ACCOUNT_IDS`. Neither is enabled by this code change.
+External switches use `set_grok_agent_settings` with server-derived owner identity,
+generation and client revision/change ID. The stored desired state is read back;
+queued changes are never labelled active. Daily time/timezone can be edited.
+Legacy/manual controls remain separate and cannot start external-owned routines.
+
+52 focused agent tests pass, including release gating, refusing the old write shape
+for a bound routine, and external queued-state readback. Type check and targeted lint
+pass. Visual/mobile browser verification is NOT yet performed for these controls.
+The outbox delivery worker, hosted migration and native registration remain pending.
+This supersedes the older statement below that the customer switch has no external
+branch; it does not supersede any pending deployment/native proof requirement.
+
 # Atomic settings/outbox implementation — pending release
 
 Migration `20260908173120_grok_settings_outbox.sql` is LOCAL ONLY. Install it before
